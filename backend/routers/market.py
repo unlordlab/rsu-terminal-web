@@ -4,7 +4,8 @@ from services.market_service import (
     get_indices, get_fear_greed, get_forex,
     get_commodities, get_sectors,
     get_economic_calendar, get_vix_term_structure,
-    get_reddit_pulse, get_nightly_briefing
+    get_reddit_pulse, get_nightly_briefing,
+    get_credit_spreads
 )
 
 router = APIRouter(prefix="/api/v1/market", tags=["market"])
@@ -44,3 +45,7 @@ async def reddit(user=Depends(verify_token)):
 @router.get("/briefing")
 async def briefing(user=Depends(verify_token)):
     return get_nightly_briefing()
+
+@router.get("/credit-spreads")
+async def credit_spreads(user=Depends(verify_token)):
+    return get_credit_spreads()

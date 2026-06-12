@@ -627,3 +627,89 @@ def get_nightly_briefing():
             "ok":        False,
             "error":     str(e),
         }
+        # ── CREDIT SPREADS ────────────────────────────────────────────────────────────
+
+FRED_SERIES = [
+    {"id": "BAMLH0A0HYM2",   "name": "HY OAS",  "label": "High Yield"},
+    {"id": "BAMLC0A0CM",     "name": "IG OAS",   "label": "Investment Grade"},
+]
+
+def _fetch_fred_series(series_id, api_key, limit=130):
+    import requests as _req
+    try:
+        if api_key:
+            url = (
+                f"https://api.stlouisfed.org/fred/series/observations"
+                f"?series_id={series_id}&api_key={api_key}&file_type=json"
+                f"&limit={limit}&sort_order=desc"
+            )
+            r = _req.get(url, timeout=15)
+            if r.status_code == 200:
+                obs = r.json().get("observations", [])
+                history = []
+                for o in reversed(obs):
+                    try:
+                        v = float(o["value"])
+                        history.append({"date": o["date"], "value": round(v, 2)})
+                    except Exception:
+                        continue
+                return history
+        # Sin API key — CSV público
+        url = f"https://fred.stlouisfed.org/graph/fredgraph.csv?id={series_id}"
+        r   = _req.get(url, timeout=15)
+        if r.status_code == 200:
+            history = []
+            for line in r.text.strip().split("\n")[1:]:
+                try:
+                    parts = line.split(",")
+                    v = float(parts[1])
+                    history.append({"date": parts[0], "value": round(v, 2)})
+                except Exception:
+                    continue
+            return history
+    except Exception:
+        pass
+    return []
+
+def get_credit_spreads():
+    from config import settings
+    api_key = getattr(settings, "fred_api_key", "")
+    results = []
+
+    for series in FRED_SERIES:
+        history = _fetch_fred_series(series["id"], api_key)
+        if len(history) >= 2:
+            current = history[-1]["value"]
+            prev    = history[-2]["value"]
+            change  = round(current - prev, 2)
+            if current > 8:    level, level_color = "ALTO", "#f23645"
+            elif current > 5:  level, level_color = "ELEVADO", "#ffb800"
+            elif current > 3:  level, level_color = "NORMAL", "#90ee90"
+            else:               level, level_color = "BAJO", "#00ffad"
+            results.append({
+                "id":          series["id"],
+                "name":        series["name"],
+                "label":       series["label"],
+                "current":     current,
+                "prev":        prev,
+                "change":      change,
+                "date":        history[-1]["date"],
+                "level":       level,
+                "level_color": level_color,
+                "history":     history[-130:],
+                "ok":          True,
+            })
+        else:
+            results.append({
+                "id":      series["id"],
+                "name":    series["name"],
+                "label":   series["label"],
+                "current": None,
+                "ok":      False,
+            })
+
+    return {
+        "data":      results,
+        "timestamp": get_timestamp(),
+        "ok":        any(r["ok"] for r in results),
+    }

@@ -11,6 +11,7 @@ export async function render(container) {
         + '<div id="widget-commodities" style="display:flex;flex-direction:column;"></div>'
         + '<div id="widget-sectors" style="grid-column:2/4;display:flex;flex-direction:column;"></div>'
         + '<div id="widget-vix" style="grid-column:1/-1;display:flex;flex-direction:column;"></div>'
+        + '<div id="widget-spreads" style="grid-column:1/-1;display:flex;flex-direction:column;"></div>'
         + '<div id="widget-reddit" style="grid-column:1/-1;display:flex;flex-direction:column;"></div>'
         + '<div id="widget-calendar" style="grid-column:1/-1;display:flex;flex-direction:column;"></div>'
         + '</div>';
@@ -22,6 +23,7 @@ export async function render(container) {
     loadCommodities(container.querySelector('#widget-commodities'));
     loadSectors(container.querySelector('#widget-sectors'));
     loadVix(container.querySelector('#widget-vix'));
+    loadSpreads(container.querySelector('#widget-spreads'));
     loadReddit(container.querySelector('#widget-reddit'));
     loadCalendar(container.querySelector('#widget-calendar'));
 }
@@ -422,5 +424,109 @@ async function loadBriefing(el) {
 
     } catch(e) {
         el.innerHTML = widgetShell('NIGHTLY BRIEFING', 'Análisis de mercado · IA', widgetError(e.message));
+    }
+}
+async function loadSpreads(el) {
+    el.innerHTML = widgetShell('CREDIT SPREADS', 'OAS · FRED · ICE BofA', loading());
+    try {
+        const res  = await fetch('/api/v1/market/credit-spreads', { headers: authHeader() });
+        const data = await res.json();
+        if (!data.ok) throw new Error('Sin datos FRED');
+
+        const chartId = 'spreads-chart-' + Date.now();
+
+        const cards = data.data.map(s => {
+            if (!s.ok) return '<div style="padding:1rem;color:var(--color-muted);font-size:12px;">' + s.label + ': Sin datos</div>';
+            const up    = s.change >= 0;
+            const color = up ? '#f23645' : '#00ffad';
+            const arrow = up ? '▲' : '▼';
+            return '<div style="flex:1;padding:1rem 1.25rem;border-right:1px solid var(--color-border);">'
+                + '<div style="color:var(--color-muted);font-size:11px;margin-bottom:6px;letter-spacing:0.05em;">' + s.name + ' · ' + s.label + '</div>'
+                + '<div style="display:flex;align-items:baseline;gap:8px;">'
+                + '<div style="color:var(--color-text);font-size:22px;">' + s.current.toFixed(2) + '</div>'
+                + '<div style="color:var(--color-muted);font-size:11px;">%</div>'
+                + '</div>'
+                + '<div style="color:' + color + ';font-size:11px;margin-top:2px;">' + arrow + ' ' + Math.abs(s.change).toFixed(2) + ' vs anterior</div>'
+                + '<div style="margin-top:8px;display:inline-block;padding:2px 8px;border-radius:4px;background:' + s.level_color + '22;color:' + s.level_color + ';font-size:10px;letter-spacing:0.08em;">' + s.level + '</div>'
+                + '<div style="color:var(--color-muted);font-size:10px;margin-top:4px;">' + s.date + '</div>'
+                + '</div>';
+        }).join('');
+
+        const summary = '<div style="display:flex;border-bottom:1px solid var(--color-border);">' + cards + '</div>';
+        const chartHtml = '<div style="padding:16px;"><canvas id="' + chartId + '" height="120"></canvas></div>';
+
+        el.innerHTML = widgetShell('CREDIT SPREADS', 'OAS · FRED · ICE BofA', summary + chartHtml, data.timestamp);
+
+        const script = document.createElement('script');
+        script.src = 'https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js';
+        script.onload = function() {
+            const ctx = document.getElementById(chartId);
+            if (!ctx) return;
+
+            const datasets = data.data
+                .filter(s => s.ok && s.history && s.history.length > 0)
+                .map((s, i) => {
+                    const colors = ['#f23645', '#00d9ff'];
+                    const c = colors[i] || '#888';
+                    return {
+                        label:           s.name,
+                        data:            s.history.map(h => ({ x: h.date, y: h.value })),
+                        borderColor:     c,
+                        backgroundColor: c + '18',
+                        borderWidth:     1.5,
+                        pointRadius:     0,
+                        fill:            false,
+                        tension:         0.3,
+                    };
+                });
+
+            new Chart(ctx, {
+                type: 'line',
+                data: { datasets },
+                options: {
+                    responsive:           true,
+                    maintainAspectRatio:  false,
+                    interaction:          { mode: 'index', intersect: false },
+                    plugins: {
+                        legend: {
+                            display:   true,
+                            position:  'top',
+                            labels: {
+                                color:    '#666',
+                                boxWidth: 12,
+                                font:     { size: 11 },
+                            }
+                        },
+                        tooltip: {
+                            backgroundColor: '#111',
+                            borderColor:     '#333',
+                            borderWidth:     1,
+                            titleColor:      '#aaa',
+                            bodyColor:       '#ccc',
+                        }
+                    },
+                    scales: {
+                        x: {
+                            type:   'category',
+                            ticks: {
+                                color:       '#555',
+                                font:        { size: 10 },
+                                maxTicksLimit: 8,
+                                maxRotation:  0,
+                            },
+                            grid: { color: 'rgba(255,255,255,0.04)' }
+                        },
+                        y: {
+                            ticks: { color: '#555', font: { size: 11 } },
+                            grid:  { color: 'rgba(255,255,255,0.04)' }
+                        }
+                    }
+                }
+            });
+        };
+        document.head.appendChild(script);
+
+    } catch(e) {
+        el.innerHTML = widgetShell('CREDIT SPREADS', 'OAS · FRED · ICE BofA', widgetError(e.message));
     }
 }
