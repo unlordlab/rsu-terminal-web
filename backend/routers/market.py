@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends
 from auth import verify_token
-from services.market_service import get_indices, get_fear_greed, get_forex, get_commodities
+from services.market_service import get_indices, get_fear_greed, get_forex, get_commodities, get_sectors
 
 router = APIRouter(prefix="/api/v1/market", tags=["market"])
 
@@ -19,3 +19,7 @@ async def forex(user=Depends(verify_token)):
 @router.get("/commodities")
 async def commodities(user=Depends(verify_token)):
     return get_commodities()
+
+@router.get("/sectors")
+async def sectors(user=Depends(verify_token)):
+    return get_sectors()

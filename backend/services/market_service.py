@@ -152,3 +152,40 @@ def get_commodities():
             results.append(future.result())
     results.sort(key=lambda x: [i["short"] for i in COMMODITY_TICKERS].index(x["ticker"]))
     return {"data": results, "timestamp": get_timestamp(), "ok": any(r["ok"] for r in results)}
+    # ── SECTOR PERFORMANCE ────────────────────────────────────────────────────────
+
+SECTOR_ETFS = [
+    {"ticker": "XLK",  "name": "Tecnología"},
+    {"ticker": "XLF",  "name": "Financiero"},
+    {"ticker": "XLV",  "name": "Salud"},
+    {"ticker": "XLE",  "name": "Energía"},
+    {"ticker": "XLI",  "name": "Industrial"},
+    {"ticker": "XLY",  "name": "Consumo Discr."},
+    {"ticker": "XLP",  "name": "Consumo Básico"},
+    {"ticker": "XLB",  "name": "Materiales"},
+    {"ticker": "XLU",  "name": "Utilities"},
+    {"ticker": "XLRE", "name": "Inmobiliario"},
+    {"ticker": "XLC",  "name": "Comunicaciones"},
+]
+
+def _fetch_sector(item):
+    try:
+        t    = yf.Ticker(item["ticker"])
+        hist = t.history(period="5d", interval="1d").dropna()
+        if len(hist) < 2:
+            raise ValueError("Sin datos")
+        prev = float(hist["Close"].iloc[-2])
+        last = float(hist["Close"].iloc[-1])
+        pct  = ((last - prev) / prev) * 100
+        return {"ticker": item["ticker"], "name": item["name"], "pct": round(pct, 2), "ok": True}
+    except Exception as e:
+        return {"ticker": item["ticker"], "name": item["name"], "pct": 0, "ok": False, "error": str(e)}
+
+def get_sectors():
+    results = []
+    with ThreadPoolExecutor(max_workers=11) as ex:
+        futures = {ex.submit(_fetch_sector, item): item for item in SECTOR_ETFS}
+        for future in futures:
+            results.append(future.result())
+    results.sort(key=lambda x: x["pct"], reverse=True)
+    return {"data": results, "timestamp": get_timestamp(), "ok": any(r["ok"] for r in results)}

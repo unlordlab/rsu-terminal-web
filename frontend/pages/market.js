@@ -1,25 +1,25 @@
 export async function render(container) {
-    container.innerHTML = `
-        <div style="margin-bottom:1.5rem;">
-            <div style="color:var(--color-accent);font-size:18px;letter-spacing:0.1em;text-shadow:var(--glow-text);margin-bottom:4px;">MARKET</div>
-            <div style="color:var(--color-muted);font-size:12px;">Dashboard de mercado · Carga modular</div>
-        </div>
-        <div id="market-grid" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(340px,1fr));gap:1rem;">
-            <div id="widget-indices"></div>
-            <div id="widget-feargreed"></div>
-            <div id="widget-forex"></div>
-            <div id="widget-commodities"></div>
-        </div>
-    `;
+    container.innerHTML = '<div style="margin-bottom:1.5rem;">'
+        + '<div style="color:var(--color-accent);font-size:18px;letter-spacing:0.1em;text-shadow:var(--glow-text);margin-bottom:4px;">MARKET</div>'
+        + '<div style="color:var(--color-muted);font-size:12px;">Dashboard de mercado · Carga modular</div>'
+        + '</div>'
+        + '<div id="market-grid" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(340px,1fr));gap:1rem;">'
+        + '<div id="widget-indices"></div>'
+        + '<div id="widget-feargreed"></div>'
+        + '<div id="widget-forex"></div>'
+        + '<div id="widget-commodities"></div>'
+        + '<div id="widget-sectors" style="grid-column:1/-1;"></div>'
+        + '</div>';
 
     loadIndices(container.querySelector('#widget-indices'));
     loadFearGreed(container.querySelector('#widget-feargreed'));
     loadForex(container.querySelector('#widget-forex'));
     loadCommodities(container.querySelector('#widget-commodities'));
+    loadSectors(container.querySelector('#widget-sectors'));
 }
 
 async function loadIndices(el) {
-    el.innerHTML = widgetShell('INDICES', 'Mercados principales', '<div style="padding:1rem;color:var(--color-muted);font-size:12px;">Cargando...</div>');
+    el.innerHTML = widgetShell('INDICES', 'Mercados principales', loading());
     try {
         const res  = await fetch('/api/v1/market/indices', { headers: authHeader() });
         const data = await res.json();
@@ -28,16 +28,10 @@ async function loadIndices(el) {
             const up    = idx.pct >= 0;
             const color = up ? 'var(--color-accent)' : '#f23645';
             const arrow = up ? '▲' : '▼';
-            return '<div style="display:flex;justify-content:space-between;align-items:center;padding:10px 14px;border-bottom:1px solid var(--color-border);">'
-                + '<div>'
-                + '<div style="color:var(--color-text);font-size:13px;font-weight:500;">' + idx.ticker + '</div>'
-                + '<div style="color:var(--color-muted);font-size:11px;">' + idx.name + '</div>'
-                + '</div>'
-                + '<div style="text-align:right;">'
-                + '<div style="color:var(--color-text);font-size:14px;">' + idx.price.toLocaleString('es-ES') + '</div>'
-                + '<div style="color:' + color + ';font-size:11px;">' + arrow + ' ' + Math.abs(idx.change).toLocaleString('es-ES') + ' (' + (idx.pct > 0 ? '+' : '') + idx.pct + '%)</div>'
-                + '</div>'
-                + '</div>';
+            return row(idx.ticker, idx.name,
+                idx.price.toLocaleString('es-ES'),
+                arrow + ' ' + Math.abs(idx.change).toLocaleString('es-ES') + ' (' + (idx.pct > 0 ? '+' : '') + idx.pct + '%)',
+                color);
         }).join('');
         el.innerHTML = widgetShell('INDICES', 'Mercados principales', rows, data.timestamp);
     } catch(e) {
@@ -46,7 +40,7 @@ async function loadIndices(el) {
 }
 
 async function loadFearGreed(el) {
-    el.innerHTML = widgetShell('FEAR & GREED', 'CNN Index', '<div style="padding:1rem;color:var(--color-muted);font-size:12px;">Cargando...</div>');
+    el.innerHTML = widgetShell('FEAR & GREED', 'CNN Index', loading());
     try {
         const res  = await fetch('/api/v1/market/fear-greed', { headers: authHeader() });
         const data = await res.json();
@@ -67,7 +61,7 @@ async function loadFearGreed(el) {
 }
 
 async function loadForex(el) {
-    el.innerHTML = widgetShell('FOREX', 'Tipos de cambio', '<div style="padding:1rem;color:var(--color-muted);font-size:12px;">Cargando...</div>');
+    el.innerHTML = widgetShell('FOREX', 'Tipos de cambio', loading());
     try {
         const res  = await fetch('/api/v1/market/forex', { headers: authHeader() });
         const data = await res.json();
@@ -76,16 +70,10 @@ async function loadForex(el) {
             const up    = fx.pct >= 0;
             const color = up ? 'var(--color-accent)' : '#f23645';
             const arrow = up ? '▲' : '▼';
-            return '<div style="display:flex;justify-content:space-between;align-items:center;padding:10px 14px;border-bottom:1px solid var(--color-border);">'
-                + '<div>'
-                + '<div style="color:var(--color-text);font-size:13px;font-weight:500;">' + fx.ticker + '</div>'
-                + '<div style="color:var(--color-muted);font-size:11px;">' + fx.name + '</div>'
-                + '</div>'
-                + '<div style="text-align:right;">'
-                + '<div style="color:var(--color-text);font-size:14px;">' + fx.price.toFixed(4) + '</div>'
-                + '<div style="color:' + color + ';font-size:11px;">' + arrow + ' ' + Math.abs(fx.change).toFixed(4) + ' (' + (fx.pct > 0 ? '+' : '') + fx.pct + '%)</div>'
-                + '</div>'
-                + '</div>';
+            return row(fx.ticker, fx.name,
+                fx.price.toFixed(4),
+                arrow + ' ' + Math.abs(fx.change).toFixed(4) + ' (' + (fx.pct > 0 ? '+' : '') + fx.pct + '%)',
+                color);
         }).join('');
         el.innerHTML = widgetShell('FOREX', 'Tipos de cambio', rows, data.timestamp);
     } catch(e) {
@@ -94,7 +82,7 @@ async function loadForex(el) {
 }
 
 async function loadCommodities(el) {
-    el.innerHTML = widgetShell('COMMODITIES', 'Futuros', '<div style="padding:1rem;color:var(--color-muted);font-size:12px;">Cargando...</div>');
+    el.innerHTML = widgetShell('COMMODITIES', 'Futuros', loading());
     try {
         const res  = await fetch('/api/v1/market/commodities', { headers: authHeader() });
         const data = await res.json();
@@ -103,20 +91,39 @@ async function loadCommodities(el) {
             const up    = c.pct >= 0;
             const color = up ? 'var(--color-accent)' : '#f23645';
             const arrow = up ? '▲' : '▼';
-            return '<div style="display:flex;justify-content:space-between;align-items:center;padding:10px 14px;border-bottom:1px solid var(--color-border);">'
-                + '<div>'
-                + '<div style="color:var(--color-text);font-size:13px;font-weight:500;">' + c.ticker + '</div>'
-                + '<div style="color:var(--color-muted);font-size:11px;">' + c.name + '</div>'
-                + '</div>'
-                + '<div style="text-align:right;">'
-                + '<div style="color:var(--color-text);font-size:14px;">' + c.prefix + c.price.toLocaleString('es-ES') + '</div>'
-                + '<div style="color:' + color + ';font-size:11px;">' + arrow + ' ' + Math.abs(c.change).toFixed(2) + ' (' + (c.pct > 0 ? '+' : '') + c.pct + '%)</div>'
-                + '</div>'
-                + '</div>';
+            return row(c.ticker, c.name,
+                c.prefix + c.price.toLocaleString('es-ES'),
+                arrow + ' ' + Math.abs(c.change).toFixed(2) + ' (' + (c.pct > 0 ? '+' : '') + c.pct + '%)',
+                color);
         }).join('');
         el.innerHTML = widgetShell('COMMODITIES', 'Futuros', rows, data.timestamp);
     } catch(e) {
         el.innerHTML = widgetShell('COMMODITIES', 'Futuros', widgetError(e.message));
+    }
+}
+
+async function loadSectors(el) {
+    el.innerHTML = widgetShell('SECTOR PERFORMANCE', 'S&P 500 ETFs · Hoy', loading());
+    try {
+        const res  = await fetch('/api/v1/market/sectors', { headers: authHeader() });
+        const data = await res.json();
+        const max  = Math.max(...data.data.map(s => Math.abs(s.pct)));
+        const bars = data.data.map(s => {
+            const up    = s.pct >= 0;
+            const color = up ? 'var(--color-accent)' : '#f23645';
+            const w     = max > 0 ? Math.abs(s.pct) / max * 100 : 0;
+            const pctStr = (s.pct > 0 ? '+' : '') + s.pct + '%';
+            return '<div style="display:flex;align-items:center;gap:10px;padding:7px 14px;border-bottom:1px solid var(--color-border);">'
+                + '<div style="width:90px;font-size:12px;color:var(--color-text);flex-shrink:0;">' + s.name + '</div>'
+                + '<div style="flex:1;background:var(--color-surface2);border-radius:2px;height:6px;overflow:hidden;">'
+                + '<div style="height:100%;width:' + w.toFixed(1) + '%;background:' + color + ';border-radius:2px;"></div>'
+                + '</div>'
+                + '<div style="width:60px;text-align:right;font-size:12px;color:' + color + ';flex-shrink:0;">' + pctStr + '</div>'
+                + '</div>';
+        }).join('');
+        el.innerHTML = widgetShell('SECTOR PERFORMANCE', 'S&P 500 ETFs · Hoy', bars, data.timestamp);
+    } catch(e) {
+        el.innerHTML = widgetShell('SECTOR PERFORMANCE', 'S&P 500 ETFs · Hoy', widgetError(e.message));
     }
 }
 
@@ -154,6 +161,19 @@ function buildGauge(score, color) {
         + '</svg>';
 }
 
+function row(ticker, name, price, change, color) {
+    return '<div style="display:flex;justify-content:space-between;align-items:center;padding:10px 14px;border-bottom:1px solid var(--color-border);">'
+        + '<div>'
+        + '<div style="color:var(--color-text);font-size:13px;font-weight:500;">' + ticker + '</div>'
+        + '<div style="color:var(--color-muted);font-size:11px;">' + name + '</div>'
+        + '</div>'
+        + '<div style="text-align:right;">'
+        + '<div style="color:var(--color-text);font-size:14px;">' + price + '</div>'
+        + '<div style="color:' + color + ';font-size:11px;">' + change + '</div>'
+        + '</div>'
+        + '</div>';
+}
+
 function widgetShell(title, subtitle, content, timestamp) {
     return '<div style="background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius);overflow:hidden;">'
         + '<div style="display:flex;justify-content:space-between;align-items:center;padding:10px 14px;border-bottom:1px solid var(--color-border);">'
@@ -163,6 +183,10 @@ function widgetShell(title, subtitle, content, timestamp) {
         + '<div>' + content + '</div>'
         + (timestamp ? '<div style="padding:6px 14px;font-size:10px;color:var(--color-muted);border-top:1px solid var(--color-border);">Actualizado: ' + timestamp + '</div>' : '')
         + '</div>';
+}
+
+function loading() {
+    return '<div style="padding:1rem;color:var(--color-muted);font-size:12px;">Cargando...</div>';
 }
 
 function widgetError(msg) {
