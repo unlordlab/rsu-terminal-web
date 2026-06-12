@@ -1,1 +1,16 @@
 
+[data-theme="crt"] {
+  --color-bg:        #0a0a0a;
+  --color-surface:   #0f0f0f;
+  --color-accent:    #00ffad;
+  --color-secondary: #00d9ff;
+  --font-mono:       'VT323', monospace;
+  --scanlines:       repeating-linear-gradient(
+    0deg,
+    rgba(0,0,0,0.15) 0px,
+    rgba(0,0,0,0.15) 1px,
+    transparent 1px,
+    transparent 2px
+  );
+  --glow-accent: 0 0 8px rgba(0,255,173,0.4);
+}
