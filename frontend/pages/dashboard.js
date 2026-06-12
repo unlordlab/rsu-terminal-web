@@ -83,7 +83,7 @@ export async function render(container) {
 
     // Health check al servidor
     try {
-        const health = await api.get('/../health');
+        const health = await fetch('/health').then(r => r.json());
         const card = container.querySelector('#health-card');
         if (card) {
             card.style.borderColor = 'var(--color-success)';
