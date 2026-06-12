@@ -3,7 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 from config import settings
-from routers import auth
+from routers import auth, market
 
 app = FastAPI(title=settings.app_name, docs_url="/api/docs")
 
@@ -16,6 +16,7 @@ app.add_middleware(
 )
 
 app.include_router(auth.router)
+app.include_router(market.router)
 
 app.mount("/static",     StaticFiles(directory="../static"),              name="static")
 app.mount("/themes",     StaticFiles(directory="../frontend/themes"),     name="themes")
