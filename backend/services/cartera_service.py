@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 import pandas as pd
 import unicodedata
 from datetime import datetime
@@ -141,3 +142,6 @@ def get_cartera():
 
     except Exception as e:
         return {"ok": False, "error": str(e)}
+=======
+
+>>>>>>> 937a93440f767ee6b0c7cb0469a4b2202af036cf
