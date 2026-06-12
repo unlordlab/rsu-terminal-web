@@ -1,1 +1,24 @@
+:root {
+  /* Colores */
+  --color-bg:        #0d0d0d;
+  --color-surface:   #111111;
+  --color-border:    rgba(255,255,255,0.08);
+  --color-accent:    #00ffad;
+  --color-secondary: #00d9ff;
+  --color-text:      #e0e0e0;
+  --color-muted:     #666;
 
+  /* Tipografía */
+  --font-mono:  'Share Tech Mono', monospace;
+  --font-ui:    'Inter', sans-serif;
+  --font-size:  14px;
+
+  /* Layout */
+  --sidebar-w:  220px;
+  --radius:     6px;
+  --transition: 0.15s ease;
+
+  /* Efectos (cada tema puede anularlos) */
+  --scanlines:  none;
+  --glow-accent: 0 0 0 transparent;
+}
