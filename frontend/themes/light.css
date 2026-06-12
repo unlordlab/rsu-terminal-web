@@ -1,1 +1,17 @@
+[data-theme="light"] {
+  --color-bg:        #f8fafc;
+  --color-surface:   #ffffff;
+  --color-surface2:  #f1f5f9;
+  --color-border:    rgba(0,0,0,0.1);
+  --color-accent:    #0ea5e9;
+  --color-secondary: #8b5cf6;
+  --color-text:      #0f172a;
+  --color-muted:     #94a3b8;
 
+  --font-mono:  'JetBrains Mono', monospace;
+  --font-size:  14px;
+
+  --scanlines:   none;
+  --glow-accent: none;
+  --glow-text:   none;
+}
