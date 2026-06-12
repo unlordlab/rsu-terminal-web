@@ -3,12 +3,14 @@ export async function render(container) {
         + '<div style="color:var(--color-accent);font-size:18px;letter-spacing:0.1em;text-shadow:var(--glow-text);margin-bottom:4px;">MARKET</div>'
         + '<div style="color:var(--color-muted);font-size:12px;">Dashboard de mercado · Carga modular</div>'
         + '</div>'
-        + '<div id="market-grid" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(340px,1fr));gap:1rem;">'
-        + '<div id="widget-indices"></div>'
-        + '<div id="widget-feargreed"></div>'
-        + '<div id="widget-forex"></div>'
-        + '<div id="widget-commodities"></div>'
-        + '<div id="widget-sectors" style="grid-column:1/-1;"></div>'
+        + '<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:1rem;">'
+        + '<div id="widget-indices" style="display:flex;flex-direction:column;"></div>'
+        + '<div id="widget-feargreed" style="display:flex;flex-direction:column;"></div>'
+        + '<div id="widget-forex" style="display:flex;flex-direction:column;"></div>'
+        + '<div id="widget-commodities" style="display:flex;flex-direction:column;"></div>'
+        + '<div id="widget-sectors" style="grid-column:2/4;display:flex;flex-direction:column;"></div>'
+        + '<div id="widget-vix" style="grid-column:1/-1;display:flex;flex-direction:column;"></div>'
+        + '<div id="widget-calendar" style="grid-column:1/-1;display:flex;flex-direction:column;"></div>'
         + '</div>';
 
     loadIndices(container.querySelector('#widget-indices'));
@@ -16,6 +18,8 @@ export async function render(container) {
     loadForex(container.querySelector('#widget-forex'));
     loadCommodities(container.querySelector('#widget-commodities'));
     loadSectors(container.querySelector('#widget-sectors'));
+    loadVix(container.querySelector('#widget-vix'));
+    loadCalendar(container.querySelector('#widget-calendar'));
 }
 
 async function loadIndices(el) {
@@ -175,13 +179,13 @@ function row(ticker, name, price, change, color) {
 }
 
 function widgetShell(title, subtitle, content, timestamp) {
-    return '<div style="background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius);overflow:hidden;">'
-        + '<div style="display:flex;justify-content:space-between;align-items:center;padding:10px 14px;border-bottom:1px solid var(--color-border);">'
+    return '<div style="background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius);overflow:hidden;height:100%;display:flex;flex-direction:column;">'
+        + '<div style="display:flex;justify-content:space-between;align-items:center;padding:10px 14px;border-bottom:1px solid var(--color-border);flex-shrink:0;">'
         + '<div style="color:var(--color-accent);font-size:13px;letter-spacing:0.08em;text-shadow:var(--glow-text);">' + title + '</div>'
         + '<div style="color:var(--color-muted);font-size:11px;">' + subtitle + '</div>'
         + '</div>'
-        + '<div>' + content + '</div>'
-        + (timestamp ? '<div style="padding:6px 14px;font-size:10px;color:var(--color-muted);border-top:1px solid var(--color-border);">Actualizado: ' + timestamp + '</div>' : '')
+        + '<div style="flex:1;overflow-y:auto;">' + content + '</div>'
+        + (timestamp ? '<div style="padding:6px 14px;font-size:10px;color:var(--color-muted);border-top:1px solid var(--color-border);flex-shrink:0;">Actualizado: ' + timestamp + '</div>' : '')
         + '</div>';
 }
 
@@ -201,4 +205,123 @@ function errorRow(ticker, name) {
         + '</div>'
         + '<div style="color:#f23645;font-size:11px;">✗ Sin datos</div>'
         + '</div>';
+}
+async function loadCalendar(el) {
+    el.innerHTML = widgetShell('CALENDARIO ECONÓMICO', 'Esta semana · Hora Madrid', loading());
+    try {
+        const res  = await fetch('/api/v1/market/calendar', { headers: authHeader() });
+        const data = await res.json();
+        if (!data.ok || !data.data.length) throw new Error(data.error || 'Sin eventos');
+
+        const impColor = { High: '#f23645', Medium: '#ffb800', Low: '#555' };
+        const impLabel = { High: '●●●', Medium: '●●○', Low: '●○○' };
+
+        const header = '<div style="display:grid;grid-template-columns:60px 55px 1fr 60px 80px 80px 80px;gap:8px;padding:8px 14px;border-bottom:1px solid var(--color-border);font-size:10px;color:var(--color-muted);letter-spacing:0.05em;">'
+            + '<div>FECHA</div><div>HORA</div><div>EVENTO</div><div>IMP</div><div>ACTUAL</div><div>PREV.</div><div>ESTIMADO</div>'
+            + '</div>';
+
+        const rows = data.data.map(ev => {
+            const ic = impColor[ev.impact] || '#555';
+            const il = impLabel[ev.impact] || '●○○';
+            const isToday = ev.date === 'HOY';
+            const bg = isToday ? 'rgba(0,255,173,0.03)' : 'transparent';
+            return '<div style="display:grid;grid-template-columns:60px 55px 1fr 60px 80px 80px 80px;gap:8px;padding:9px 14px;border-bottom:1px solid var(--color-border);font-size:12px;background:' + bg + ';align-items:center;">'
+                + '<div style="color:' + ev.date_color + ';font-size:11px;font-weight:500;">' + ev.date + '</div>'
+                + '<div style="color:var(--color-muted);">' + ev.time + '</div>'
+                + '<div style="color:var(--color-text);">' + ev.event + '</div>'
+                + '<div style="color:' + ic + ';font-size:10px;letter-spacing:1px;">' + il + '</div>'
+                + '<div style="color:var(--color-accent);text-align:right;">' + ev.actual + '</div>'
+                + '<div style="color:var(--color-muted);text-align:right;">' + ev.previous + '</div>'
+                + '<div style="color:var(--color-muted);text-align:right;">' + ev.forecast + '</div>'
+                + '</div>';
+        }).join('');
+
+        el.innerHTML = widgetShell('CALENDARIO ECONÓMICO', 'Esta semana · Hora Madrid', header + rows, data.timestamp);
+    } catch(e) {
+        el.innerHTML = widgetShell('CALENDARIO ECONÓMICO', 'Esta semana · Hora Madrid', widgetError(e.message));
+    }
+}
+async function loadVix(el) {
+    el.innerHTML = widgetShell('VIX TERM STRUCTURE', 'Curva de futuros · Volatilidad implícita', loading());
+    try {
+        const res  = await fetch('/api/v1/market/vix', { headers: authHeader() });
+        const data = await res.json();
+        if (!data.ok) throw new Error(data.error || 'Sin datos');
+
+        const labels = data.data.map(d => d.label);
+        const values = data.data.map(d => d.value);
+        const isContango = data.structure === 'contango';
+        const lineColor  = isContango ? '#f23645' : '#00ffad';
+        const structureLabel = isContango ? 'CONTANGO' : 'BACKWARDATION';
+        const structureColor = isContango ? '#f23645' : '#00ffad';
+        const spot = data.spot;
+        const diff = data.contango;
+
+        const summary = '<div style="display:flex;gap:2rem;padding:12px 16px;border-bottom:1px solid var(--color-border);font-size:12px;">'
+            + '<div><span style="color:var(--color-muted);">VIX SPOT  </span><span style="color:var(--color-text);font-size:16px;margin-left:6px;">' + spot + '</span></div>'
+            + '<div><span style="color:var(--color-muted);">ESTRUCTURA  </span><span style="color:' + structureColor + ';margin-left:6px;letter-spacing:0.08em;">' + structureLabel + '</span></div>'
+            + '<div><span style="color:var(--color-muted);">SPREAD SPOT-ÚLTIMO  </span><span style="color:' + (diff > 0 ? '#f23645' : '#00ffad') + ';margin-left:6px;">' + (diff > 0 ? '+' : '') + diff + '</span></div>'
+            + '</div>';
+
+        const chartId = 'vix-chart-' + Date.now();
+        const chartHtml = '<div style="padding:16px;"><canvas id="' + chartId + '" height="120"></canvas></div>';
+
+        el.innerHTML = widgetShell('VIX TERM STRUCTURE', 'Curva de futuros · Volatilidad implícita', summary + chartHtml, data.timestamp);
+
+        const script = document.createElement('script');
+        script.src = 'https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js';
+        script.onload = function() {
+            const ctx = document.getElementById(chartId);
+            if (!ctx) return;
+            new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        label: 'VIX',
+                        data: values,
+                        borderColor: lineColor,
+                        backgroundColor: lineColor + '18',
+                        borderWidth: 2,
+                        pointBackgroundColor: lineColor,
+                        pointRadius: 5,
+                        pointHoverRadius: 7,
+                        fill: true,
+                        tension: 0.3,
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { display: false },
+                        tooltip: {
+                            backgroundColor: '#111',
+                            borderColor: lineColor,
+                            borderWidth: 1,
+                            titleColor: '#aaa',
+                            bodyColor: lineColor,
+                            callbacks: {
+                                label: ctx => 'VIX: ' + ctx.parsed.y.toFixed(2)
+                            }
+                        }
+                    },
+                    scales: {
+                        x: {
+                            ticks: { color: '#555', font: { size: 11 } },
+                            grid:  { color: 'rgba(255,255,255,0.04)' }
+                        },
+                        y: {
+                            ticks: { color: '#555', font: { size: 11 } },
+                            grid:  { color: 'rgba(255,255,255,0.04)' }
+                        }
+                    }
+                }
+            });
+        };
+        document.head.appendChild(script);
+
+    } catch(e) {
+        el.innerHTML = widgetShell('VIX TERM STRUCTURE', 'Curva de futuros · Volatilidad implícita', widgetError(e.message));
+    }
 }
