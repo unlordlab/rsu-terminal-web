@@ -1,24 +1,73 @@
 :root {
-  /* Colores */
   --color-bg:        #0d0d0d;
   --color-surface:   #111111;
+  --color-surface2:  #1a1a1a;
   --color-border:    rgba(255,255,255,0.08);
   --color-accent:    #00ffad;
   --color-secondary: #00d9ff;
   --color-text:      #e0e0e0;
-  --color-muted:     #666;
+  --color-muted:     #555555;
+  --color-danger:    #ff4d4d;
+  --color-warning:   #ffb800;
+  --color-success:   #00ffad;
 
-  /* Tipografía */
-  --font-mono:  'Share Tech Mono', monospace;
-  --font-ui:    'Inter', sans-serif;
-  --font-size:  14px;
+  --font-mono:   'Share Tech Mono', monospace;
+  --font-ui:     'Inter', sans-serif;
+  --font-size:   14px;
+  --line-height: 1.6;
 
-  /* Layout */
-  --sidebar-w:  220px;
-  --radius:     6px;
-  --transition: 0.15s ease;
+  --sidebar-w:   220px;
+  --topbar-h:    48px;
+  --radius:      6px;
+  --radius-lg:   10px;
+  --transition:  0.15s ease;
 
-  /* Efectos (cada tema puede anularlos) */
-  --scanlines:  none;
-  --glow-accent: 0 0 0 transparent;
+  --scanlines:   none;
+  --glow-accent: none;
+  --glow-text:   none;
+}
+
+*, *::before, *::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  background:  var(--color-bg);
+  color:       var(--color-text);
+  font-family: var(--font-mono);
+  font-size:   var(--font-size);
+  line-height: var(--line-height);
+}
+
+body::after {
+  content: '';
+  position: fixed;
+  inset: 0;
+  background: var(--scanlines);
+  pointer-events: none;
+  z-index: 9998;
+}
+
+a {
+  color: var(--color-accent);
+  text-decoration: none;
+}
+
+a:hover {
+  opacity: 0.8;
+}
+
+::-webkit-scrollbar {
+  width: 4px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--color-surface);
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--color-border);
+  border-radius: 2px;
 }
