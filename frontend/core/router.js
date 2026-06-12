@@ -9,7 +9,11 @@ const ROUTES = {
     '/rsrw':     () => import('/pages/rsrw.js'),
     '/spxl':     () => import('/pages/spxl.js'),
     '/research': () => import('/pages/research.js'),
+    '/newsfeed': () => import('/pages/newsfeed.js'),
     '/canslim':  () => import('/pages/canslim.js'),
+    '/academy': () => import('/pages/academy.js'),
+    '/roadmap': () => import('/pages/roadmap.js'),
+    '/tesis': () => import('/pages/tesis.js'),
     '/algoritmo': () => import('/pages/algoritmo.js'),
     '/login':    () => import('/pages/login.js'),
 };
@@ -21,7 +25,7 @@ function isAuthenticated() {
 }
 
 export function navigate(path) {
-    const protectedRoutes = ['/', '/market', '/cartera', '/rsrw', '/spxl', '/research', '/canslim', '/algoritmo'];
+    const protectedRoutes = ['/', '/market', '/cartera', '/rsrw', '/newsfeed', '/spxl', '/roadmap', '/academy', '/tesis', '/research', '/canslim', '/algoritmo'];
     const needsAuth = protectedRoutes.includes(path);
     if (needsAuth && !isAuthenticated()) {
         loadView('/login');

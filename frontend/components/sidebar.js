@@ -3,8 +3,12 @@ const NAV_ITEMS = [
     { path: '/market',    label: 'Market',       icon: 'M' },
     { path: '/cartera',   label: 'Cartera',      icon: 'C' },
     { path: '/rsrw',      label: 'RS/RW',        icon: 'R' },
+    { path: '/newsfeed',  label: 'News Feed',    icon: 'N' },
+    { path: '/tesis',     label: 'Tesis', icon: 'T' },
     { path: '/spxl',      label: 'SPXL',         icon: 'S' },
     { path: '/research',  label: 'Research',     icon: 'I' },
+    { path: '/academy', label: 'Academy', icon: 'Ac' },
+    { path: '/roadmap', label: 'Roadmap 2026', icon: 'R' },
     { path: '/canslim',   label: 'CANSLIM',      icon: 'K' },
     { path: '/algoritmo', label: 'RSU Algoritmo',icon: 'A' },
 ];

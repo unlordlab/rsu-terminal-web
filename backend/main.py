@@ -3,7 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 from config import settings
-from routers import auth, market, cartera, canslim, rsu_algoritmo
+from routers import auth, market, cartera, canslim, rsu_algoritmo, research, newsfeed, tesis, spxl
 
 app = FastAPI(title=settings.app_name, docs_url="/api/docs")
 
@@ -20,6 +20,11 @@ app.include_router(market.router)
 app.include_router(cartera.router)
 app.include_router(canslim.router)
 app.include_router(rsu_algoritmo.router)
+app.include_router(research.router)
+app.include_router(newsfeed.router)
+app.include_router(tesis.router)
+app.include_router(spxl.router)
+
 
 app.mount("/static",     StaticFiles(directory="../static"),              name="static")
 app.mount("/themes",     StaticFiles(directory="../frontend/themes"),     name="themes")
