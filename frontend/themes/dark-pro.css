@@ -1,8 +1,17 @@
 [data-theme="dark-pro"] {
   --color-bg:        #111827;
   --color-surface:   #1f2937;
+  --color-surface2:  #374151;
+  --color-border:    rgba(255,255,255,0.1);
   --color-accent:    #6366f1;
   --color-secondary: #06b6d4;
-  --font-mono:       'JetBrains Mono', monospace;
-  --scanlines:       none;
+  --color-text:      #f1f5f9;
+  --color-muted:     #64748b;
+
+  --font-mono:  'JetBrains Mono', monospace;
+  --font-size:  14px;
+
+  --scanlines:   none;
+  --glow-accent: none;
+  --glow-text:   none;
 }
