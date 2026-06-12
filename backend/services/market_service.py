@@ -398,3 +398,232 @@ def get_vix_term_structure():
         "timestamp": get_timestamp(),
         "ok":        True,
     }
+    # ── REDDIT PULSE ──────────────────────────────────────────────────────────────
+
+_BLACKLIST = {
+    'A','I','IT','IS','AT','BE','BY','DO','FOR','GO','HE','IF','IN','ME',
+    'MY','NO','OF','ON','OR','SO','TO','UP','US','WE','AND','ARE','BUT',
+    'CAN','DID','GET','GOT','HAS','HAD','HER','HIM','HIS','HOW','ITS',
+    'LET','MAY','NEW','NOT','NOW','OFF','OUR','OUT','OWN','PUT','RUN',
+    'SAY','SHE','THE','TOO','TWO','USE','WAS','WAY','WHO','WHY','WITH',
+    'YOU','YOLO','LMAO','FOMO','EPS','CEO','IPO','ETF','GDP','FED','ALL',
+    'GOOD','BEST','NEXT','LAST','HIGH','LOW','MORE','MUCH','JUST','LIKE',
+    'MAKE','MANY','MOST','MOVE','NEED','OVER','SOME','SUCH','THAN','THAT',
+    'THEM','THEN','THEY','THIS','WHAT','WHEN','WILL','YEAR','HOLD','SELL',
+    'BUY','LONG','SHORT','PUMP','DUMP','MOON','BEAR','BULL','CALLS','PUTS',
+    'DD','TA','OTM','ITM','ATM','WSB','RH','TD','AI','ML','API','LOL',
+    'WTF','OMG','GG','GE','F','T','X','V','D','C','K','M','R','S',
+    'PRE','POST','AH','PM','AM','EST','PST','UTC','USD','EUR','CAD',
+    'WELL','WORK','TAKE','GIVE','BACK','COME','WANT','SHOW','ONLY','VERY',
+}
+
+def _extract_tickers(text: str):
+    import re as _re
+    found = {}
+    for m in _re.finditer(r'\$([A-Z]{1,6})\b|\b([A-Z]{2,5})\b', text):
+        t = (m.group(1) or m.group(2) or '').strip()
+        if t and t not in _BLACKLIST and 2 <= len(t) <= 6:
+            found[t] = found.get(t, 0) + (2 if m.group(1) else 1)
+    return sorted(found.items(), key=lambda x: -x[1])[:30]
+
+def _enrich_ticker(ticker, mention_count, max_mentions, st_tickers):
+    try:
+        tk       = yf.Ticker(ticker)
+        info     = tk.fast_info
+        price    = getattr(info, 'last_price', None)
+        prev     = getattr(info, 'previous_close', None)
+        change   = ((price - prev) / prev * 100) if price and prev and prev > 0 else 0.0
+        hist     = tk.history(period='10d')
+        vol_today = float(hist['Volume'].iloc[-1]) if len(hist) > 0 else 0
+        vol_avg   = float(hist['Volume'].mean())   if len(hist) > 0 else 1
+        vol_ratio = vol_today / vol_avg if vol_avg > 0 else 1.0
+        hype_raw  = mention_count / max_mentions
+        hype_stars = max(1, min(5, round(hype_raw * 5)))
+        smart_raw  = min(vol_ratio / 2, 1.0)
+        smart_stars = max(1, min(5, round(smart_raw * 5)))
+        in_st = ticker in st_tickers
+        hype_suffix  = " Reddit Top" if hype_raw > 0.5 else (" StockTwits" if in_st else "")
+        smart_suffix = f" Vol ×{vol_ratio:.1f}" if vol_ratio > 1.5 else ""
+        if change > 2:      health_num, health_lbl = 85, "Fuerte"
+        elif change > 0:    health_num, health_lbl = 65, "Hold"
+        elif change > -2:   health_num, health_lbl = 45, "Hold"
+        else:               health_num, health_lbl = 30, "Débil"
+        return {
+            "ticker":      ticker,
+            "price":       round(price, 2) if price else None,
+            "change":      round(change, 2),
+            "buzz":        round(hype_raw * 100),
+            "health":      f"{health_num} {health_lbl}",
+            "social_hype": "★" * hype_stars + "☆" * (5 - hype_stars) + hype_suffix,
+            "smart_money": "★" * smart_stars + "☆" * (5 - smart_stars) + smart_suffix,
+            "mentions":    mention_count,
+            "ok":          True,
+        }
+    except Exception:
+        return {
+            "ticker": ticker, "price": None, "change": 0.0,
+            "buzz": mention_count, "health": "50 Hold",
+            "social_hype": "★★★☆☆", "smart_money": "★★☆☆☆",
+            "mentions": mention_count, "ok": False,
+        }
+
+def get_reddit_pulse():
+    import requests as _req
+    session = _req.Session()
+    session.headers.update({
+        "User-Agent": "Mozilla/5.0 (compatible; MarketDashboard/2.0)",
+        "Accept": "application/json",
+    })
+
+    ticker_mentions = {}
+    sources = []
+
+    # Reddit
+    for sub in ['wallstreetbets', 'stocks', 'investing', 'options', 'StockMarket']:
+        try:
+            r = session.get(
+                f'https://www.reddit.com/r/{sub}/hot.json?limit=30&t=day',
+                timeout=10
+            )
+            if r.status_code != 200:
+                continue
+            sources.append('Reddit')
+            for post in r.json().get('data', {}).get('children', []):
+                p    = post.get('data', {})
+                text = f"{p.get('title','')} {p.get('selftext','')}".upper()
+                for ticker, count in _extract_tickers(text):
+                    ticker_mentions[ticker] = ticker_mentions.get(ticker, 0) + count
+            break
+        except Exception:
+            continue
+
+   # StockTwits — peso escalonado por posición en el ranking
+    st_tickers = []
+    try:
+        r = session.get(
+            'https://api.stocktwits.com/api/2/trending/symbols.json',
+            timeout=8
+        )
+        if r.status_code == 200:
+            symbols = r.json().get('symbols', [])[:20]
+            for i, item in enumerate(symbols):
+                t = item.get('symbol', '').upper()
+                if t and 2 <= len(t) <= 6:
+                    st_tickers.append(t)
+                    # Peso decreciente: #1 = 20pts, #2 = 19pts... #20 = 1pt
+                    weight = max(1, 20 - i)
+                    ticker_mentions[t] = ticker_mentions.get(t, 0) + weight
+            if st_tickers:
+                sources.append('StockTwits')
+    except Exception:
+        pass
+
+    if not ticker_mentions:
+        return _reddit_fallback()
+
+    top = [t for t, _ in sorted(ticker_mentions.items(), key=lambda x: -x[1])[:15]]
+    max_mentions = max(ticker_mentions.values())
+
+    results = []
+    with ThreadPoolExecutor(max_workers=8) as ex:
+        futures_map = {
+            ex.submit(_enrich_ticker, t, ticker_mentions[t], max_mentions, st_tickers): t
+            for t in top
+        }
+        for future in futures_map:
+            results.append(future.result())
+
+    results.sort(key=lambda x: -x["buzz"])
+
+    return {
+        "data":      results[:15],
+        "sources":   list(set(sources)),
+        "timestamp": get_timestamp(),
+        "ok":        True,
+    }
+
+def _reddit_fallback():
+    fallback = [
+        {"ticker":"NVDA","price":None,"change":0.8, "buzz":98,"health":"85 Fuerte","social_hype":"★★★★★ Reddit Top","smart_money":"★★★★☆ Vol ×2.3","mentions":98},
+        {"ticker":"TSLA","price":None,"change":-0.4,"buzz":95,"health":"72 Fuerte","social_hype":"★★★★★ Reddit Top","smart_money":"★★★☆☆ Vol ×1.8","mentions":95},
+        {"ticker":"AAPL","price":None,"change":0.2, "buzz":88,"health":"80 Fuerte","social_hype":"★★★★☆",           "smart_money":"★★★★☆ Vol ×1.5","mentions":88},
+        {"ticker":"META","price":None,"change":1.1, "buzz":85,"health":"78 Fuerte","social_hype":"★★★★☆",           "smart_money":"★★★☆☆",         "mentions":85},
+        {"ticker":"PLTR","price":None,"change":2.3, "buzz":80,"health":"65 Hold",  "social_hype":"★★★★★ Reddit Top","smart_money":"★★★☆☆",         "mentions":80},
+        {"ticker":"AMD", "price":None,"change":-0.9,"buzz":75,"health":"60 Hold",  "social_hype":"★★★★☆ Reddit Top","smart_money":"★★★☆☆",         "mentions":75},
+        {"ticker":"GME", "price":None,"change":3.2, "buzz":72,"health":"40 Hold",  "social_hype":"★★★★★ Reddit Top","smart_money":"★☆☆☆☆",         "mentions":72},
+        {"ticker":"MSFT","price":None,"change":0.1, "buzz":70,"health":"82 Fuerte","social_hype":"★★★☆☆",           "smart_money":"★★★★★ Vol ×1.9","mentions":70},
+    ]
+    return {"data": fallback, "sources": ["Fallback"], "timestamp": get_timestamp(), "ok": True}
+
+    # ── NIGHTLY BRIEFING ──────────────────────────────────────────────────────────
+
+BRIEFING_GIST_ID = "715ee0c4e571517c11fa65c5c2376c34"
+
+def get_nightly_briefing():
+    import requests as _req
+    import json as _json
+    try:
+        r = _req.get(
+            f"https://api.github.com/gists/{BRIEFING_GIST_ID}",
+            headers={"Accept": "application/vnd.github+json"},
+            timeout=10,
+        )
+        if r.status_code != 200:
+            raise ValueError(f"HTTP {r.status_code}")
+
+        gist  = r.json()
+        files = gist.get("files", {})
+
+        raw_content = None
+        for fname, fdata in files.items():
+            raw_content = fdata.get("content", "")
+            break
+
+        if not raw_content:
+            raise ValueError("Briefing vacío")
+
+        # Intentar parsear como JSON
+        content = raw_content
+        date_str = ""
+        model_str = ""
+        try:
+            parsed   = _json.loads(raw_content)
+            content  = parsed.get("text", raw_content)
+            date_str = parsed.get("date", "")
+            model_str = parsed.get("model", "")
+            # Limpiar \n literales
+            content = content.replace("\\n", "\n").replace("\\*", "*")
+        except Exception:
+            pass
+
+        updated_at = gist.get("updated_at", "")
+        updated_str = ""
+        if updated_at:
+            try:
+                import pytz
+                utc_dt  = datetime.strptime(updated_at[:19], "%Y-%m-%dT%H:%M:%S")
+                madrid  = pytz.timezone("Europe/Madrid")
+                mad_dt  = pytz.utc.localize(utc_dt).astimezone(madrid)
+                updated_str = mad_dt.strftime("%d %b %Y · %H:%M")
+            except Exception:
+                updated_str = updated_at[:10]
+
+        return {
+            "content":   content,
+            "date":      date_str,
+            "model":     model_str,
+            "updated":   updated_str,
+            "timestamp": get_timestamp(),
+            "ok":        True,
+        }
+
+    except Exception as e:
+        return {
+            "content":   "",
+            "date":      "",
+            "model":     "",
+            "updated":   "",
+            "timestamp": get_timestamp(),
+            "ok":        False,
+            "error":     str(e),
+        }

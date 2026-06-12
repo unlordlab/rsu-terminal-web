@@ -3,7 +3,8 @@ from auth import verify_token
 from services.market_service import (
     get_indices, get_fear_greed, get_forex,
     get_commodities, get_sectors,
-    get_economic_calendar, get_vix_term_structure
+    get_economic_calendar, get_vix_term_structure,
+    get_reddit_pulse, get_nightly_briefing
 )
 
 router = APIRouter(prefix="/api/v1/market", tags=["market"])
@@ -35,3 +36,11 @@ async def calendar(user=Depends(verify_token)):
 @router.get("/vix")
 async def vix(user=Depends(verify_token)):
     return get_vix_term_structure()
+
+@router.get("/reddit")
+async def reddit(user=Depends(verify_token)):
+    return get_reddit_pulse()
+
+@router.get("/briefing")
+async def briefing(user=Depends(verify_token)):
+    return get_nightly_briefing()

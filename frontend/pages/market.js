@@ -4,21 +4,25 @@ export async function render(container) {
         + '<div style="color:var(--color-muted);font-size:12px;">Dashboard de mercado · Carga modular</div>'
         + '</div>'
         + '<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:1rem;">'
+        + '<div id="widget-briefing" style="grid-column:1/-1;display:flex;flex-direction:column;"></div>'
         + '<div id="widget-indices" style="display:flex;flex-direction:column;"></div>'
         + '<div id="widget-feargreed" style="display:flex;flex-direction:column;"></div>'
         + '<div id="widget-forex" style="display:flex;flex-direction:column;"></div>'
         + '<div id="widget-commodities" style="display:flex;flex-direction:column;"></div>'
         + '<div id="widget-sectors" style="grid-column:2/4;display:flex;flex-direction:column;"></div>'
         + '<div id="widget-vix" style="grid-column:1/-1;display:flex;flex-direction:column;"></div>'
+        + '<div id="widget-reddit" style="grid-column:1/-1;display:flex;flex-direction:column;"></div>'
         + '<div id="widget-calendar" style="grid-column:1/-1;display:flex;flex-direction:column;"></div>'
         + '</div>';
 
+    loadBriefing(container.querySelector('#widget-briefing'));
     loadIndices(container.querySelector('#widget-indices'));
     loadFearGreed(container.querySelector('#widget-feargreed'));
     loadForex(container.querySelector('#widget-forex'));
     loadCommodities(container.querySelector('#widget-commodities'));
     loadSectors(container.querySelector('#widget-sectors'));
     loadVix(container.querySelector('#widget-vix'));
+    loadReddit(container.querySelector('#widget-reddit'));
     loadCalendar(container.querySelector('#widget-calendar'));
 }
 
@@ -323,5 +327,100 @@ async function loadVix(el) {
 
     } catch(e) {
         el.innerHTML = widgetShell('VIX TERM STRUCTURE', 'Curva de futuros · Volatilidad implícita', widgetError(e.message));
+    }
+}
+async function loadReddit(el) {
+    el.innerHTML = widgetShell('REDDIT PULSE', 'Social buzz · Reddit + StockTwits', loading());
+    try {
+        const res  = await fetch('/api/v1/market/reddit', { headers: authHeader() });
+        const data = await res.json();
+        if (!data.ok) throw new Error('Sin datos');
+
+        const sources = data.sources.join(' + ');
+
+        const header = '<div style="display:grid;grid-template-columns:40px 70px 90px 80px 1fr 1fr;gap:8px;padding:8px 14px;border-bottom:1px solid var(--color-border);font-size:10px;color:var(--color-muted);letter-spacing:0.05em;">'
+            + '<div>#</div><div>TICKER</div><div>PRECIO</div><div>BUZZ</div><div>SOCIAL HYPE</div><div>SMART MONEY</div>'
+            + '</div>';
+
+        const rows = data.data.map((item, i) => {
+            const up      = item.change >= 0;
+            const chgColor = up ? 'var(--color-accent)' : '#f23645';
+            const chgStr  = (up ? '+' : '') + item.change.toFixed(2) + '%';
+            const priceStr = item.price ? '$' + item.price.toLocaleString('en-US') : '-';
+            const buzzW   = item.buzz + '%';
+            const rank    = i + 1;
+            const rankColor = rank <= 3 ? 'var(--color-accent)' : 'var(--color-muted)';
+
+            return '<div style="display:grid;grid-template-columns:40px 70px 90px 80px 1fr 1fr;gap:8px;padding:9px 14px;border-bottom:1px solid var(--color-border);font-size:12px;align-items:center;">'
+                + '<div style="color:' + rankColor + ';font-weight:500;">' + rank + '</div>'
+                + '<div style="color:var(--color-accent);font-weight:500;letter-spacing:0.05em;">' + item.ticker + '</div>'
+                + '<div>'
+                + '<div style="color:var(--color-text);">' + priceStr + '</div>'
+                + '<div style="color:' + chgColor + ';font-size:10px;">' + chgStr + '</div>'
+                + '</div>'
+                + '<div>'
+                + '<div style="background:var(--color-surface2);border-radius:2px;height:4px;margin-bottom:3px;">'
+                + '<div style="height:100%;width:' + buzzW + ';background:var(--color-accent);border-radius:2px;"></div>'
+                + '</div>'
+                + '<div style="color:var(--color-muted);font-size:10px;">' + item.buzz + '</div>'
+                + '</div>'
+                + '<div style="color:var(--color-muted);font-size:11px;">' + item.social_hype + '</div>'
+                + '<div style="color:var(--color-muted);font-size:11px;">' + item.smart_money + '</div>'
+                + '</div>';
+        }).join('');
+
+        el.innerHTML = widgetShell('REDDIT PULSE', sources, header + rows, data.timestamp);
+    } catch(e) {
+        el.innerHTML = widgetShell('REDDIT PULSE', 'Social buzz', widgetError(e.message));
+    }
+}
+async function loadBriefing(el) {
+    el.innerHTML = widgetShell('NIGHTLY BRIEFING', 'Análisis de mercado · IA', loading());
+    try {
+        const res  = await fetch('/api/v1/market/briefing', { headers: authHeader() });
+        const data = await res.json();
+        if (!data.ok) throw new Error(data.error || 'Sin briefing');
+
+        const lines = data.content.split('\n').filter(l => l.trim());
+        const html  = lines.map(line => {
+            const t = line.trim();
+            if (t.startsWith('# ')) {
+                return '<div style="color:var(--color-accent);font-size:15px;font-weight:500;letter-spacing:0.05em;margin:12px 0 6px;text-shadow:var(--glow-text);">'
+                    + t.replace(/^#+\s*/, '') + '</div>';
+            }
+            if (t.startsWith('## ') || t.startsWith('### ')) {
+                return '<div style="color:var(--color-secondary);font-size:13px;font-weight:500;margin:10px 0 4px;letter-spacing:0.05em;">'
+                    + t.replace(/^#+\s*/, '') + '</div>';
+            }
+            if (t.startsWith('- ') || t.startsWith('* ')) {
+                return '<div style="color:var(--color-text);font-size:12px;padding:3px 0 3px 12px;border-left:2px solid var(--color-border);margin:2px 0;">'
+                    + t.replace(/^[-*]\s*/, '') + '</div>';
+            }
+            if (t.startsWith('**') || t.match(/^[A-Z]{2,}:/)) {
+                return '<div style="color:var(--color-text);font-size:12px;font-weight:500;margin:4px 0;">'
+                    + t.replace(/\*\*/g, '') + '</div>';
+            }
+            if (t === '---' || t === '***') {
+                return '<div style="border-top:1px solid var(--color-border);margin:10px 0;"></div>';
+            }
+            if (t.length > 0) {
+                return '<div style="color:var(--color-muted);font-size:12px;line-height:1.6;margin:2px 0;">'
+                    + t + '</div>';
+            }
+            return '';
+        }).join('');
+
+        const updated = data.updated
+            ? '<span style="color:var(--color-muted);font-size:11px;">Generado: ' + data.updated + '</span>'
+            : '';
+
+        const content = '<div style="padding:1rem 1.25rem;max-height:300px;overflow-y:auto;">'
+            + html
+            + '</div>';
+
+        el.innerHTML = widgetShell('NIGHTLY BRIEFING', updated, content, data.timestamp);
+
+    } catch(e) {
+        el.innerHTML = widgetShell('NIGHTLY BRIEFING', 'Análisis de mercado · IA', widgetError(e.message));
     }
 }
