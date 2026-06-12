@@ -10,6 +10,7 @@ const ROUTES = {
     '/spxl':     () => import('/pages/spxl.js'),
     '/research': () => import('/pages/research.js'),
     '/canslim':  () => import('/pages/canslim.js'),
+    '/algoritmo': () => import('/pages/algoritmo.js'),
     '/login':    () => import('/pages/login.js'),
 };
 
@@ -20,7 +21,7 @@ function isAuthenticated() {
 }
 
 export function navigate(path) {
-    const protectedRoutes = ['/', '/market', '/cartera', '/rsrw', '/spxl', '/research', '/canslim'];
+    const protectedRoutes = ['/', '/market', '/cartera', '/rsrw', '/spxl', '/research', '/canslim', '/algoritmo'];
     const needsAuth = protectedRoutes.includes(path);
     if (needsAuth && !isAuthenticated()) {
         loadView('/login');

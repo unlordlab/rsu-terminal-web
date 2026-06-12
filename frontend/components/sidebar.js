@@ -1,11 +1,12 @@
 const NAV_ITEMS = [
-    { path: '/', label: 'Dashboard', icon: 'D' },
-    { path: '/market', label: 'Market', icon: 'M' },
-    { path: '/cartera', label: 'Cartera', icon: 'C' },
-    { path: '/rsrw', label: 'RS/RW', icon: 'R' },
-    { path: '/spxl', label: 'SPXL', icon: 'S' },
-    { path: '/research', label: 'Research', icon: 'I' },
-    { path: '/canslim', label: 'CANSLIM', icon: 'K' }
+    { path: '/',          label: 'Dashboard',    icon: 'D' },
+    { path: '/market',    label: 'Market',       icon: 'M' },
+    { path: '/cartera',   label: 'Cartera',      icon: 'C' },
+    { path: '/rsrw',      label: 'RS/RW',        icon: 'R' },
+    { path: '/spxl',      label: 'SPXL',         icon: 'S' },
+    { path: '/research',  label: 'Research',     icon: 'I' },
+    { path: '/canslim',   label: 'CANSLIM',      icon: 'K' },
+    { path: '/algoritmo', label: 'RSU Algoritmo',icon: 'A' },
 ];
 
 export function renderSidebar(container, navigate) {
