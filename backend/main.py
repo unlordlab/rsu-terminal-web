@@ -3,6 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 from config import settings
+from routers import auth                    # ← importamos el router
 
 app = FastAPI(title=settings.app_name, docs_url="/api/docs")
 
@@ -13,6 +14,9 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Registramos el router de autenticación
+app.include_router(auth.router)             # ← lo registramos en la app
 
 # Archivos estáticos del frontend
 app.mount("/static", StaticFiles(directory="../static"), name="static")
@@ -25,7 +29,7 @@ app.mount("/pages", StaticFiles(directory="../frontend/pages"), name="pages")
 async def health():
     return {"status": "ok", "app": settings.app_name}
 
-# SPA catch-all: todo lo que no sea /api/* devuelve index.html
+# SPA catch-all
 @app.get("/{full_path:path}")
 async def spa_fallback(full_path: str):
     if not full_path.startswith("api/"):
