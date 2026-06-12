@@ -2,36 +2,61 @@ import { initTheme } from '/core/theme.js';
 import { renderSidebar } from '/components/sidebar.js';
 import { renderTopbar } from '/components/topbar.js';
 
-// Mapa de rutas → módulos. Añadir aquí cada nuevo módulo.
 const ROUTES = {
-  '/':          () => import('/pages/dashboard.js'),
-  '/market':    () => import('/pages/market.js'),
-  '/cartera':   () => import('/pages/cartera.js'),
-  '/rsrw':      () => import('/pages/rsrw.js'),
-  '/spxl':      () => import('/pages/spxl.js'),
-  '/research':  () => import('/pages/research.js'),
-  '/canslim':   () => import('/pages/canslim.js'),
+    '/':         () => import('/pages/dashboard.js'),
+    '/market':   () => import('/pages/market.js'),
+    '/cartera':  () => import('/pages/cartera.js'),
+    '/rsrw':     () => import('/pages/rsrw.js'),
+    '/spxl':     () => import('/pages/spxl.js'),
+    '/research': () => import('/pages/research.js'),
+    '/canslim':  () => import('/pages/canslim.js'),
+    '/login':    () => import('/pages/login.js'),
 };
 
-async function navigate(path) {
-  const view = document.getElementById('view');
-  view.innerHTML = '<p style="color:var(--color-muted)">Cargando...</p>';
+const TOKEN_KEY = 'rsu_token';
 
-  const loader = ROUTES[path] || ROUTES['/'];
-  const module = await loader();
-  await module.render(view);
+function isAuthenticated() {
+    return !!sessionStorage.getItem(TOKEN_KEY);
+}
 
-  // Actualizar URL sin recargar
-  history.pushState({}, '', path);
+export function navigate(path) {
+    const protectedRoutes = ['/', '/market', '/cartera', '/rsrw', '/spxl', '/research', '/canslim'];
+    const needsAuth = protectedRoutes.includes(path);
+
+    if (needsAuth && !isAuthenticated()) {
+        loadView('/login');
+        history.pushState({}, '', '/login');
+        return;
+    }
+
+    loadView(path);
+    history.pushState({}, '', path);
+}
+
+async function loadView(path) {
+    const view = document.getElementById('view');
+    view.innerHTML = '<p class="loading">Cargando</p>';
+
+    try {
+        const loader = ROUTES[path] || ROUTES['/'];
+        const module = await loader();
+        await module.render(view);
+    } catch (err) {
+        view.innerHTML = `<p style="color:var(--color-danger)">Error cargando módulo: ${err.message}</p>`;
+        console.error(err);
+    }
 }
 
 // Arranque
 initTheme();
 renderSidebar(document.getElementById('sidebar'), navigate);
-renderTopbar(document.getElementById('topbar'));
+renderTopbar(document.getElementById('topbar'), navigate);
 
-// Routing inicial
+// Ruta inicial
 navigate(location.pathname);
 
-// Navegación con botones atrás/adelante del browser
+// Botones atrás/adelante del browser
 window.addEventListener('popstate', () => navigate(location.pathname));
+
+// Exponer navigate globalmente para usarlo desde cualquier módulo
+window.__navigate = navigate;
