@@ -1,0 +1,8 @@
+[data-theme="dark-pro"] {
+  --color-bg:        #111827;
+  --color-surface:   #1f2937;
+  --color-accent:    #6366f1;
+  --color-secondary: #06b6d4;
+  --font-mono:       'JetBrains Mono', monospace;
+  --scanlines:       none;
+}
