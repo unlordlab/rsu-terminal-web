@@ -6,11 +6,13 @@ const NAV_ITEMS = [
     { path: '/newsfeed',  label: 'News Feed',    icon: 'N' },
     { path: '/tesis',     label: 'Tesis', icon: 'T' },
     { path: '/spxl',      label: 'SPXL',         icon: 'S' },
+    { path: '/options', label: 'Options Flow', icon: 'O' },
     { path: '/research',  label: 'Research',     icon: 'I' },
     { path: '/academy', label: 'Academy', icon: 'Ac' },
     { path: '/roadmap', label: 'Roadmap 2026', icon: 'R' },
     { path: '/canslim',   label: 'CANSLIM',      icon: 'K' },
     { path: '/algoritmo', label: 'RSU Algoritmo',icon: 'A' },
+    { path: '/disclaimer', label: 'Disclaimer', icon: '⚖' },
 ];
 
 export function renderSidebar(container, navigate) {

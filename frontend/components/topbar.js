@@ -116,7 +116,7 @@ function setWsIndicator(container, connected) {
     if (dot) dot.style.background = connected ? 'var(--color-accent)' : '#555';
     if (mkt) {
         mkt.style.color  = connected ? 'var(--color-accent)' : 'var(--color-muted)';
-        mkt.textContent  = connected ? '● MKT LIVE' : '● MKT';
+        mkt.textContent  = connected ? 'MKT LIVE' : '● MKT';
     }
 }
 
@@ -177,7 +177,7 @@ function updateTicker(container, data) {
 
     // Recalcular duración de la animación según el ancho del contenido
     const trackWidth = track.scrollWidth / 2;
-    const speed      = 20; // px por segundo
+    const speed      = 10; // px por segundo
     const duration   = Math.max(30, trackWidth / speed);
     track.style.animationDuration = duration + 's';
 }

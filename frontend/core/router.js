@@ -13,11 +13,13 @@ const ROUTES = {
     '/research': () => import('/pages/research.js'),
     '/newsfeed': () => import('/pages/newsfeed.js'),
     '/canslim':  () => import('/pages/canslim.js'),
+    '/options': () => import('/pages/options.js'),
     '/academy': () => import('/pages/academy.js'),
     '/roadmap': () => import('/pages/roadmap.js'),
     '/tesis': () => import('/pages/tesis.js'),
     '/algoritmo': () => import('/pages/algoritmo.js'),
     '/login':    () => import('/pages/login.js'),
+    '/disclaimer': () => import('/pages/disclaimer.js'),
 };
 
 const TOKEN_KEY = 'rsu_token';
@@ -27,7 +29,7 @@ function isAuthenticated() {
 }
 
 export function navigate(path) {
-    const protectedRoutes = ['/', '/market', '/cartera', '/rsrw', '/newsfeed', '/spxl', '/roadmap', '/academy', '/tesis', '/research', '/canslim', '/algoritmo'];
+    const protectedRoutes = ['/', '/market', '/cartera', '/rsrw', '/newsfeed', '/spxl', '/roadmap', '/academy', '/tesis', '/options', '/research', '/disclaimer', '/canslim', '/algoritmo'];
     const needsAuth = protectedRoutes.includes(path);
     if (needsAuth && !isAuthenticated()) {
         loadView('/login');

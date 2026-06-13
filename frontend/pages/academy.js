@@ -1,157 +1,202 @@
 const MODULES = [
     {
-        id: 1, title: "Bienvenida", icon: "👋",
-        description: "Introducción al programa y configuración inicial de tu espacio de trabajo.",
-        chapters: 3, duration: "45 min",
+        id: 1, title: "Configuración de Gráficos", icon: "📊",
+        description: "Configura correctamente tus gráficos en múltiples temporalidades. El análisis top-down empieza aquí.",
+        chapters: 4, duration: "45 min",
         videos: [
-            { title: "Bienvenida al Programa",    duration: "15:30", url: "https://www.youtube.com/watch?v=6kjnyouSnHs" },
-            { title: "Configuración del Entorno", duration: "18:45", url: "https://www.youtube.com/watch?v=WSvGAHejvgU" },
-            { title: "Roadmap del Curso",         duration: "11:20", url: "#" },
+            { title: "Gráfico Mensual — La visión macro",     duration: "12:00", url: "#" },
+            { title: "Gráfico Semanal — La tendencia media",  duration: "11:00", url: "#" },
+            { title: "Gráfico Diario — El setup operativo",   duration: "12:00", url: "#" },
+            { title: "Velas Limpias — Sin ruido visual",      duration: "10:00", url: "#" },
         ]
     },
     {
-        id: 2, title: "Inicio Trading Lab", icon: "🚀",
-        description: "Primeros pasos en el Trading Lab. Entendiendo la plataforma y herramientas básicas.",
+        id: 2, title: "Estructura de Mercado", icon: "🏗️",
+        description: "Identifica la tendencia antes de operar. Máximos y mínimos crecientes o decrecientes lo dicen todo.",
+        chapters: 4, duration: "50 min",
+        videos: [
+            { title: "Máximos Crecientes — Señal alcista",    duration: "12:00", url: "#" },
+            { title: "Mínimos Crecientes — Soporte dinámico", duration: "13:00", url: "#" },
+            { title: "Máximos Decrecientes — Señal bajista",  duration: "12:00", url: "#" },
+            { title: "Mínimos Decrecientes — Presión vendedora", duration: "13:00", url: "#" },
+        ]
+    },
+    {
+        id: 3, title: "Análisis de Tendencia", icon: "📈",
+        description: "Nunca luches contra el mercado. Aprende a identificar y operar a favor de la tendencia dominante.",
+        chapters: 4, duration: "55 min",
+        videos: [
+            { title: "Tendencia Alcista — Cómo montarla",     duration: "14:00", url: "#" },
+            { title: "Tendencia Bajista — Cómo evitarla",     duration: "13:00", url: "#" },
+            { title: "Rango Lateral — Paciencia obligatoria", duration: "14:00", url: "#" },
+            { title: "Validación de Líneas de Tendencia",     duration: "14:00", url: "#" },
+        ]
+    },
+    {
+        id: 4, title: "Soporte y Resistencia", icon: "🧱",
+        description: "Los niveles fuertes controlan el precio. Aprende a marcar zonas que realmente importan.",
+        chapters: 4, duration: "1h",
+        videos: [
+            { title: "Soporte Fresco — Primera vez testeado",  duration: "15:00", url: "#" },
+            { title: "Resistencia Mayor — Donde venden los grandes", duration: "15:00", url: "#" },
+            { title: "Marcado de Zonas — Técnica profesional", duration: "15:00", url: "#" },
+            { title: "Niveles con Múltiples Toques",           duration: "15:00", url: "#" },
+        ]
+    },
+    {
+        id: 5, title: "Oferta y Demanda", icon: "⚖️",
+        description: "Las instituciones actúan en estas zonas. Aprende a identificar dónde el dinero inteligente opera.",
+        chapters: 4, duration: "1h 10min",
+        videos: [
+            { title: "Zonas de Demanda — Dónde compran los grandes", duration: "18:00", url: "#" },
+            { title: "Zonas de Oferta — Dónde venden los grandes",   duration: "17:00", url: "#" },
+            { title: "Áreas de Rechazo — Señales de reacción",       duration: "17:00", url: "#" },
+            { title: "Formación de Base — Acumulación institucional", duration: "18:00", url: "#" },
+        ]
+    },
+    {
+        id: 6, title: "Comportamiento de Velas", icon: "🕯️",
+        description: "El cierre de la vela revela la verdad. Las formaciones de velas cuentan la historia del mercado.",
+        chapters: 4, duration: "1h",
+        videos: [
+            { title: "Engulfing Alcista — Reversión potente",  duration: "15:00", url: "#" },
+            { title: "Engulfing Bajista — Trampa para bulls",  duration: "15:00", url: "#" },
+            { title: "Pin Bar — Rechazo de nivel clave",       duration: "15:00", url: "#" },
+            { title: "Inside Bar — Compresión antes del movimiento", duration: "15:00", url: "#" },
+        ]
+    },
+    {
+        id: 7, title: "Rupturas de Precio", icon: "💥",
+        description: "Confirma si es real o una trampa. Las rupturas falsas son la fuente de pérdidas más común.",
+        chapters: 4, duration: "1h 5min",
+        videos: [
+            { title: "Ruptura de Rango — Cuándo creerla",       duration: "16:00", url: "#" },
+            { title: "Ruptura de Tendencia — Cambio de régimen", duration: "16:00", url: "#" },
+            { title: "Ruptura de Soporte — Señal bajista",       duration: "17:00", url: "#" },
+            { title: "Entradas en Retest — La entrada profesional", duration: "16:00", url: "#" },
+        ]
+    },
+    {
+        id: 8, title: "Análisis de Volumen", icon: "📦",
+        description: "El volumen confirma el precio. Sin volumen, el movimiento no tiene convicción real.",
+        chapters: 4, duration: "1h",
+        videos: [
+            { title: "Volumen en Rupturas — Confirmación clave",   duration: "15:00", url: "#" },
+            { title: "Bajo Volumen en Retrocesos — Señal alcista", duration: "15:00", url: "#" },
+            { title: "Volumen Clímax — Agotamiento del movimiento", duration: "15:00", url: "#" },
+            { title: "Participación Débil — Trampa a evitar",      duration: "15:00", url: "#" },
+        ]
+    },
+    {
+        id: 9, title: "Patrones de Gráfico", icon: "🔷",
+        description: "Los patrones solo funcionan con contexto. Aprende a leerlos dentro de la tendencia dominante.",
+        chapters: 4, duration: "1h 10min",
+        videos: [
+            { title: "Triángulo Ascendente — Continuación alcista",  duration: "17:00", url: "#" },
+            { title: "Triángulo Descendente — Continuación bajista", duration: "17:00", url: "#" },
+            { title: "Rectángulo — Rango operativo",                 duration: "18:00", url: "#" },
+            { title: "Bandera y Asta — Impulso y continuación",      duration: "18:00", url: "#" },
+        ]
+    },
+    {
+        id: 10, title: "Alineación Multi-Temporalidad", icon: "🔭",
+        description: "La alineación crea potencia. Cuando mensual, semanal y diario coinciden, la probabilidad dispara.",
         chapters: 4, duration: "1h 20min",
         videos: [
-            { title: "Introducción al Trading Lab", duration: "20:00", url: "#" },
-            { title: "Herramientas Esenciales",     duration: "25:30", url: "#" },
-            { title: "Tu Primera Operación",        duration: "22:15", url: "#" },
-            { title: "Checklist Pre-Trading",       duration: "12:45", url: "#" },
+            { title: "Sesgo Mensual — La dirección macro",         duration: "20:00", url: "#" },
+            { title: "Estructura Semanal — La tendencia real",     duration: "20:00", url: "#" },
+            { title: "Setup Diario — El punto de entrada",         duration: "20:00", url: "#" },
+            { title: "Trigger en TF Menor — La ejecución precisa", duration: "20:00", url: "#" },
         ]
     },
     {
-        id: 3, title: "Introducción", icon: "📚",
-        description: "Conceptos fundamentales del trading: mercados, instrumentos y terminología.",
-        chapters: 5, duration: "2h 10min",
+        id: 11, title: "Planificación del Trade", icon: "📋",
+        description: "Sin plan no hay trading. Define entrada, stop y objetivo antes de pulsar el botón.",
+        chapters: 4, duration: "1h",
         videos: [
-            { title: "¿Qué es el Trading?",       duration: "25:00", url: "#" },
-            { title: "Tipos de Mercados",          duration: "30:00", url: "#" },
-            { title: "Instrumentos Financieros",   duration: "28:00", url: "#" },
-            { title: "Terminología Básica",        duration: "22:00", url: "#" },
-            { title: "Psicología del Trader",      duration: "25:00", url: "#" },
+            { title: "Zona de Entrada — Dónde y por qué",       duration: "15:00", url: "#" },
+            { title: "Stop Loss — No negociable",                duration: "15:00", url: "#" },
+            { title: "Niveles Objetivo — Take Profit inteligente", duration: "15:00", url: "#" },
+            { title: "Ratio Riesgo/Recompensa — El número que importa", duration: "15:00", url: "#" },
         ]
     },
     {
-        id: 4, title: "Lab Station", icon: "🧪",
-        description: "Configuración avanzada de estaciones de trabajo para análisis técnico.",
-        chapters: 4, duration: "1h 45min",
+        id: 12, title: "Gestión del Riesgo", icon: "🛡️",
+        description: "Sobrevive primero, gana después. La gestión del riesgo es lo único que te mantiene en el juego.",
+        chapters: 4, duration: "1h 10min",
         videos: [
-            { title: "Setup Profesional",              duration: "28:00", url: "#" },
-            { title: "Pantallas y Layouts",            duration: "22:00", url: "#" },
-            { title: "Atajos y Productividad",         duration: "25:00", url: "#" },
-            { title: "Gestión de Múltiples Monitores", duration: "30:00", url: "#" },
+            { title: "Riesgo Fijo por Trade — La regla del 1-2%",  duration: "17:00", url: "#" },
+            { title: "Sizing de Posición — Cálculo exacto",         duration: "18:00", url: "#" },
+            { title: "Sin Revenge Trading — El mayor asesino",      duration: "17:00", url: "#" },
+            { title: "Protección de Capital — Prioridad absoluta",  duration: "18:00", url: "#" },
         ]
     },
     {
-        id: 5, title: "Lab Foundation", icon: "🏗️",
-        description: "Fundamentos del análisis técnico: soportes, resistencias y tendencias.",
-        chapters: 6, duration: "3h 30min",
+        id: 13, title: "Ejecución", icon: "⚡",
+        description: "La disciplina es el edge. Espera confirmación, sigue el plan y sal sin ego.",
+        chapters: 4, duration: "1h",
         videos: [
-            { title: "Teoría de Dow",          duration: "35:00", url: "#" },
-            { title: "Soportes y Resistencias",duration: "40:00", url: "#" },
-            { title: "Líneas de Tendencia",    duration: "35:00", url: "#" },
-            { title: "Canales y Patrones",     duration: "45:00", url: "#" },
-            { title: "Velas Japonesas I",      duration: "35:00", url: "#" },
-            { title: "Velas Japonesas II",     duration: "30:00", url: "#" },
+            { title: "Esperar Confirmación — No adelantarse",      duration: "15:00", url: "#" },
+            { title: "Evitar Entradas Prematuras — La trampa más cara", duration: "15:00", url: "#" },
+            { title: "Seguir el Plan — Sin improvisar",            duration: "15:00", url: "#" },
+            { title: "Salir Sin Ego — Cerrar cuando toca",         duration: "15:00", url: "#" },
         ]
     },
     {
-        id: 6, title: "Advanced Foundation", icon: "🔬",
-        description: "Conceptos avanzados: indicadores, osciladores y sistemas de trading.",
-        chapters: 5, duration: "4h 15min",
+        id: 14, title: "Trampas del Mercado", icon: "⚠️",
+        description: "El mercado cobra matrícula. Aprende a reconocer las trampas más comunes antes de caer en ellas.",
+        chapters: 4, duration: "1h 5min",
         videos: [
-            { title: "Medias Móviles Avanzadas",  duration: "50:00", url: "#" },
-            { title: "RSI y Estocástico",         duration: "45:00", url: "#" },
-            { title: "MACD y Divergencias",       duration: "55:00", url: "#" },
-            { title: "Volumen y Perfil",          duration: "45:00", url: "#" },
-            { title: "Construcción de Sistemas",  duration: "60:00", url: "#" },
+            { title: "Falsas Rupturas — Stop Hunt profesional",    duration: "16:00", url: "#" },
+            { title: "Entradas Tardías — El FOMO que destroza",    duration: "16:00", url: "#" },
+            { title: "Sobretrading — Menos es más",                duration: "17:00", url: "#" },
+            { title: "Ignorar el Volumen — Error fatal",           duration: "16:00", url: "#" },
         ]
     },
     {
-        id: 7, title: "Multi-TimeFrame Análisis", icon: "📊",
-        description: "Análisis multi-temporal: sincronización de timeframes y confluencias.",
-        chapters: 4, duration: "2h 45min",
+        id: 15, title: "Revisión Post-Trade", icon: "📓",
+        description: "Journal o repite el dolor. La revisión sistemática es lo que separa a los traders rentables.",
+        chapters: 4, duration: "50 min",
         videos: [
-            { title: "Teoría de Timeframes",  duration: "40:00", url: "#" },
-            { title: "Top-Down Analysis",     duration: "45:00", url: "#" },
-            { title: "Confluencias y Zonas",  duration: "40:00", url: "#" },
-            { title: "Casos Prácticos MTF",   duration: "50:00", url: "#" },
-        ]
-    },
-    {
-        id: 10, title: "Manejo de la Posición", icon: "🎯",
-        description: "Gestión activa de trades: stops, targets y ajustes en vivo.",
-        chapters: 5, duration: "3h 20min",
-        videos: [
-            { title: "Stop Loss Inteligente",  duration: "40:00", url: "#" },
-            { title: "Take Profit y RRR",      duration: "35:00", url: "#" },
-            { title: "Breakeven y Trailing",   duration: "45:00", url: "#" },
-            { title: "Escalado de Posiciones", duration: "40:00", url: "#" },
-            { title: "Gestión en Vivo",        duration: "50:00", url: "#" },
-        ]
-    },
-    {
-        id: 11, title: "Gestión Monetaria", icon: "💰",
-        description: "Gestión de capital: sizing, riesgo por trade y curva de equity.",
-        chapters: 4, duration: "2h 30min",
-        videos: [
-            { title: "Regla del 1-2%",          duration: "35:00", url: "#" },
-            { title: "Position Sizing",          duration: "40:00", url: "#" },
-            { title: "Drawdown y Recuperación",  duration: "35:00", url: "#" },
-            { title: "Optimización de Curva",    duration: "40:00", url: "#" },
-        ]
-    },
-    {
-        id: 12, title: "Creación de Watchlist", icon: "📋",
-        description: "Construcción y mantenimiento de listas de seguimiento efectivas.",
-        chapters: 3, duration: "1h 45min",
-        videos: [
-            { title: "Criterios de Selección", duration: "35:00", url: "#" },
-            { title: "Scanning y Filtrado",    duration: "35:00", url: "#" },
-            { title: "Mantenimiento Diario",   duration: "35:00", url: "#" },
-        ]
-    },
-    {
-        id: 13, title: "Trader Goals", icon: "🎖️",
-        description: "Planificación de objetivos y desarrollo de disciplina de trading.",
-        chapters: 3, duration: "1h 30min",
-        videos: [
-            { title: "SMART Goals",            duration: "30:00", url: "#" },
-            { title: "Trading Plan Personal",  duration: "35:00", url: "#" },
-            { title: "Review y Mejora Continua", duration: "25:00", url: "#" },
-        ]
-    },
-    {
-        id: 14, title: "Despedida", icon: "🎓",
-        description: "Cierre del programa y próximos pasos en tu carrera de trading.",
-        chapters: 2, duration: "45 min",
-        videos: [
-            { title: "Resumen y Checklist Final", duration: "25:00", url: "#" },
-            { title: "Comunidad y Recursos",      duration: "20:00", url: "#" },
+            { title: "Captura de Pantalla — Documenta todo",       duration: "12:00", url: "#" },
+            { title: "Registro de Errores — Honestidad brutal",    duration: "13:00", url: "#" },
+            { title: "Revisión del Setup — ¿Cumplí las reglas?",  duration: "13:00", url: "#" },
+            { title: "Lecciones Aprendidas — El verdadero beneficio", duration: "12:00", url: "#" },
         ]
     },
 ];
 
 const PHASES = [
-    { label: "📍 FASE 1 // FUNDAMENTOS",          modules: [0,1,2]   },
-    { label: "🔬 FASE 2 // LABORATORIO Y TÉCNICO", modules: [3,4,5]   },
-    { label: "🎯 FASE 3 // ESTRATEGIA AVANZADA",  modules: [6,7]     },
-    { label: "🚀 FASE 4 // ESPECIALIZACIÓN",       modules: [8,9,10,11] },
+    { label: "📍 FASE 1 // ANÁLISIS TÉCNICO FUNDAMENTAL", modules: [0, 1, 2, 3, 4] },
+    { label: "🔬 FASE 2 // LECTURA DE MERCADO AVANZADA",  modules: [5, 6, 7, 8] },
+    { label: "🎯 FASE 3 // ESTRATEGIA Y PLANIFICACIÓN",   modules: [9, 10, 11] },
+    { label: "🚀 FASE 4 // EJECUCIÓN Y MENTALIDAD",       modules: [12, 13, 14] },
 ];
+
+const OUTCOME = {
+    icon:  "🏆",
+    title: "RESULTADO FINAL",
+    items: [
+        { icon: "✅", text: "Setup Limpio — Sin ruido, sin dudas" },
+        { icon: "⏳", text: "Entrada Paciente — Esperar la confirmación" },
+        { icon: "🛡️", text: "Riesgo Controlado — Capital protegido" },
+        { icon: "💰", text: "Salida Rentable — Ejecutar el plan" },
+    ]
+};
 
 let activeModule = null;
 
 export async function render(container) {
     activeModule = null;
-    container.innerHTML = pageHeader() + phasesGrid() + pageFooter();
+    container.innerHTML = pageHeader() + phasesGrid() + outcomeSection() + pageFooter();
     setupCards(container);
 }
 
 function pageHeader() {
     return '<div style="margin-bottom:2rem;">'
         + '<div style="color:var(--color-accent);font-size:18px;letter-spacing:0.1em;text-shadow:var(--glow-text);margin-bottom:4px;">RSU ACADEMY</div>'
-        + '<div style="color:var(--color-muted);font-size:12px;">PROTOCOLO DE FORMACIÓN // 14 MÓDULOS // ACCESO COMPLETO</div>'
+        + '<div style="color:var(--color-secondary);font-size:13px;letter-spacing:0.15em;margin-bottom:4px;">TECHNICAL ANALYSIS BLUEPRINT</div>'
+        + '<div style="color:var(--color-muted);font-size:12px;">15 MÓDULOS // ACCESO COMPLETO // DE CERO A TRADER TÉCNICO</div>'
         + '</div>';
 }
 
@@ -173,32 +218,41 @@ function moduleCard(m) {
         + 'background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius);'
         + 'overflow:hidden;cursor:pointer;transition:all var(--transition);">'
 
-        // Thumbnail
-        + '<div style="height:110px;background:linear-gradient(135deg,var(--color-surface),var(--color-bg,#0a0a0a));'
+        + '<div style="height:90px;background:linear-gradient(135deg,var(--color-surface),var(--color-bg,#0a0a0a));'
         + 'display:flex;align-items:center;justify-content:center;border-bottom:1px solid var(--color-border);">'
-        + '<span style="font-size:3rem;">' + m.icon + '</span>'
+        + '<span style="font-size:2.5rem;">' + m.icon + '</span>'
         + '</div>'
 
-        // Body
         + '<div style="padding:1rem;">'
         + '<div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">'
         + '<div style="background:var(--color-accent);color:#000;width:22px;height:22px;border-radius:3px;'
         + 'display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:500;flex-shrink:0;">'
         + m.id + '</div>'
-        + '<div style="color:var(--color-text);font-size:13px;font-weight:500;letter-spacing:0.05em;">' + m.title.toUpperCase() + '</div>'
+        + '<div style="color:var(--color-text);font-size:12px;font-weight:500;letter-spacing:0.04em;">' + m.title.toUpperCase() + '</div>'
         + '</div>'
         + '<div style="color:var(--color-muted);font-size:11px;line-height:1.5;margin-bottom:10px;">' + m.description + '</div>'
         + '<div style="display:flex;gap:8px;font-size:10px;color:var(--color-muted);margin-bottom:10px;">'
         + '<span>📹 ' + m.videos.length + ' vídeos</span>'
         + '<span>⏱ ' + m.duration + '</span>'
         + '</div>'
-
-        // Progress bar
         + '<div style="background:var(--color-bg,#0a0a0a);height:3px;border-radius:2px;overflow:hidden;">'
         + '<div style="height:100%;width:0%;background:var(--color-accent);border-radius:2px;"></div>'
         + '</div>'
-        + '<div style="color:var(--color-muted);font-size:10px;margin-top:4px;">0% completado</div>'
+        + '</div>'
+        + '</div>';
+}
 
+function outcomeSection() {
+    return '<div style="border-top:1px solid var(--color-border);margin-top:2rem;padding-top:2rem;">'
+        + '<div style="color:var(--color-secondary);font-size:13px;letter-spacing:0.1em;border-left:3px solid var(--color-accent);padding-left:10px;margin-bottom:1.5rem;">'
+        + '🏆 RESULTADO FINAL // TECHNICAL ANALYSIS BLUEPRINT</div>'
+        + '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:1rem;">'
+        + OUTCOME.items.map(item =>
+            '<div style="background:rgba(0,255,173,0.05);border:1px solid var(--color-accent);border-radius:var(--radius);padding:1.25rem;text-align:center;">'
+            + '<div style="font-size:2rem;margin-bottom:8px;">' + item.icon + '</div>'
+            + '<div style="color:var(--color-accent);font-size:13px;letter-spacing:0.05em;">' + item.text + '</div>'
+            + '</div>'
+        ).join('')
         + '</div>'
         + '</div>';
 }
@@ -206,7 +260,7 @@ function moduleCard(m) {
 function pageFooter() {
     return '<div style="text-align:center;margin-top:3rem;padding:1.5rem;border-top:1px solid var(--color-border);">'
         + '<div style="color:var(--color-muted);font-size:10px;letter-spacing:0.15em;">'
-        + '[END OF TRANSMISSION // RSU_ACADEMY_v2.0]<br>'
+        + '[END OF TRANSMISSION // TECHNICAL_ANALYSIS_BLUEPRINT_v1.0]<br>'
         + '[STATUS: ALL MODULES UNLOCKED // ACCESS: FULL]'
         + '</div>'
         + '</div>';
@@ -232,21 +286,19 @@ function renderModuleDetail(container, m) {
         + 'border-radius:var(--radius);padding:6px 14px;font-family:var(--font-mono);font-size:12px;'
         + 'cursor:pointer;margin-bottom:1.5rem;">← VOLVER</button>'
 
-        // Header módulo
         + '<div style="background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius);padding:1.5rem;margin-bottom:1.5rem;">'
         + '<div style="display:flex;align-items:center;gap:1rem;margin-bottom:0.75rem;">'
         + '<span style="font-size:2.5rem;">' + m.icon + '</span>'
         + '<div>'
         + '<div style="color:var(--color-accent);font-size:20px;letter-spacing:0.1em;">' + m.title.toUpperCase() + '</div>'
         + '<div style="color:var(--color-muted);font-size:12px;margin-top:2px;">'
-        + '📹 ' + m.videos.length + ' vídeos · ⏱ ' + m.duration + ' · 📚 ' + m.chapters + ' capítulos'
+        + '📹 ' + m.videos.length + ' vídeos · ⏱ ' + m.duration
         + '</div>'
         + '</div>'
         + '</div>'
-        + '<div style="color:var(--color-text);font-size:13px;line-height:1.6;">' + m.description + '</div>'
+        + '<div style="color:var(--color-text);font-size:13px;line-height:1.7;">' + m.description + '</div>'
         + '</div>'
 
-        // Lista de vídeos
         + '<div style="background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius);overflow:hidden;">'
         + '<div style="padding:10px 14px;border-bottom:1px solid var(--color-border);color:var(--color-accent);font-size:12px;letter-spacing:0.08em;">CONTENIDO DEL MÓDULO</div>'
         + m.videos.map((v, i) => {

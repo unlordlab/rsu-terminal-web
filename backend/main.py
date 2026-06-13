@@ -5,7 +5,7 @@ from fastapi.responses import FileResponse
 from contextlib import asynccontextmanager
 import asyncio
 from config import settings
-from routers import auth, market, cartera, canslim, rsu_algoritmo, research, newsfeed, tesis, spxl, rsrw, ws
+from routers import auth, market, cartera, canslim, rsu_algoritmo, research, newsfeed, tesis, spxl, rsrw, ws, options
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -36,6 +36,7 @@ app.include_router(tesis.router)
 app.include_router(spxl.router)
 app.include_router(rsrw.router)
 app.include_router(ws.router)
+app.include_router(options.router)
 
 app.mount("/static",     StaticFiles(directory="../static"),              name="static")
 app.mount("/themes",     StaticFiles(directory="../frontend/themes"),     name="themes")
