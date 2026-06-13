@@ -2,6 +2,7 @@ import { Tooltip } from '/components/tooltip.js';
 import { initTheme } from '/core/theme.js';
 import { renderSidebar } from '/components/sidebar.js';
 import { renderTopbar } from '/components/topbar.js';
+import { initWebSocket } from '/core/websocket.js';
 
 const ROUTES = {
     '/':         () => import('/pages/dashboard.js'),
@@ -51,6 +52,8 @@ async function loadView(path) {
 }
 
 initTheme();
+const token = sessionStorage.getItem('rsu_token');
+if (token) initWebSocket(token);
 renderSidebar(document.getElementById('sidebar'), navigate);
 renderTopbar(document.getElementById('topbar'), navigate);
 navigate(location.pathname);

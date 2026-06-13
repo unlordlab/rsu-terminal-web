@@ -2,10 +2,18 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
+from contextlib import asynccontextmanager
+import asyncio
 from config import settings
-from routers import auth, market, cartera, canslim, rsu_algoritmo, research, newsfeed, tesis, spxl, rsrw
+from routers import auth, market, cartera, canslim, rsu_algoritmo, research, newsfeed, tesis, spxl, rsrw, ws
 
-app = FastAPI(title=settings.app_name, docs_url="/api/docs")
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    task = asyncio.create_task(ws.broadcast_loop())
+    yield
+    task.cancel()
+
+app = FastAPI(title=settings.app_name, docs_url="/api/docs", lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,
@@ -25,7 +33,7 @@ app.include_router(newsfeed.router)
 app.include_router(tesis.router)
 app.include_router(spxl.router)
 app.include_router(rsrw.router)
-
+app.include_router(ws.router)
 
 app.mount("/static",     StaticFiles(directory="../static"),              name="static")
 app.mount("/themes",     StaticFiles(directory="../frontend/themes"),     name="themes")
