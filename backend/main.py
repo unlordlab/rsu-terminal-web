@@ -9,9 +9,11 @@ from routers import auth, market, cartera, canslim, rsu_algoritmo, research, new
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    task = asyncio.create_task(ws.broadcast_loop())
+    task1 = asyncio.create_task(ws.broadcast_loop())
+    task2 = asyncio.create_task(ws.broadcast_cartera_loop())
     yield
-    task.cancel()
+    task1.cancel()
+    task2.cancel()
 
 app = FastAPI(title=settings.app_name, docs_url="/api/docs", lifespan=lifespan)
 

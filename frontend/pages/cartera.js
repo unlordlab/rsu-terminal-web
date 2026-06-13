@@ -21,7 +21,6 @@ export async function render(container) {
             + mktBadge
             + '</div>';
 
-        // Métricas principales
         if (m) {
             const pnlColor = m.pnl_neto >= 0 ? 'var(--color-accent)' : '#f23645';
             const valColor = m.val_pct  >= 0 ? 'var(--color-accent)' : '#f23645';
@@ -32,26 +31,23 @@ export async function render(container) {
                 + '</div>';
         }
 
-        // Posiciones activas
         html += sectionHeader('01 // POSICIONES ACTIVAS');
         if (data.abiertas && data.abiertas.length > 0) {
-            html += positionsTable(data.abiertas);
+            html += positionsTable(data.abiertas, false);
         } else {
             html += emptyBox('Sin posiciones activas en este momento.');
         }
 
-        // Actividad reciente
         html += sectionHeader('02 // ACTIVIDAD RECIENTE');
         html += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem;margin-bottom:1.5rem;">'
             + recentBox('ÚLTIMAS ENTRADAS', data.recent, true)
             + recentBox('ÚLTIMAS SALIDAS', data.cerradas ? data.cerradas.slice(0,5) : [], false)
             + '</div>';
 
-        // Stats cerradas
         if (c && c.total > 0) {
             html += sectionHeader('03 // HISTORIAL DE OPERACIONES CERRADAS');
-            const wrColor = c.win_rate >= 50 ? 'var(--color-accent)' : '#f23645';
-            const pnlColor = c.avg_pnl >= 0 ? 'var(--color-accent)' : '#f23645';
+            const wrColor  = c.win_rate >= 50 ? 'var(--color-accent)' : '#f23645';
+            const pnlColor = c.avg_pnl  >= 0  ? 'var(--color-accent)' : '#f23645';
             html += '<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:1rem;margin-bottom:1rem;">'
                 + metricCard('Trades Cerrados', c.total, c.ganadas + 'W / ' + c.perdidas + 'L', 'var(--color-text)')
                 + metricCard('Win Rate', c.win_rate.toFixed(1) + '%', 'Operaciones ganadoras', wrColor)
@@ -60,16 +56,59 @@ export async function render(container) {
             html += positionsTable(data.cerradas, true);
         }
 
-        // Allocation
         html += sectionHeader('04 // ESTRATEGIA DE ASIGNACIÓN');
         html += allocationWidget();
 
         container.querySelector('#cartera-content').innerHTML = html;
 
+        // WebSocket cartera — actualizar precios en tiempo real
+        initCarteraWS();
+
     } catch(e) {
         container.querySelector('#cartera-content').innerHTML =
             '<div style="padding:1.5rem;background:var(--color-surface);border:1px solid #f2364566;border-radius:var(--radius);color:#f23645;font-size:13px;">⚠ ' + e.message + '</div>';
     }
+}
+
+function initCarteraWS() {
+    const token = sessionStorage.getItem('rsu_token');
+    const url   = 'ws://localhost:8000/ws/cartera' + (token ? '?token=' + token : '');
+    const ws    = new WebSocket(url);
+
+    ws.onmessage = (event) => {
+        try {
+            const data = JSON.parse(event.data);
+            if (data.type !== 'cartera_update') return;
+            updateCarteraPrices(data.prices);
+        } catch(e) {}
+    };
+
+    ws.onerror = () => ws.close();
+
+    // Indicador WS en cartera
+    ws.onopen  = () => {
+        const ind = document.getElementById('cartera-ws-indicator');
+        if (ind) { ind.style.background = 'var(--color-accent)'; ind.title = 'Precios en tiempo real'; }
+    };
+    ws.onclose = () => {
+        const ind = document.getElementById('cartera-ws-indicator');
+        if (ind) { ind.style.background = '#555'; ind.title = 'Sin conexión en tiempo real'; }
+    };
+}
+
+function updateCarteraPrices(prices) {
+    (prices || []).forEach(p => {
+        // Actualizar precio actual
+        document.querySelectorAll('[data-price="' + p.ticker + '"]').forEach(el => {
+            el.textContent = '$' + p.price.toLocaleString('en-US', {minimumFractionDigits:2});
+        });
+        // Actualizar % cambio hoy
+        document.querySelectorAll('[data-chg="' + p.ticker + '"]').forEach(el => {
+            const color = p.chg >= 0 ? 'var(--color-accent)' : '#f23645';
+            el.style.color  = color;
+            el.textContent  = (p.chg >= 0 ? '+' : '') + p.chg.toFixed(2) + '% hoy';
+        });
+    });
 }
 
 function authHeader() {
@@ -86,7 +125,10 @@ function metricCard(label, value, sub, color) {
 }
 
 function sectionHeader(title) {
-    return '<div style="color:var(--color-secondary);font-size:14px;letter-spacing:0.1em;margin:1.5rem 0 0.75rem;border-left:3px solid var(--color-accent);padding-left:10px;">' + title + '</div>';
+    return '<div style="display:flex;align-items:center;gap:10px;color:var(--color-secondary);font-size:14px;letter-spacing:0.1em;margin:1.5rem 0 0.75rem;border-left:3px solid var(--color-accent);padding-left:10px;">'
+        + title
+        + '<span id="cartera-ws-indicator" style="width:6px;height:6px;border-radius:50%;background:#555;margin-left:6px;" title="Conectando..."></span>'
+        + '</div>';
 }
 
 function emptyBox(msg) {
@@ -96,20 +138,36 @@ function emptyBox(msg) {
 function positionsTable(rows, closed) {
     const headers = closed
         ? ['Fecha', 'Ticker', 'P. Compra', 'P. Salida', 'P&L %', 'Comentarios']
-        : ['Fecha', 'Ticker', 'P. Compra', 'P. Actual', 'P&L %', 'Comentarios'];
+        : ['Fecha', 'Ticker', 'P. Compra', 'P. Actual', 'Hoy', 'P&L %', 'Comentarios'];
 
-    const th = headers.map(h => '<th style="color:var(--color-secondary);font-size:11px;letter-spacing:0.08em;padding:8px 12px;border-bottom:1px solid var(--color-border);text-align:left;">' + h + '</th>').join('');
+    const th = headers.map(h =>
+        '<th style="color:var(--color-secondary);font-size:11px;letter-spacing:0.08em;padding:8px 12px;border-bottom:1px solid var(--color-border);text-align:left;">' + h + '</th>'
+    ).join('');
 
     const trs = rows.map(r => {
         const pnlColor = r.pnl >= 0 ? 'var(--color-accent)' : '#f23645';
         const pnlStr   = (r.pnl >= 0 ? '+' : '') + r.pnl.toFixed(2) + '%';
+        const comment  = (r.comment && r.comment !== 'nan') ? r.comment : '—';
+
+        if (closed) {
+            return '<tr style="border-bottom:1px solid var(--color-border);">'
+                + '<td style="padding:9px 12px;color:var(--color-muted);font-size:12px;">' + r.fecha + '</td>'
+                + '<td style="padding:9px 12px;"><span style="background:rgba(0,255,173,0.1);color:var(--color-accent);border:1px solid rgba(0,255,173,0.3);border-radius:3px;padding:2px 8px;font-size:12px;">' + r.ticker + '</span></td>'
+                + '<td style="padding:9px 12px;color:var(--color-text);font-size:12px;">$' + r.compra.toLocaleString('en-US', {minimumFractionDigits:2}) + '</td>'
+                + '<td style="padding:9px 12px;color:var(--color-text);font-size:12px;">$' + r.actual.toLocaleString('en-US', {minimumFractionDigits:2}) + '</td>'
+                + '<td style="padding:9px 12px;color:' + pnlColor + ';font-size:12px;font-weight:500;">' + pnlStr + '</td>'
+                + '<td style="padding:9px 12px;color:var(--color-muted);font-size:11px;">' + comment + '</td>'
+                + '</tr>';
+        }
+
         return '<tr style="border-bottom:1px solid var(--color-border);">'
             + '<td style="padding:9px 12px;color:var(--color-muted);font-size:12px;">' + r.fecha + '</td>'
             + '<td style="padding:9px 12px;"><span style="background:rgba(0,255,173,0.1);color:var(--color-accent);border:1px solid rgba(0,255,173,0.3);border-radius:3px;padding:2px 8px;font-size:12px;">' + r.ticker + '</span></td>'
             + '<td style="padding:9px 12px;color:var(--color-text);font-size:12px;">$' + r.compra.toLocaleString('en-US', {minimumFractionDigits:2}) + '</td>'
-            + '<td style="padding:9px 12px;color:var(--color-text);font-size:12px;">$' + r.actual.toLocaleString('en-US', {minimumFractionDigits:2}) + '</td>'
+            + '<td style="padding:9px 12px;color:var(--color-text);font-size:12px;" data-price="' + r.ticker + '">$' + r.actual.toLocaleString('en-US', {minimumFractionDigits:2}) + '</td>'
+            + '<td style="padding:9px 12px;font-size:11px;color:var(--color-muted);" data-chg="' + r.ticker + '">—</td>'
             + '<td style="padding:9px 12px;color:' + pnlColor + ';font-size:12px;font-weight:500;">' + pnlStr + '</td>'
-            + '<td style="padding:9px 12px;color:var(--color-muted);font-size:11px;">' + (r.comment || '—') + '</td>'
+            + '<td style="padding:9px 12px;color:var(--color-muted);font-size:11px;">' + comment + '</td>'
             + '</tr>';
     }).join('');
 

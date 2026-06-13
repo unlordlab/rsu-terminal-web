@@ -1,52 +1,70 @@
 import { cycleTheme, getCurrentTheme } from '/core/theme.js';
-import { initWebSocket, onMarketUpdate, offMarketUpdate } from '/core/websocket.js';
+import { initWebSocket, onMarketUpdate } from '/core/websocket.js';
 
 export function renderTopbar(container, navigate) {
     container.innerHTML = `
-        <div id="prices-ticker" style="
-            flex:1;
-            display:flex;
-            gap:1.5rem;
-            overflow:hidden;
-            align-items:center;
-            font-size:11px;
-        ">
-            <span style="color:var(--color-muted);">Conectando...</span>
+        <div style="flex:1;overflow:hidden;position:relative;min-width:0;height:48px;">
+            <div id="ticker-track" style="
+                display:inline-flex;
+                gap:2rem;
+                position:absolute;
+                top:0;left:0;
+                white-space:nowrap;
+                animation:ticker-scroll 60s linear infinite;
+                align-items:center;
+                height:48px;
+            ">
+                <span style="color:var(--color-muted);font-size:11px;">Conectando...</span>
+            </div>
         </div>
 
-        <div style="display:flex;align-items:center;gap:0.75rem;flex-shrink:0;">
-            <span id="ws-indicator" title="WebSocket" style="
+        <div style="display:flex;align-items:center;gap:0.75rem;flex-shrink:0;margin-left:1rem;">
+            <span id="ws-indicator" style="
                 width:6px;height:6px;border-radius:50%;
-                background:#555;
-                transition:background 0.3s;
+                background:#555;transition:background 0.3s;
+                flex-shrink:0;
             "></span>
-
-            <span id="market-status" style="font-size:11px;color:var(--color-muted);">
-                ● MKT
-            </span>
-
-            <button id="theme-toggle" title="Cambiar tema" style="
+            <span id="market-status" style="font-size:11px;color:var(--color-muted);flex-shrink:0;">● MKT</span>
+            <span id="topbar-time" style="font-size:11px;color:var(--color-muted);flex-shrink:0;font-family:var(--font-mono);"></span>
+            <button id="theme-toggle" style="
                 background:none;border:1px solid var(--color-border);
                 color:var(--color-muted);padding:3px 10px;
                 border-radius:var(--radius);cursor:pointer;
                 font-family:var(--font-mono);font-size:11px;
-                transition:all var(--transition);
             ">THEME</button>
-
             <button id="logout-btn" style="
                 background:none;border:1px solid var(--color-border);
                 color:var(--color-muted);padding:3px 10px;
                 border-radius:var(--radius);cursor:pointer;
                 font-family:var(--font-mono);font-size:11px;
-                transition:all var(--transition);
             ">LOGOUT</button>
         </div>
     `;
 
-    // Theme toggle
+    // Inyectar CSS de animación
+    if (!document.getElementById('ticker-css')) {
+        const style = document.createElement('style');
+        style.id = 'ticker-css';
+        style.textContent = `
+            @keyframes ticker-scroll {
+                0%   { transform: translateX(100vw); }
+                100% { transform: translateX(-100%); }
+            }
+            #ticker-track:hover {
+                animation-play-state: paused;
+            }
+        `;
+        document.head.appendChild(style);
+    }
+
+    // Reloj en tiempo real hora Madrid
+    updateClock(container);
+    setInterval(() => updateClock(container), 1000);
+
+    // Theme
     container.querySelector('#theme-toggle').addEventListener('click', () => {
         cycleTheme();
-        updateThemeLabel();
+        updateThemeLabel(container);
     });
 
     // Logout
@@ -55,38 +73,56 @@ export function renderTopbar(container, navigate) {
         navigate('/login');
     });
 
-    // WS indicator
-    document.addEventListener('ws:connected',    () => setWsIndicator(true));
-    document.addEventListener('ws:disconnected', () => setWsIndicator(false));
+    // WS events
+    document.addEventListener('ws:connected',    () => setWsIndicator(container, true));
+    document.addEventListener('ws:disconnected', () => setWsIndicator(container, false));
 
-    // Market updates → actualizar barra
+    // Market updates
     onMarketUpdate('topbar', (data) => {
-        updatePricesTicker(container, data);
+        requestAnimationFrame(() => updateTicker(container, data));
     });
 
-    function updateThemeLabel() {
-        const btn = container.querySelector('#theme-toggle');
-        if (btn) btn.textContent = getCurrentTheme().toUpperCase();
-    }
+    // Escuchar también el evento directo del documento
+    document.addEventListener('ws:market_update', (e) => {
+        requestAnimationFrame(() => updateTicker(container, e.detail));
+    });
 
-    function setWsIndicator(connected) {
-        const dot = container.querySelector('#ws-indicator');
-        if (dot) {
-            dot.style.background = connected ? 'var(--color-accent)' : '#555';
-            dot.title = connected ? 'WebSocket conectado' : 'WebSocket desconectado';
-        }
-    }
-
-    updateThemeLabel();
+    updateThemeLabel(container);
 
     // Iniciar WebSocket
     const token = sessionStorage.getItem('rsu_token');
     if (token) initWebSocket(token);
 }
 
-function updatePricesTicker(container, data) {
-    const ticker = container.querySelector('#prices-ticker');
-    if (!ticker) return;
+function updateClock(container) {
+    const el = container.querySelector('#topbar-time');
+    if (!el) return;
+    const now = new Date();
+    const madrid = now.toLocaleTimeString('es-ES', {
+        timeZone: 'Europe/Madrid',
+        hour: '2-digit', minute: '2-digit', second: '2-digit'
+    });
+    el.textContent = '⟳ ' + madrid;
+}
+
+function updateThemeLabel(container) {
+    const btn = container.querySelector('#theme-toggle');
+    if (btn) btn.textContent = getCurrentTheme().toUpperCase();
+}
+
+function setWsIndicator(container, connected) {
+    const dot = container.querySelector('#ws-indicator');
+    const mkt = container.querySelector('#market-status');
+    if (dot) dot.style.background = connected ? 'var(--color-accent)' : '#555';
+    if (mkt) {
+        mkt.style.color  = connected ? 'var(--color-accent)' : 'var(--color-muted)';
+        mkt.textContent  = connected ? '● MKT LIVE' : '● MKT';
+    }
+}
+
+function updateTicker(container, data) {
+    const track = container.querySelector('#ticker-track');
+    if (!track) return;
 
     const items = [];
 
@@ -96,18 +132,16 @@ function updatePricesTicker(container, data) {
         const color = up ? 'var(--color-accent)' : '#f23645';
         const arrow = up ? '▲' : '▼';
         items.push(
-            '<div style="display:flex;flex-direction:column;align-items:center;flex-shrink:0;">'
+            '<span style="display:inline-flex;flex-direction:column;align-items:center;flex-shrink:0;min-width:60px;">'
             + '<span style="color:var(--color-muted);font-size:9px;letter-spacing:0.05em;">' + idx.ticker + '</span>'
-            + '<span style="color:var(--color-text);font-size:11px;">' + idx.price.toLocaleString('en-US') + '</span>'
+            + '<span style="color:var(--color-text);font-size:12px;">' + idx.price.toLocaleString('en-US') + '</span>'
             + '<span style="color:' + color + ';font-size:9px;">' + arrow + ' ' + Math.abs(idx.chg).toFixed(2) + '%</span>'
-            + '</div>'
+            + '</span>'
         );
     });
 
     // Separador
-    if (items.length > 0 && (data.prices || []).length > 0) {
-        items.push('<div style="width:1px;height:28px;background:var(--color-border);flex-shrink:0;"></div>');
-    }
+    items.push('<span style="color:var(--color-border);font-size:16px;flex-shrink:0;">│</span>');
 
     // Precios extra
     (data.prices || []).forEach(p => {
@@ -115,39 +149,35 @@ function updatePricesTicker(container, data) {
         const color = up ? 'var(--color-accent)' : '#f23645';
         const arrow = up ? '▲' : '▼';
         items.push(
-            '<div style="display:flex;flex-direction:column;align-items:center;flex-shrink:0;">'
+            '<span style="display:inline-flex;flex-direction:column;align-items:center;flex-shrink:0;min-width:60px;">'
             + '<span style="color:var(--color-muted);font-size:9px;letter-spacing:0.05em;">' + p.name + '</span>'
-            + '<span style="color:var(--color-text);font-size:11px;">' + p.price.toLocaleString('en-US') + '</span>'
+            + '<span style="color:var(--color-text);font-size:12px;">' + p.price.toLocaleString('en-US') + '</span>'
             + '<span style="color:' + color + ';font-size:9px;">' + arrow + ' ' + Math.abs(p.chg).toFixed(2) + '%</span>'
-            + '</div>'
+            + '</span>'
         );
     });
 
-    // RSU Score
+    // Separador
     if (data.algo) {
-        items.push('<div style="width:1px;height:28px;background:var(--color-border);flex-shrink:0;"></div>');
+        items.push('<span style="color:var(--color-border);font-size:16px;flex-shrink:0;">│</span>');
         items.push(
-            '<div style="display:flex;flex-direction:column;align-items:center;flex-shrink:0;">'
+            '<span style="display:inline-flex;flex-direction:column;align-items:center;flex-shrink:0;min-width:80px;">'
             + '<span style="color:var(--color-muted);font-size:9px;letter-spacing:0.05em;">RSU ALGO</span>'
-            + '<span style="color:' + data.algo.color + ';font-size:11px;font-weight:500;">' + data.algo.score + '/100</span>'
+            + '<span style="color:' + data.algo.color + ';font-size:12px;font-weight:500;">' + data.algo.score + '/100</span>'
             + '<span style="color:' + data.algo.color + ';font-size:9px;">' + data.algo.estado + '</span>'
-            + '</div>'
+            + '</span>'
         );
     }
 
-    // Timestamp
-    if (data.timestamp) {
-        items.push(
-            '<div style="color:var(--color-muted);font-size:9px;flex-shrink:0;margin-left:auto;">⟳ ' + data.timestamp + '</div>'
-        );
-    }
+    // Duplicar contenido para loop infinito suave
+    const content = items.join('');
+    track.innerHTML = content + 
+        '<span style="display:inline-block;min-width:4rem;"></span>' + 
+        content;
 
-    ticker.innerHTML = items.join('');
-
-    // Actualizar estado mercado
-    const mkt = container.querySelector('#market-status');
-    if (mkt && data.indices && data.indices.length > 0) {
-        mkt.style.color = 'var(--color-accent)';
-        mkt.textContent = '● MKT LIVE';
-    }
+    // Recalcular duración de la animación según el ancho del contenido
+    const trackWidth = track.scrollWidth / 2;
+    const speed      = 20; // px por segundo
+    const duration   = Math.max(30, trackWidth / speed);
+    track.style.animationDuration = duration + 's';
 }
