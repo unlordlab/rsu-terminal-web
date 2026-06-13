@@ -1,3 +1,4 @@
+import { Tooltip } from '/components/tooltip.js';
 import { initTheme } from '/core/theme.js';
 import { renderSidebar } from '/components/sidebar.js';
 import { renderTopbar } from '/components/topbar.js';
@@ -55,3 +56,4 @@ renderTopbar(document.getElementById('topbar'), navigate);
 navigate(location.pathname);
 window.addEventListener('popstate', () => navigate(location.pathname));
 window.__navigate = navigate;
+Tooltip.init();

@@ -1,3 +1,5 @@
+import { tt } from '/components/tooltip.js';
+
 export async function render(container) {
     container.innerHTML = header()
         + '<div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem;margin-bottom:1.5rem;">'
@@ -20,7 +22,7 @@ function header() {
 
 function analyzerPanel() {
     return '<div style="background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius);padding:1.25rem;">'
-        + '<div style="color:var(--color-accent);font-size:13px;letter-spacing:0.08em;margin-bottom:1rem;">ANÁLISIS INDIVIDUAL</div>'
+        + '<div style="color:var(--color-accent);font-size:13px;letter-spacing:0.08em;margin-bottom:1rem;">ANÁLISIS INDIVIDUAL ' + tt('canslim') + '</div>'
         + '<div style="display:flex;gap:8px;">'
         + '<input id="ticker-input" type="text" placeholder="AAPL, NVDA, MSFT..." style="flex:1;background:var(--color-bg);border:1px solid var(--color-border);border-radius:var(--radius);padding:8px 12px;color:var(--color-text);font-family:var(--font-mono);font-size:13px;outline:none;">'
         + '<button id="analyze-btn" style="background:var(--color-accent);color:#000;border:none;border-radius:var(--radius);padding:8px 16px;font-family:var(--font-mono);font-size:12px;cursor:pointer;letter-spacing:0.05em;">ANALIZAR</button>'
@@ -46,24 +48,20 @@ function scannerPanel() {
 }
 
 function setupAnalyzer(container) {
-    const input = container.querySelector('#ticker-input');
-    const btn   = container.querySelector('#analyze-btn');
+    const input  = container.querySelector('#ticker-input');
+    const btn    = container.querySelector('#analyze-btn');
     const result = container.querySelector('#canslim-result');
 
     async function doAnalyze() {
         const ticker = input.value.trim().toUpperCase();
         if (!ticker) return;
-
-        btn.textContent  = 'ANALIZANDO...';
+        btn.textContent   = 'ANALIZANDO...';
         btn.style.opacity = '0.7';
-        result.innerHTML = '<div style="padding:1rem;color:var(--color-muted);font-size:12px;">Analizando ' + ticker + '...</div>';
-
+        result.innerHTML  = '<div style="padding:1rem;color:var(--color-muted);font-size:12px;">Analizando ' + ticker + '...</div>';
         try {
             const res  = await fetch('/api/v1/canslim/analyze/' + ticker, { headers: authHeader() });
             const data = await res.json();
-
             if (!data.ok) throw new Error(data.error || 'Error de análisis');
-
             result.innerHTML = renderAnalysis(data);
             renderChart(data);
         } catch(e) {
@@ -84,17 +82,14 @@ function setupScanner(container) {
     const result = container.querySelector('#canslim-scan-result');
 
     btn.addEventListener('click', async () => {
-        const minScore = select.value;
-        btn.textContent  = 'ESCANEANDO...';
+        const minScore    = select.value;
+        btn.textContent   = 'ESCANEANDO...';
         btn.style.opacity = '0.7';
-        result.innerHTML = '<div style="padding:1rem;color:var(--color-muted);font-size:12px;">Escaneando S&P 500... esto puede tardar ~60 segundos</div>';
-
+        result.innerHTML  = '<div style="padding:1rem;color:var(--color-muted);font-size:12px;">Escaneando S&P 500... esto puede tardar ~60 segundos</div>';
         try {
             const res  = await fetch('/api/v1/canslim/scan?min_score=' + minScore, { headers: authHeader() });
             const data = await res.json();
-
             if (!data.ok) throw new Error('Error en el scan');
-
             result.innerHTML = renderScanResults(data);
         } catch(e) {
             result.innerHTML = '<div style="padding:1rem;color:#f23645;font-size:12px;">✗ ' + e.message + '</div>';
@@ -106,17 +101,19 @@ function setupScanner(container) {
 }
 
 function renderAnalysis(data) {
-    const chgColor = data.chg_pct >= 0 ? 'var(--color-accent)' : '#f23645';
-    const chgStr   = (data.chg_pct >= 0 ? '+' : '') + data.chg_pct.toFixed(2) + '%';
+    const chgColor   = data.chg_pct >= 0 ? 'var(--color-accent)' : '#f23645';
+    const chgStr     = (data.chg_pct >= 0 ? '+' : '') + data.chg_pct.toFixed(2) + '%';
     const scoreColor = data.canslim_score >= 70 ? 'var(--color-accent)' : data.canslim_score >= 50 ? '#ffb800' : '#f23645';
-    const mktcapStr = data.mktcap >= 1e12 ? '$' + (data.mktcap/1e12).toFixed(1) + 'T' : data.mktcap >= 1e9 ? '$' + (data.mktcap/1e9).toFixed(1) + 'B' : '$' + (data.mktcap/1e6).toFixed(0) + 'M';
+    const mktcapStr  = data.mktcap >= 1e12 ? '$' + (data.mktcap/1e12).toFixed(1) + 'T'
+                     : data.mktcap >= 1e9  ? '$' + (data.mktcap/1e9).toFixed(1)  + 'B'
+                     : '$' + (data.mktcap/1e6).toFixed(0) + 'M';
 
     const ibdRows = [
-        ['RS Rating',        data.ibd.rs,        ratingColor(data.ibd.rs, 80, 60)],
-        ['EPS Rating',       data.ibd.eps,       ratingColor(data.ibd.eps, 80, 60)],
-        ['Composite',        data.ibd.composite, ratingColor(data.ibd.composite, 80, 60)],
-        ['SMR Rating',       data.ibd.smr,       gradeColor(data.ibd.smr)],
-        ['Acc/Dis Rating',   data.ibd.acc_dis,   gradeColor(data.ibd.acc_dis)],
+        ['RS Rating',      data.ibd.rs,        ratingColor(data.ibd.rs, 80, 60)],
+        ['EPS Rating',     data.ibd.eps,       ratingColor(data.ibd.eps, 80, 60)],
+        ['Composite',      data.ibd.composite, ratingColor(data.ibd.composite, 80, 60)],
+        ['SMR Rating',     data.ibd.smr,       gradeColor(data.ibd.smr)],
+        ['Acc/Dis Rating', data.ibd.acc_dis,   gradeColor(data.ibd.acc_dis)],
     ].map(([label, val, color]) =>
         '<div style="display:flex;justify-content:space-between;padding:7px 0;border-bottom:1px solid var(--color-border);font-size:12px;">'
         + '<span style="color:var(--color-muted);">' + label + '</span>'
@@ -144,8 +141,6 @@ function renderAnalysis(data) {
     ).join('');
 
     return '<div style="margin-top:1.5rem;">'
-
-        // Header ticker
         + '<div style="background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius);padding:1.25rem;margin-bottom:1rem;">'
         + '<div style="display:flex;justify-content:space-between;align-items:flex-start;">'
         + '<div>'
@@ -161,38 +156,28 @@ function renderAnalysis(data) {
         + '<div style="color:var(--color-muted);font-size:11px;margin-top:2px;">' + mktcapStr + ' market cap</div>'
         + '</div>'
         + '</div>'
-
-        // Score bar
         + '<div style="margin-top:1rem;padding-top:1rem;border-top:1px solid var(--color-border);">'
         + '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">'
         + '<span style="color:var(--color-muted);font-size:11px;letter-spacing:0.08em;">CAN SLIM SCORE</span>'
         + '<span style="color:' + scoreColor + ';font-size:18px;font-weight:500;">' + data.canslim_score + '/100</span>'
         + '</div>'
-        + '<div style="background:var(--color-surface2, #1a1a1a);border-radius:4px;height:8px;">'
+        + '<div style="background:var(--color-surface2,#1a1a1a);border-radius:4px;height:8px;">'
         + '<div style="height:100%;width:' + data.canslim_score + '%;background:' + scoreColor + ';border-radius:4px;transition:width 0.5s;"></div>'
         + '</div>'
         + '</div>'
         + '</div>'
-
-        // Grid 3 columnas
         + '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:1rem;margin-bottom:1rem;">'
-
-        // IBD Ratings
         + '<div style="background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius);padding:1rem;">'
-        + '<div style="color:var(--color-accent);font-size:12px;letter-spacing:0.08em;margin-bottom:0.75rem;">IBD RATINGS</div>'
+        + '<div style="color:var(--color-accent);font-size:12px;letter-spacing:0.08em;margin-bottom:0.75rem;">IBD RATINGS ' + tt('rs-rating') + '</div>'
         + ibdRows
         + '</div>'
-
-        // Trend Template
         + '<div style="background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius);padding:1rem;">'
         + '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.75rem;">'
-        + '<div style="color:var(--color-accent);font-size:12px;letter-spacing:0.08em;">TREND TEMPLATE</div>'
+        + '<div style="color:var(--color-accent);font-size:12px;letter-spacing:0.08em;">TREND TEMPLATE ' + tt('trend-template') + '</div>'
         + '<div style="color:' + (data.trend.passed ? 'var(--color-accent)' : '#f23645') + ';font-size:11px;">' + data.trend.score + '/7 ' + (data.trend.passed ? '✓ PASS' : '✗ FAIL') + '</div>'
         + '</div>'
         + trendRows
         + '</div>'
-
-        // Fundamentales
         + '<div style="background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius);padding:1rem;">'
         + '<div style="color:var(--color-accent);font-size:12px;letter-spacing:0.08em;margin-bottom:0.75rem;">FUNDAMENTALES</div>'
         + fundRows
@@ -205,21 +190,17 @@ function renderAnalysis(data) {
         + '</div>'
         + '</div>'
         + '</div>'
-
         + '</div>'
-
-        // Chart
         + '<div style="background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius);padding:1rem;">'
         + '<div style="color:var(--color-accent);font-size:12px;letter-spacing:0.08em;margin-bottom:0.75rem;">PRECIO — ÚLTIMOS 60 DÍAS</div>'
         + '<canvas id="canslim-chart" height="80"></canvas>'
         + '</div>'
-
         + '</div>';
 }
 
 function renderChart(data) {
-    const script = document.createElement('script');
-    script.src = 'https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js';
+    const script  = document.createElement('script');
+    script.src    = 'https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js';
     script.onload = function() {
         const ctx = document.getElementById('canslim-chart');
         if (!ctx) return;
@@ -284,14 +265,12 @@ function renderScanResults(data) {
 
     const html = '<div style="margin-top:1.5rem;background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius);overflow:hidden;">'
         + '<div style="padding:10px 14px;border-bottom:1px solid var(--color-border);color:var(--color-accent);font-size:13px;letter-spacing:0.08em;">RESULTADOS DEL SCAN</div>'
-        + summary
-        + header
-        + rows
+        + summary + header + rows
         + '</div>';
 
     setTimeout(() => {
         document.querySelectorAll('.scan-row').forEach(row => {
-            row.addEventListener('mouseenter', () => row.style.background = 'var(--color-surface2, #1a1a1a)');
+            row.addEventListener('mouseenter', () => row.style.background = 'var(--color-surface2,#1a1a1a)');
             row.addEventListener('mouseleave', () => row.style.background = 'transparent');
             row.addEventListener('click', () => {
                 const ticker = row.getAttribute('data-ticker');

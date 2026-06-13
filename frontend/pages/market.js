@@ -1,3 +1,4 @@
+import { tt } from '/components/tooltip.js';
 export async function render(container) {
     container.innerHTML = '<div style="margin-bottom:1.5rem;">'
         + '<div style="color:var(--color-accent);font-size:18px;letter-spacing:0.1em;text-shadow:var(--glow-text);margin-bottom:4px;">MARKET</div>'
@@ -43,7 +44,7 @@ async function loadIndices(el) {
                 arrow + ' ' + Math.abs(idx.change).toLocaleString('es-ES') + ' (' + (idx.pct > 0 ? '+' : '') + idx.pct + '%)',
                 color);
         }).join('');
-        el.innerHTML = widgetShell('INDICES', 'Mercados principales', rows, data.timestamp);
+        el.innerHTML = widgetShell('INDICES ' + tt('ad-line'), 'Mercados principales', rows, data.timestamp);
     } catch(e) {
         el.innerHTML = widgetShell('INDICES', 'Mercados principales', widgetError(e.message));
     }
@@ -64,7 +65,7 @@ async function loadFearGreed(el) {
             + '<div style="text-align:center;"><div>AYER</div><div style="color:var(--color-text);margin-top:2px;">' + data.prev + '</div></div>'
             + '<div style="text-align:center;"><div>HACE 1 SEM</div><div style="color:var(--color-text);margin-top:2px;">' + data.week_ago + '</div></div>'
             + '</div></div>';
-        el.innerHTML = widgetShell('FEAR & GREED', 'CNN Index', content, data.timestamp);
+        el.innerHTML = widgetShell('FEAR & GREED ' + tt('fear-greed'), 'CNN Index', content, data.timestamp);
     } catch(e) {
         el.innerHTML = widgetShell('FEAR & GREED', 'CNN Index', widgetError(e.message));
     }
@@ -272,7 +273,7 @@ async function loadVix(el) {
         const chartId = 'vix-chart-' + Date.now();
         const chartHtml = '<div style="padding:16px;"><canvas id="' + chartId + '" height="120"></canvas></div>';
 
-        el.innerHTML = widgetShell('VIX TERM STRUCTURE', 'Curva de futuros · Volatilidad implícita', summary + chartHtml, data.timestamp);
+       el.innerHTML = widgetShell('VIX TERM STRUCTURE ' + tt('vix-term-structure'), 'Curva de futuros · Volatilidad implícita', summary + chartHtml, data.timestamp);
 
         const script = document.createElement('script');
         script.src = 'https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js';
@@ -455,7 +456,7 @@ async function loadSpreads(el) {
         const summary = '<div style="display:flex;border-bottom:1px solid var(--color-border);">' + cards + '</div>';
         const chartHtml = '<div style="padding:16px;"><canvas id="' + chartId + '" height="120"></canvas></div>';
 
-        el.innerHTML = widgetShell('CREDIT SPREADS', 'OAS · FRED · ICE BofA', summary + chartHtml, data.timestamp);
+        el.innerHTML = widgetShell('CREDIT SPREADS ' + tt('credit-spreads'), 'OAS · FRED · ICE BofA', summary + chartHtml, data.timestamp);
 
         const script = document.createElement('script');
         script.src = 'https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js';

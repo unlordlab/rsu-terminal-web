@@ -1,3 +1,4 @@
+import { tt } from '/components/tooltip.js';
 export async function render(container) {
     container.innerHTML = '<div style="margin-bottom:1.5rem;">'
         + '<div style="color:var(--color-accent);font-size:18px;letter-spacing:0.1em;text-shadow:var(--glow-text);margin-bottom:4px;">SPXL STRATEGY</div>'
