@@ -89,20 +89,24 @@ function renderSectors(el, sectors) {
 
     el.innerHTML = '<div style="background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius);padding:1rem;">'
         + '<div style="color:var(--color-accent);font-size:12px;letter-spacing:0.08em;margin-bottom:0.75rem;">ROTACIÓN SECTORIAL · RS vs SPY</div>'
-        + '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:8px;">'
+        + '<div style="display:flex;flex-direction:column;gap:6px;">'
         + sorted.map(s => {
-            const rs    = s.rs || 0;
-            const color = rs > 0 ? 'var(--color-accent)' : '#f23645';
-            const w     = maxAbs > 0 ? Math.abs(rs) / maxAbs * 100 : 0;
-            const trend = (s.rs_trend || 0) > 0.01 ? '▲' : (s.rs_trend || 0) < -0.01 ? '▼' : '→';
+            const rs     = s.rs || 0;
+            const name   = s.ticker || s.sector || s.index || 'N/A';
+            const color  = rs > 0 ? 'var(--color-accent)' : '#f23645';
+            const w      = maxAbs > 0 ? Math.abs(rs) / maxAbs * 100 : 0;
+            const trendV = s.rs_trend || 0;
+            const trend  = trendV > 0.01 ? '▲' : trendV < -0.01 ? '▼' : '→';
             const tColor = trend === '▲' ? 'var(--color-accent)' : trend === '▼' ? '#f23645' : 'var(--color-muted)';
-            return '<div style="display:flex;align-items:center;gap:8px;">'
-                + '<div style="width:100px;font-size:11px;color:var(--color-muted);flex-shrink:0;">' + (s.sector || '') + '</div>'
-                + '<div style="flex:1;background:var(--color-bg,#0a0a0a);border-radius:2px;height:5px;">'
+            const ret63  = s.return_63d != null ? ((s.return_63d >= 0 ? '+' : '') + s.return_63d.toFixed(1) + '%') : '';
+            return '<div style="display:grid;grid-template-columns:140px 1fr 50px 20px 60px;gap:8px;align-items:center;">'
+                + '<div style="font-size:11px;color:var(--color-muted);">' + name + '</div>'
+                + '<div style="background:var(--color-bg,#0a0a0a);border-radius:2px;height:5px;">'
                 + '<div style="height:100%;width:' + w.toFixed(1) + '%;background:' + color + ';border-radius:2px;"></div>'
                 + '</div>'
-                + '<div style="color:' + color + ';font-size:11px;width:45px;text-align:right;">' + rs.toFixed(1) + '</div>'
-                + '<div style="color:' + tColor + ';font-size:11px;width:16px;">' + trend + '</div>'
+                + '<div style="color:' + color + ';font-size:11px;text-align:right;">' + rs.toFixed(2) + '</div>'
+                + '<div style="color:' + tColor + ';font-size:11px;">' + trend + '</div>'
+                + '<div style="color:var(--color-muted);font-size:10px;text-align:right;">' + ret63 + '</div>'
                 + '</div>';
         }).join('')
         + '</div>'

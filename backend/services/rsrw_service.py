@@ -67,6 +67,10 @@ def _parse_gist(data: dict) -> tuple:
             if c in df.columns:
                 df[c] = pd.to_numeric(df[c], errors="coerce")
         df = df.dropna(subset=["RS_Pct"])
+        # Mapear sectores en inglés a español
+        if "Sector" in df.columns:
+            df["Sector"] = df["Sector"].map(lambda x: GICS_MAP.get(str(x), x) if pd.notna(x) else "Otros")
+            df["Sector"] = df["Sector"].fillna("Otros")
     else:
         df = pd.DataFrame()
 
@@ -241,8 +245,12 @@ def _df_to_records(df: pd.DataFrame, limit: int = 500) -> list:
                 if pd.isna(val): val = None
                 elif isinstance(val, (np.integer,)): val = int(val)
                 elif isinstance(val, (np.floating,)): val = round(float(val), 4)
+                elif isinstance(val, str): val = val.strip()
             except Exception: pass
             r[col.lower()] = val
+        # Asegurar que sector nunca sea vacío
+        if not r.get('sector') or str(r.get('sector', '')).strip() in ('', 'nan', 'None'):
+            r['sector'] = 'Otros'
         records.append(r)
     return records[:limit]
 
