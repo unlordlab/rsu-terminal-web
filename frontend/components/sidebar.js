@@ -9,6 +9,7 @@ const NAV_ITEMS = [
     { path: '/btc-stratum', label: 'BTC Stratum', icon: '₿' },
     { path: '/options', label: 'Options Flow', icon: 'O' },
     { path: '/research',  label: 'Research',     icon: 'I' },
+    { path: '/insider',   label: 'Insider Flow',  icon: '🔍' },
     { path: '/academy', label: 'Academy', icon: 'Ac' },
     { path: '/roadmap', label: 'Roadmap 2026', icon: 'R' },
     { path: '/canslim',   label: 'CANSLIM',      icon: 'K' },

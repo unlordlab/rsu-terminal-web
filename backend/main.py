@@ -6,8 +6,7 @@ from contextlib import asynccontextmanager
 import asyncio
 from config import settings
 from middleware.rate_limit import rate_limit
-from routers import auth, market, cartera, canslim, rsu_algoritmo, research, newsfeed, tesis, spxl, rsrw, ws, options, btc_stratum
-
+from routers import auth, market, cartera, canslim, rsu_algoritmo, research, newsfeed, tesis, spxl, rsrw, ws, options, btc_stratum, insider
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     task1 = asyncio.create_task(ws.broadcast_loop())
@@ -44,6 +43,7 @@ app.include_router(rsrw.router,         dependencies=rl)
 app.include_router(ws.router)
 app.include_router(options.router,      dependencies=rl)
 app.include_router(btc_stratum.router,  dependencies=rl)
+app.include_router(insider.router,      dependencies=rl)
 
 app.mount("/static",     StaticFiles(directory="../static"),          name="static")
 app.mount("/assets",     StaticFiles(directory="../frontend/assets"), name="assets")
