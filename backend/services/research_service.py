@@ -189,6 +189,51 @@ def _get_finnhub(ticker: str) -> dict:
     except Exception:
         return {}
 
+def _get_fmp_analyst_changes(ticker: str) -> list:
+    try:
+        key = settings.finnhub_api_key
+        if not key: return []
+        r = requests.get(
+            f"https://finnhub.io/api/v1/stock/recommendation?symbol={ticker}&token={key}",
+            timeout=8
+        )
+        if r.status_code != 200: return []
+        data = r.json()
+        if not isinstance(data, list) or not data: return []
+
+        # Finnhub devuelve recomendaciones mensuales — convertimos a cambios
+        results = []
+        for i, item in enumerate(data[:6]):
+            period = item.get('period', '')[:10]
+            buy    = int(item.get('buy', 0) or 0)
+            hold   = int(item.get('hold', 0) or 0)
+            sell   = int(item.get('sell', 0) or 0)
+            sb     = int(item.get('strongBuy', 0) or 0)
+            ss     = int(item.get('strongSell', 0) or 0)
+            total  = buy + hold + sell + sb + ss
+            if total == 0: continue
+            buy_pct  = round((buy + sb) / total * 100)
+            if buy_pct >= 70:
+                action = 'ALCISTA'
+                action_color = '#00ffad'
+            elif buy_pct >= 50:
+                action = 'NEUTRAL'
+                action_color = '#ffb800'
+            else:
+                action = 'BAJISTA'
+                action_color = '#f23645'
+            results.append({
+                "date":         period,
+                "firm":         f"{buy+sb} compra · {hold} neutral · {sell+ss} venta",
+                "action":       action,
+                "action_color": action_color,
+                "from_grade":   f"{buy_pct}% alcistas",
+                "to_grade":     f"{total} analistas",
+            })
+        return results
+    except Exception:
+        return []
+
 def _get_alpha_vantage(ticker: str) -> dict:
     key = settings.alpha_vantage_api_key
     if not key:
@@ -341,15 +386,176 @@ def _compute_rsu_score(yf_data: dict) -> dict:
 
     return {"score": score, "max": max_score, "color": color, "label": label, "breakdown": breakdown}
 
+def _translate_description(text: str) -> str:
+    if not text: return text
+    try:
+        import requests as _req
+        key = getattr(settings, 'xai_api_key', '') or getattr(settings, 'groq_api_key', '')
+        if not key: return text
+        
+        # Intentar con Groq
+        groq_key = getattr(settings, 'groq_api_key', '')
+        if groq_key:
+            r = _req.post(
+                "https://api.groq.com/openai/v1/chat/completions",
+                headers={"Authorization": f"Bearer {groq_key}", "Content-Type": "application/json"},
+                json={
+                    "model": "llama-3.3-70b-versatile",
+                    "messages": [
+                        {"role": "system", "content": "Traduce el siguiente texto del inglés al español de forma natural y profesional. Devuelve solo la traducción, sin explicaciones."},
+                        {"role": "user", "content": text[:1500]}
+                    ],
+                    "max_tokens": 800,
+                    "temperature": 0.3,
+                },
+                timeout=10
+            )
+            if r.status_code == 200:
+                return r.json()['choices'][0]['message']['content'].strip()
+    except Exception:
+        pass
+    return text
+
+def _get_insider_trading(ticker: str) -> list:
+    try:
+        key = settings.finnhub_api_key
+        if not key: return []
+        r = requests.get(
+            f"https://finnhub.io/api/v1/stock/insider-transactions?symbol={ticker}&token={key}",
+            timeout=8
+        )
+        if r.status_code != 200: return []
+        data = r.json().get('data', [])
+        if not isinstance(data, list): return []
+        results = []
+        for item in data[:10]:
+            change = _safe(item.get('change', 0)) or 0
+            value  = _safe(item.get('transactionPrice', 0)) or 0
+            total  = abs(change * value)
+            is_buy = change > 0
+            results.append({
+                "date":     item.get('transactionDate', '')[:10],
+                "name":     item.get('name', ''),
+                "title":    item.get('position', ''),
+                "type":     'COMPRA' if is_buy else 'VENTA',
+                "type_color": '#00ffad' if is_buy else '#f23645',
+                "shares":   int(abs(change)),
+                "price":    round(value, 2),
+                "value":    _fmt_value(total),
+            })
+        return results
+    except Exception:
+        return []
+
+def _get_short_interest(ticker: str) -> dict:
+    try:
+        stock     = yf.Ticker(ticker)
+        info      = stock.info or {}
+        short_pct = _safe(info.get('shortPercentOfFloat'))
+        short_int = _safe(info.get('sharesShort'))
+        short_ratio = _safe(info.get('shortRatio'))  # días para cubrir
+        if short_pct is None and short_int is None:
+            return {}
+        return {
+            "short_pct":   round(short_pct * 100, 2) if short_pct else None,
+            "short_int":   short_int,
+            "short_ratio": round(short_ratio, 1) if short_ratio else None,
+            "date":        "",
+        }
+    except Exception:
+        return {}
+
+def _get_next_earnings(ticker: str) -> dict:
+    try:
+        key = settings.finnhub_api_key
+        if not key: return {}
+        from datetime import datetime, timedelta
+        now     = datetime.now()
+        to_date = (now + timedelta(days=90)).strftime('%Y-%m-%d')
+        from_date = now.strftime('%Y-%m-%d')
+        r = requests.get(
+            f"https://finnhub.io/api/v1/calendar/earnings?symbol={ticker}&from={from_date}&to={to_date}&token={key}",
+            timeout=8
+        )
+        if r.status_code != 200: return {}
+        items = r.json().get('earningsCalendar', [])
+        if not items: return {}
+        next_e = items[0]
+        return {
+            "date":     next_e.get('date', ''),
+            "eps_est":  _safe(next_e.get('epsEstimate')),
+            "hour":     next_e.get('hour', ''),
+        }
+    except Exception:
+        return {}
+
+def _get_seasonality(ticker: str) -> list:
+    try:
+        import yfinance as yf
+        stock = yf.Ticker(ticker)
+        hist  = stock.history(period="5y", interval="1mo")
+        if hist.empty or len(hist) < 12: return []
+        hist['month']  = hist.index.month
+        hist['return'] = hist['Close'].pct_change() * 100
+        monthly = hist.groupby('month')['return'].mean()
+        months  = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic']
+        results = []
+        for m in range(1, 13):
+            val = round(float(monthly.get(m, 0)), 2)
+            results.append({
+                "month": months[m-1],
+                "avg":   val,
+                "color": '#00ffad' if val > 1 else '#90ee90' if val > 0 else '#f23645' if val < -1 else '#ff8c00',
+            })
+        return results
+    except Exception:
+        return []
+
+def _get_technical_levels(ticker: str) -> dict:
+    try:
+        import yfinance as yf
+        stock = yf.Ticker(ticker)
+        hist  = stock.history(period="1y", interval="1d").dropna()
+        if len(hist) < 50: return {}
+        close  = hist['Close']
+        price  = float(close.iloc[-1])
+        sma50  = round(float(close.tail(50).mean()), 2)
+        sma200 = round(float(close.tail(200).mean()), 2) if len(close) >= 200 else None
+        sma20  = round(float(close.tail(20).mean()), 2)
+        high52 = round(float(close.tail(252).max()), 2) if len(close) >= 252 else round(float(close.max()), 2)
+        low52  = round(float(close.tail(252).min()), 2) if len(close) >= 252 else round(float(close.min()), 2)
+        return {
+            "sma20":         sma20,
+            "sma50":         sma50,
+            "sma200":        sma200,
+            "vs_sma20":      round((price - sma20)  / sma20  * 100, 1),
+            "vs_sma50":      round((price - sma50)  / sma50  * 100, 1),
+            "vs_sma200":     round((price - sma200) / sma200 * 100, 1) if sma200 else None,
+            "vs_52h":        round((price - high52) / high52 * 100, 1),
+            "vs_52l":        round((price - low52)  / low52  * 100, 1),
+            "above_sma50":   price > sma50,
+            "above_sma200":  price > sma200 if sma200 else None,
+        }
+    except Exception:
+        return {}
+
 def get_research(ticker: str) -> dict:
     ticker = ticker.upper().strip()
-    with ThreadPoolExecutor(max_workers=3) as ex:
-        f_yf  = ex.submit(_get_yfinance, ticker)
-        f_fh  = ex.submit(_get_finnhub, ticker)
-        f_av  = ex.submit(_get_alpha_vantage, ticker)
-        yf_data = f_yf.result()
-        fh_data = f_fh.result()
-        av_data = f_av.result()
+    with ThreadPoolExecutor(max_workers=7) as ex:
+        f_yf      = ex.submit(_get_yfinance, ticker)
+        f_fh      = ex.submit(_get_finnhub, ticker)
+        f_av      = ex.submit(_get_alpha_vantage, ticker)
+        f_fmp     = ex.submit(_get_fmp_analyst_changes, ticker)
+        f_insider = ex.submit(_get_insider_trading, ticker)
+        f_short   = ex.submit(_get_short_interest, ticker)
+        f_season  = ex.submit(_get_seasonality, ticker)
+        yf_data   = f_yf.result()
+        fh_data   = f_fh.result()
+        av_data   = f_av.result()
+        fmp_data  = f_fmp.result()
+        insider   = f_insider.result()
+        short     = f_short.result()
+        season    = f_season.result()
 
     if not yf_data.get('ok'):
         return {"ok": False, "error": yf_data.get('error', 'Sin datos')}
@@ -365,7 +571,7 @@ def get_research(ticker: str) -> dict:
         "industry":    yf_data['industry'],
         "country":     yf_data['country'],
         "website":     yf_data['website'],
-        "description": yf_data['description'],
+        "description": _translate_description(yf_data['description']),
         "price":       yf_data['price'],
         "chg_pct":     yf_data['chg_pct'],
         "mktcap_fmt":  yf_data['mktcap_fmt'],
@@ -384,5 +590,11 @@ def get_research(ticker: str) -> dict:
         "quarterly_earnings": av_data.get('quarterly_earnings', []),
         "suggestions":     suggestions,
         "rsu_score":       rsu_score,
+        "analyst_changes":    fmp_data,
+        "insider_trading":    insider,
+        "short_interest":     short,
+        "seasonality":        season,
+        "next_earnings":      _get_next_earnings(ticker),
+        "technical_levels":   _get_technical_levels(ticker),
         "timestamp":       datetime.now().strftime('%H:%M:%S'),
     }
