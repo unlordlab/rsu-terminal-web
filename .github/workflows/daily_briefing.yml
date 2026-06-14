@@ -1,0 +1,33 @@
+name: Daily Market Briefing
+
+on:
+  schedule:
+    # Lunes a viernes a las 08:00 CET (07:00 UTC)
+    - cron: '0 7 * * 1-5'
+  workflow_dispatch:  # Permite ejecutar manualmente
+
+jobs:
+  briefing:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          pip install requests yfinance numpy
+
+      - name: Generate Daily Briefing
+        env:
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+          GIST_TOKEN:         ${{ secrets.GIST_TOKEN }}
+          GIST_ID:            ${{ secrets.GIST_ID }}
+        run: |
+          python scripts/daily_briefing.py

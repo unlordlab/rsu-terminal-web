@@ -449,7 +449,6 @@ function hashrateSection(data) {
 }
 
 function loading(msg) {
-function loading(msg) {
     return '<div style="padding:2rem;color:var(--color-muted);font-size:12px;text-align:center;">'
         + '<div style="font-size:24px;margin-bottom:8px;">₿</div>'
         + msg

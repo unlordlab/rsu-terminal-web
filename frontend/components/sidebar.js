@@ -23,11 +23,27 @@ export function renderSidebar(container, navigate) {
 
     const header = document.createElement('div');
     header.style.cssText = 'padding:1.25rem 1rem 1rem; border-bottom:1px solid var(--color-border); margin-bottom:0.5rem;';
-    header.innerHTML = '<div style="display:flex;align-items:center;gap:10px;margin-bottom:4px;">'
-        + '<img src="/assets/logo.png" style="width:36px;height:36px;border-radius:50%;object-fit:cover;border:1px solid var(--color-border);" onerror="this.style.display=\'none\'">'
+    const logoStyle = document.createElement('style');
+    logoStyle.textContent = `
+        @keyframes logo-pulse {
+            0%, 100% { box-shadow: 0 0 8px rgba(0,255,173,0.4), 0 0 16px rgba(0,255,173,0.2); }
+            50%       { box-shadow: 0 0 14px rgba(0,255,173,0.7), 0 0 28px rgba(0,255,173,0.3), 0 0 40px rgba(0,217,255,0.1); }
+        }
+        .rsu-logo {
+            animation: logo-pulse 3s ease-in-out infinite;
+            transition: transform 0.3s ease;
+        }
+        .rsu-logo:hover {
+            transform: scale(1.08) rotate(3deg);
+        }
+    `;
+    document.head.appendChild(logoStyle);
+
+    header.innerHTML = '<div style="display:flex;align-items:center;gap:12px;margin-bottom:4px;">'
+        + '<img src="/assets/logo.png" class="rsu-logo" style="width:52px;height:52px;border-radius:50%;object-fit:cover;border:2px solid var(--color-accent);" onerror="this.style.display=\'none\'">'
         + '<div>'
-        + '<div style="color:var(--color-accent);font-size:16px;letter-spacing:0.1em;">RSU TERMINAL</div>'
-        + '<div style="color:var(--color-muted);font-size:11px;">v2.0 FastAPI</div>'
+        + '<div style="color:var(--color-accent);font-size:15px;letter-spacing:0.12em;text-shadow:var(--glow-text);">RSU TERMINAL</div>'
+        + '<div style="color:var(--color-muted);font-size:10px;letter-spacing:0.05em;">v2.0 FastAPI</div>'
         + '</div>'
         + '</div>';
 
