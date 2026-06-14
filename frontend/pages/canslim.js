@@ -245,7 +245,7 @@ function renderScanResults(data) {
         const perfColor  = c.perf_12m >= 0 ? 'var(--color-accent)' : '#f23645';
         const scoreColor = c.score >= 70 ? 'var(--color-accent)' : c.score >= 50 ? '#ffb800' : '#f23645';
         return '<div style="display:grid;grid-template-columns:80px 80px 90px 70px 70px 80px 80px 80px;gap:8px;padding:9px 14px;border-bottom:1px solid var(--color-border);font-size:12px;align-items:center;cursor:pointer;" class="scan-row" data-ticker="' + c.ticker + '">'
-            + '<div style="color:var(--color-accent);font-weight:500;">' + c.ticker + '</div>'
+            + '<div onclick="goToResearch(\'' + c.ticker + '\')" class="ticker-link" style="color:var(--color-accent);font-weight:500;">' + c.ticker + '</div>'
             + '<div style="color:var(--color-text);">$' + c.price.toLocaleString('en-US') + '</div>'
             + '<div style="color:' + perfColor + ';">' + (c.perf_12m >= 0 ? '+' : '') + c.perf_12m.toFixed(1) + '%</div>'
             + '<div style="color:' + ratingColor(c.rs, 80, 60) + ';">' + c.rs + '</div>'

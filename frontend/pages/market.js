@@ -557,7 +557,7 @@ async function loadReddit(el) {
             const rank     = i + 1;
             return '<div style="display:grid;grid-template-columns:30px 60px 80px 70px 1fr;gap:6px;padding:8px 12px;border-bottom:1px solid var(--color-border);font-size:11px;align-items:center;">'
                 + '<div style="color:' + (rank <= 3 ? 'var(--color-accent)' : 'var(--color-muted)') + ';font-weight:500;">' + rank + '</div>'
-                + '<div style="color:var(--color-accent);font-weight:500;">' + item.ticker + '</div>'
+                + '<div onclick="goToResearch(\'' + item.ticker + '\')" class="ticker-link" style="color:var(--color-accent);font-weight:500;">' + item.ticker + '</div>'
                 + '<div><div style="color:var(--color-text);">' + priceStr + '</div><div style="color:' + chgColor + ';font-size:10px;">' + chgStr + '</div></div>'
                 + '<div><div style="background:var(--color-surface2);border-radius:2px;height:4px;margin-bottom:2px;"><div style="height:100%;width:' + item.buzz + '%;background:var(--color-accent);border-radius:2px;"></div></div><div style="color:var(--color-muted);font-size:10px;">' + item.buzz + '</div></div>'
                 + '<div style="color:var(--color-muted);font-size:10px;">' + item.social_hype + '</div>'
@@ -627,7 +627,7 @@ async function loadCalendar(el) {
 function wsRow(ticker, name, price, change, color) {
     return '<div data-ws-ticker="' + ticker + '" style="display:flex;justify-content:space-between;align-items:center;padding:10px 14px;border-bottom:1px solid var(--color-border);">'
         + '<div>'
-        + '<div style="color:var(--color-text);font-size:13px;font-weight:500;">' + ticker + '</div>'
+        + '<div onclick="goToResearch(\'' + ticker + '\')" class="ticker-link" style="color:var(--color-accent);font-size:13px;font-weight:500;">' + ticker + '</div>'
         + '<div style="color:var(--color-muted);font-size:11px;">' + name + '</div>'
         + '</div>'
         + '<div style="text-align:right;">'

@@ -13,6 +13,15 @@ export async function render(container) {
     const btn    = container.querySelector('#research-btn');
     const result = container.querySelector('#research-result');
 
+    // Auto-cargar ticker si viene en la URL
+    const urlTicker = new URLSearchParams(window.location.search).get('ticker');
+    if (urlTicker) {
+        input.value = urlTicker.toUpperCase();
+        setTimeout(() => doResearch(), 100);
+    } else {
+        input.focus();
+    }
+
     input.focus();
 
     async function doResearch() {

@@ -130,8 +130,7 @@ function renderTable(el, title, rows, isLeaders, freshness, total) {
         const rvolClr   = (r.rvol || 0) >= 1.5 ? 'var(--color-accent)' : 'var(--color-muted)';
 
         return '<div style="display:grid;grid-template-columns:70px 60px 60px 60px 60px 60px 60px 1fr;gap:6px;padding:8px 12px;border-bottom:1px solid var(--color-border);font-size:11px;align-items:center;">'
-            + '<div style="color:var(--color-accent);font-weight:500;">' + (r.ticker || '') + '</div>'
-            + '<div style="color:' + pctColor + ';font-weight:500;">' + pct.toFixed(0) + '</div>'
+            + '<div onclick="goToResearch(\'' + (r.ticker || '') + '\')" class="ticker-link" style="color:var(--color-accent);font-weight:500;">' + (r.ticker || '') + '</div>'            + '<div style="color:' + pctColor + ';font-weight:500;">' + pct.toFixed(0) + '</div>'
             + '<div style="color:var(--color-muted);">' + (r.rs_21d || 0).toFixed(1) + '</div>'
             + '<div style="color:var(--color-muted);">' + (r.rs_63d || 0).toFixed(1) + '</div>'
             + '<div style="color:var(--color-muted);">' + (r.rs_126d || 0).toFixed(1) + '</div>'

@@ -71,3 +71,11 @@ a:hover {
   background: var(--color-border);
   border-radius: 2px;
 }
+.ticker-link {
+    cursor: pointer;
+    transition: opacity 0.15s;
+}
+.ticker-link:hover {
+    opacity: 0.75;
+    text-decoration: underline;
+}

@@ -390,7 +390,7 @@ function flowTable(title, rows, color) {
         const scoreColor = r.score >= 7 ? '#ffb800' : r.score >= 5 ? 'var(--color-accent)' : 'var(--color-muted)';
         const expShort   = r.exp ? r.exp.substring(2).replace(/-/g, '/') : '';
         return '<div style="display:grid;grid-template-columns:60px 1fr 70px 55px 40px;gap:4px;padding:7px 10px;border-bottom:1px solid var(--color-border);font-size:11px;align-items:center;cursor:pointer;" class="flow-row" data-ticker="' + r.ticker + '">'
-            + '<div style="color:var(--color-accent);font-weight:500;">' + r.ticker + '</div>'
+            + '<div onclick="goToResearch(\'' + r.ticker + '\')" class="ticker-link" style="color:var(--color-accent);font-weight:500;">' + r.ticker + '</div>'
             + '<div style="color:var(--color-muted);">$' + r.strike + ' ' + r.strike_pct + '<br><span style="font-size:10px;">' + expShort + '</span></div>'
             + '<div style="color:var(--color-text);">' + r.premium_fmt + '</div>'
             + '<div style="color:var(--color-muted);">' + r.vol_oi_ratio + 'x</div>'
@@ -484,7 +484,7 @@ function renderHistory(data, ticker, period) {
         const expShort = r.exp ? r.exp.substring(2).replace(/-/g, '/') : '';
         return '<div style="display:grid;grid-template-columns:90px 70px 60px 80px 60px 60px 70px 60px 50px;gap:4px;padding:7px 12px;border-bottom:1px solid var(--color-border);font-size:11px;align-items:center;">'
             + '<div style="color:var(--color-muted);">' + r.scan_date + '</div>'
-            + '<div style="color:var(--color-accent);font-weight:500;">' + r.ticker + '</div>'
+            + '<div onclick="goToResearch(\'' + r.ticker + '\')" class="ticker-link" style="color:var(--color-accent);font-weight:500;">' + r.ticker + '</div>'
             + '<div style="color:' + color + ';">' + r.type.toUpperCase() + ' ' + r.action.toUpperCase() + '</div>'
             + '<div style="color:var(--color-text);">$' + r.strike + ' <span style="color:var(--color-muted);font-size:10px;">' + (r.strike_pct || '') + '</span></div>'
             + '<div style="color:var(--color-muted);">' + expShort + '</div>'
