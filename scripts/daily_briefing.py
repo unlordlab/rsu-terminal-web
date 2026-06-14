@@ -14,7 +14,7 @@ import numpy as np
 OPENROUTER_KEY = os.environ.get("OPENROUTER_API_KEY", "")
 GIST_TOKEN     = os.environ.get("GIST_TOKEN", "")
 GIST_ID        = os.environ.get("GIST_ID", "715ee0c4e571517c11fa65c5c2376c34")
-MODEL          = "qwen/qwen-2.5-72b-instruct"
+MODEL          = "qwen/qwen3-235b-a22b"
 
 # ── RECOPILAR DATOS DE MERCADO ────────────────────────────────────────────────
 
@@ -313,8 +313,8 @@ def generate_briefing(prompt: str) -> str:
         json={
             "model":       MODEL,
             "messages":    [{"role": "user", "content": prompt}],
-            "max_tokens":  3000,
-            "temperature": 0.3,
+            "max_tokens":  6000,
+            "temperature": 0.2,
         },
         timeout=120,
     )
@@ -335,7 +335,7 @@ def save_to_gist(content: str, market_data: dict):
         "date":   market_data["date"],
         "time":   market_data["time"],
         "model":  MODEL,
-        "source": "OpenRouter + Qwen 2.5 72B",
+        "source": "OpenRouter + Qwen3 235B",
     }
 
     r = requests.patch(

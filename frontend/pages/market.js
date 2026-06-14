@@ -575,16 +575,7 @@ async function loadBriefing(el) {
         const res  = await fetch('/api/v1/market/briefing', { headers: authHeader() });
         const data = await res.json();
         if (!data.ok) throw new Error(data.error || 'Sin briefing');
-        const lines = data.content.split('\n').filter(l => l.trim());
-        const html  = lines.map(line => {
-            const t = line.trim();
-            if (t.startsWith('# '))                      return '<div style="color:var(--color-accent);font-size:14px;font-weight:500;letter-spacing:0.05em;margin:10px 0 5px;text-shadow:var(--glow-text);">' + t.replace(/^#+\s*/,'') + '</div>';
-            if (t.startsWith('## ') || t.startsWith('### ')) return '<div style="color:var(--color-secondary);font-size:12px;font-weight:500;margin:8px 0 3px;">' + t.replace(/^#+\s*/,'') + '</div>';
-            if (t.startsWith('- ') || t.startsWith('* '))   return '<div style="color:var(--color-text);font-size:11px;padding:2px 0 2px 10px;border-left:2px solid var(--color-border);margin:2px 0;">' + t.replace(/^[-*]\s*/,'') + '</div>';
-            if (t === '---' || t === '***')                  return '<div style="border-top:1px solid var(--color-border);margin:8px 0;"></div>';
-            if (t.length > 0)                                return '<div style="color:var(--color-muted);font-size:11px;line-height:1.6;margin:2px 0;">' + t + '</div>';
-            return '';
-        }).join('');
+        const html = renderMarkdown(data.content);
         const updated = data.updated ? '<span style="color:var(--color-muted);font-size:11px;">Generado: ' + data.updated + '</span>' : '';
         el.innerHTML = widgetShell('NIGHTLY BRIEFING', updated, '<div style="padding:1rem 1.25rem;max-height:200px;overflow-y:auto;">' + html + '</div>', data.timestamp);
     } catch(e) {
@@ -697,7 +688,108 @@ function buildGauge(score) {
         + '<text x="136" y="95" fill="#00ffad" font-size="9" font-family="monospace">100</text>'
         + '</svg>';
 }
+function renderMarkdown(text) {
+    if (!text) return '';
+    const lines  = text.split('\n');
+    let html     = '';
+    let inTable  = false;
+    let tableRows = [];
 
+    for (let i = 0; i < lines.length; i++) {
+        const line = lines[i];
+        const t    = line.trim();
+
+        // Tablas
+        if (t.startsWith('|')) {
+            if (!inTable) { inTable = true; tableRows = []; }
+            tableRows.push(t);
+            continue;
+        } else if (inTable) {
+            inTable = false;
+            html += renderTable(tableRows);
+            tableRows = [];
+        }
+
+        // Headers
+        if (t.startsWith('### ')) {
+            html += '<div style="color:var(--color-secondary);font-size:12px;font-weight:600;margin:10px 0 4px;letter-spacing:0.05em;">' + escMD(t.replace(/^###\s*/,'')) + '</div>';
+        } else if (t.startsWith('## ')) {
+            html += '<div style="color:var(--color-accent);font-size:13px;font-weight:600;margin:14px 0 5px;letter-spacing:0.08em;text-shadow:var(--glow-text);">' + escMD(t.replace(/^##\s*/,'')) + '</div>';
+        } else if (t.startsWith('# ')) {
+            html += '<div style="color:var(--color-accent);font-size:15px;font-weight:600;margin:16px 0 6px;letter-spacing:0.1em;text-shadow:var(--glow-text);">' + escMD(t.replace(/^#\s*/,'')) + '</div>';
+        }
+        // Bullets
+        else if (t.startsWith('- ') || t.startsWith('* ')) {
+            html += '<div style="display:flex;gap:8px;padding:3px 0 3px 8px;font-size:11px;">'
+                + '<span style="color:var(--color-accent);flex-shrink:0;">▸</span>'
+                + '<span style="color:var(--color-text);line-height:1.6;">' + formatInline(t.replace(/^[-*]\s*/,'')) + '</span>'
+                + '</div>';
+        }
+        // Numerados
+        else if (/^\d+\.\s/.test(t)) {
+            const num = t.match(/^(\d+)\./)[1];
+            html += '<div style="display:flex;gap:8px;padding:3px 0 3px 8px;font-size:11px;">'
+                + '<span style="color:var(--color-accent);flex-shrink:0;min-width:16px;">' + num + '.</span>'
+                + '<span style="color:var(--color-text);line-height:1.6;">' + formatInline(t.replace(/^\d+\.\s*/,'')) + '</span>'
+                + '</div>';
+        }
+        // Separador
+        else if (t === '---' || t === '***') {
+            html += '<div style="border-top:1px solid var(--color-border);margin:10px 0;"></div>';
+        }
+        // Línea vacía
+        else if (t === '') {
+            html += '<div style="height:6px;"></div>';
+        }
+        // Párrafo normal
+        else {
+            html += '<div style="color:var(--color-muted);font-size:11px;line-height:1.7;margin:2px 0;">' + formatInline(t) + '</div>';
+        }
+    }
+
+    // Cerrar tabla si queda abierta
+    if (inTable && tableRows.length) html += renderTable(tableRows);
+
+    return html;
+}
+
+function renderTable(rows) {
+    if (rows.length < 2) return '';
+    const headers = rows[0].split('|').filter(c => c.trim()).map(c => c.trim());
+    const dataRows = rows.slice(2); // skip separator row
+
+    let html = '<div style="overflow-x:auto;margin:8px 0;">'
+        + '<table style="width:100%;border-collapse:collapse;font-size:10px;">'
+        + '<thead><tr>'
+        + headers.map(h => '<th style="padding:6px 10px;border-bottom:1px solid var(--color-accent);color:var(--color-accent);text-align:left;letter-spacing:0.05em;white-space:nowrap;">' + escMD(h) + '</th>').join('')
+        + '</tr></thead><tbody>';
+
+    dataRows.forEach((row, i) => {
+        const cells = row.split('|').filter(c => c.trim() !== undefined).slice(1, -1).map(c => c.trim());
+        if (!cells.length) return;
+        const bg = i % 2 === 0 ? 'transparent' : 'rgba(255,255,255,0.02)';
+        html += '<tr style="background:' + bg + ';">'
+            + cells.map(c => '<td style="padding:5px 10px;border-bottom:1px solid var(--color-border);color:var(--color-text);line-height:1.5;">' + formatInline(c) + '</td>').join('')
+            + '</tr>';
+    });
+
+    html += '</tbody></table></div>';
+    return html;
+}
+
+function formatInline(text) {
+    return escMD(text)
+        .replace(/\*\*(.+?)\*\*/g, '<strong style="color:var(--color-text);">$1</strong>')
+        .replace(/\*(.+?)\*/g,     '<em style="color:var(--color-secondary);">$1</em>')
+        .replace(/`(.+?)`/g,       '<code style="background:var(--color-surface2);padding:1px 4px;border-radius:3px;font-size:10px;color:var(--color-accent);">$1</code>');
+}
+
+function escMD(text) {
+    return text
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;');
+}
 function loading()        { return '<div style="padding:1rem;color:var(--color-muted);font-size:12px;">Cargando...</div>'; }
 function widgetError(msg) { return '<div style="padding:1rem;color:#f23645;font-size:12px;">✗ ' + msg + '</div>'; }
 
