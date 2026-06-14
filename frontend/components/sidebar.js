@@ -6,6 +6,7 @@ const NAV_ITEMS = [
     { path: '/newsfeed',  label: 'News Feed',    icon: 'N' },
     { path: '/tesis',     label: 'Tesis', icon: 'T' },
     { path: '/spxl',      label: 'SPXL',         icon: 'S' },
+    { path: '/btc-stratum', label: 'BTC Stratum', icon: '₿' },
     { path: '/options', label: 'Options Flow', icon: 'O' },
     { path: '/research',  label: 'Research',     icon: 'I' },
     { path: '/academy', label: 'Academy', icon: 'Ac' },
@@ -22,8 +23,13 @@ export function renderSidebar(container, navigate) {
 
     const header = document.createElement('div');
     header.style.cssText = 'padding:1.25rem 1rem 1rem; border-bottom:1px solid var(--color-border); margin-bottom:0.5rem;';
-    header.innerHTML = '<div style="color:var(--color-accent);font-size:16px;letter-spacing:0.1em;">RSU TERMINAL</div><div style="color:var(--color-muted);font-size:11px;margin-top:2px;">v2.0 FastAPI</div>';
-    container.appendChild(header);
+    header.innerHTML = '<div style="display:flex;align-items:center;gap:10px;margin-bottom:4px;">'
+        + '<img src="/assets/logo.png" style="width:36px;height:36px;border-radius:50%;object-fit:cover;border:1px solid var(--color-border);" onerror="this.style.display=\'none\'">'
+        + '<div>'
+        + '<div style="color:var(--color-accent);font-size:16px;letter-spacing:0.1em;">RSU TERMINAL</div>'
+        + '<div style="color:var(--color-muted);font-size:11px;">v2.0 FastAPI</div>'
+        + '</div>'
+        + '</div>';
 
     const nav = document.createElement('nav');
     nav.style.padding = '0.5rem 0';
@@ -53,6 +59,7 @@ export function renderSidebar(container, navigate) {
         nav.appendChild(a);
     });
 
+    container.appendChild(header);
     container.appendChild(nav);
     setActive(location.pathname);
 }

@@ -10,6 +10,7 @@ const ROUTES = {
     '/cartera':    () => import('/pages/cartera.js'),
     '/rsrw':       () => import('/pages/rsrw.js'),
     '/spxl':       () => import('/pages/spxl.js'),
+    '/btc-stratum': () => import('/pages/btc_stratum.js'),
     '/research':   () => import('/pages/research.js'),
     '/newsfeed':   () => import('/pages/newsfeed.js'),
     '/canslim':    () => import('/pages/canslim.js'),
@@ -30,7 +31,7 @@ function isAuthenticated() {
 
 export function navigate(path) {
     const cleanPath = path.split('?')[0];
-    const protectedRoutes = ['/', '/market', '/cartera', '/rsrw', '/newsfeed', '/spxl', '/roadmap', '/academy', '/tesis', '/options', '/research', '/disclaimer', '/canslim', '/algoritmo'];
+    const protectedRoutes = ['/', '/market', '/cartera', '/rsrw', '/newsfeed', '/spxl', '/btc-stratum', '/roadmap', '/academy', '/tesis', '/options', '/research', '/disclaimer', '/canslim', '/algoritmo'];
     const needsAuth = protectedRoutes.includes(cleanPath);
     if (needsAuth && !isAuthenticated()) {
         loadView('/login');

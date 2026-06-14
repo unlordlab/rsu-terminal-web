@@ -107,7 +107,8 @@ EJEMPLOS HISTÓRICOS:
 
 Un mercado sano tiene AD Line confirmando los máximos del índice.`
     },
-// ── OPTIONS FLOW ──────────────────────────────────────────────────────────
+
+    // ── OPTIONS FLOW ──────────────────────────────────────────────────────────
     "options-flow": {
         title: "Options Flow — Flujo de Opciones",
         short: "Registro de operaciones inusuales en opciones. Prima alta + Vol/OI elevado = posible posicionamiento institucional.",
@@ -357,8 +358,8 @@ IV alta en una señal de compra = señal más fuerte, porque el coste de equivoc
 IV RANK:
 Compara la IV actual con el rango histórico del último año. IV Rank 80% = la IV está en el percentil 80 de los últimos 12 meses — inusualmente cara.`
     },
-    // ── ALGORITMO RSU ─────────────────────────────────────────────────────────
 
+    // ── ALGORITMO RSU ─────────────────────────────────────────────────────────
     "rsu-algoritmo": {
         title: "RSU Algoritmo — Detector de Fondos",
         short: "Sistema multi-factor que detecta condiciones de fondo de mercado. Score 0-100.",
@@ -415,7 +416,6 @@ Sin FTD, no hay confirmación de fondo. Con FTD, empieza la acción.`
     },
 
     // ── CANSLIM ───────────────────────────────────────────────────────────────
-
     "canslim": {
         title: "CAN SLIM — Metodología IBD",
         short: "Sistema de selección de acciones de William O'Neil basado en 7 criterios fundamentales y técnicos.",
@@ -488,7 +488,6 @@ LAS MEJORES ACCIONES tienen RS > 90 y la línea de RS marcando máximos históri
     },
 
     // ── SPXL ──────────────────────────────────────────────────────────────────
-
     "spxl": {
         title: "SPXL — Direxion Daily S&P 500 Bull 3X",
         short: "ETF apalancado 3x del S&P 500. Triplica las ganancias Y las pérdidas diarias.",
@@ -537,7 +536,6 @@ La disciplina de seguir el plan sin improvisaciones es la clave del sistema.`
     },
 
     // ── RESEARCH ──────────────────────────────────────────────────────────────
-
     "rsu-score": {
         title: "RSU Score — Valoración Integral",
         short: "Score 0-100 que combina crecimiento, rentabilidad, consenso y potencial de precio objetivo.",
@@ -571,7 +569,6 @@ Es una herramienta de filtrado, no una recomendación de inversión.`
     },
 
     // ── RS/RW ─────────────────────────────────────────────────────────────────
-
     "rsrw": {
         title: "RS/RW Scanner — Relative Strength/Weakness",
         short: "Identifica las acciones con mayor fortaleza y debilidad relativa vs el mercado.",
@@ -602,7 +599,6 @@ Aplicamos media móvil exponencial para eliminar el ruido de corto plazo y ver l
     },
 
     // ── GENERAL ───────────────────────────────────────────────────────────────
-
     "market-cap": {
         title: "Market Cap — Capitalización bursátil",
         short: "Precio de la acción × número de acciones en circulación. Tamaño total de la empresa en bolsa.",
@@ -645,6 +641,210 @@ Si PEG < 1 → acción potencialmente barata respecto a su crecimiento.
 Si PEG > 2 → valoración exigente.
 
 Para acciones de crecimiento tipo CAN SLIM, el P/E absoluto importa menos que el crecimiento. Una acción con P/E 40x creciendo al 50% es más interesante que una con P/E 10x sin crecimiento.`
+    },
+
+    // ── BTC STRATUM ───────────────────────────────────────────────────────────
+    "btc-stratum": {
+        title: "BTC Stratum — Modelo de Acumulación",
+        short: "Modelo de acumulación BTC basado en MA200W, MVRV Z-Score, Puell Multiple y AHR999. Genera señales de compra ponderadas.",
+        long: `El BTC Stratum es un modelo propio RSU que combina 4 indicadores on-chain (aproximados) para detectar zonas históricas de acumulación en Bitcoin.
+
+IMPORTANTE: Los indicadores son proxies basados en precio/MA200W. Los valores reales requieren datos on-chain de Glassnode.
+
+COMPONENTES:
+- MA200W (40%): Soporte histórico más importante de BTC
+- MVRV Z-Score (30%): Proxy de valor de mercado vs valor realizado
+- Puell Multiple (20%): Proxy de ingresos de mineros
+- AHR999 (10%): Índice de acumulación específico
+
+RSU SCORE BTC 0-100:
+- < 20 → Oportunidad extrema → 25% asignación
+- 20-40 → Acumulación fuerte → 20% asignación
+- 40-60 → Acumulación moderada → 10% asignación
+- 60-80 → Neutral/espera → 0% asignación
+- > 80 → Sobrecompra/riesgo → 0% asignación
+
+No es asesoramiento financiero. Bitcoin es un activo de alto riesgo.`
+    },
+
+    "ma200w": {
+        title: "MA200W — Media Móvil 200 Semanas",
+        short: "El soporte histórico más importante de Bitcoin. Precios bajo esta línea han sido oportunidades históricas de compra.",
+        long: `La Media Móvil de 200 Semanas (MA200W) equivale a ~1400 días de precio de cierre promedio. Es el indicador técnico de largo plazo más respetado en Bitcoin.
+
+HISTORIAL:
+Desde 2013, el precio de BTC NUNCA ha cerrado una semana por debajo de la MA200W durante más de unos pocos meses. Cada vez que ha tocado o caído bajo esta línea, ha representado una zona de acumulación histórica.
+
+ZONAS BASADAS EN MA200W:
+- Precio < MA200W × 0.5 → Oportunidad máxima (capitulación total)
+- Precio < MA200W × 0.75 → Compra agresiva
+- Precio < MA200W → Compra fuerte
+- Precio < MA200W × 1.25 → Buena compra
+- Precio < MA200W × 1.5 → Zona DCA
+- Precio > MA200W × 1.5 → Esperar
+
+CURVATURA:
+La pendiente y aceleración de la MA200W revelan la salud de la tendencia de largo plazo. Pendiente positiva + acelerando = bull market confirmado.`
+    },
+
+    "mvrv-z": {
+        title: "MVRV Z-Score (Proxy)",
+        short: "Market Value to Realized Value Z-Score — mide si BTC está sobrevalorado o infravalorado. <0 = zona de acumulación extrema.",
+        long: `El MVRV Z-Score compara el valor de mercado total de BTC con el "valor realizado" (el precio al que cada BTC cambió de manos por última vez).
+
+IMPORTANTE: Este módulo usa una APROXIMACIÓN basada en desviación del precio vs MA200W. El MVRV real requiere datos on-chain de Glassnode.
+
+INTERPRETACIÓN DEL MVRV REAL:
+- Z-Score < 0 → Valor realizado > Valor mercado → Inversores en pérdidas → Zona de suelo histórica
+- Z-Score 0-2 → Zona neutra
+- Z-Score 2-7 → Zona de distribución
+- Z-Score > 7 → Zona de techo histórica (euforia extrema)
+
+SEÑALES HISTÓRICAS:
+- Noviembre 2018: MVRV < 0 → Suelo en $3,200
+- Marzo 2020: MVRV < 0 → Suelo en $3,800
+- Noviembre 2022: MVRV < 0 → Suelo en $15,500
+
+Para datos reales: glassnode.com (requiere suscripción)`
+    },
+
+    "puell-multiple": {
+        title: "Puell Multiple (Proxy)",
+        short: "Ratio entre ingresos diarios de mineros y su media anual. <0.5 indica mineros en stress, históricamente zona de suelo.",
+        long: `El Puell Multiple mide los ingresos de los mineros de Bitcoin en relación con su media histórica anual.
+
+IMPORTANTE: Este módulo usa una APROXIMACIÓN basada en precio actual vs SMA365. El Puell real requiere datos de emisión on-chain.
+
+FÓRMULA APROXIMADA:
+Puell = Precio actual / SMA365
+
+INTERPRETACIÓN:
+- Puell < 0.5 → Mineros en stress severo. Históricamente zona de suelo.
+- Puell 0.5-1.0 → Mineros bajo presión moderada
+- Puell 1.0-4.0 → Zona normal
+- Puell > 4.0 → Mineros muy rentables → Zona de distribución
+
+POR QUÉ IMPORTA:
+Cuando los mineros están en pérdidas, venden BTC para sobrevivir, creando presión bajista. Pero también reduce la oferta disponible. Los suelos históricos coinciden con Puell < 0.5.
+
+Los mineros son los "productores" de BTC — cuando sufren, el mercado suele estar en capitulación.`
+    },
+
+    "ahr999": {
+        title: "AHR999 (Proxy)",
+        short: "Índice de acumulación específico de BTC. <0.45 señala zona de compra fuerte según datos históricos.",
+        long: `El AHR999 es un índice desarrollado por el usuario "ahr999" de la comunidad china de Bitcoin, diseñado específicamente para identificar zonas de DCA (Dollar Cost Averaging).
+
+IMPORTANTE: Este módulo usa una APROXIMACIÓN. El AHR999 real combina precio actual, MA200 y coste de minería.
+
+FÓRMULA APROXIMADA:
+AHR999 ≈ (Precio / MA200W) / log(MA200W)
+
+ZONAS HISTÓRICAS:
+- AHR999 < 0.45 → Zona de compra agresiva (DCA fuerte)
+- AHR999 0.45-1.2 → Zona de DCA normal
+- AHR999 > 1.2 → Esperar mejor oportunidad
+
+COMPLEMENTARIEDAD:
+El AHR999 es útil porque penaliza las compras cuando tanto el precio como la MA200W son muy altas, evitando comprar en topping de ciclo aunque el precio parezca "normal" vs la MA.`
+    },
+
+    "halving-cycle": {
+        title: "Ciclo de Halving — Bitcoin",
+        short: "Bitcoin reduce a la mitad su emisión cada ~4 años. Los precios históricamente siguen patrones cíclicos alrededor de estos eventos.",
+        long: `El Halving de Bitcoin es un evento programado en el código que reduce a la mitad la recompensa que reciben los mineros por cada bloque minado.
+
+HALVINGS HISTÓRICOS:
+- Nov 2012: 50 → 25 BTC/bloque. Precio pasó de $12 a $1,100 en 12 meses.
+- Jul 2016: 25 → 12.5 BTC/bloque. Precio pasó de $650 a $20,000 en 18 meses.
+- May 2020: 12.5 → 6.25 BTC/bloque. Precio pasó de $8,700 a $69,000 en 18 meses.
+- Abr 2024: 6.25 → 3.125 BTC/bloque. Ciclo actual en desarrollo.
+
+FASES DEL CICLO (~4 años):
+1. ACUMULACIÓN (0-20% del ciclo): Precio bajo, inversores acumulan
+2. BULL TEMPRANO (20-40%): Rally inicial, euforia moderada
+3. BULL AVANZADO (40-60%): Máximos históricos, euforia alta
+4. DISTRIBUCIÓN (60-80%): Techos, institucionales distribuyendo
+5. MERCADO BAJISTA (80-100%): Corrección severa, reset
+
+ADVERTENCIA:
+Los patrones históricos son informativos pero no garantizan repetición. "Esta vez podría ser diferente" — aunque hasta ahora no lo ha sido.`
+    },
+
+    "rsu-btc-score": {
+        title: "RSU BTC Score — Score de Acumulación",
+        short: "Score compuesto 0-100: MA200W (40%) + MVRV (30%) + Puell (20%) + AHR999 (10%). Menor score = mayor oportunidad de acumulación.",
+        long: `El RSU BTC Score es un indicador compuesto que combina 4 proxies de indicadores on-chain para generar una señal de acumulación en Bitcoin.
+
+PONDERACIONES:
+- MA200W (40%): El indicador más importante. Desviación del precio vs media de largo plazo.
+- MVRV Z-Score (30%): Valoración relativa al valor realizado.
+- Puell Multiple (20%): Stress de mineros como proxy de capitulación.
+- AHR999 (10%): Índice específico de oportunidad de DCA.
+
+INTERPRETACIÓN (INVERTIDO — menor = mejor oportunidad):
+- Score 0-20 → OPORTUNIDAD EXTREMA → Todos los indicadores en zona de suelo
+- Score 20-40 → ACUMULACIÓN FUERTE → Mayoría en zona de oportunidad
+- Score 40-60 → ACUMULACIÓN MODERADA → Mix de señales
+- Score 60-80 → NEUTRAL/ESPERA → Sin señal clara de oportunidad
+- Score 80-100 → SOBRECOMPRA/RIESGO → Mercado caro, evitar entradas
+
+ASIGNACIÓN SUGERIDA:
+Varía según score y perfil de riesgo. Los porcentajes mostrados son orientativos para un inversor con tolerancia al riesgo media-alta.
+
+DISCLAIMER: Estos son proxies, no los indicadores on-chain reales. Para análisis más preciso usar Glassnode.`
+    },
+
+    "btc-backtest": {
+        title: "Backtest Histórico — BTC Stratum",
+        short: "Simulación histórica de la estrategia: qué habría pasado si hubieras comprado cada vez que el RSU Score cruzó umbrales clave.",
+        long: `El backtest simula la estrategia RSU BTC Stratum sobre datos históricos de los últimos 10 años para evaluar su efectividad histórica.
+
+METODOLOGÍA:
+- Capital inicial: $10,000
+- Señal de compra: RSU Score cae por debajo del umbral (20, 40 o 60)
+- Acción: Invertir 50% del capital disponible en BTC
+- Señal de venta: RSU Score supera 80
+- Datos: Cierre diario BTC/USD desde yfinance
+
+MÉTRICAS:
+- Retorno total: % de ganancia sobre capital inicial
+- Capital final: valor en $ al final del período
+- Alpha: diferencia vs Buy & Hold puro de BTC
+- Operaciones: número de compras y ventas ejecutadas
+
+LIMITACIONES IMPORTANTES:
+1. Sin costes de transacción ni slippage
+2. Ejecución perfecta al precio de cierre (imposible en la práctica)
+3. Sin considerar impuestos
+4. Datos históricos no garantizan resultados futuros
+5. El backtest usa proxies, no indicadores on-chain reales
+
+USE CASE:
+El backtest sirve para validar conceptualmente la estrategia. Los resultados reales diferirán significativamente. Es una herramienta educativa, no una garantía de rentabilidad.`
+    },
+
+    "stress-test": {
+        title: "Stress Test — Escenarios Adversos",
+        short: "Escenarios adversos extremos para gestión de expectativas. Las probabilidades son estimaciones subjetivas, no predicciones.",
+        long: `El Stress Test simula escenarios extremos adversos para que el inversor pueda prepararse mentalmente y definir su estrategia de gestión de riesgo.
+
+ESCENARIOS INCLUIDOS:
+1. Colapso de Exchange (FTX 2.0): -50% en precio. Pánico sistémico temporal.
+2. Ban Regulatorio G7: -35%. Prohibición coordinada en economías desarrolladas.
+3. Estanflación 5+ años: -60%. Macro muy adverso prolongado.
+4. Ruptura Criptográfica: -90%. Vulnerabilidad SHA256 o ataque cuántico.
+
+IMPORTANTE SOBRE LAS PROBABILIDADES:
+Las probabilidades son ESTIMACIONES SUBJETIVAS del equipo RSU. No tienen base estadística rigurosa. Son aproximaciones para dar contexto, no predicciones científicas.
+
+CÓMO USAR ESTA INFORMACIÓN:
+1. Define tu pérdida máxima tolerable ANTES de invertir
+2. Asegúrate de que tu posición sobrevive el peor escenario
+3. Ten un plan para cada escenario (¿compro más? ¿vendo? ¿hold?)
+4. Nunca inviertas más de lo que puedes permitirte perder completamente
+
+El objetivo no es asustar sino preparar. Un inversor con plan sobrevive las crisis. Uno sin plan entra en pánico y vende en el peor momento.`
     },
 };
 
@@ -689,7 +889,6 @@ export const Tooltip = {
                 transform: scale(1.1);
             }
 
-            /* Tooltip flotante pequeño */
             .tt-popup {
                 position: fixed;
                 z-index: 9000;
@@ -709,7 +908,6 @@ export const Tooltip = {
             .tt-popup.visible { opacity: 1; }
             .tt-popup strong { color: var(--color-secondary); display: block; margin-bottom: 3px; font-size: 12px; }
 
-            /* Modal detallado */
             .tt-overlay {
                 position: fixed;
                 inset: 0;
@@ -806,7 +1004,6 @@ export const Tooltip = {
         overlay.addEventListener('click', e => { if (e.target === overlay) this.closeModal(); });
         document.addEventListener('keydown', e => { if (e.key === 'Escape') this.closeModal(); });
 
-        // Popup flotante
         const popup = document.createElement('div');
         popup.id        = 'tt-popup';
         popup.className = 'tt-popup';
