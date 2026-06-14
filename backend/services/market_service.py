@@ -18,15 +18,22 @@ INDICES = [
 
 def _fetch_ticker(item):
     try:
-        t = yf.Ticker(item["ticker"])
-        hist = t.history(period="2d", interval="1d")
+        t    = yf.Ticker(item["ticker"])
+        hist = t.history(period="5d", interval="1d").dropna()
         if len(hist) < 2:
             raise ValueError("Sin datos suficientes")
-        prev  = float(hist["Close"].iloc[-2])
-        last  = float(hist["Close"].iloc[-1])
-        chg   = last - prev
-        pct   = (chg / prev) * 100
-        return {"ticker": item["short"], "name": item["name"], "price": round(last, 2), "change": round(chg, 2), "pct": round(pct, 2), "ok": True}
+        prev = float(hist["Close"].iloc[-2])
+        last = float(hist["Close"].iloc[-1])
+        chg  = last - prev
+        pct  = (chg / prev) * 100
+        return {
+            "ticker": item["short"],
+            "name":   item["name"],
+            "price":  round(last, 2),
+            "change": round(chg, 2),
+            "pct":    round(pct, 2),
+            "ok":     True
+        }
     except Exception as e:
         return {"ticker": item["short"], "name": item["name"], "price": None, "change": None, "pct": None, "ok": False, "error": str(e)}
 
@@ -66,7 +73,7 @@ def get_fear_greed():
         pass
     try:
         t     = yf.Ticker("^VIX")
-        hist  = t.history(period="2d")
+        hist  = t.history(period="5d").dropna()
         vix   = float(hist["Close"].iloc[-1]) if len(hist) else 20
         score = max(0, min(100, int(100 - (vix - 10) * 3.5)))
         if score >= 75:   rating = "Extreme Greed"
@@ -97,8 +104,7 @@ def _fetch_fx(item):
     for ticker in tickers_to_try:
         try:
             t    = yf.Ticker(ticker)
-            hist = t.history(period="5d", interval="1d")
-            hist = hist.dropna()
+            hist = t.history(period="5d", interval="1d").dropna()
             if len(hist) < 2:
                 continue
             prev = float(hist["Close"].iloc[-2])
@@ -160,7 +166,8 @@ def get_commodities():
             results.append(future.result())
     results.sort(key=lambda x: [i["short"] for i in COMMODITY_TICKERS].index(x["ticker"]))
     return {"data": results, "timestamp": get_timestamp(), "ok": any(r["ok"] for r in results)}
-    # ── SECTOR PERFORMANCE ────────────────────────────────────────────────────────
+
+# ── SECTOR PERFORMANCE ────────────────────────────────────────────────────────
 
 SECTOR_ETFS = [
     {"ticker": "XLK",  "name": "Tecnología"},
@@ -178,7 +185,7 @@ SECTOR_ETFS = [
 
 def _fetch_sector(item, period="1d"):
     try:
-        t    = yf.Ticker(item["ticker"])
+        t = yf.Ticker(item["ticker"])
         if period == "1d":
             hist = t.history(period="5d", interval="1d").dropna()
             if len(hist) < 2: raise ValueError("Sin datos")
@@ -199,7 +206,6 @@ def _fetch_sector(item, period="1d"):
             if len(hist) < 2: raise ValueError("Sin datos")
             prev = float(hist["Close"].iloc[-2])
             last = float(hist["Close"].iloc[-1])
-
         pct = ((last - prev) / prev) * 100
         return {"ticker": item["ticker"], "name": item["name"], "pct": round(pct, 2), "ok": True}
     except Exception as e:
@@ -213,10 +219,10 @@ def get_sectors(period: str = "1d"):
             results.append(future.result())
     results.sort(key=lambda x: x["pct"], reverse=True)
     return {"data": results, "timestamp": get_timestamp(), "ok": any(r["ok"] for r in results)}
-    # ── CALENDARIO ECONÓMICO ──────────────────────────────────────────────────────
+
+# ── CALENDARIO ECONÓMICO ──────────────────────────────────────────────────────
 
 EVENT_TRANSLATIONS = {
-    # Ya existentes...
     "Nonfarm Payrolls": "Nóminas No Agrícolas",
     "Unemployment Rate": "Tasa de Desempleo",
     "CPI": "IPC (Inflación)",
@@ -245,7 +251,6 @@ EVENT_TRANSLATIONS = {
     "Durable Goods Orders": "Pedidos Bienes Duraderos",
     "PCE Price Index": "Índice Precios PCE",
     "Core PCE": "PCE Subyacente",
-    # Nuevas entradas UK y globales
     "Revised Industrial Production": "Producción Industrial Revisada",
     "Industrial Production": "Producción Industrial",
     "Manufacturing Production": "Producción Manufacturera",
@@ -254,13 +259,10 @@ EVENT_TRANSLATIONS = {
     "Consumer Inflation Expectations": "Expectativas de Inflación",
     "M2 Money Supply": "Oferta Monetaria M2",
     "New Loans": "Nuevos Préstamos",
-    "ECOFIN Meetings": "Reunión ECOFIN",
     "CB Leading Index": "Índice Adelantado CB",
     "UoM Consumer Sentiment": "Sentimiento Consumidor UoM",
     "Prelim UoM Consumer Sentiment": "Sentimiento Consumidor UoM (Prel.)",
     "Prelim UoM Inflation Expectations": "Expectativas Inflación UoM (Prel.)",
-    "German Buba President": "Presidente Bundesbank",
-    "Buba President": "Presidente Bundesbank",
     "Existing Home Sales": "Ventas Viviendas Existentes",
     "New Home Sales": "Ventas Viviendas Nuevas",
     "Pending Home Sales": "Ventas Viviendas Pendientes",
@@ -307,8 +309,8 @@ def get_economic_calendar():
             data = r.json()
             for item in data:
                 try:
-                    date_str  = item.get('date', '')
-                    event_dt  = datetime.strptime(date_str[:19], '%Y-%m-%dT%H:%M:%S') if date_str else now
+                    date_str = item.get('date', '')
+                    event_dt = datetime.strptime(date_str[:19], '%Y-%m-%dT%H:%M:%S') if date_str else now
                     if event_dt.date() < now.date():
                         continue
                     if event_dt.weekday() >= 5:
@@ -338,35 +340,23 @@ def get_economic_calendar():
                         date_display = event_dt.strftime('%d %b').upper()
                         date_color   = "#888"
                     events.append({
-                        "date":         date_display,
-                        "date_color":   date_color,
-                        "time":         f"{hour:02d}:{minute:02d}",
-                        "event":        translate_event(item.get('title', 'Evento')),
-                        "impact":       impact,
-                        "country":      item.get('country', 'US').upper()[:2],
-                        "actual":       item.get('actual', '-') or '-',
-                        "forecast":     item.get('forecast', '-') or '-',
-                        "previous":     item.get('previous', '-') or '-',
+                        "date":       date_display,
+                        "date_color": date_color,
+                        "time":       f"{hour:02d}:{minute:02d}",
+                        "event":      translate_event(item.get('title', 'Evento')),
+                        "impact":     impact,
+                        "country":    item.get('country', 'US').upper()[:2],
+                        "actual":     item.get('actual', '-') or '-',
+                        "forecast":   item.get('forecast', '-') or '-',
+                        "previous":   item.get('previous', '-') or '-',
                     })
                 except Exception:
                     continue
     except Exception as e:
         return {"data": [], "timestamp": get_timestamp(), "ok": False, "error": str(e)}
+    return {"data": events[:20], "timestamp": get_timestamp(), "ok": True}
 
-    events = events[:20]
-    return {"data": events, "timestamp": get_timestamp(), "ok": True}
-   # ── VIX TERM STRUCTURE ────────────────────────────────────────────────────────
-
-VIX_CHAIN = [
-    {"ticker": "^VIX",   "label": "VIX Spot",  "months": 0},
-    {"ticker": "VIXY",   "label": "1M (VIXY)", "months": 1},
-    {"ticker": "VIXM",   "label": "5M (VIXM)", "months": 5},
-    {"ticker": "VXZ",    "label": "5M (VXZ)",  "months": 5},
-    {"ticker": "SVXY",   "label": "Inv 1M",    "months": 1},
-    {"ticker": "^VIX3M", "label": "VIX 3M",   "months": 3},
-    {"ticker": "^VIX6M", "label": "VIX 6M",   "months": 6},
-    {"ticker": "^VIX1Y", "label": "VIX 1Y",   "months": 12},
-]
+# ── VIX TERM STRUCTURE ────────────────────────────────────────────────────────
 
 VIX_DIRECT = [
     {"ticker": "^VIX",   "label": "Spot"},
@@ -377,8 +367,8 @@ VIX_DIRECT = [
 
 def _fetch_vix_point(item):
     try:
-        t    = yf.Ticker(item["ticker"])
-        hist = t.history(period="5d").dropna()
+        t     = yf.Ticker(item["ticker"])
+        hist  = t.history(period="5d").dropna()
         if len(hist) == 0:
             raise ValueError("Sin datos")
         price = round(float(hist["Close"].iloc[-1]), 2)
@@ -393,10 +383,6 @@ def get_vix_term_structure():
         for future in futures_map:
             results.append(future.result())
 
-    results.sort(key=lambda x: VIX_DIRECT[[i["ticker"] for i in VIX_DIRECT].index(
-        next(i["ticker"] for i in VIX_DIRECT if i["label"] == x["label"])
-    )]["label"] if x["ok"] else "z")
-
     ordered = []
     for item in VIX_DIRECT:
         match = next((r for r in results if r["label"] == item["label"]), None)
@@ -404,7 +390,6 @@ def get_vix_term_structure():
             ordered.append(match)
 
     valid = [r for r in ordered if r["ok"] and r["value"] is not None]
-
     if len(valid) < 2:
         return {"data": [], "timestamp": get_timestamp(), "ok": False, "error": "Sin datos VIX"}
 
@@ -421,7 +406,8 @@ def get_vix_term_structure():
         "timestamp": get_timestamp(),
         "ok":        True,
     }
-    # ── REDDIT PULSE ──────────────────────────────────────────────────────────────
+
+# ── REDDIT PULSE ──────────────────────────────────────────────────────────────
 
 _BLACKLIST = {
     'A','I','IT','IS','AT','BE','BY','DO','FOR','GO','HE','IF','IN','ME',
@@ -451,20 +437,20 @@ def _extract_tickers(text: str):
 
 def _enrich_ticker(ticker, mention_count, max_mentions, st_tickers):
     try:
-        tk       = yf.Ticker(ticker)
-        info     = tk.fast_info
-        price    = getattr(info, 'last_price', None)
-        prev     = getattr(info, 'previous_close', None)
-        change   = ((price - prev) / prev * 100) if price and prev and prev > 0 else 0.0
-        hist     = tk.history(period='10d')
-        vol_today = float(hist['Volume'].iloc[-1]) if len(hist) > 0 else 0
-        vol_avg   = float(hist['Volume'].mean())   if len(hist) > 0 else 1
-        vol_ratio = vol_today / vol_avg if vol_avg > 0 else 1.0
-        hype_raw  = mention_count / max_mentions
-        hype_stars = max(1, min(5, round(hype_raw * 5)))
-        smart_raw  = min(vol_ratio / 2, 1.0)
+        tk          = yf.Ticker(ticker)
+        info        = tk.fast_info
+        price       = getattr(info, 'last_price', None)
+        prev        = getattr(info, 'previous_close', None)
+        change      = ((price - prev) / prev * 100) if price and prev and prev > 0 else 0.0
+        hist        = tk.history(period='10d')
+        vol_today   = float(hist['Volume'].iloc[-1]) if len(hist) > 0 else 0
+        vol_avg     = float(hist['Volume'].mean())   if len(hist) > 0 else 1
+        vol_ratio   = vol_today / vol_avg if vol_avg > 0 else 1.0
+        hype_raw    = mention_count / max_mentions
+        hype_stars  = max(1, min(5, round(hype_raw * 5)))
+        smart_raw   = min(vol_ratio / 2, 1.0)
         smart_stars = max(1, min(5, round(smart_raw * 5)))
-        in_st = ticker in st_tickers
+        in_st        = ticker in st_tickers
         hype_suffix  = " Reddit Top" if hype_raw > 0.5 else (" StockTwits" if in_st else "")
         smart_suffix = f" Vol ×{vol_ratio:.1f}" if vol_ratio > 1.5 else ""
         if change > 2:      health_num, health_lbl = 85, "Fuerte"
@@ -497,17 +483,12 @@ def get_reddit_pulse():
         "User-Agent": "Mozilla/5.0 (compatible; MarketDashboard/2.0)",
         "Accept": "application/json",
     })
-
     ticker_mentions = {}
     sources = []
 
-    # Reddit
     for sub in ['wallstreetbets', 'stocks', 'investing', 'options', 'StockMarket']:
         try:
-            r = session.get(
-                f'https://www.reddit.com/r/{sub}/hot.json?limit=30&t=day',
-                timeout=10
-            )
+            r = session.get(f'https://www.reddit.com/r/{sub}/hot.json?limit=30&t=day', timeout=10)
             if r.status_code != 200:
                 continue
             sources.append('Reddit')
@@ -520,20 +501,15 @@ def get_reddit_pulse():
         except Exception:
             continue
 
-   # StockTwits — peso escalonado por posición en el ranking
     st_tickers = []
     try:
-        r = session.get(
-            'https://api.stocktwits.com/api/2/trending/symbols.json',
-            timeout=8
-        )
+        r = session.get('https://api.stocktwits.com/api/2/trending/symbols.json', timeout=8)
         if r.status_code == 200:
             symbols = r.json().get('symbols', [])[:20]
             for i, item in enumerate(symbols):
                 t = item.get('symbol', '').upper()
                 if t and 2 <= len(t) <= 6:
                     st_tickers.append(t)
-                    # Peso decreciente: #1 = 20pts, #2 = 19pts... #20 = 1pt
                     weight = max(1, 20 - i)
                     ticker_mentions[t] = ticker_mentions.get(t, 0) + weight
             if st_tickers:
@@ -544,26 +520,17 @@ def get_reddit_pulse():
     if not ticker_mentions:
         return _reddit_fallback()
 
-    top = [t for t, _ in sorted(ticker_mentions.items(), key=lambda x: -x[1])[:15]]
+    top          = [t for t, _ in sorted(ticker_mentions.items(), key=lambda x: -x[1])[:15]]
     max_mentions = max(ticker_mentions.values())
 
     results = []
     with ThreadPoolExecutor(max_workers=8) as ex:
-        futures_map = {
-            ex.submit(_enrich_ticker, t, ticker_mentions[t], max_mentions, st_tickers): t
-            for t in top
-        }
+        futures_map = {ex.submit(_enrich_ticker, t, ticker_mentions[t], max_mentions, st_tickers): t for t in top}
         for future in futures_map:
             results.append(future.result())
 
     results.sort(key=lambda x: -x["buzz"])
-
-    return {
-        "data":      results[:15],
-        "sources":   list(set(sources)),
-        "timestamp": get_timestamp(),
-        "ok":        True,
-    }
+    return {"data": results[:15], "sources": list(set(sources)), "timestamp": get_timestamp(), "ok": True}
 
 def _reddit_fallback():
     fallback = [
@@ -578,7 +545,7 @@ def _reddit_fallback():
     ]
     return {"data": fallback, "sources": ["Fallback"], "timestamp": get_timestamp(), "ok": True}
 
-    # ── NIGHTLY BRIEFING ──────────────────────────────────────────────────────────
+# ── NIGHTLY BRIEFING ──────────────────────────────────────────────────────────
 
 BRIEFING_GIST_ID = "715ee0c4e571517c11fa65c5c2376c34"
 
@@ -593,68 +560,45 @@ def get_nightly_briefing():
         )
         if r.status_code != 200:
             raise ValueError(f"HTTP {r.status_code}")
-
-        gist  = r.json()
-        files = gist.get("files", {})
-
+        gist        = r.json()
+        files       = gist.get("files", {})
         raw_content = None
         for fname, fdata in files.items():
             raw_content = fdata.get("content", "")
             break
-
         if not raw_content:
             raise ValueError("Briefing vacío")
-
-        # Intentar parsear como JSON
-        content = raw_content
-        date_str = ""
+        content   = raw_content
+        date_str  = ""
         model_str = ""
         try:
-            parsed   = _json.loads(raw_content)
-            content  = parsed.get("text", raw_content)
-            date_str = parsed.get("date", "")
+            parsed    = _json.loads(raw_content)
+            content   = parsed.get("text", raw_content)
+            date_str  = parsed.get("date", "")
             model_str = parsed.get("model", "")
-            # Limpiar \n literales
-            content = content.replace("\\n", "\n").replace("\\*", "*")
+            content   = content.replace("\\n", "\n").replace("\\*", "*")
         except Exception:
             pass
-
-        updated_at = gist.get("updated_at", "")
+        updated_at  = gist.get("updated_at", "")
         updated_str = ""
         if updated_at:
             try:
                 import pytz
-                utc_dt  = datetime.strptime(updated_at[:19], "%Y-%m-%dT%H:%M:%S")
-                madrid  = pytz.timezone("Europe/Madrid")
-                mad_dt  = pytz.utc.localize(utc_dt).astimezone(madrid)
+                utc_dt      = datetime.strptime(updated_at[:19], "%Y-%m-%dT%H:%M:%S")
+                madrid      = pytz.timezone("Europe/Madrid")
+                mad_dt      = pytz.utc.localize(utc_dt).astimezone(madrid)
                 updated_str = mad_dt.strftime("%d %b %Y · %H:%M")
             except Exception:
                 updated_str = updated_at[:10]
-
-        return {
-            "content":   content,
-            "date":      date_str,
-            "model":     model_str,
-            "updated":   updated_str,
-            "timestamp": get_timestamp(),
-            "ok":        True,
-        }
-
+        return {"content": content, "date": date_str, "model": model_str, "updated": updated_str, "timestamp": get_timestamp(), "ok": True}
     except Exception as e:
-        return {
-            "content":   "",
-            "date":      "",
-            "model":     "",
-            "updated":   "",
-            "timestamp": get_timestamp(),
-            "ok":        False,
-            "error":     str(e),
-        }
-        # ── CREDIT SPREADS ────────────────────────────────────────────────────────────
+        return {"content": "", "date": "", "model": "", "updated": "", "timestamp": get_timestamp(), "ok": False, "error": str(e)}
+
+# ── CREDIT SPREADS ────────────────────────────────────────────────────────────
 
 FRED_SERIES = [
-    {"id": "BAMLH0A0HYM2",   "name": "HY OAS",  "label": "High Yield"},
-    {"id": "BAMLC0A0CM",     "name": "IG OAS",   "label": "Investment Grade"},
+    {"id": "BAMLH0A0HYM2", "name": "HY OAS", "label": "High Yield"},
+    {"id": "BAMLC0A0CM",   "name": "IG OAS",  "label": "Investment Grade"},
 ]
 
 def _fetch_fred_series(series_id, api_key, limit=130):
@@ -668,7 +612,7 @@ def _fetch_fred_series(series_id, api_key, limit=130):
             )
             r = _req.get(url, timeout=15)
             if r.status_code == 200:
-                obs = r.json().get("observations", [])
+                obs     = r.json().get("observations", [])
                 history = []
                 for o in reversed(obs):
                     try:
@@ -677,7 +621,6 @@ def _fetch_fred_series(series_id, api_key, limit=130):
                     except Exception:
                         continue
                 return history
-        # Sin API key — CSV público
         url = f"https://fred.stlouisfed.org/graph/fredgraph.csv?id={series_id}"
         r   = _req.get(url, timeout=15)
         if r.status_code == 200:
@@ -685,7 +628,7 @@ def _fetch_fred_series(series_id, api_key, limit=130):
             for line in r.text.strip().split("\n")[1:]:
                 try:
                     parts = line.split(",")
-                    v = float(parts[1])
+                    v     = float(parts[1])
                     history.append({"date": parts[0], "value": round(v, 2)})
                 except Exception:
                     continue
@@ -698,42 +641,22 @@ def get_credit_spreads():
     from config import settings
     api_key = getattr(settings, "fred_api_key", "")
     results = []
-
     for series in FRED_SERIES:
         history = _fetch_fred_series(series["id"], api_key)
         if len(history) >= 2:
             current = history[-1]["value"]
             prev    = history[-2]["value"]
             change  = round(current - prev, 2)
-            if current > 8:    level, level_color = "ALTO", "#f23645"
-            elif current > 5:  level, level_color = "ELEVADO", "#ffb800"
-            elif current > 3:  level, level_color = "NORMAL", "#90ee90"
-            else:               level, level_color = "BAJO", "#00ffad"
+            if current > 8:   level, level_color = "ALTO",    "#f23645"
+            elif current > 5: level, level_color = "ELEVADO", "#ffb800"
+            elif current > 3: level, level_color = "NORMAL",  "#90ee90"
+            else:             level, level_color = "BAJO",    "#00ffad"
             results.append({
-                "id":          series["id"],
-                "name":        series["name"],
-                "label":       series["label"],
-                "current":     current,
-                "prev":        prev,
-                "change":      change,
-                "date":        history[-1]["date"],
-                "level":       level,
-                "level_color": level_color,
-                "history":     history[-130:],
-                "ok":          True,
+                "id": series["id"], "name": series["name"], "label": series["label"],
+                "current": current, "prev": prev, "change": change,
+                "date": history[-1]["date"], "level": level, "level_color": level_color,
+                "history": history[-130:], "ok": True,
             })
         else:
-            results.append({
-                "id":      series["id"],
-                "name":    series["name"],
-                "label":   series["label"],
-                "current": None,
-                "ok":      False,
-            })
-
-    return {
-        "data":      results,
-        "timestamp": get_timestamp(),
-        "ok":        any(r["ok"] for r in results),
-    }
-    
+            results.append({"id": series["id"], "name": series["name"], "label": series["label"], "current": None, "ok": False})
+    return {"data": results, "timestamp": get_timestamp(), "ok": any(r["ok"] for r in results)}

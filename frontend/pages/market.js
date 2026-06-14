@@ -25,8 +25,9 @@ export async function render(container) {
         + '<div id="widget-indices"     style="display:flex;flex-direction:column;"></div>'
         + '<div id="widget-feargreed"   style="display:flex;flex-direction:column;"></div>'
         + '<div id="widget-forex"       style="display:flex;flex-direction:column;"></div>'
-        + '<div id="widget-commodities" style="display:flex;flex-direction:column;"></div>'
-        + '<div id="widget-earnings"    style="grid-column:2/4;display:flex;flex-direction:column;"></div>'
+        + '<div id="widget-commodities" style="display:flex;flex-direction:column;height:420px;"></div>'
+        + '<div id="widget-earnings"    style="grid-column:2/4;display:flex;flex-direction:column;height:420px;"></div>'
+        + '<div style="grid-column:1/-1;height:0;"></div>'
         + '</div>'
 
         // Fila 2 — 2 columnas
@@ -211,32 +212,122 @@ async function loadEarnings(el) {
     try {
         const res  = await fetch('/api/v1/market/earnings', { headers: authHeader() });
         const data = await res.json();
-        if (!data.ok || !data.data || !data.data.length) throw new Error('Sin datos de earnings');
+        if (!data.ok || !data.data || !data.data.length) throw new Error('Sin earnings próximos');
 
-        const header = '<div style="display:grid;grid-template-columns:55px 65px 65px 75px 75px 1fr;gap:6px;padding:7px 12px;border-bottom:1px solid var(--color-border);font-size:10px;color:var(--color-muted);letter-spacing:0.05em;">'
-            + '<div>FECHA</div><div>HORA</div><div>TICKER</div><div>PRECIO</div><div>EPS EST</div><div>FUENTE</div>'
+        const searchBar = '<div style="padding:8px 12px;border-bottom:1px solid var(--color-border);display:flex;gap:8px;">'
+            + '<input id="earnings-search" type="text" placeholder="Buscar ticker (AAPL, NVDA...)" style="flex:1;background:var(--color-bg,#0a0a0a);border:1px solid var(--color-border);border-radius:var(--radius);padding:5px 10px;color:var(--color-text);font-family:var(--font-mono);font-size:11px;outline:none;">'
+            + '<button id="earnings-search-btn" style="background:var(--color-secondary);color:#000;border:none;border-radius:var(--radius);padding:5px 12px;font-family:var(--font-mono);font-size:11px;cursor:pointer;">BUSCAR</button>'
+            + '</div>';
+
+        const header = '<div style="display:grid;grid-template-columns:55px 90px 70px 80px 80px;gap:8px;padding:6px 12px;border-bottom:1px solid var(--color-border);font-size:10px;color:var(--color-muted);letter-spacing:0.05em;">'
+            + '<div>FECHA</div><div>HORA</div><div>TICKER</div><div>PRECIO</div><div>EPS EST</div>'
             + '</div>';
 
         const rows = data.data.map(e => {
             const isToday   = e.is_today;
             const bg        = isToday ? 'rgba(0,255,173,0.04)' : 'transparent';
             const dateColor = isToday ? 'var(--color-accent)' : (e.days_out <= 2 ? '#ffb800' : 'var(--color-muted)');
-            const timeColor = (e.time || '').includes('BMO') ? '#ffb800' : (e.time || '').includes('AMC') ? '#00d9ff' : 'var(--color-muted)';
+            const isBMO     = (e.time || '').includes('BMO');
+            const isAMC     = (e.time || '').includes('AMC');
+            const timeColor = isBMO ? '#ffb800' : isAMC ? '#00d9ff' : 'var(--color-muted)';
+            const timeBg    = isBMO ? 'rgba(255,184,0,0.1)' : isAMC ? 'rgba(0,217,255,0.1)' : 'transparent';
             const epsStr    = e.eps_est != null ? '$' + Number(e.eps_est).toFixed(2) : '—';
             const priceStr  = e.price ? '$' + Number(e.price).toLocaleString('en-US') : '—';
-            return '<div style="display:grid;grid-template-columns:55px 65px 65px 75px 75px 1fr;gap:6px;padding:8px 12px;border-bottom:1px solid var(--color-border);font-size:11px;align-items:center;background:' + bg + ';">'
+            return '<div style="display:grid;grid-template-columns:55px 90px 70px 80px 80px;gap:8px;padding:8px 12px;border-bottom:1px solid var(--color-border);font-size:11px;align-items:center;background:' + bg + ';cursor:pointer;" class="earnings-row" data-ticker="' + e.ticker + '">'
                 + '<div style="color:' + dateColor + ';font-weight:' + (isToday ? '600' : '400') + ';">' + (e.date_fmt || e.date || '—') + '</div>'
-                + '<div style="color:' + timeColor + ';font-size:10px;">' + (e.time || '—') + '</div>'
+                + '<div style="background:' + timeBg + ';color:' + timeColor + ';font-size:10px;padding:2px 6px;border-radius:3px;display:inline-block;">' + (e.time || '—') + '</div>'
                 + '<div style="color:var(--color-accent);font-weight:500;">' + e.ticker + '</div>'
                 + '<div style="color:var(--color-text);">' + priceStr + '</div>'
                 + '<div style="color:var(--color-muted);">' + epsStr + '</div>'
-                + '<div style="color:var(--color-muted);font-size:10px;">' + (e.source || '') + '</div>'
                 + '</div>';
         }).join('');
 
-        el.innerHTML = widgetShell('EARNINGS CALENDAR', 'Próximos 14 días · FMP + Finnhub', header + rows, data.timestamp);
+        const content = searchBar
+            + header
+            + '<div style="overflow-y:auto;max-height:280px;" id="earnings-list">' + rows + '</div>'
+            + '<div id="earnings-detail" style="border-top:1px solid var(--color-border);"></div>';
+
+        el.innerHTML = widgetShell('EARNINGS CALENDAR', 'Próximos 14 días · FMP + Finnhub', content, data.timestamp);
+
+        // Click en fila → cargar sorpresas
+        el.querySelectorAll('.earnings-row').forEach(row => {
+            row.addEventListener('mouseenter', () => row.style.background = 'var(--color-surface2,#1a1a1a)');
+            row.addEventListener('mouseleave', () => row.style.background = 'transparent');
+            row.addEventListener('click', () => loadEarningsSurprise(row.getAttribute('data-ticker'), el));
+        });
+
+        // Búsqueda manual
+        const searchBtn = el.querySelector('#earnings-search-btn');
+        const searchInput = el.querySelector('#earnings-search');
+        if (searchBtn) {
+            searchBtn.addEventListener('click', () => {
+                const t = searchInput.value.trim().toUpperCase();
+                if (t) loadEarningsSurprise(t, el);
+            });
+        }
+        if (searchInput) {
+            searchInput.addEventListener('keydown', e => {
+                if (e.key === 'Enter') {
+                    const t = searchInput.value.trim().toUpperCase();
+                    if (t) loadEarningsSurprise(t, el);
+                }
+            });
+        }
+
     } catch(e) {
-        el.innerHTML = widgetShell('EARNINGS CALENDAR', 'Próximos resultados', widgetError(e.message));
+        el.innerHTML = widgetShell('EARNINGS CALENDAR', 'Próximos 14 días', widgetError(e.message));
+    }
+}
+
+async function loadEarningsSurprise(ticker, container) {
+    const detail = container.querySelector('#earnings-detail');
+    if (!detail) return;
+    detail.innerHTML = '<div style="padding:1rem;color:var(--color-muted);font-size:12px;">Cargando historial de ' + ticker + '...</div>';
+
+    try {
+        const token = sessionStorage.getItem('rsu_token');
+        const res   = await fetch('/api/v1/market/earnings/' + ticker, {
+            headers: token ? { 'Authorization': 'Bearer ' + token } : {}
+        });
+        const data  = await res.json();
+        if (!data.ok) throw new Error('Sin datos');
+
+        const history = data.surprise_history || [];
+        const nextDate = data.next_date ? '<span style="color:var(--color-muted);font-size:10px;">Próximo: ' + data.next_date + '</span>' : '';
+        const epsEst   = data.eps_est != null ? '<span style="color:var(--color-muted);font-size:10px;margin-left:1rem;">EPS Est: $' + Number(data.eps_est).toFixed(2) + '</span>' : '';
+
+        let html = '<div style="padding:10px 12px;">'
+            + '<div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">'
+            + '<span style="color:var(--color-accent);font-size:14px;font-weight:500;">' + ticker + '</span>'
+            + nextDate + epsEst
+            + '</div>';
+
+        if (history.length) {
+            html += '<div style="font-size:10px;color:var(--color-muted);margin-bottom:6px;letter-spacing:0.05em;">HISTORIAL EPS · ÚLTIMOS 4 TRIMESTRES</div>'
+                + '<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:6px;">'
+                + history.slice(0, 4).map(h => {
+                    const beat    = h.actual >= h.estimate;
+                    const color   = beat ? 'var(--color-accent)' : '#f23645';
+                    const icon    = beat ? '▲ BEAT' : '▼ MISS';
+                    const surpStr = (h.surprise > 0 ? '+' : '') + h.surprise + '%';
+                    return '<div style="background:' + color + '11;border:1px solid ' + color + '33;border-radius:var(--radius);padding:8px;text-align:center;">'
+                        + '<div style="color:var(--color-muted);font-size:9px;margin-bottom:4px;">' + (h.quarter || '') + '</div>'
+                        + '<div style="color:' + color + ';font-size:10px;font-weight:500;">' + icon + '</div>'
+                        + '<div style="color:var(--color-text);font-size:11px;margin-top:2px;">$' + h.actual + '</div>'
+                        + '<div style="color:var(--color-muted);font-size:9px;">Est: $' + h.estimate + '</div>'
+                        + '<div style="color:' + color + ';font-size:10px;margin-top:2px;">' + surpStr + '</div>'
+                        + '</div>';
+                }).join('')
+                + '</div>';
+        } else {
+            html += '<div style="color:var(--color-muted);font-size:11px;">Sin historial de sorpresas disponible.</div>';
+        }
+
+        html += '</div>';
+        detail.innerHTML = html;
+
+    } catch(e) {
+        detail.innerHTML = '<div style="padding:0.75rem;color:#f23645;font-size:11px;">✗ ' + e.message + '</div>';
     }
 }
 
