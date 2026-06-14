@@ -38,12 +38,18 @@ def _fetch_ticker(item):
         return {"ticker": item["short"], "name": item["name"], "price": None, "change": None, "pct": None, "ok": False, "error": str(e)}
 
 def get_indices():
+    from services.cache import cache, TTL
+    cached = cache.get("market:indices")
+    if cached: return cached
     results = []
     with ThreadPoolExecutor(max_workers=5) as ex:
         futures = {ex.submit(_fetch_ticker, item): item for item in INDICES}
         for future in futures:
             results.append(future.result())
     results.sort(key=lambda x: ["SPX","NDX","DJI","RUT","VIX"].index(x["ticker"]))
+    result = {"data": results, "timestamp": get_timestamp(), "ok": any(r["ok"] for r in results)}
+    cache.set("market:indices", result, TTL["market"])
+    return result
     return {"data": results, "timestamp": get_timestamp(), "ok": any(r["ok"] for r in results)}
 
 # ── FEAR & GREED ──────────────────────────────────────────────────────────────
@@ -117,15 +123,20 @@ def _fetch_fx(item):
     return {"ticker": item["short"], "name": item["name"], "ok": False, "error": "Sin datos"}
 
 def get_forex():
+    from services.cache import cache, TTL
+    cached = cache.get("market:forex")
+    if cached: return cached
     results = []
     with ThreadPoolExecutor(max_workers=6) as ex:
         futures = {ex.submit(_fetch_fx, item): item for item in FOREX_TICKERS}
         for future in futures:
             results.append(future.result())
     results.sort(key=lambda x: [i["short"] for i in FOREX_TICKERS].index(x["ticker"]))
-    return {"data": results, "timestamp": get_timestamp(), "ok": any(r["ok"] for r in results)}
+    result = {"data": results, "timestamp": get_timestamp(), "ok": any(r["ok"] for r in results)}
+    cache.set("market:forex", result, TTL["market"])
+    return result
 
-# ── COMMODITIES ───────────────────────────────────────────────────────────────
+# ── COMMODITIES
 
 COMMODITY_TICKERS = [
     {"ticker": "GC=F", "name": "Oro",            "short": "GOLD",   "prefix": "$"},
@@ -159,15 +170,20 @@ def _fetch_commodity(item):
         return {"ticker": item["short"], "name": item["name"], "ok": False, "error": str(e)}
 
 def get_commodities():
+    from services.cache import cache, TTL
+    cached = cache.get("market:commodities")
+    if cached: return cached
     results = []
     with ThreadPoolExecutor(max_workers=6) as ex:
         futures = {ex.submit(_fetch_commodity, item): item for item in COMMODITY_TICKERS}
         for future in futures:
             results.append(future.result())
     results.sort(key=lambda x: [i["short"] for i in COMMODITY_TICKERS].index(x["ticker"]))
-    return {"data": results, "timestamp": get_timestamp(), "ok": any(r["ok"] for r in results)}
+    result = {"data": results, "timestamp": get_timestamp(), "ok": any(r["ok"] for r in results)}
+    cache.set("market:commodities", result, TTL["market"])
+    return result
 
-# ── SECTOR PERFORMANCE ────────────────────────────────────────────────────────
+# ── SECTOR
 
 SECTOR_ETFS = [
     {"ticker": "XLK",  "name": "Tecnología"},
@@ -212,15 +228,20 @@ def _fetch_sector(item, period="1d"):
         return {"ticker": item["ticker"], "name": item["name"], "pct": 0, "ok": False, "error": str(e)}
 
 def get_sectors(period: str = "1d"):
+    from services.cache import cache, TTL
+    cached = cache.get(f"market:sectors:{period}")
+    if cached: return cached
     results = []
     with ThreadPoolExecutor(max_workers=11) as ex:
         futures = {ex.submit(_fetch_sector, item, period): item for item in SECTOR_ETFS}
         for future in futures:
             results.append(future.result())
     results.sort(key=lambda x: x["pct"], reverse=True)
-    return {"data": results, "timestamp": get_timestamp(), "ok": any(r["ok"] for r in results)}
+    result = {"data": results, "timestamp": get_timestamp(), "ok": any(r["ok"] for r in results)}
+    cache.set(f"market:sectors:{period}", result, TTL["sectors"])
+    return result
 
-# ── CALENDARIO ECONÓMICO ──────────────────────────────────────────────────────
+# ── CALENDARIO
 
 EVENT_TRANSLATIONS = {
     "Nonfarm Payrolls": "Nóminas No Agrícolas",
@@ -296,6 +317,9 @@ def translate_event(name):
     return name
 
 def get_economic_calendar():
+    from services.cache import cache, TTL
+    cached = cache.get("market:calendar")
+    if cached: return cached
     import requests
     events = []
     try:
@@ -354,9 +378,11 @@ def get_economic_calendar():
                     continue
     except Exception as e:
         return {"data": [], "timestamp": get_timestamp(), "ok": False, "error": str(e)}
-    return {"data": events[:20], "timestamp": get_timestamp(), "ok": True}
+    result = {"data": events[:20], "timestamp": get_timestamp(), "ok": True}
+    cache.set("market:calendar", result, TTL["calendar"])
+    return result
 
-# ── VIX TERM STRUCTURE ────────────────────────────────────────────────────────
+# ── VIX
 
 VIX_DIRECT = [
     {"ticker": "^VIX",   "label": "Spot"},
@@ -377,6 +403,9 @@ def _fetch_vix_point(item):
         return {"label": item["label"], "value": None, "ok": False}
 
 def get_vix_term_structure():
+    from services.cache import cache, TTL
+    cached = cache.get("market:vix")
+    if cached: return cached
     results = []
     with ThreadPoolExecutor(max_workers=4) as ex:
         futures_map = {ex.submit(_fetch_vix_point, item): item for item in VIX_DIRECT}
@@ -398,7 +427,7 @@ def get_vix_term_structure():
     contango  = round(last - spot, 2)
     structure = "contango" if contango > 0 else "backwardation"
 
-    return {
+    result = {
         "data":      valid,
         "spot":      spot,
         "contango":  contango,
@@ -406,8 +435,10 @@ def get_vix_term_structure():
         "timestamp": get_timestamp(),
         "ok":        True,
     }
+    cache.set("market:vix", result, TTL["vix"])
+    return result
 
-# ── REDDIT PULSE ──────────────────────────────────────────────────────────────
+# ── REDDIT
 
 _BLACKLIST = {
     'A','I','IT','IS','AT','BE','BY','DO','FOR','GO','HE','IF','IN','ME',
@@ -477,6 +508,9 @@ def _enrich_ticker(ticker, mention_count, max_mentions, st_tickers):
         }
 
 def get_reddit_pulse():
+    from services.cache import cache, TTL
+    cached = cache.get("market:reddit")
+    if cached: return cached
     import requests as _req
     session = _req.Session()
     session.headers.update({
@@ -530,7 +564,9 @@ def get_reddit_pulse():
             results.append(future.result())
 
     results.sort(key=lambda x: -x["buzz"])
-    return {"data": results[:15], "sources": list(set(sources)), "timestamp": get_timestamp(), "ok": True}
+    result = {"data": results[:15], "sources": list(set(sources)), "timestamp": get_timestamp(), "ok": True}
+    cache.set("market:reddit", result, TTL["reddit"])
+    return result
 
 def _reddit_fallback():
     fallback = [
@@ -550,6 +586,9 @@ def _reddit_fallback():
 BRIEFING_GIST_ID = "715ee0c4e571517c11fa65c5c2376c34"
 
 def get_nightly_briefing():
+    from services.cache import cache, TTL
+    cached = cache.get("market:briefing")
+    if cached: return cached
     import requests as _req
     import json as _json
     try:
@@ -590,7 +629,9 @@ def get_nightly_briefing():
                 updated_str = mad_dt.strftime("%d %b %Y · %H:%M")
             except Exception:
                 updated_str = updated_at[:10]
-        return {"content": content, "date": date_str, "model": model_str, "updated": updated_str, "timestamp": get_timestamp(), "ok": True}
+        result = {"content": content, "date": date_str, "model": model_str, "updated": updated_str, "timestamp": get_timestamp(), "ok": True}
+        cache.set("market:briefing", result, TTL["briefing"])
+        return result
     except Exception as e:
         return {"content": "", "date": "", "model": "", "updated": "", "timestamp": get_timestamp(), "ok": False, "error": str(e)}
 
@@ -638,6 +679,9 @@ def _fetch_fred_series(series_id, api_key, limit=130):
     return []
 
 def get_credit_spreads():
+    from services.cache import cache, TTL
+    cached = cache.get("market:spreads")
+    if cached: return cached
     from config import settings
     api_key = getattr(settings, "fred_api_key", "")
     results = []
@@ -659,4 +703,6 @@ def get_credit_spreads():
             })
         else:
             results.append({"id": series["id"], "name": series["name"], "label": series["label"], "current": None, "ok": False})
-    return {"data": results, "timestamp": get_timestamp(), "ok": any(r["ok"] for r in results)}
+    result = {"data": results, "timestamp": get_timestamp(), "ok": any(r["ok"] for r in results)}
+    cache.set("market:spreads", result, TTL["spreads"])
+    return result

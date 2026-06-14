@@ -541,6 +541,10 @@ def _get_technical_levels(ticker: str) -> dict:
 
 def get_research(ticker: str) -> dict:
     ticker = ticker.upper().strip()
+    from services.cache import cache, TTL
+    cached = cache.get(f"research:{ticker}")
+    if cached: return cached
+
     with ThreadPoolExecutor(max_workers=7) as ex:
         f_yf      = ex.submit(_get_yfinance, ticker)
         f_fh      = ex.submit(_get_finnhub, ticker)
@@ -563,38 +567,40 @@ def get_research(ticker: str) -> dict:
     suggestions = _generate_suggestions(yf_data)
     rsu_score   = _compute_rsu_score(yf_data)
 
-    return {
-        "ok":          True,
-        "ticker":      yf_data['ticker'],
-        "name":        yf_data['name'],
-        "sector":      yf_data['sector'],
-        "industry":    yf_data['industry'],
-        "country":     yf_data['country'],
-        "website":     yf_data['website'],
-        "description": _translate_description(yf_data['description']),
-        "price":       yf_data['price'],
-        "chg_pct":     yf_data['chg_pct'],
-        "mktcap_fmt":  yf_data['mktcap_fmt'],
-        "week52_high": yf_data['week52_high'],
-        "week52_low":  yf_data['week52_low'],
-        "beta":        yf_data['beta'],
-        "dividend_yield": yf_data['dividend_yield'],
-        "n_analysts":  yf_data['n_analysts'],
-        "recommendations": yf_data['recommendations'],
-        "target_data":     yf_data['target_data'],
-        "metrics":         yf_data['metrics'],
-        "profitability":   yf_data['profitability'],
-        "sparkline":       yf_data['sparkline'],
-        "news":            fh_data.get('news', []),
-        "sentiment":       fh_data.get('sentiment', {}),
+    result = {
+        "ok":                 True,
+        "ticker":             yf_data['ticker'],
+        "name":               yf_data['name'],
+        "sector":             yf_data['sector'],
+        "industry":           yf_data['industry'],
+        "country":            yf_data['country'],
+        "website":            yf_data['website'],
+        "description":        _translate_description(yf_data['description']),
+        "price":              yf_data['price'],
+        "chg_pct":            yf_data['chg_pct'],
+        "mktcap_fmt":         yf_data['mktcap_fmt'],
+        "week52_high":        yf_data['week52_high'],
+        "week52_low":         yf_data['week52_low'],
+        "beta":               yf_data['beta'],
+        "dividend_yield":     yf_data['dividend_yield'],
+        "n_analysts":         yf_data['n_analysts'],
+        "recommendations":    yf_data['recommendations'],
+        "target_data":        yf_data['target_data'],
+        "metrics":            yf_data['metrics'],
+        "profitability":      yf_data['profitability'],
+        "sparkline":          yf_data['sparkline'],
+        "news":               fh_data.get('news', []),
+        "sentiment":          fh_data.get('sentiment', {}),
         "quarterly_earnings": av_data.get('quarterly_earnings', []),
-        "suggestions":     suggestions,
-        "rsu_score":       rsu_score,
+        "suggestions":        suggestions,
+        "rsu_score":          rsu_score,
         "analyst_changes":    fmp_data,
         "insider_trading":    insider,
         "short_interest":     short,
         "seasonality":        season,
         "next_earnings":      _get_next_earnings(ticker),
         "technical_levels":   _get_technical_levels(ticker),
-        "timestamp":       datetime.now().strftime('%H:%M:%S'),
+        "timestamp":          datetime.now().strftime('%H:%M:%S'),
     }
+    cache.set(f"research:{ticker}", result, TTL["research"])
+    return result

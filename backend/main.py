@@ -46,7 +46,14 @@ app.mount("/pages",      StaticFiles(directory="../frontend/pages"),      name="
 
 @app.get("/health")
 async def health():
-    return {"status": "ok", "app": settings.app_name}
+    from services.cache import cache
+    return {"status": "ok", "app": settings.app_name, "cache": cache.stats()}
+
+@app.delete("/api/v1/cache/{prefix}")
+async def clear_cache(prefix: str):
+    from services.cache import cache
+    cache.clear_prefix(prefix)
+    return {"ok": True, "cleared": prefix}
 
 @app.get("/{full_path:path}")
 async def spa_fallback(full_path: str):
