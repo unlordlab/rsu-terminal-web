@@ -2,19 +2,293 @@ import yfinance as yf
 import requests
 import pandas as pd
 import numpy as np
+import sqlite3
+import os
 from datetime import datetime, timedelta
 from concurrent.futures import ThreadPoolExecutor
-import json
 
-MASSIVE_KEY = "0328d4QbyOxYeB1x8G4dl4PyfhemDqZW"
+MASSIVE_KEY  = "0328d4QbyOxYeB1x8G4dl4PyfhemDqZW"
 MASSIVE_BASE = "https://api.massive.com"
+DB_PATH      = os.path.join(os.path.dirname(__file__), '..', 'options_flow.db')
+
+# ── UNIVERSO ──────────────────────────────────────────────────────────────────
 
 WATCHLIST = [
-    "NVDA","AAPL","MSFT","AMZN","META","GOOGL","TSLA","AMD","AVGO","NFLX",
-    "SPY","QQQ","IWM","GLD","TLT","HYG","XLK","XLF","XLE","XLV",
-    "HOOD","MSTR","PLTR","CRWD","PANW","NET","UBER","ABNB","COIN","RKLB",
-    "SOFI","MELI","NOW","ZS","SNOW","ARM","SMCI","AXON","NBIS","VIAV",
+    # Mega caps
+    "AAPL","MSFT","NVDA","AMZN","META","GOOGL","TSLA","AVGO","BRK-B","JPM",
+    "LLY","V","UNH","XOM","MA","JNJ","PG","HD","MRK","COST","ABBV","CVX",
+    "BAC","KO","CRM","PEP","WFC","NFLX","ORCL","AMD","ACN","ADBE","LIN",
+    # Tech/Growth
+    "PLTR","CRWD","PANW","NET","SNOW","ARM","SMCI","AXON","NBIS","RKLB",
+    "COIN","HOOD","MSTR","UBER","ABNB","DXCM","ZS","OKTA","DASH","RIVN",
+    "SOFI","MELI","NOW","ANET","FTNT","CPNG","SHOP","SQ","PYPL","APP",
+    "CELH","DUOL","TTD","HUBS","DDOG","MDB","ZM","BILL","DOCN","GTLB",
+    # Finance
+    "GS","MS","BLK","SCHW","COF","AXP","SPGI","ICE","CME","MCO",
+    # Defense/Industrial
+    "LMT","RTX","NOC","GD","BA","CAT","DE","HON","ETN","EMR",
+    "BWXT","HII","LDOS","AXON","KTOS","AVAV",
+    # Energy/Materials
+    "XOM","CVX","COP","SLB","OXY","FCX","NEM","ALB","MP","UUUU",
+    # ETFs
+    "SPY","QQQ","IWM","DIA","TLT","GLD","GDX","GDXJ","HYG","LQD",
+    "XLK","XLF","XLE","XLV","XLY","XLP","XLI","XLB","XLRE","XLC","XLU",
+    "ARKK","IBIT","MAGS","BOTZ","UFO","ITA","NLR",
+    # RSU Portfolio
+    "COHR","UMAC","LTRX","VVX","MIR","EQT","PLPC","ENS","PRIM","GLXY",
+    "BWXT","UUUU","LEU","VIAV","TOST","URG","BOTZ","USAR",
 ]
+WATCHLIST = list(dict.fromkeys(WATCHLIST))  # deduplicar
+
+# ── DB ────────────────────────────────────────────────────────────────────────
+
+def init_db():
+    conn = sqlite3.connect(DB_PATH)
+    conn.execute('''
+        CREATE TABLE IF NOT EXISTS options_flow (
+            id              INTEGER PRIMARY KEY AUTOINCREMENT,
+            scan_date       TEXT NOT NULL,
+            scan_ts         TEXT NOT NULL,
+            ticker          TEXT NOT NULL,
+            strike          REAL,
+            exp             TEXT,
+            type            TEXT,
+            action          TEXT,
+            premium         REAL,
+            premium_fmt     TEXT,
+            volume          INTEGER,
+            oi              INTEGER,
+            vol_oi_ratio    REAL,
+            score           INTEGER,
+            signal          TEXT,
+            price           REAL,
+            strike_pct      TEXT,
+            iv              REAL,
+            underlying_price REAL
+        )
+    ''')
+    conn.execute('CREATE INDEX IF NOT EXISTS idx_ticker ON options_flow(ticker)')
+    conn.execute('CREATE INDEX IF NOT EXISTS idx_date   ON options_flow(scan_date)')
+    conn.execute('CREATE INDEX IF NOT EXISTS idx_signal ON options_flow(signal)')
+    conn.commit()
+    conn.close()
+
+def save_flow_to_db(flow_items: list, scan_ts: str):
+    init_db()
+    scan_date = scan_ts[:10]
+    conn      = sqlite3.connect(DB_PATH)
+    inserted  = 0
+    for item in flow_items:
+        existing = conn.execute(
+            'SELECT id FROM options_flow WHERE scan_date=? AND ticker=? AND strike=? AND exp=? AND action=?',
+            (scan_date, item['ticker'], item['strike'], item['exp'], item['action'])
+        ).fetchone()
+        if existing: continue
+        conn.execute('''
+            INSERT INTO options_flow
+            (scan_date,scan_ts,ticker,strike,exp,type,action,premium,premium_fmt,
+             volume,oi,vol_oi_ratio,score,signal,price,strike_pct,iv,underlying_price)
+            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+        ''', (
+            scan_date, scan_ts,
+            item['ticker'], item['strike'], item['exp'],
+            item['type'], item['action'],
+            item['premium'], item['premium_fmt'],
+            item['volume'], item['oi'], item['vol_oi_ratio'],
+            item['score'], item['signal'],
+            item['price'], item['strike_pct'], item['iv'],
+            item['price'],  # underlying_price = precio del subyacente en momento del scan
+        ))
+        inserted += 1
+    conn.commit()
+    conn.close()
+    return inserted
+
+def get_history_from_db(ticker: str = None, period: str = '1w') -> list:
+    init_db()
+    days_map = {'1w': 7, '2w': 14, '1m': 30, '3m': 90}
+    days     = days_map.get(period, 7)
+    from_dt  = (datetime.now() - timedelta(days=days)).strftime('%Y-%m-%d')
+
+    conn  = sqlite3.connect(DB_PATH)
+    conn.row_factory = sqlite3.Row
+    if ticker:
+        rows = conn.execute(
+            'SELECT * FROM options_flow WHERE ticker=? AND scan_date>=? ORDER BY scan_ts DESC LIMIT 200',
+            (ticker.upper(), from_dt)
+        ).fetchall()
+    else:
+        rows = conn.execute(
+            'SELECT * FROM options_flow WHERE scan_date>=? ORDER BY premium DESC LIMIT 500',
+            (from_dt,)
+        ).fetchall()
+    conn.close()
+    return [dict(r) for r in rows]
+
+def get_db_stats() -> dict:
+    init_db()
+    conn  = sqlite3.connect(DB_PATH)
+    total = conn.execute('SELECT COUNT(*) FROM options_flow').fetchone()[0]
+    days  = conn.execute('SELECT COUNT(DISTINCT scan_date) FROM options_flow').fetchone()[0]
+    last  = conn.execute('SELECT MAX(scan_ts) FROM options_flow').fetchone()[0]
+    top   = conn.execute(
+        'SELECT ticker, COUNT(*) as cnt FROM options_flow GROUP BY ticker ORDER BY cnt DESC LIMIT 10'
+    ).fetchall()
+    conn.close()
+    return {
+        "total_records": total,
+        "scan_days":     days,
+        "last_scan":     last or "Sin scans",
+        "top_tickers":   [{"ticker": r[0], "count": r[1]} for r in top],
+    }
+
+def get_repeat_signals(days: int = 7, min_repeats: int = 2) -> list:
+    init_db()
+    from_dt = (datetime.now() - timedelta(days=days)).strftime('%Y-%m-%d')
+    conn    = sqlite3.connect(DB_PATH)
+    conn.row_factory = sqlite3.Row
+    rows = conn.execute('''
+        SELECT
+            ticker, strike, exp, type, action,
+            COUNT(DISTINCT scan_date) as repeat_count,
+            SUM(premium) as total_premium,
+            AVG(score) as avg_score,
+            MAX(underlying_price) as last_price,
+            MIN(scan_date) as first_seen,
+            MAX(scan_date) as last_seen,
+            GROUP_CONCAT(DISTINCT premium_fmt) as premiums
+        FROM options_flow
+        WHERE scan_date >= ?
+        GROUP BY ticker, strike, exp, type, action
+        HAVING repeat_count >= ?
+        ORDER BY repeat_count DESC, total_premium DESC
+        LIMIT 50
+    ''', (from_dt, min_repeats)).fetchall()
+    conn.close()
+    result = []
+    for r in rows:
+        d = dict(r)
+        d['total_premium_fmt'] = _fmt_premium(d['total_premium'])
+        d['avg_score']         = round(d['avg_score'], 1)
+        result.append(d)
+    return result
+
+def get_ticker_history_summary(ticker: str) -> dict:
+    init_db()
+    from_dt = (datetime.now() - timedelta(days=90)).strftime('%Y-%m-%d')
+    conn    = sqlite3.connect(DB_PATH)
+    conn.row_factory = sqlite3.Row
+    rows = conn.execute('''
+        SELECT scan_date, type, action, strike, exp,
+               premium, score, signal, underlying_price, strike_pct
+        FROM options_flow
+        WHERE ticker=? AND scan_date>=?
+        ORDER BY scan_date DESC
+    ''', (ticker.upper(), from_dt)).fetchall()
+    conn.close()
+
+    if not rows:
+        return {"ok": False, "error": "Sin historial para " + ticker}
+
+    current_price = 0.0
+    try:
+        tk = yf.Ticker(ticker.upper())
+        fi = tk.fast_info
+        current_price = float(getattr(fi, 'last_price', 0) or 0)
+    except Exception:
+        pass
+
+    records   = [dict(r) for r in rows]
+    bull_prem = sum(r['premium'] for r in records if (r['type']=='call' and r['action']=='buy') or (r['type']=='put' and r['action']=='sell'))
+    bear_prem = sum(r['premium'] for r in records if (r['type']=='put' and r['action']=='buy') or (r['type']=='call' and r['action']=='sell'))
+
+    weekly = {}
+    for r in records:
+        week = r['scan_date'][:7]
+        if week not in weekly:
+            weekly[week] = {"bull": 0, "bear": 0, "count": 0, "price": r['underlying_price']}
+        if (r['type']=='call' and r['action']=='buy') or (r['type']=='put' and r['action']=='sell'):
+            weekly[week]['bull'] += 1
+        else:
+            weekly[week]['bear'] += 1
+        weekly[week]['count'] += 1
+
+    weekly_list = [{"week": k, **v, "net": v['bull'] - v['bear']} for k, v in sorted(weekly.items(), reverse=True)]
+
+    return {
+        "ok":            True,
+        "ticker":        ticker.upper(),
+        "current_price": round(current_price, 2),
+        "total_records": len(records),
+        "bull_premium":  _fmt_premium(bull_prem),
+        "bear_premium":  _fmt_premium(bear_prem),
+        "net_bias":      "ALCISTA" if bull_prem > bear_prem else "BAJISTA" if bear_prem > bull_prem else "NEUTRAL",
+        "records":       records[:50],
+        "weekly":        weekly_list,
+    }
+
+def get_ticker_history_summary(ticker: str) -> dict:
+    """Resumen de un ticker: Net Score por semana, precio entonces vs ahora"""
+    init_db()
+    from_dt = (datetime.now() - timedelta(days=90)).strftime('%Y-%m-%d')
+    conn    = sqlite3.connect(DB_PATH)
+    conn.row_factory = sqlite3.Row
+
+    rows = conn.execute('''
+        SELECT
+            scan_date,
+            type, action, strike, exp,
+            premium, score, signal,
+            underlying_price, strike_pct
+        FROM options_flow
+        WHERE ticker=? AND scan_date>=?
+        ORDER BY scan_date DESC
+    ''', (ticker.upper(), from_dt)).fetchall()
+    conn.close()
+
+    if not rows:
+        return {"ok": False, "error": "Sin historial para " + ticker}
+
+    # Precio actual
+    current_price = 0.0
+    try:
+        tk = yf.Ticker(ticker.upper())
+        fi = tk.fast_info
+        current_price = float(getattr(fi, 'last_price', 0) or 0)
+    except Exception:
+        pass
+
+    records  = [dict(r) for r in rows]
+    bull_prem = sum(r['premium'] for r in records if (r['type']=='call' and r['action']=='buy') or (r['type']=='put' and r['action']=='sell'))
+    bear_prem = sum(r['premium'] for r in records if (r['type']=='put' and r['action']=='buy') or (r['type']=='call' and r['action']=='sell'))
+
+    # Agrupar por semana
+    weekly = {}
+    for r in records:
+        week = r['scan_date'][:7]  # YYYY-MM
+        if week not in weekly:
+            weekly[week] = {"bull": 0, "bear": 0, "count": 0, "price": r['underlying_price']}
+        if (r['type']=='call' and r['action']=='buy') or (r['type']=='put' and r['action']=='sell'):
+            weekly[week]['bull'] += 1
+        else:
+            weekly[week]['bear'] += 1
+        weekly[week]['count'] += 1
+
+    weekly_list = [{"week": k, **v, "net": v['bull'] - v['bear']} for k, v in sorted(weekly.items(), reverse=True)]
+
+    return {
+        "ok":           True,
+        "ticker":       ticker.upper(),
+        "current_price": round(current_price, 2),
+        "total_records": len(records),
+        "bull_premium":  _fmt_premium(bull_prem),
+        "bear_premium":  _fmt_premium(bear_prem),
+        "net_bias":      "ALCISTA" if bull_prem > bear_prem else "BAJISTA" if bear_prem > bull_prem else "NEUTRAL",
+        "records":       records[:50],
+        "weekly":        weekly_list,
+    }
+
+# ── HELPERS ───────────────────────────────────────────────────────────────────
 
 def _safe(val, default=0.0):
     try:
@@ -33,32 +307,66 @@ def _pct_from_atm(strike: float, price: float) -> str:
     pct = (strike - price) / price * 100
     return f"{pct:+.0f}%"
 
-def _classify_sentiment(calls_vol: float, puts_vol: float) -> str:
+def _score_entry(vol, oi, premium, iv, exp_days, strike_pct_val) -> tuple:
+    score  = 0
+    signal = "LOW"
+
+    # Prima
+    if premium >= 1_000_000: score += 3
+    elif premium >= 500_000: score += 2
+    elif premium >= 100_000: score += 1
+
+    # Vol/OI ratio
+    vol_oi = vol / oi if oi > 0 else vol
+    if vol_oi >= 2.0:   score += 2
+    elif vol_oi >= 0.5: score += 1
+
+    # IV
+    if iv >= 0.80:   score += 2
+    elif iv >= 0.40: score += 1
+
+    # Strike OTM sweet spot (5-25%)
+    abs_pct = abs(strike_pct_val)
+    if 5 <= abs_pct <= 25: score += 2
+    elif abs_pct <= 5:     score += 1
+
+    # Vencimiento 14-60 días
+    if 14 <= exp_days <= 60:   score += 1
+    elif 7 <= exp_days <= 180: score += 0
+
+    if score >= 7:   signal = "HIGH"
+    elif score >= 4: signal = "MEDIUM"
+    else:            signal = "LOW"
+
+    return score, signal, round(vol_oi, 2)
+
+def _classify_sentiment(calls_vol, puts_vol):
     if calls_vol + puts_vol == 0: return "neutral"
     ratio = calls_vol / (calls_vol + puts_vol)
     if ratio >= 0.65:  return "bullish"
     if ratio <= 0.35:  return "bearish"
     return "neutral"
 
-def _process_chain(ticker: str, min_premium: float = 50_000) -> dict:
+# ── SCAN ENGINE ───────────────────────────────────────────────────────────────
+
+def _process_chain(ticker: str, min_premium: float = 100_000, min_score: int = 4) -> dict:
     try:
-        tk     = yf.Ticker(ticker)
-        price  = None
+        tk    = yf.Ticker(ticker)
+        price = 0.0
         try:
             fi    = tk.fast_info
             price = _safe(getattr(fi, 'last_price', None))
-        except Exception:
-            pass
+        except Exception: pass
         if not price:
             hist  = tk.history(period="2d")
             price = float(hist['Close'].iloc[-1]) if not hist.empty else 0
 
         expirations = tk.options
-        if not expirations:
-            return {"ticker": ticker, "ok": False}
+        if not expirations: return {"ticker": ticker, "ok": False}
 
-        # Tomar los próximos 4 vencimientos
-        exps = expirations[:4]
+        # Próximos 5 vencimientos
+        exps = expirations[:5]
+        today = datetime.now().date()
 
         calls_bought, puts_bought, calls_sold, puts_sold = [], [], [], []
         total_call_vol, total_put_vol = 0, 0
@@ -66,74 +374,65 @@ def _process_chain(ticker: str, min_premium: float = 50_000) -> dict:
 
         for exp in exps:
             try:
+                exp_date = datetime.strptime(exp, '%Y-%m-%d').date()
+                exp_days = (exp_date - today).days
+                if exp_days < 7 or exp_days > 180: continue
                 chain = tk.option_chain(exp)
             except Exception:
                 continue
 
-            for _, row in chain.calls.iterrows():
-                vol     = _safe(row.get('volume', 0))
-                oi      = _safe(row.get('openInterest', 0))
-                price_c = _safe(row.get('lastPrice', 0))
-                strike  = _safe(row.get('strike', 0))
-                iv      = _safe(row.get('impliedVolatility', 0))
-                premium = vol * price_c * 100
-                if premium < min_premium or vol < 10: continue
+            for opt_type, df in [('call', chain.calls), ('put', chain.puts)]:
+                for _, row in df.iterrows():
+                    vol     = _safe(row.get('volume', 0))
+                    oi      = _safe(row.get('openInterest', 0))
+                    price_o = _safe(row.get('lastPrice', 0))
+                    strike  = _safe(row.get('strike', 0))
+                    iv      = _safe(row.get('impliedVolatility', 0))
 
-                total_call_vol  += vol
-                total_call_prem += premium
+                    if vol < 10 or price_o < 0.10: continue
 
-                # Heurística: vol >> OI → compra nueva; vol << OI → posición existente
-                is_buy = vol > oi * 0.5 if oi > 0 else True
-                entry = {
-                    "ticker":    ticker,
-                    "strike":    round(strike, 2),
-                    "strike_pct": _pct_from_atm(strike, price),
-                    "exp":       exp,
-                    "volume":    int(vol),
-                    "oi":        int(oi),
-                    "price":     round(price_c, 2),
-                    "premium":   premium,
-                    "premium_fmt": _fmt_premium(premium),
-                    "iv":        round(iv * 100, 1),
-                    "type":      "call",
-                    "action":    "buy" if is_buy else "sell",
-                }
-                if is_buy:
-                    calls_bought.append(entry)
-                else:
-                    calls_sold.append(entry)
+                    premium = vol * price_o * 100
+                    if premium < min_premium: continue
 
-            for _, row in chain.puts.iterrows():
-                vol     = _safe(row.get('volume', 0))
-                oi      = _safe(row.get('openInterest', 0))
-                price_p = _safe(row.get('lastPrice', 0))
-                strike  = _safe(row.get('strike', 0))
-                iv      = _safe(row.get('impliedVolatility', 0))
-                premium = vol * price_p * 100
-                if premium < min_premium or vol < 10: continue
+                    strike_pct_val = (strike - price) / price * 100 if price > 0 else 0
+                    strike_pct     = _pct_from_atm(strike, price)
 
-                total_put_vol  += vol
-                total_put_prem += premium
+                    score, signal, vol_oi = _score_entry(vol, oi, premium, iv, exp_days, strike_pct_val)
+                    if score < min_score: continue
 
-                is_buy = vol > oi * 0.5 if oi > 0 else False
-                entry = {
-                    "ticker":    ticker,
-                    "strike":    round(strike, 2),
-                    "strike_pct": _pct_from_atm(strike, price),
-                    "exp":       exp,
-                    "volume":    int(vol),
-                    "oi":        int(oi),
-                    "price":     round(price_p, 2),
-                    "premium":   premium,
-                    "premium_fmt": _fmt_premium(premium),
-                    "iv":        round(iv * 100, 1),
-                    "type":      "put",
-                    "action":    "buy" if is_buy else "sell",
-                }
-                if is_buy:
-                    puts_bought.append(entry)
-                else:
-                    puts_sold.append(entry)
+                    is_buy = (vol / oi >= 0.3) if oi > 0 else True
+
+                    entry = {
+                        "ticker":      ticker,
+                        "strike":      round(strike, 2),
+                        "strike_pct":  strike_pct,
+                        "exp":         exp,
+                        "exp_days":    exp_days,
+                        "volume":      int(vol),
+                        "oi":          int(oi),
+                        "vol_oi_ratio": vol_oi,
+                        "price":       round(price, 2),
+                        "price_opt":   round(price_o, 2),
+                        "premium":     premium,
+                        "premium_fmt": _fmt_premium(premium),
+                        "iv":          round(iv * 100, 1),
+                        "type":        opt_type,
+                        "action":      "buy" if is_buy else "sell",
+                        "score":       score,
+                        "signal":      signal,
+                        "color":       "bullish" if (opt_type == 'call' and is_buy) or (opt_type == 'put' and not is_buy) else "bearish",
+                    }
+
+                    if opt_type == 'call':
+                        total_call_vol  += vol
+                        total_call_prem += premium
+                        if is_buy: calls_bought.append(entry)
+                        else:      calls_sold.append(entry)
+                    else:
+                        total_put_vol  += vol
+                        total_put_prem += premium
+                        if is_buy: puts_bought.append(entry)
+                        else:      puts_sold.append(entry)
 
         sentiment = _classify_sentiment(total_call_vol, total_put_vol)
 
@@ -141,34 +440,33 @@ def _process_chain(ticker: str, min_premium: float = 50_000) -> dict:
             "ticker":       ticker,
             "ok":           True,
             "price":        round(price, 2),
-            "total_call_vol":  int(total_call_vol),
-            "total_put_vol":   int(total_put_vol),
+            "sentiment":    sentiment,
             "total_call_prem": total_call_prem,
             "total_put_prem":  total_put_prem,
-            "total_prem":      total_call_prem + total_put_prem,
-            "sentiment":    sentiment,
-            "calls_bought": sorted(calls_bought, key=lambda x: -x['premium'])[:10],
-            "puts_bought":  sorted(puts_bought,  key=lambda x: -x['premium'])[:10],
-            "calls_sold":   sorted(calls_sold,   key=lambda x: -x['premium'])[:10],
-            "puts_sold":    sorted(puts_sold,    key=lambda x: -x['premium'])[:10],
+            "total_prem":   total_call_prem + total_put_prem,
+            "calls_bought": sorted(calls_bought, key=lambda x: -x['score'])[:15],
+            "puts_bought":  sorted(puts_bought,  key=lambda x: -x['score'])[:10],
+            "calls_sold":   sorted(calls_sold,   key=lambda x: -x['score'])[:10],
+            "puts_sold":    sorted(puts_sold,    key=lambda x: -x['score'])[:10],
         }
     except Exception as e:
         return {"ticker": ticker, "ok": False, "error": str(e)}
 
-def get_options_flow(min_premium: float = 50_000, tickers: list = None) -> dict:
+def get_options_flow(min_premium: float = 100_000, min_score: int = 4, tickers: list = None) -> dict:
     target  = tickers or WATCHLIST
     results = []
+    scan_ts = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
 
-    with ThreadPoolExecutor(max_workers=8) as ex:
-        futures = {ex.submit(_process_chain, t, min_premium): t for t in target}
+    with ThreadPoolExecutor(max_workers=10) as ex:
+        futures = {ex.submit(_process_chain, t, min_premium, min_score): t for t in target}
         for f in futures:
             r = f.result()
-            if r.get('ok'):
+            if r.get('ok') and r['total_prem'] > 0:
                 results.append(r)
 
-    # Agregados globales
     all_calls_bought, all_puts_bought = [], []
     all_calls_sold,   all_puts_sold   = [], []
+    all_high_signal = []
 
     for r in results:
         all_calls_bought.extend(r['calls_bought'])
@@ -176,47 +474,59 @@ def get_options_flow(min_premium: float = 50_000, tickers: list = None) -> dict:
         all_calls_sold.extend(r['calls_sold'])
         all_puts_sold.extend(r['puts_sold'])
 
-    # Top rankings
-    top_premium = sorted(results, key=lambda x: -x['total_prem'])[:10]
+    # Señales HIGH
+    for item in all_calls_bought + all_puts_bought + all_calls_sold + all_puts_sold:
+        if item['signal'] == 'HIGH':
+            all_high_signal.append(item)
+
+    top_premium = sorted(results, key=lambda x: -x['total_prem'])[:12]
     top_bullish  = sorted(results, key=lambda x: -x['total_call_prem'])[:8]
     top_bearish  = sorted(results, key=lambda x: -x['total_put_prem'])[:8]
 
     return {
         "ok":           True,
-        "scanned":      len(results),
-        "calls_bought": sorted(all_calls_bought, key=lambda x: -x['premium'])[:50],
-        "puts_bought":  sorted(all_puts_bought,  key=lambda x: -x['premium'])[:30],
-        "calls_sold":   sorted(all_calls_sold,   key=lambda x: -x['premium'])[:30],
-        "puts_sold":    sorted(all_puts_sold,    key=lambda x: -x['premium'])[:30],
+        "scanned":      len(target),
+        "matched":      len(results),
+        "scan_ts":      scan_ts,
+        "calls_bought": sorted(all_calls_bought, key=lambda x: (-x['score'], -x['premium']))[:50],
+        "puts_bought":  sorted(all_puts_bought,  key=lambda x: (-x['score'], -x['premium']))[:30],
+        "calls_sold":   sorted(all_calls_sold,   key=lambda x: (-x['score'], -x['premium']))[:30],
+        "puts_sold":    sorted(all_puts_sold,    key=lambda x: (-x['score'], -x['premium']))[:30],
+        "high_signals": sorted(all_high_signal,  key=lambda x: -x['premium'])[:20],
         "top_premium":  [{"ticker": r['ticker'], "premium_fmt": _fmt_premium(r['total_prem']), "sentiment": r['sentiment']} for r in top_premium],
         "top_bullish":  [{"ticker": r['ticker'], "premium_fmt": _fmt_premium(r['total_call_prem'])} for r in top_bullish],
         "top_bearish":  [{"ticker": r['ticker'], "premium_fmt": _fmt_premium(r['total_put_prem'])} for r in top_bearish],
         "timestamp":    datetime.now().strftime('%H:%M:%S'),
-        "date":         datetime.now().strftime('%Y-%m-%d'),
         "data_note":    "EOD Data · yfinance · Delayed",
     }
 
+def save_current_scan(flow_data: dict) -> dict:
+    all_items = (
+        flow_data.get('calls_bought', []) +
+        flow_data.get('puts_bought',  []) +
+        flow_data.get('calls_sold',   []) +
+        flow_data.get('puts_sold',    [])
+    )
+    inserted = save_flow_to_db(all_items, flow_data['scan_ts'])
+    return {"ok": True, "inserted": inserted, "total": len(all_items)}
+
 def get_options_ticker(ticker: str) -> dict:
     try:
-        result = _process_chain(ticker.upper(), min_premium=0)
+        result = _process_chain(ticker.upper(), min_premium=0, min_score=0)
         if not result.get('ok'):
             return {"ok": False, "error": result.get('error', 'Sin datos')}
 
-        # Historial via Massive (contratos más activos)
-        history = _get_massive_history(ticker.upper())
-
-        # Net Score: calls_bought - puts_bought (simplificado)
         net_score = len(result['calls_bought']) - len(result['puts_bought'])
 
         all_flow = []
         for item in result['calls_bought']:
-            all_flow.append({**item, "order_type": "Buy Call",  "color": "bullish"})
+            all_flow.append({**item, "order_type": "Buy Call"})
         for item in result['puts_sold']:
-            all_flow.append({**item, "order_type": "Sell Put",  "color": "bullish"})
+            all_flow.append({**item, "order_type": "Sell Put"})
         for item in result['puts_bought']:
-            all_flow.append({**item, "order_type": "Buy Put",   "color": "bearish"})
+            all_flow.append({**item, "order_type": "Buy Put"})
         for item in result['calls_sold']:
-            all_flow.append({**item, "order_type": "Sell Call", "color": "bearish"})
+            all_flow.append({**item, "order_type": "Sell Call"})
 
         all_flow.sort(key=lambda x: -x['premium'])
 
@@ -226,63 +536,10 @@ def get_options_ticker(ticker: str) -> dict:
             "price":     result['price'],
             "net_score": net_score,
             "sentiment": result['sentiment'],
-            "flow":      all_flow[:30],
-            "history":   history,
+            "flow":      all_flow[:40],
             "total_call_prem": _fmt_premium(result['total_call_prem']),
             "total_put_prem":  _fmt_premium(result['total_put_prem']),
             "timestamp": datetime.now().strftime('%H:%M:%S'),
         }
     except Exception as e:
         return {"ok": False, "error": str(e)}
-
-def _get_massive_history(ticker: str) -> list:
-    try:
-        # Obtener contratos disponibles
-        r = requests.get(
-            f"{MASSIVE_BASE}/v3/reference/options/contracts",
-            params={"underlying_ticker": ticker, "limit": 20, "apiKey": MASSIVE_KEY},
-            timeout=8
-        )
-        if r.status_code != 200: return []
-        contracts = r.json().get('results', [])
-        if not contracts: return []
-
-        history = []
-        today   = datetime.now().strftime('%Y-%m-%d')
-        from_d  = (datetime.now() - timedelta(days=7)).strftime('%Y-%m-%d')
-
-        for contract in contracts[:5]:
-            cticker = contract['ticker']
-            try:
-                agg = requests.get(
-                    f"{MASSIVE_BASE}/v2/aggs/ticker/{cticker}/range/1/day/{from_d}/{today}",
-                    params={"limit": 10, "apiKey": MASSIVE_KEY},
-                    timeout=8
-                )
-                if agg.status_code != 200: continue
-                data = agg.json()
-                if data.get('status') in ('NOT_AUTHORIZED', 'ERROR'): continue
-                results = data.get('results', [])
-                for bar in results:
-                    vol     = bar.get('v', 0)
-                    price_v = bar.get('vw', bar.get('c', 0))
-                    premium = vol * price_v * 100
-                    if premium < 10_000: continue
-                    ts = datetime.fromtimestamp(bar['t'] / 1000)
-                    history.append({
-                        "date":      ts.strftime('%Y-%m-%d'),
-                        "ticker":    cticker,
-                        "strike":    contract['strike_price'],
-                        "exp":       contract['expiration_date'],
-                        "type":      contract['contract_type'],
-                        "volume":    int(vol),
-                        "premium":   premium,
-                        "premium_fmt": _fmt_premium(premium),
-                    })
-            except Exception:
-                continue
-
-        history.sort(key=lambda x: x['date'], reverse=True)
-        return history[:20]
-    except Exception:
-        return []

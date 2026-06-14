@@ -133,14 +133,22 @@ COMMODITY_TICKERS = [
 def _fetch_commodity(item):
     try:
         t    = yf.Ticker(item["ticker"])
-        hist = t.history(period="2d", interval="1d")
+        hist = t.history(period="5d", interval="1d").dropna()
         if len(hist) < 2:
             raise ValueError("Sin datos")
         prev = float(hist["Close"].iloc[-2])
         last = float(hist["Close"].iloc[-1])
         chg  = last - prev
         pct  = (chg / prev) * 100
-        return {"ticker": item["short"], "name": item["name"], "price": round(last, 4), "change": round(chg, 4), "pct": round(pct, 2), "prefix": item["prefix"], "ok": True}
+        return {
+            "ticker": item["short"],
+            "name":   item["name"],
+            "price":  round(last, 4),
+            "change": round(chg, 4),
+            "pct":    round(pct, 2),
+            "prefix": item["prefix"],
+            "ok":     True
+        }
     except Exception as e:
         return {"ticker": item["short"], "name": item["name"], "ok": False, "error": str(e)}
 
@@ -168,28 +176,43 @@ SECTOR_ETFS = [
     {"ticker": "XLC",  "name": "Comunicaciones"},
 ]
 
-def _fetch_sector(item):
+def _fetch_sector(item, period="1d"):
     try:
         t    = yf.Ticker(item["ticker"])
-        hist = t.history(period="5d", interval="1d").dropna()
-        if len(hist) < 2:
-            raise ValueError("Sin datos")
-        prev = float(hist["Close"].iloc[-2])
-        last = float(hist["Close"].iloc[-1])
-        pct  = ((last - prev) / prev) * 100
+        if period == "1d":
+            hist = t.history(period="5d", interval="1d").dropna()
+            if len(hist) < 2: raise ValueError("Sin datos")
+            prev = float(hist["Close"].iloc[-2])
+            last = float(hist["Close"].iloc[-1])
+        elif period == "1w":
+            hist = t.history(period="1mo", interval="1d").dropna()
+            if len(hist) < 6: raise ValueError("Sin datos")
+            prev = float(hist["Close"].iloc[-6])
+            last = float(hist["Close"].iloc[-1])
+        elif period == "1m":
+            hist = t.history(period="3mo", interval="1d").dropna()
+            if len(hist) < 22: raise ValueError("Sin datos")
+            prev = float(hist["Close"].iloc[-22])
+            last = float(hist["Close"].iloc[-1])
+        else:
+            hist = t.history(period="5d", interval="1d").dropna()
+            if len(hist) < 2: raise ValueError("Sin datos")
+            prev = float(hist["Close"].iloc[-2])
+            last = float(hist["Close"].iloc[-1])
+
+        pct = ((last - prev) / prev) * 100
         return {"ticker": item["ticker"], "name": item["name"], "pct": round(pct, 2), "ok": True}
     except Exception as e:
         return {"ticker": item["ticker"], "name": item["name"], "pct": 0, "ok": False, "error": str(e)}
 
-def get_sectors():
+def get_sectors(period: str = "1d"):
     results = []
     with ThreadPoolExecutor(max_workers=11) as ex:
-        futures = {ex.submit(_fetch_sector, item): item for item in SECTOR_ETFS}
+        futures = {ex.submit(_fetch_sector, item, period): item for item in SECTOR_ETFS}
         for future in futures:
             results.append(future.result())
     results.sort(key=lambda x: x["pct"], reverse=True)
     return {"data": results, "timestamp": get_timestamp(), "ok": any(r["ok"] for r in results)}
-
     # ── CALENDARIO ECONÓMICO ──────────────────────────────────────────────────────
 
 EVENT_TRANSLATIONS = {
@@ -713,3 +736,4 @@ def get_credit_spreads():
         "timestamp": get_timestamp(),
         "ok":        any(r["ok"] for r in results),
     }
+    

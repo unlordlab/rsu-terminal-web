@@ -107,7 +107,256 @@ EJEMPLOS HISTÓRICOS:
 
 Un mercado sano tiene AD Line confirmando los máximos del índice.`
     },
+// ── OPTIONS FLOW ──────────────────────────────────────────────────────────
+    "options-flow": {
+        title: "Options Flow — Flujo de Opciones",
+        short: "Registro de operaciones inusuales en opciones. Prima alta + Vol/OI elevado = posible posicionamiento institucional.",
+        long: `El flujo de opciones inusual rastrea operaciones donde el volumen y la prima pagada superan significativamente lo habitual para ese contrato.
 
+POR QUÉ IMPORTA:
+Las instituciones no pueden ocultar sus operaciones en opciones. Cuando alguien paga $3M en calls de HOOD a 60 días, eso deja huella en el volumen — y nosotros la vemos.
+
+LO QUE BUSCAMOS:
+▸ Prima alta (>$100K) → tamaño institucional
+▸ Vol/OI ratio alto (>2x) → posición completamente nueva
+▸ Strike OTM 5-25% → el sweet spot táctico institucional
+▸ Vencimiento 14-60 días → timing direccional, no especulativo
+
+LIMITACIÓN IMPORTANTE:
+Estos datos son EOD (end of day) — del cierre del día anterior. Para opciones a corto plazo (0-5 días) el retraso importa mucho. Para posiciones a semanas o meses, el retraso es irrelevante — la señal sigue siendo válida.`
+    },
+
+    "vol-oi-ratio": {
+        title: "Vol/OI Ratio — Volumen vs Open Interest",
+        short: "Cuánto volumen nuevo se ha negociado respecto al OI existente. >1x = posición nueva. >2x = señal fuerte.",
+        long: `El ratio Vol/OI es uno de los indicadores más importantes para distinguir flujo institucional nuevo del ruido de trading habitual.
+
+OPEN INTEREST (OI):
+Número total de contratos abiertos en ese strike/vencimiento. Es la posición acumulada de todos los participantes.
+
+VOLUMEN:
+Contratos negociados HOY en ese strike/vencimiento.
+
+INTERPRETACIÓN:
+- Vol/OI < 0.1 → Actividad mínima, ruido
+- Vol/OI 0.1-0.5 → Actividad normal
+- Vol/OI 0.5-1.0 → Interés elevado
+- Vol/OI 1.0-2.0 → Posición nueva significativa
+- Vol/OI > 2.0 → SEÑAL FUERTE — alguien está abriendo posición grande nueva
+
+EJEMPLO:
+Strike $85 con OI = 5.000 y Vol = 12.000 → Vol/OI = 2.4x
+Esto significa que se han negociado más contratos hoy que todos los que existían ayer. Es posición nueva, no cierre de existentes.`
+    },
+
+    "options-score": {
+        title: "Score — Puntuación de Señal",
+        short: "Score 0-10 que combina prima, Vol/OI, IV, strike OTM y vencimiento. ≥7 = señal HIGH.",
+        long: `El Score es un sistema propio RSU que combina múltiples factores para priorizar las señales más relevantes.
+
+COMPONENTES DEL SCORE:
+
+Prima (máx 3pts):
+- >$1M → 3pts
+- >$500K → 2pts
+- >$100K → 1pt
+
+Vol/OI Ratio (máx 2pts):
+- >2.0x → 2pts
+- >0.5x → 1pt
+
+Implied Volatility (máx 2pts):
+- IV >80% → 2pts (pagan caro = alta convicción)
+- IV >40% → 1pt
+
+Strike OTM (máx 2pts):
+- 5-25% OTM → 2pts (sweet spot institucional)
+- 0-5% OTM → 1pt
+
+Vencimiento (máx 1pt):
+- 14-60 días → 1pt (timing táctico)
+
+NIVELES:
+- Score 8-10 → HIGH ⚡ Señal de alta convicción
+- Score 5-7  → MEDIUM 📊 Señal a seguir
+- Score <5   → LOW Ruido filtrado`
+    },
+
+    "calls-bought": {
+        title: "Calls Bought — Compra de Calls",
+        short: "Compras de opciones call. Señal alcista — el comprador apuesta a que el precio sube.",
+        long: `Una Call comprada da al comprador el derecho (no la obligación) de comprar el activo al precio strike antes del vencimiento.
+
+SEÑAL ALCISTA:
+Quien compra una call está apostando a que el precio del subyacente supera el strike antes del vencimiento. Cuanto más OTM el strike y mayor la prima pagada, mayor es la convicción del comprador.
+
+EJEMPLO:
+NVDA Call $250 vencimiento 45 días, prima $2M
+→ Alguien paga $2M apostando a que NVDA supera $250 en 45 días
+→ Si NVDA está en $220, necesita subir +13.6%
+
+CALLS BOUGHT vs CALLS SOLD:
+- Calls Bought → Alcista (apuesta a subida)
+- Calls Sold (Covered/Naked) → Neutral/Bajista (apuesta a que NO sube)`
+    },
+
+    "puts-bought": {
+        title: "Puts Bought — Compra de Puts",
+        short: "Compras de opciones put. Señal bajista — el comprador se protege o apuesta a caída.",
+        long: `Una Put comprada da al comprador el derecho de vender el activo al precio strike. Es la cobertura o apuesta bajista más directa.
+
+DOS INTERPRETACIONES:
+
+1. COBERTURA (Hedge):
+Un fondo que tiene 1M de acciones de MSFT compra puts para protegerse de una caída. No es necesariamente bajista en la acción, solo se cubre.
+
+2. APUESTA BAJISTA PURA:
+Comprar puts OTM con vencimiento corto/medio sin posición en el subyacente es apostar a que el precio cae.
+
+CÓMO DISTINGUIRLAS:
+- Puts muy OTM (>20%) con vencimiento largo → probablemente cobertura de cartera
+- Puts cerca del precio actual con vencimiento corto → apuesta bajista táctica
+
+SEÑAL MÁS RELEVANTE:
+Puts compradas en tickers individuales (no ETFs como SPY/QQQ) son más significativas como señal bajista.`
+    },
+
+    "puts-sold": {
+        title: "Puts Sold — Venta de Puts",
+        short: "Venta de opciones put. Señal alcista — el vendedor apuesta a que el precio NO baja.",
+        long: `Vender una put obliga al vendedor a comprar el activo al precio strike si el comprador ejerce. Es una estrategia alcista o neutral.
+
+SEÑAL ALCISTA:
+Quien vende puts está diciendo "estoy dispuesto a comprar este activo a este precio" o simplemente cree que el precio no caerá hasta ese nivel.
+
+ESTRATEGIAS COMUNES:
+- Sell Put para generar ingreso (premium selling)
+- Sell Put como forma de comprar acciones a precio deseado
+- Wheel strategy: vender puts, si te asignan vender calls
+
+INTERPRETACIÓN EN OPCIONES FLOW:
+Puts vendidas masivas en un ticker = la "smart money" cree que NO va a bajar. Es una señal alcista implícita.
+
+EJEMPLO:
+SPY Sell Put $500, 30 días, prima $1.5M
+→ Alguien recibe $1.5M apostando a que SPY no cae por debajo de $500 en 30 días`
+    },
+
+    "calls-sold": {
+        title: "Calls Sold — Venta de Calls",
+        short: "Venta de opciones call. Señal bajista o neutral — apuesta a que el precio NO sube.",
+        long: `Vender una call obliga al vendedor a entregar el activo al precio strike si se ejerce. Es bajista o neutral.
+
+DOS TIPOS:
+
+COVERED CALL (Cubierta):
+El vendedor ya tiene las acciones y vende calls para generar ingreso extra. Es una estrategia neutral — cree que el precio no subirá mucho más.
+
+NAKED CALL (Descubierta):
+El vendedor NO tiene las acciones. Es extremadamente arriesgado y señal bajista fuerte — apuesta a que el precio NO sube.
+
+SEÑAL EN OPTIONS FLOW:
+Calls vendidas masivas = la smart money cree que el precio tiene techo en ese strike.
+
+DIFERENCIA CON BUY CALL:
+- Buy Call → quiero que suba → ALCISTA
+- Sell Call → creo que NO sube → BAJISTA/NEUTRAL`
+    },
+
+    "net-score-options": {
+        title: "Net Score — Puntuación Neta",
+        short: "Calls Bought - Puts Bought. Positivo = flujo alcista neto. Negativo = flujo bajista neto.",
+        long: `El Net Score es un indicador resumen del sesgo direccional del flujo de opciones para un ticker específico.
+
+CÁLCULO:
+Net Score = (nº señales alcistas) - (nº señales bajistas)
+Donde alcistas = Calls Bought + Puts Sold
+Y bajistas = Puts Bought + Calls Sold
+
+INTERPRETACIÓN:
+- Score muy positivo (+5 o más) → Acumulación alcista sistemática
+- Score ligeramente positivo (+1 a +4) → Ligero sesgo alcista
+- Score neutro (0) → Sin sesgo claro
+- Score negativo → Distribución o cobertura bajista
+
+LIMITACIONES:
+El Net Score no pondera por prima — una señal de $5M pesa igual que una de $100K. En próximas versiones se ponderará por prima total para dar más peso a las señales de mayor tamaño.
+
+MÁS ÚTIL CON HISTORIAL:
+Un Net Score de +7 en una semana es más significativo que un +7 puntual — si aparece repetido en varios días, hay acumulación sistemática.`
+    },
+
+    "high-signal": {
+        title: "Señal HIGH — Alta Convicción",
+        short: "Score ≥7. Combina prima grande, Vol/OI alto, IV elevada y strike OTM en rango óptimo.",
+        long: `Las señales HIGH son las más relevantes del scanner. Requieren cumplir simultáneamente varios criterios estrictos.
+
+CRITERIOS PARA HIGH (Score ≥7):
+✓ Prima típicamente >$500K
+✓ Vol/OI ratio >2x (posición completamente nueva)
+✓ IV elevada (pagan caro = tienen convicción)
+✓ Strike en sweet spot OTM (5-25%)
+✓ Vencimiento táctico (14-60 días)
+
+POR QUÉ SON RELEVANTES:
+Para que una señal alcance score 7+ tiene que cumplir casi todos los criterios simultáneamente. Eso filtra casi todo el ruido retail y deja solo operaciones de tamaño y convicción.
+
+CÓMO USARLAS:
+1. Anota el ticker y el strike cuando aparece la señal
+2. Revisa la tesis fundamental del activo
+3. Compara con tu análisis técnico (¿confirma o contradice?)
+4. Si la misma señal aparece 2-3 días seguidos → señal de acumulación
+
+IMPORTANTE:
+Una señal HIGH no garantiza movimiento. Es información, no señal de trading automático. Siempre combina con análisis propio.`
+    },
+
+    "otm-strike": {
+        title: "Strike OTM — Out of the Money",
+        short: "Strike fuera del precio actual. Call OTM = strike > precio. Put OTM = strike < precio.",
+        long: `Un strike OTM (Out of The Money) es aquel que está fuera del precio actual del subyacente.
+
+CALL OTM:
+Strike > Precio actual
+Ejemplo: NVDA a $220, Call $250 = OTM +13.6%
+Para ganar dinero, NVDA debe superar $250 antes del vencimiento.
+
+PUT OTM:
+Strike < Precio actual
+Ejemplo: NVDA a $220, Put $180 = OTM -18.2%
+Para ganar dinero, NVDA debe caer por debajo de $180 antes del vencimiento.
+
+POR QUÉ EL SWEET SPOT ES 5-25% OTM:
+- <5% OTM (near the money): puede ser cobertura rutinaria, mucho ruido
+- 5-25% OTM: requiere movimiento significativo = convicción real
+- >25% OTM: especulación pura tipo "lotto ticket", baja probabilidad
+
+SEÑAL DE ACUMULACIÓN:
+Compras repetidas de calls 10-20% OTM con vencimiento a 30-60 días = alguien espera movimiento fuerte y tiene información o convicción alta.`
+    },
+
+    "implied-volatility": {
+        title: "IV — Implied Volatility (Volatilidad Implícita)",
+        short: "La volatilidad que el mercado está descontando en el precio de la opción. IV alta = opciones caras.",
+        long: `La Volatilidad Implícita (IV) es la expectativa del mercado sobre cuánto se moverá el subyacente hasta el vencimiento.
+
+CÓMO FUNCIONA:
+El precio de una opción se deriva de varios factores. La IV es el único que no se observa directamente — se calcula a partir del precio de mercado de la opción.
+
+INTERPRETACIÓN:
+- IV baja (20-30%): mercado tranquilo, opciones baratas
+- IV media (30-60%): actividad normal
+- IV alta (60-100%): incertidumbre alta, opciones caras
+- IV muy alta (>100%): evento inminente (earnings, merger)
+
+POR QUÉ IMPORTA PARA EL FLOW:
+Si alguien compra opciones con IV alta, está pagando una prima elevada. Eso significa que tienen alta convicción — no esperan a que la IV baje para entrar.
+
+IV alta en una señal de compra = señal más fuerte, porque el coste de equivocarse es mayor.
+
+IV RANK:
+Compara la IV actual con el rango histórico del último año. IV Rank 80% = la IV está en el percentil 80 de los últimos 12 meses — inusualmente cara.`
+    },
     // ── ALGORITMO RSU ─────────────────────────────────────────────────────────
 
     "rsu-algoritmo": {
