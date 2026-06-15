@@ -42,7 +42,12 @@ export async function render(container) {
         + '<div id="widget-reddit"  style="display:flex;flex-direction:column;max-height:480px;"></div>'
         + '</div>'
 
-        // Fila 4 — full width
+        // Fila 4 — Fed & Macro
+        + '<div style="margin-bottom:1rem;">'
+        + '<div id="widget-fed-macro" style="display:flex;flex-direction:column;"></div>'
+        + '</div>'
+
+        // Fila 5 — full width
         + '<div style="margin-bottom:1rem;">'
         + '<div id="widget-calendar" style="display:flex;flex-direction:column;"></div>'
         + '</div>';
@@ -57,6 +62,7 @@ export async function render(container) {
     loadVix(container.querySelector('#widget-vix'));
     loadSpreads(container.querySelector('#widget-spreads'));
     loadReddit(container.querySelector('#widget-reddit'));
+    loadFedMacro(container.querySelector('#widget-fed-macro'));
     loadCalendar(container.querySelector('#widget-calendar'));
 
     onMarketUpdate('market-page', (data) => {
@@ -582,7 +588,202 @@ async function loadBriefing(el) {
         el.innerHTML = widgetShell('NIGHTLY BRIEFING', 'Análisis de mercado · IA', widgetError(e.message));
     }
 }
+async function loadFedMacro(el) {
+    el.innerHTML = widgetShell('FED & MACRO ' + tt('credit-spreads'), 'Balance Fed · Curva de Tipos · Indicadores FRED', loading());
+    try {
+        const res  = await fetch('/api/v1/market/fed-macro', { headers: authHeader() });
+        const data = await res.json();
+        if (!data.ok) throw new Error(data.error || 'Sin datos');
 
+        const b = data.balance    || {};
+        const y = data.yields     || {};
+        const ind = data.indicators || {};
+
+        // ── BALANCE FED ───────────────────────────────────────────────────────
+        const balColor  = b.color || '#ffb800';
+        const wChgColor = (b.w_change || 0) > 0 ? '#00ffad' : (b.w_change || 0) < 0 ? '#f23645' : '#888';
+        const wChgStr   = b.w_change != null ? (b.w_change > 0 ? '+' : '') + b.w_change + 'B' : 'N/D';
+        const mChgStr   = b.m_change != null ? (b.m_change > 0 ? '+' : '') + b.m_change + 'B' : 'N/D';
+
+        const balSection = '<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:1rem;padding:1rem;border-bottom:1px solid var(--color-border);">'
+
+            // Status
+            + '<div style="background:var(--color-bg,#0a0a0a);border:1px solid ' + balColor + '44;border-radius:var(--radius);padding:0.75rem;text-align:center;">'
+            + '<div style="color:var(--color-muted);font-size:10px;margin-bottom:4px;">POLÍTICA FED ' + tt('vix') + '</div>'
+            + '<div style="color:' + balColor + ';font-size:20px;font-weight:500;">' + (b.status || 'N/D') + '</div>'
+            + '<div style="color:var(--color-muted);font-size:10px;margin-top:4px;">' + (b.date || '') + '</div>'
+            + '</div>'
+
+            // Balance total
+            + '<div style="background:var(--color-bg,#0a0a0a);border:1px solid var(--color-border);border-radius:var(--radius);padding:0.75rem;text-align:center;">'
+            + '<div style="color:var(--color-muted);font-size:10px;margin-bottom:4px;">BALANCE TOTAL (WALCL)</div>'
+            + '<div style="color:var(--color-text);font-size:18px;font-weight:500;">' + (b.total || 'N/D') + '</div>'
+            + '<div style="color:' + wChgColor + ';font-size:10px;margin-top:4px;">Δ Semanal: ' + wChgStr + '</div>'
+            + '</div>'
+
+            // Liquidez neta
+            + '<div style="background:var(--color-bg,#0a0a0a);border:1px solid var(--color-border);border-radius:var(--radius);padding:0.75rem;text-align:center;">'
+            + '<div style="color:var(--color-muted);font-size:10px;margin-bottom:4px;">LIQ. NETA (Bal−TGA−RRP)</div>'
+            + '<div style="color:var(--color-text);font-size:18px;font-weight:500;">' + (b.net_liq || 'N/D') + '</div>'
+            + '<div style="color:var(--color-muted);font-size:10px;margin-top:4px;">TGA: ' + (b.tga || 'N/D') + ' · RRP: ' + (b.rrp || 'N/D') + '</div>'
+            + '</div>'
+
+            // Cambio mensual
+            + '<div style="background:var(--color-bg,#0a0a0a);border:1px solid var(--color-border);border-radius:var(--radius);padding:0.75rem;text-align:center;">'
+            + '<div style="color:var(--color-muted);font-size:10px;margin-bottom:4px;">Δ MENSUAL BALANCE</div>'
+            + '<div style="color:' + wChgColor + ';font-size:18px;font-weight:500;">' + mChgStr + '</div>'
+            + '<div style="color:var(--color-muted);font-size:10px;margin-top:4px;">vs hace 5 semanas</div>'
+            + '</div>'
+
+            + '</div>';
+
+        // Sparkline balance
+        const history = b.history || [];
+        let sparkHtml = '';
+        if (history.length >= 4) {
+            const chartId = 'fed-bal-chart-' + Date.now();
+            sparkHtml = '<div style="padding:0 1rem 0.5rem;">'
+                + '<div style="color:var(--color-muted);font-size:10px;margin-bottom:4px;">Balance Fed últimas 24 semanas (Trillones $)</div>'
+                + '<div style="height:60px;"><canvas id="' + chartId + '" height="60"></canvas></div>'
+                + '</div>';
+            setTimeout(() => {
+                const ctx = document.getElementById(chartId);
+                if (!ctx || !window.Chart) return;
+                new Chart(ctx, {
+                    type: 'line',
+                    data: {
+                        labels:   history.map(h => h.date.substring(5)),
+                        datasets: [{ data: history.map(h => h.value), borderColor: balColor, backgroundColor: balColor + '22', borderWidth: 1.5, pointRadius: 0, fill: true, tension: 0.3 }]
+                    },
+                    options: {
+                        responsive: true, maintainAspectRatio: true, aspectRatio: 5,
+                        plugins: { legend: { display: false } },
+                        scales: {
+                            x: { ticks: { color: '#555', font: { size: 8 }, maxTicksLimit: 6, maxRotation: 0 }, grid: { color: 'rgba(255,255,255,0.03)' } },
+                            y: { ticks: { color: '#555', font: { size: 8 }, callback: v => '$' + v.toFixed(1) + 'T' }, grid: { color: 'rgba(255,255,255,0.03)' } }
+                        }
+                    }
+                });
+            }, 300);
+        }
+
+        // ── CURVA DE TIPOS ────────────────────────────────────────────────────
+        const sp10_2  = y.spread_10_2;
+        const inverted = y.inverted;
+        const spColor  = inverted ? '#f23645' : '#00ffad';
+        const spLabel  = inverted ? '⚠ INVERTIDA' : '✓ NORMAL';
+        const spDesc   = inverted
+            ? 'Curva invertida — históricamente precede recesión 6-18 meses'
+            : 'Curva normal — expectativas de crecimiento económico saludable';
+
+        const yieldPoints = [
+            { label: '3M', val: y.Y3M },
+            { label: '2Y', val: y.Y2Y },
+            { label: '5Y', val: y.Y5Y },
+            { label: '10Y', val: y.Y10Y },
+            { label: '30Y', val: y.Y30Y },
+        ].filter(p => p.val);
+
+        const yieldBars = yieldPoints.map(p => {
+            const maxY = Math.max(...yieldPoints.map(x => x.val));
+            const w    = maxY > 0 ? (p.val / maxY) * 100 : 0;
+            return '<div style="display:flex;align-items:center;gap:8px;margin-bottom:5px;">'
+                + '<div style="width:28px;color:var(--color-muted);font-size:10px;text-align:right;flex-shrink:0;">' + p.label + '</div>'
+                + '<div style="flex:1;background:var(--color-bg,#0a0a0a);border-radius:2px;height:8px;">'
+                + '<div style="height:100%;width:' + w.toFixed(1) + '%;background:' + spColor + ';border-radius:2px;"></div>'
+                + '</div>'
+                + '<div style="width:40px;color:var(--color-text);font-size:11px;text-align:right;flex-shrink:0;">' + p.val.toFixed(2) + '%</div>'
+                + '</div>';
+        }).join('');
+
+        const yieldsSection = '<div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem;padding:1rem;border-bottom:1px solid var(--color-border);">'
+
+            // Curva visual
+            + '<div>'
+            + '<div style="color:var(--color-muted);font-size:10px;letter-spacing:0.05em;margin-bottom:0.75rem;">CURVA DE TIPOS US TREASURY ' + tt('credit-spreads') + '</div>'
+            + yieldBars
+            + '</div>'
+
+            // Spread + estado
+            + '<div style="display:flex;flex-direction:column;gap:8px;">'
+            + '<div style="background:var(--color-bg,#0a0a0a);border:1px solid ' + spColor + '44;border-radius:var(--radius);padding:0.75rem;text-align:center;">'
+            + '<div style="color:var(--color-muted);font-size:10px;margin-bottom:4px;">SPREAD 10Y − 2Y</div>'
+            + '<div style="color:' + spColor + ';font-size:22px;font-weight:500;">' + (sp10_2 != null ? (sp10_2 >= 0 ? '+' : '') + sp10_2.toFixed(2) + '%' : 'N/D') + '</div>'
+            + '<div style="color:' + spColor + ';font-size:10px;font-weight:500;margin-top:4px;">' + spLabel + '</div>'
+            + '</div>'
+            + '<div style="background:var(--color-bg,#0a0a0a);border:1px solid var(--color-border);border-radius:var(--radius);padding:0.75rem;">'
+            + '<div style="color:var(--color-muted);font-size:10px;line-height:1.6;">' + spDesc + '</div>'
+            + '</div>'
+            + '</div>'
+
+            + '</div>';
+
+        // ── INDICADORES FRED ──────────────────────────────────────────────────
+        const fedFunds    = ind.fed_funds;
+        const cpi         = ind.cpi_yoy;
+        const unemployment = ind.unemployment;
+        const corePce     = ind.core_pce;
+
+        function indCard(label, obj, unit, tooltip_key) {
+            if (!obj) return '<div style="background:var(--color-bg,#0a0a0a);border:1px solid var(--color-border);border-radius:var(--radius);padding:0.75rem;text-align:center;">'
+                + '<div style="color:var(--color-muted);font-size:10px;margin-bottom:4px;">' + label + '</div>'
+                + '<div style="color:var(--color-muted);font-size:14px;">N/D</div>'
+                + '</div>';
+            const val   = obj.value;
+            const chg   = obj.chg;
+            const yoy   = obj.yoy;
+            const date  = (obj.date || '').substring(0, 7);
+            const up    = chg >= 0;
+            const color = up ? '#f23645' : '#00ffad'; // para macro: subida = malo generalmente
+            const arrow = up ? '▲' : '▼';
+            return '<div style="background:var(--color-bg,#0a0a0a);border:1px solid var(--color-border);border-radius:var(--radius);padding:0.75rem;text-align:center;">'
+                + '<div style="color:var(--color-muted);font-size:10px;margin-bottom:4px;">' + label + (tooltip_key ? ' ' + tt(tooltip_key) : '') + '</div>'
+                + '<div style="color:var(--color-text);font-size:18px;font-weight:500;">' + val.toFixed(2) + '<span style="color:var(--color-muted);font-size:10px;"> ' + unit + '</span></div>'
+                + (yoy != null ? '<div style="color:' + color + ';font-size:10px;margin-top:2px;">' + arrow + ' ' + Math.abs(yoy).toFixed(2) + '% YoY</div>' : '<div style="color:' + color + ';font-size:10px;margin-top:2px;">' + arrow + ' ' + Math.abs(chg).toFixed(3) + '</div>')
+                + '<div style="color:var(--color-muted);font-size:9px;margin-top:2px;">' + date + '</div>'
+                + '</div>';
+        }
+
+        // Fed Funds tiene color inverso (subida de tipos no es siempre malo)
+        function fedFundsCard(obj) {
+            if (!obj) return indCard('FED FUNDS RATE', null, '%', null);
+            const postura = obj.value >= 4.5 ? 'RESTRICTIVA' : obj.value >= 3 ? 'NEUTRAL' : 'EXPANSIVA';
+            const pColor  = obj.value >= 4.5 ? '#f23645' : obj.value >= 3 ? '#ffb800' : '#00ffad';
+            return '<div style="background:var(--color-bg,#0a0a0a);border:1px solid ' + pColor + '44;border-radius:var(--radius);padding:0.75rem;text-align:center;">'
+                + '<div style="color:var(--color-muted);font-size:10px;margin-bottom:4px;">FED FUNDS RATE</div>'
+                + '<div style="color:var(--color-text);font-size:18px;font-weight:500;">' + obj.value.toFixed(2) + '<span style="color:var(--color-muted);font-size:10px;"> %</span></div>'
+                + '<div style="color:' + pColor + ';font-size:10px;font-weight:500;margin-top:4px;">' + postura + '</div>'
+                + '<div style="color:var(--color-muted);font-size:9px;margin-top:2px;">' + (obj.date || '').substring(0, 7) + '</div>'
+                + '</div>';
+        }
+
+        const indicatorsSection = '<div style="padding:1rem;">'
+            + '<div style="color:var(--color-muted);font-size:10px;letter-spacing:0.05em;margin-bottom:0.75rem;">INDICADORES MACROECONÓMICOS · FRED</div>'
+            + '<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:0.75rem;">'
+            + fedFundsCard(fedFunds)
+            + indCard('IPC YoY', cpi, 'Index', null)
+            + indCard('DESEMPLEO', unemployment, '%', null)
+            + indCard('PCE CORE', corePce, 'Index', null)
+            + '</div>'
+            + '<div style="margin-top:0.75rem;padding:0.6rem 0.75rem;background:var(--color-bg,#0a0a0a);border-radius:var(--radius);font-size:10px;color:var(--color-muted);">'
+            + '⚡ Fuente: FRED (Federal Reserve Bank of St. Louis) · CSV público sin API key · Actualizado cada 30 min'
+            + '</div>'
+            + '</div>';
+
+        const content = balSection + sparkHtml + yieldsSection + indicatorsSection;
+        el.innerHTML  = widgetShell('FED & MACRO ' + tt('credit-spreads'), 'Balance Fed · Curva de Tipos · Indicadores FRED', content, data.timestamp);
+
+        // Cargar Chart.js si no está y renderizar sparkline
+        if (history.length >= 4 && !window.Chart) {
+            const s  = document.createElement('script');
+            s.src    = 'https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js';
+            document.head.appendChild(s);
+        }
+
+    } catch(e) {
+        el.innerHTML = widgetShell('FED & MACRO', 'Balance Fed · Curva de Tipos · FRED', widgetError(e.message));
+    }
+}
 async function loadCalendar(el) {
     el.innerHTML = widgetShell('CALENDARIO ECONÓMICO', 'Esta semana · Hora Madrid', loading());
     try {

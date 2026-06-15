@@ -58,3 +58,8 @@ async def briefing(user=Depends(verify_token)):
 @router.get("/credit-spreads")
 async def credit_spreads(user=Depends(verify_token)):
     return get_credit_spreads()
+
+@router.get("/fed-macro")
+async def fed_macro():
+    from services.market_service import get_fed_macro
+    return get_fed_macro()

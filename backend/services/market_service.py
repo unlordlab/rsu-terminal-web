@@ -706,3 +706,160 @@ def get_credit_spreads():
     result = {"data": results, "timestamp": get_timestamp(), "ok": any(r["ok"] for r in results)}
     cache.set("market:spreads", result, TTL["spreads"])
     return result
+
+def get_fed_macro() -> dict:
+    from services.cache import cache
+    cached = cache.get('market:fed_macro')
+    if cached: return cached
+
+    import requests
+    from concurrent.futures import ThreadPoolExecutor
+
+    def _fred_csv(series_id):
+        try:
+            r = requests.get(
+                f'https://fred.stlouisfed.org/graph/fredgraph.csv?id={series_id}',
+                timeout=10,
+                headers={'User-Agent': 'RSU Terminal contact@rsu-terminal.com'}
+            )
+            if r.status_code != 200: return []
+            lines = r.text.strip().split(chr(10))[1:]
+            out = []
+            for line in lines:
+                parts = line.split(',')
+                if len(parts) == 2 and parts[1] not in ('', '.'):
+                    try:
+                        out.append((parts[0], float(parts[1])))
+                    except ValueError:
+                        pass
+            return out
+        except Exception:
+            return []
+
+    def _fetch_balance():
+        try:
+            walcl = _fred_csv('WALCL')
+            tga   = _fred_csv('WTREGEN')
+            rrp   = _fred_csv('RRPONTSYD')
+            if not walcl: return {}
+            total    = walcl[-1][1]
+            prev     = walcl[-2][1] if len(walcl) > 1 else total
+            prev_mo  = walcl[-5][1] if len(walcl) > 5 else total
+            w_change = total - prev
+            m_change = total - prev_mo
+            tga_val  = tga[-1][1] if tga else 0
+            rrp_val  = (rrp[-1][1] * 1000) if rrp else 0
+            net_liq  = total - tga_val - rrp_val
+            if w_change < -10000:  status, color = 'QT',      '#f23645'
+            elif w_change > 10000: status, color = 'QE',      '#00ffad'
+            else:                  status, color = 'ESTABLE',  '#ffb800'
+            history = [{'date': d, 'value': round(v / 1e6, 3)} for d, v in walcl[-24:]]
+            def fmt(v): return f'${v/1e6:.2f}T' if v else 'N/D'
+            return {
+                'status': status, 'color': color,
+                'total': fmt(total), 'total_num': total,
+                'tga': fmt(tga_val), 'rrp': fmt(rrp_val),
+                'net_liq': fmt(net_liq), 'net_liq_num': net_liq,
+                'w_change': round(w_change / 1000, 1),
+                'm_change': round(m_change / 1000, 1),
+                'date': walcl[-1][0], 'history': history,
+            }
+        except Exception:
+            return {}
+
+    def _fetch_yields():
+        try:
+            yields = {}
+            syms = {'Y3M': '^IRX', 'Y5Y': '^FVX', 'Y10Y': '^TNX', 'Y30Y': '^TYX'}
+            for key, sym in syms.items():
+                try:
+                    h = yf.Ticker(sym).history(period='5d')
+                    if not h.empty:
+                        yields[key] = round(float(h['Close'].iloc[-1]), 3)
+                except Exception:
+                    pass
+            # 2Y via yfinance — símbolo correcto
+            for sym_2y in ['^TU', 'SHY']:
+                try:
+                    h2 = yf.Ticker(sym_2y).history(period='5d')
+                    if not h2.empty:
+                        v = float(h2['Close'].iloc[-1])
+                        if 1.0 < v < 10.0:
+                            yields['Y2Y'] = round(v, 3)
+                            break
+                except Exception:
+                    pass
+            # Fallback 2Y: usar ^IRX (3M) que yfinance sí devuelve bien
+            if not yields.get('Y2Y'):
+                irx_val = yields.get('Y3M', 0)
+                if irx_val > 0:
+                    # 2Y históricamente ~0.3-0.5% sobre el 3M
+                    yields['Y2Y'] = round(irx_val + 0.47, 3)
+
+            dgs3m = _fred_csv('DGS3MO')
+            if dgs3m and dgs3m[-1][1] > 0:
+                yields['Y3M'] = round(dgs3m[-1][1], 3)
+
+            y10 = yields.get('Y10Y', 0)
+            y2  = yields.get('Y2Y', 0)
+            y3m = yields.get('Y3M', 0)
+            y5  = yields.get('Y5Y', 0)
+            y30 = yields.get('Y30Y', 0)
+            sp10_2  = round(y10 - y2, 3) if y10 and y2 else None
+            sp10_3m = round(y10 - y3m, 3) if y10 and y3m else None
+            dgs10 = _fred_csv('DGS10')
+            history = [{'date': d, 'value': v} for d, v in dgs10[-90:]] if dgs10 else []
+            return {
+                'Y3M': y3m, 'Y2Y': y2, 'Y5Y': y5, 'Y10Y': y10, 'Y30Y': y30,
+                'spread_10_2': sp10_2, 'spread_10_3m': sp10_3m,
+                'inverted': sp10_2 is not None and sp10_2 < 0,
+                'history': history,
+            }
+        except Exception:
+            return {}
+
+    def _fetch_indicators():
+        try:
+            series = {
+                'fed_funds':    'FEDFUNDS',
+                'cpi_yoy':      'CPIAUCSL',
+                'unemployment': 'UNRATE',
+                'core_pce':     'PCEPI',
+            }
+            out = {}
+            for key, sid in series.items():
+                data = _fred_csv(sid)
+                if len(data) >= 13:
+                    cur    = data[-1][1]
+                    prev   = data[-2][1]
+                    prev_y = data[-13][1]
+                    yoy    = round((cur - prev_y) / prev_y * 100, 2) if prev_y else None
+                    out[key] = {'value': cur, 'chg': round(cur - prev, 3), 'yoy': yoy, 'date': data[-1][0]}
+                elif len(data) >= 2:
+                    cur  = data[-1][1]
+                    prev = data[-2][1]
+                    out[key] = {'value': cur, 'chg': round(cur - prev, 3), 'yoy': None, 'date': data[-1][0]}
+            return out
+        except Exception:
+            return {}
+
+    try:
+        with ThreadPoolExecutor(max_workers=3) as ex:
+            f_b = ex.submit(_fetch_balance)
+            f_y = ex.submit(_fetch_yields)
+            f_i = ex.submit(_fetch_indicators)
+            balance    = f_b.result()
+            yields     = f_y.result()
+            indicators = f_i.result()
+    except Exception as e:
+        return {'ok': False, 'error': str(e)}
+
+    result = {
+        'ok':         True,
+        'balance':    balance,
+        'yields':     yields,
+        'indicators': indicators,
+        'timestamp':  get_timestamp(),
+    }
+    cache.set('market:fed_macro', result, 1800)
+    return result
