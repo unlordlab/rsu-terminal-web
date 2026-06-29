@@ -30,6 +30,52 @@ function isAuthenticated() {
     return !!sessionStorage.getItem(TOKEN_KEY);
 }
 
+// Interceptor global de fetch: cubre dos casos transversales a toda la app,
+// sin tener que modificar cada página individualmente:
+//
+// 1) 401 → token inválido/expirado: limpia sesión y redirige a /login.
+// 2) 429 → rate limit excedido: reescribe la respuesta para que toda página
+//    que haga `data.ok` / `data.error` reciba un objeto uniforme con
+//    `rate_limited: true` y el tiempo de espera real, en vez de un "Sin datos"
+//    genérico que no explica qué pasó. Esto cubre las páginas (cartera.js,
+//    market.js, canslim.js) que usan su propio helper authHeader() local en
+//    vez de core/api.js.
+const _originalFetch = window.fetch;
+window.fetch = async function(...args) {
+    const response = await _originalFetch.apply(this, args);
+    const url = typeof args[0] === 'string' ? args[0] : (args[0] && args[0].url) || '';
+
+    if (response.status === 401 && url.includes('/api/v1/') && location.pathname !== '/login') {
+        sessionStorage.removeItem(TOKEN_KEY);
+        navigate('/login');
+        return response;
+    }
+
+    if (response.status === 429 && url.includes('/api/v1/')) {
+        let retryIn = 60, message = 'Demasiadas peticiones. Espera unos segundos e inténtalo de nuevo.';
+        try {
+            const body = await response.clone().json();
+            const detail = body.detail || body;
+            if (detail.retry_in) retryIn = detail.retry_in;
+            if (detail.message)  message  = detail.message;
+        } catch (e) { /* respuesta no-JSON, usar valores por defecto */ }
+
+        const uniformBody = JSON.stringify({
+            ok: false,
+            rate_limited: true,
+            retry_in: retryIn,
+            error: message,
+        });
+        return new Response(uniformBody, {
+            status: 429,
+            statusText: response.statusText,
+            headers: response.headers,
+        });
+    }
+
+    return response;
+};
+
 export function navigate(path) {
     const cleanPath = path.split('?')[0];
     const protectedRoutes = ['/', '/market', '/cartera', '/rsrw', '/newsfeed', '/spxl', '/btc-stratum', '/roadmap', '/academy', '/tesis', '/options', '/research', '/disclaimer', '/canslim', '/algoritmo', '/insider'];

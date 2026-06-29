@@ -1,4 +1,5 @@
 import { tt } from '/components/tooltip.js';
+import { errorMessage } from '/core/ui.js';
 
 export async function render(container) {
     container.innerHTML = pageHeader();
@@ -24,7 +25,7 @@ export async function render(container) {
             renderSparkline(data);
             renderEarningsChart(data);
         } catch(e) {
-            result.innerHTML = '<div style="padding:1rem;color:#f23645;font-size:12px;">✗ ' + e.message + '</div>';
+            result.innerHTML = errorMessage(e.message);
         } finally {
             btn.textContent   = 'ANALIZAR';
             btn.style.opacity = '1';
@@ -65,11 +66,13 @@ function renderResearch(data) {
     return headerSection(data, chgColor, chgStr)
         + descriptionSection(data)
         + rsuScoreSection(score, scoreColor)
+        + piotroskiSection(data)
         + chartSection(data)
         + technicalSection(data)
         + metricsSection(data)
         + consensoSection(data)
         + analystChangesSection(data)
+        + institutionalSection(data)
         + seasonalitySection(data)
         + insiderSection(data)
         + earningsSection(data)
@@ -95,7 +98,7 @@ function headerSection(data, chgColor, chgStr) {
         + '<div style="text-align:right;">'
         + '<div style="color:var(--color-text);font-size:28px;font-weight:500;">$' + data.price.toLocaleString('en-US') + '</div>'
         + '<div style="color:' + chgColor + ';font-size:13px;">' + chgStr + ' hoy</div>'
-        + '<div style="color:var(--color-muted);font-size:11px;margin-top:2px;">' + data.mktcap_fmt + ' market cap</div>'
+        + '<div style="color:var(--color-muted);font-size:11px;margin-top:2px;">' + data.mktcap_fmt + ' market cap ' + tt('market-cap') + '</div>'
         + '</div>'
         + '</div>'
         + '<div style="display:flex;gap:2rem;margin-top:1rem;padding-top:1rem;border-top:1px solid var(--color-border);font-size:11px;flex-wrap:wrap;">'
@@ -145,6 +148,56 @@ function rsuScoreSection(score, scoreColor) {
         + '</div>';
 }
 
+function piotroskiSection(data) {
+    const p = data.piotroski;
+    if (!p || !p.criteria || !p.criteria.length) return '';
+    return '<div style="background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius);padding:1.25rem;margin-bottom:1rem;">'
+        + '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">'
+        + '<span style="color:var(--color-muted);font-size:11px;letter-spacing:0.08em;">PIOTROSKI F-SCORE ' + tt('piotroski-score') + '</span>'
+        + '<div style="display:flex;align-items:center;gap:10px;">'
+        + '<span style="color:' + p.color + ';font-size:20px;font-weight:500;">' + p.score + '/' + p.max + '</span>'
+        + '<span style="color:' + p.color + ';font-size:12px;padding:2px 10px;border:1px solid ' + p.color + '33;border-radius:4px;">' + p.label + '</span>'
+        + '</div></div>'
+        + '<div style="background:var(--color-bg,#0a0a0a);border-radius:4px;height:6px;margin-bottom:10px;">'
+        + '<div style="height:100%;width:' + (p.score / p.max * 100) + '%;background:' + p.color + ';border-radius:4px;transition:width 0.8s;"></div>'
+        + '</div>'
+        + '<div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;">'
+        + p.criteria.map(c => {
+            const ok = c.pass === true;
+            const icon = ok ? '✓' : '✗';
+            const color = ok ? 'var(--color-accent)' : '#f23645';
+            return '<div style="display:flex;align-items:center;gap:6px;font-size:11px;color:var(--color-muted);">'
+                + '<span style="color:' + color + ';font-weight:600;">' + icon + '</span>' + c.label
+                + '</div>';
+        }).join('')
+        + '</div>'
+        + '</div>';
+}
+
+function institutionalSection(data) {
+    const inst = data.institutional;
+    if (!inst || (inst.pct_institutions == null && (!inst.holders || !inst.holders.length))) return '';
+    return '<div style="background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius);overflow:hidden;margin-bottom:1rem;">'
+        + '<div style="display:flex;justify-content:space-between;align-items:center;padding:10px 14px;border-bottom:1px solid var(--color-border);">'
+        + '<span style="color:var(--color-accent);font-size:12px;letter-spacing:0.08em;">PROPIEDAD INSTITUCIONAL</span>'
+        + (inst.pct_institutions != null
+            ? '<span style="color:var(--color-text);font-size:16px;font-weight:500;">' + inst.pct_institutions + '% <span style="color:var(--color-muted);font-size:11px;font-weight:400;">en manos institucionales</span></span>'
+            : '')
+        + '</div>'
+        + (inst.holders && inst.holders.length
+            ? '<div style="display:grid;grid-template-columns:1fr 100px 70px 90px;gap:8px;padding:6px 14px;border-bottom:1px solid var(--color-border);font-size:10px;color:var(--color-muted);">'
+              + '<div>INSTITUCIÓN</div><div>ACCIONES</div><div>% FLOAT</div><div>VALOR</div>'
+              + '</div>'
+              + inst.holders.map(h => '<div style="display:grid;grid-template-columns:1fr 100px 70px 90px;gap:8px;padding:8px 14px;border-bottom:1px solid var(--color-border);font-size:11px;align-items:center;">'
+                  + '<div style="color:var(--color-text);">' + h.holder + '</div>'
+                  + '<div style="color:var(--color-muted);">' + h.shares.toLocaleString('en-US') + '</div>'
+                  + '<div style="color:var(--color-muted);">' + (h.pct_out != null ? h.pct_out + '%' : 'N/A') + '</div>'
+                  + '<div style="color:var(--color-muted);">' + h.value + '</div>'
+                  + '</div>').join('')
+            : '<div style="padding:10px 14px;color:var(--color-muted);font-size:11px;">Sin desglose de accionistas disponible.</div>')
+        + '</div>';
+}
+
 function chartSection(data) {
     const tvSymbol = data.ticker;
     return '<div style="background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius);overflow:hidden;margin-bottom:1rem;">'
@@ -163,26 +216,46 @@ function chartSection(data) {
 function metricsSection(data) {
     const m = data.metrics;
     const p = data.profitability;
+    const sc = (data.sector_comparison && data.sector_comparison.ok) ? data.sector_comparison.items : {};
+    const sectorName = data.sector || 'el sector';
+
+    // Construye el objeto de comparación para una métrica, con tooltip legible.
+    // Si no hay benchmark para esa métrica (ej. Current Ratio, FCF), devuelve undefined
+    // y metricCard se comporta exactamente como antes (sin color condicional).
+    function sec(key, fmt) {
+        const item = sc[key];
+        if (!item || item.diff_pct == null) return undefined;
+        const avgStr = fmt(item.sector_avg);
+        return {
+            favorable: item.favorable,
+            diff_pct:  item.diff_pct,
+            tooltip:   'Mediana de ' + sectorName + ': ' + avgStr + (item.favorable ? ' · Mejor que el sector' : ' · Peor que el sector'),
+        };
+    }
+
+    const pctFmt = v => v ? (v*100).toFixed(1) + '%' : 'N/A';
+    const xFmt   = v => v ? v.toFixed(1) + 'x' : 'N/A';
+
     return '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:1rem;margin-bottom:1rem;">'
-        + metricCard('VALORACIÓN', [
-            ['P/E Trailing',  m.trailing_pe,    v => v ? v.toFixed(1) + 'x' : 'N/A'],
-            ['P/E Forward',   m.forward_pe,     v => v ? v.toFixed(1) + 'x' : 'N/A'],
-            ['P/S',           m.price_to_sales, v => v ? v.toFixed(1) + 'x' : 'N/A'],
-            ['EV/EBITDA',     m.ev_ebitda,      v => v ? v.toFixed(1) + 'x' : 'N/A'],
-            ['PEG',           m.peg_ratio,      v => v ? v.toFixed(2)        : 'N/A'],
-            ['P/B',           m.price_to_book,  v => v ? v.toFixed(2) + 'x' : 'N/A'],
+        + metricCard('VALORACIÓN ' + tt('sector-valuation'), [
+            ['P/E Trailing ' + tt('pe-ratio'),  m.trailing_pe,    v => v ? v.toFixed(1) + 'x' : 'N/A', sec('trailing_pe', xFmt)],
+            ['P/E Forward',   m.forward_pe,     v => v ? v.toFixed(1) + 'x' : 'N/A', sec('forward_pe', xFmt)],
+            ['P/S',           m.price_to_sales, v => v ? v.toFixed(1) + 'x' : 'N/A', sec('price_to_sales', xFmt)],
+            ['EV/EBITDA',     m.ev_ebitda,      v => v ? v.toFixed(1) + 'x' : 'N/A', sec('ev_ebitda', xFmt)],
+            ['PEG',           m.peg_ratio,      v => v ? v.toFixed(2)        : 'N/A', sec('peg_ratio', v => v.toFixed(2))],
+            ['P/B',           m.price_to_book,  v => v ? v.toFixed(2) + 'x' : 'N/A', sec('price_to_book', xFmt)],
         ])
-        + metricCard('RENTABILIDAD', [
-            ['ROE',           p.roe,            v => v ? (v*100).toFixed(1) + '%' : 'N/A'],
-            ['ROA',           p.roa,            v => v ? (v*100).toFixed(1) + '%' : 'N/A'],
-            ['Margen Neto',   p.net_margin,     v => v ? (v*100).toFixed(1) + '%' : 'N/A'],
-            ['Margen Op.',    p.op_margin,      v => v ? (v*100).toFixed(1) + '%' : 'N/A'],
-            ['Margen Bruto',  p.gross_margin,   v => v ? (v*100).toFixed(1) + '%' : 'N/A'],
-            ['D/E Ratio',     p.debt_to_equity, v => v ? v.toFixed(0) + '%'       : 'N/A'],
+        + metricCard('RENTABILIDAD ' + tt('sector-profitability'), [
+            ['ROE',           p.roe,            pctFmt, sec('roe', pctFmt)],
+            ['ROA',           p.roa,            pctFmt, sec('roa', pctFmt)],
+            ['Margen Neto',   p.net_margin,     pctFmt, sec('net_margin', pctFmt)],
+            ['Margen Op.',    p.op_margin,      pctFmt, sec('op_margin', pctFmt)],
+            ['Margen Bruto',  p.gross_margin,   pctFmt, sec('gross_margin', pctFmt)],
+            ['D/E Ratio',     p.debt_to_equity, v => v ? v.toFixed(0) + '%'       : 'N/A', sec('debt_to_equity', v => v.toFixed(0) + '%')],
         ])
-        + metricCard('CRECIMIENTO', [
-            ['Revenue Growth',  p.revenue_growth,  v => v ? (v*100).toFixed(1) + '%' : 'N/A'],
-            ['Earnings Growth', p.earnings_growth, v => v ? (v*100).toFixed(1) + '%' : 'N/A'],
+        + metricCard('CRECIMIENTO ' + tt('sector-growth'), [
+            ['Revenue Growth',  p.revenue_growth,  pctFmt, sec('revenue_growth', pctFmt)],
+            ['Earnings Growth', p.earnings_growth, pctFmt, sec('earnings_growth', pctFmt)],
             ['Current Ratio',   p.current_ratio,   v => v ? v.toFixed(2) + 'x'       : 'N/A'],
             ['Free Cash Flow',  p.free_cashflow,   v => v ? _fmtVal(v)                : 'N/A'],
             ['Div. Yield',      data.dividend_yield, v => v ? (v*100).toFixed(2) + '%' : 'N/A'],
@@ -224,20 +297,30 @@ function consensoSection(data) {
 }
 
 function analystChangesSection(data) {
-    const changes = data.analyst_changes || [];
+    const rh = data.ratings_history || {};
+    const changes = rh.history || [];
     if (!changes.length) return '';
     return '<div style="background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius);overflow:hidden;margin-bottom:1rem;">'
-        + '<div style="padding:10px 14px;border-bottom:1px solid var(--color-border);color:var(--color-accent);font-size:12px;letter-spacing:0.08em;">CAMBIOS DE RATING ANALISTAS</div>'
-        + '<div style="display:grid;grid-template-columns:80px 1fr 100px 1fr;gap:8px;padding:6px 14px;border-bottom:1px solid var(--color-border);font-size:10px;color:var(--color-muted);">'
-        + '<div>FECHA</div><div>FIRMA</div><div>ACCIÓN</div><div>CAMBIO</div>'
+        + '<div style="padding:10px 14px;border-bottom:1px solid var(--color-border);color:var(--color-accent);font-size:12px;letter-spacing:0.08em;">CAMBIOS DE RATING ANALISTAS ' + tt('analyst-ratings-history') + '</div>'
+        + '<div style="display:grid;grid-template-columns:80px 1fr 130px 1fr 90px;gap:8px;padding:6px 14px;border-bottom:1px solid var(--color-border);font-size:10px;color:var(--color-muted);">'
+        + '<div>FECHA</div><div>FIRMA</div><div>ACCIÓN</div><div>CAMBIO DE GRADO</div><div style="text-align:right;">P. OBJETIVO</div>'
         + '</div>'
         + changes.map(c => {
-            const arrow = c.from_grade && c.to_grade ? c.from_grade + ' → ' + c.to_grade : c.to_grade || c.from_grade || '—';
-            return '<div style="display:grid;grid-template-columns:80px 1fr 100px 1fr;gap:8px;padding:8px 14px;border-bottom:1px solid var(--color-border);font-size:11px;align-items:center;">'
+            const arrow = (c.from_grade !== '—' && c.to_grade !== '—' && c.from_grade !== c.to_grade)
+                ? c.from_grade + ' → ' + c.to_grade
+                : c.to_grade;
+            const ptStr = c.cur_price_target
+                ? c.prior_price_target && c.prior_price_target !== c.cur_price_target
+                    ? '<span style="color:var(--color-muted);text-decoration:line-through;margin-right:4px;">' + c.prior_price_target + '</span>'
+                      + '<span style="color:var(--color-text);">' + c.cur_price_target + '</span>'
+                    : '<span style="color:var(--color-text);">' + c.cur_price_target + '</span>'
+                : '<span style="color:var(--color-muted);">—</span>';
+            return '<div style="display:grid;grid-template-columns:80px 1fr 130px 1fr 90px;gap:8px;padding:8px 14px;border-bottom:1px solid var(--color-border);font-size:11px;align-items:center;">'
                 + '<div style="color:var(--color-muted);">' + c.date + '</div>'
                 + '<div style="color:var(--color-text);">' + c.firm + '</div>'
                 + '<div style="background:' + c.action_color + '22;color:' + c.action_color + ';border:1px solid ' + c.action_color + '44;border-radius:3px;padding:2px 8px;font-size:10px;text-align:center;">' + c.action + '</div>'
                 + '<div style="color:var(--color-muted);">' + arrow + '</div>'
+                + '<div style="text-align:right;">' + ptStr + '</div>'
                 + '</div>';
         }).join('')
         + '</div>';
@@ -265,7 +348,7 @@ function newsSection(data) {
         + '<div style="color:var(--color-accent);font-size:12px;letter-spacing:0.08em;margin-bottom:0.75rem;">NOTICIAS RECIENTES</div>'
         + data.news.map(n => '<div style="padding:8px 0;border-bottom:1px solid var(--color-border);">'
             + '<a href="' + n.url + '" target="_blank" style="color:var(--color-text);font-size:12px;line-height:1.4;display:block;">' + n.headline + '</a>'
-            + '<div style="color:var(--color-muted);font-size:10px;margin-top:3px;">' + n.source + '</div>'
+            + '<div style="color:var(--color-muted);font-size:10px;margin-top:3px;">' + n.source + (n.date ? ' · ' + n.date : '') + '</div>'
             + '</div>').join('')
         + '</div>';
 }
@@ -360,16 +443,20 @@ function insiderSection(data) {
     if (!insider || !insider.length) return '';
     return '<div style="background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius);overflow:hidden;margin-bottom:1rem;">'
         + '<div style="padding:10px 14px;border-bottom:1px solid var(--color-border);color:var(--color-accent);font-size:12px;letter-spacing:0.08em;">INSIDER TRADING · TRANSACCIONES DIRECTIVOS</div>'
-        + '<div style="display:grid;grid-template-columns:90px 1fr 120px 70px 80px 80px;gap:8px;padding:6px 14px;border-bottom:1px solid var(--color-border);font-size:10px;color:var(--color-muted);">'
-        + '<div>FECHA</div><div>NOMBRE</div><div>CARGO</div><div>TIPO</div><div>ACCIONES</div><div>VALOR</div>'
+        + '<div style="display:grid;grid-template-columns:85px 1fr 110px 65px 75px 75px 1fr;gap:8px;padding:6px 14px;border-bottom:1px solid var(--color-border);font-size:10px;color:var(--color-muted);">'
+        + '<div>FECHA</div><div>NOMBRE</div><div>CARGO</div><div>TIPO</div><div>ACCIONES</div><div>VALOR</div><div>NATURALEZA</div>'
         + '</div>'
-        + insider.map(i => '<div style="display:grid;grid-template-columns:90px 1fr 120px 70px 80px 80px;gap:8px;padding:8px 14px;border-bottom:1px solid var(--color-border);font-size:11px;align-items:center;">'
+        + insider.map(i => '<div style="display:grid;grid-template-columns:85px 1fr 110px 65px 75px 75px 1fr;gap:8px;padding:8px 14px;border-bottom:1px solid var(--color-border);font-size:11px;align-items:center;">'
             + '<div style="color:var(--color-muted);">' + i.date + '</div>'
             + '<div style="color:var(--color-text);">' + i.name + '</div>'
             + '<div style="color:var(--color-muted);font-size:10px;">' + i.title + '</div>'
             + '<div style="background:' + i.type_color + '22;color:' + i.type_color + ';border:1px solid ' + i.type_color + '44;border-radius:3px;padding:2px 6px;font-size:10px;text-align:center;">' + i.type + '</div>'
             + '<div style="color:var(--color-text);">' + i.shares.toLocaleString('en-US') + '</div>'
             + '<div style="color:var(--color-text);">' + i.value + '</div>'
+            + '<div style="font-size:10px;">'
+            + '<span style="color:' + (i.flag_color || 'var(--color-muted)') + ';">' + (i.flag || '') + '</span>'
+            + '<div style="color:var(--color-muted);font-size:9px;margin-top:2px;">' + (i.nature || '') + '</div>'
+            + '</div>'
             + '</div>').join('')
         + '</div>';
 }
@@ -378,11 +465,20 @@ function insiderSection(data) {
 function metricCard(title, rows) {
     return '<div style="background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius);padding:1rem;">'
         + '<div style="color:var(--color-accent);font-size:11px;letter-spacing:0.08em;margin-bottom:0.75rem;">' + title + '</div>'
-        + rows.map(([label, val, fmt]) => {
+        + rows.map(([label, val, fmt, sectorInfo]) => {
             const fmtVal = fmt(val);
+            // Color por defecto (comportamiento original, sin cambios si no hay sectorInfo)
+            let valColor = fmtVal !== 'N/A' ? 'var(--color-text)' : 'var(--color-muted)';
+            let sectorBadge = '';
+            if (sectorInfo && fmtVal !== 'N/A') {
+                valColor = sectorInfo.favorable ? '#00ffad' : '#f23645';
+                const diffSign = sectorInfo.diff_pct >= 0 ? '+' : '';
+                sectorBadge = ' <span title="' + sectorInfo.tooltip + '" style="color:' + valColor + ';font-size:9px;opacity:0.75;cursor:help;">('
+                    + diffSign + sectorInfo.diff_pct.toFixed(0) + '% vs sector)</span>';
+            }
             return '<div style="display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px solid var(--color-border);font-size:11px;">'
                 + '<span style="color:var(--color-muted);">' + label + '</span>'
-                + '<span style="color:' + (fmtVal !== 'N/A' ? 'var(--color-text)' : 'var(--color-muted)') + ';">' + fmtVal + '</span>'
+                + '<span style="color:' + valColor + ';">' + fmtVal + sectorBadge + '</span>'
                 + '</div>';
         }).join('')
         + '</div>';

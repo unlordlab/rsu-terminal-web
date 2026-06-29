@@ -1,4 +1,5 @@
 import { tt } from '/components/tooltip.js';
+import { errorMessage } from '/core/ui.js';
 
 let currentData = null;
 
@@ -147,7 +148,7 @@ function setupTickerSearch(container) {
             if (!data.ok) throw new Error(data.error || 'Sin datos');
             result.innerHTML = renderTickerResult(data);
         } catch(e) {
-            result.innerHTML = '<div style="padding:1rem;color:#f23645;font-size:12px;">✗ ' + e.message + '</div>';
+            result.innerHTML = errorMessage(e.message);
         } finally {
             btn.textContent   = 'BUSCAR';
             btn.style.opacity = '1';
@@ -189,7 +190,7 @@ function setupHistory(container) {
             const data = await res.json();
             result.innerHTML = renderHistory(data, ticker, activePeriod);
         } catch(e) {
-            result.innerHTML = '<div style="padding:1rem;color:#f23645;font-size:12px;">✗ ' + e.message + '</div>';
+            result.innerHTML = errorMessage(e.message);
         } finally {
             btn.textContent   = 'CONSULTAR';
             btn.style.opacity = '1';
@@ -237,7 +238,7 @@ function setupRepeats(container) {
                 }).join('')
                 + '</div>';
         } catch(e) {
-            result.innerHTML = '<div style="padding:0.5rem;color:#f23645;font-size:12px;">✗ ' + e.message + '</div>';
+            result.innerHTML = errorMessage(e.message, {padding: '0.5rem'});
         } finally {
             btn.textContent   = 'BUSCAR';
             btn.style.opacity = '1';
@@ -278,38 +279,103 @@ async function loadFlow(container, minPremium, minScore) {
 
         currentData = data;
 
-        if (status)  status.textContent    = data.scanned + ' escaneados · ' + data.matched + ' con señal · ' + data.timestamp;
-        if (saveBtn) saveBtn.style.display  = 'inline-block';
-        if (highEl)   highEl.innerHTML      = renderHighSignals(data.high_signals);
-        if (topEl)    topEl.innerHTML       = renderTopSection(data);
-        if (tablesEl) tablesEl.innerHTML    = renderTables(data);
+        if (status)  status.textContent   = data.scanned + ' escaneados · ' + data.matched + ' con señal · ' + data.timestamp;
+        if (saveBtn) saveBtn.style.display = 'inline-block';
+        if (highEl)  highEl.innerHTML      = renderSpecialSignals(data);
+        if (topEl)   topEl.innerHTML       = renderTopSection(data);
+        if (tablesEl) tablesEl.innerHTML   = renderTables(data);
 
     } catch(e) {
-        if (highEl) highEl.innerHTML = '<div style="padding:1rem;color:#f23645;font-size:12px;">✗ ' + e.message + '</div>';
+        if (highEl) highEl.innerHTML = errorMessage(e.message);
     }
 }
 
-function renderHighSignals(signals) {
-    if (!signals || !signals.length) return '';
-    return '<div style="background:var(--color-surface);border:1px solid rgba(255,184,0,0.4);border-radius:var(--radius);overflow:hidden;margin-bottom:1rem;">'
+function renderSpecialSignals(data) {
+    let html = '';
+
+    // UNUSUAL — vol/OI > 5x
+    if (data.unusual && data.unusual.length) {
+        html += signalBlock('🚨 ACTIVIDAD INUSUAL', data.unusual, '#ff6b35', 'UNUSUAL', 'vol/OI > 5x');
+    }
+    // HIGH signals
+    if (data.high_signals && data.high_signals.length) {
+        html += signalBlock('⚡ SEÑALES HIGH', data.high_signals, '#ffb800', 'HIGH', 'Score ≥ 7');
+    }
+    // Block trades
+    if (data.blocks && data.blocks.length) {
+        html += signalBlock('🏦 BLOCK TRADES', data.blocks, '#b044ff', 'BLOCK', 'Prima > $500K, < 500 contratos');
+    }
+    // Sweeps
+    if (data.sweeps && data.sweeps.length) {
+        html += signalBlock('⚡ SWEEPS', data.sweeps, '#00d9ff', 'SWEEP', '3+ strikes mismo exp con vol/OI > 1x');
+    }
+    // Near earnings
+    if (data.near_earnings && data.near_earnings.length) {
+        html += signalBlock('📅 CERCA DE EARNINGS', data.near_earnings, '#ffd60a', 'EARNINGS', 'Vencimiento en ventana de earnings');
+    }
+    // Sector heatmap
+    if (data.sector_heat && data.sector_heat.length) {
+        html += renderSectorHeatmap(data.sector_heat);
+    }
+    return html;
+}
+
+function signalBlock(title, signals, color, badge, subtitle) {
+    return '<div style="background:var(--color-surface);border:1px solid ' + color + '44;border-radius:var(--radius);overflow:hidden;margin-bottom:1rem;">'
         + '<div style="padding:10px 14px;border-bottom:1px solid var(--color-border);display:flex;align-items:center;gap:8px;">'
-        + '<span style="color:#ffb800;font-size:13px;letter-spacing:0.08em;">⚡ SEÑALES HIGH ' + tt('high-signal') + '</span>'
-        + '<span style="background:#ffb80022;color:#ffb800;border:1px solid #ffb80044;border-radius:3px;padding:1px 8px;font-size:10px;">' + signals.length + '</span>'
+        + '<span style="color:' + color + ';font-size:13px;letter-spacing:0.08em;">' + title + '</span>'
+        + '<span style="background:' + color + '22;color:' + color + ';border:1px solid ' + color + '44;border-radius:3px;padding:1px 8px;font-size:10px;">' + signals.length + '</span>'
+        + '<span style="color:var(--color-muted);font-size:10px;margin-left:auto;">' + subtitle + '</span>'
         + '</div>'
         + '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:0;">'
         + signals.slice(0, 12).map(s => {
             const isBull = s.color === 'bullish';
-            const color  = isBull ? 'var(--color-accent)' : '#f23645';
+            const sc     = isBull ? 'var(--color-accent)' : '#f23645';
             const bg     = isBull ? 'rgba(0,255,173,0.03)' : 'rgba(242,54,69,0.03)';
+            const flags  = [
+                s.is_block     ? '<span style="color:#b044ff;font-size:9px;background:#b044ff22;padding:1px 5px;border-radius:2px;">BLOCK</span>' : '',
+                s.is_sweep     ? '<span style="color:#00d9ff;font-size:9px;background:#00d9ff22;padding:1px 5px;border-radius:2px;">SWEEP</span>' : '',
+                s.near_earnings? '<span style="color:#ffd60a;font-size:9px;background:#ffd60a22;padding:1px 5px;border-radius:2px;">EARN</span>' : '',
+            ].filter(Boolean).join(' ');
             return '<div style="padding:10px 14px;border:1px solid var(--color-border);background:' + bg + ';">'
                 + '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">'
-                + '<span style="color:var(--color-accent);font-weight:500;font-size:13px;">' + s.ticker + '</span>'
-                + '<span style="color:#ffb800;font-size:10px;background:#ffb80022;padding:1px 6px;border-radius:3px;">SCORE ' + s.score + '</span>'
+                + '<span style="color:' + color + ';font-weight:500;font-size:13px;">' + s.ticker + '</span>'
+                + '<div style="display:flex;gap:4px;align-items:center;">'
+                + flags
+                + '<span style="color:' + color + ';font-size:10px;background:' + color + '22;padding:1px 6px;border-radius:3px;">SCORE ' + s.score + '</span>'
+                + '</div>'
                 + '</div>'
                 + '<div style="color:var(--color-muted);font-size:11px;">' + s.type.toUpperCase() + ' · $' + s.strike + ' ' + s.strike_pct + ' · ' + s.exp + '</div>'
                 + '<div style="display:flex;justify-content:space-between;margin-top:4px;">'
-                + '<span style="color:' + color + ';font-size:12px;font-weight:500;">' + s.premium_fmt + '</span>'
+                + '<span style="color:' + sc + ';font-size:12px;font-weight:500;">' + s.premium_fmt + '</span>'
                 + '<span style="color:var(--color-muted);font-size:10px;">Vol/OI: ' + s.vol_oi_ratio + 'x</span>'
+                + '</div>'
+                + '</div>';
+        }).join('')
+        + '</div></div>';
+}
+
+function renderSectorHeatmap(sectors) {
+    return '<div style="background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius);overflow:hidden;margin-bottom:1rem;">'
+        + '<div style="padding:10px 14px;border-bottom:1px solid var(--color-border);">'
+        + '<span style="color:var(--color-secondary);font-size:13px;letter-spacing:0.08em;">🗺 HEATMAP SECTORIAL — Prima Ponderada</span>'
+        + '</div>'
+        + '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:0;">'
+        + sectors.map(s => {
+            const color = s.bias === 'bullish' ? 'var(--color-accent)' : s.bias === 'bearish' ? '#f23645' : '#ffb800';
+            const barW  = Math.abs(s.nps);
+            const barColor = s.nps >= 0 ? 'var(--color-accent)' : '#f23645';
+            return '<div style="padding:12px 14px;border:1px solid var(--color-border);">'
+                + '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">'
+                + '<span style="color:' + color + ';font-size:12px;font-weight:500;">' + s.sector + '</span>'
+                + '<span style="color:' + color + ';font-size:11px;">' + (s.nps > 0 ? '+' : '') + s.nps + '%</span>'
+                + '</div>'
+                + '<div style="height:4px;background:var(--color-border);border-radius:2px;overflow:hidden;">'
+                + '<div style="height:100%;width:' + Math.min(barW, 100) + '%;background:' + barColor + ';border-radius:2px;"></div>'
+                + '</div>'
+                + '<div style="display:flex;justify-content:space-between;margin-top:6px;">'
+                + '<span style="color:var(--color-accent);font-size:10px;">▲ ' + s.bull + '</span>'
+                + '<span style="color:#f23645;font-size:10px;">▼ ' + s.bear + '</span>'
                 + '</div>'
                 + '</div>';
         }).join('')
@@ -321,19 +387,23 @@ function renderTopSection(data) {
         return '<div style="background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius);padding:1rem;">'
             + '<div style="color:' + color + ';font-size:12px;letter-spacing:0.08em;margin-bottom:0.75rem;">' + title + '</div>'
             + '<div style="display:flex;flex-wrap:wrap;gap:6px;">'
-            + items.map(item =>
-                '<span style="background:' + color + '18;color:' + color + ';border:1px solid ' + color + '33;border-radius:3px;padding:3px 10px;font-size:11px;cursor:pointer;" class="top-ticker" data-ticker="' + item.ticker + '">'
-                + item.ticker + ' <span style="opacity:0.7;">' + item.premium_fmt + '</span>'
-                + '</span>'
-            ).join('')
+            + items.map(item => {
+                const nps    = item.net_prem_score;
+                const npsCol = nps > 0 ? 'var(--color-accent)' : nps < 0 ? '#f23645' : '#ffb800';
+                return '<div style="display:flex;align-items:center;gap:6px;background:var(--color-bg,#0a0a0a);border:1px solid var(--color-border);border-radius:3px;padding:4px 10px;cursor:pointer;" class="top-ticker" data-ticker="' + item.ticker + '">'
+                    + '<span style="color:' + color + ';font-size:11px;">' + item.ticker + '</span>'
+                    + '<span style="color:var(--color-muted);font-size:10px;">' + item.premium_fmt + '</span>'
+                    + (nps != null ? '<span style="color:' + npsCol + ';font-size:10px;background:' + npsCol + '18;padding:1px 5px;border-radius:2px;">' + (nps > 0 ? '+' : '') + nps + '%</span>' : '')
+                    + '</div>';
+            }).join('')
             + '</div>'
             + '</div>';
     }
 
     const html = '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:1rem;">'
-        + topBox('$ TOP PREMIUM', data.top_premium, 'var(--color-text)')
-        + topBox('▲ TOP BULLISH', data.top_bullish, 'var(--color-accent)')
-        + topBox('▼ TOP BEARISH', data.top_bearish, '#f23645')
+        + topBox('$ TOP PREMIUM · NPS', data.top_premium, 'var(--color-text)')
+        + topBox('▲ TOP BULLISH (prima)', data.top_bullish, 'var(--color-accent)')
+        + topBox('▼ TOP BEARISH (prima)', data.top_bearish, '#f23645')
         + '</div>';
 
     setTimeout(() => {
@@ -421,16 +491,40 @@ function flowTable(title, rows, color) {
 }
 
 function renderTickerResult(data) {
-    const sentColor  = data.sentiment === 'bullish' ? 'var(--color-accent)' : data.sentiment === 'bearish' ? '#f23645' : '#ffb800';
-    const sentIcon   = data.sentiment === 'bullish' ? '▲' : data.sentiment === 'bearish' ? '▼' : '→';
-    const scoreColor = data.net_score > 0 ? 'var(--color-accent)' : data.net_score < 0 ? '#f23645' : '#ffb800';
+    // Sentimiento por prima (nuevo) + volumen (legacy)
+    const sentPrem   = data.sentiment_prem || data.sentiment;
+    const sentColor  = sentPrem === 'bullish' ? 'var(--color-accent)' : sentPrem === 'bearish' ? '#f23645' : '#ffb800';
+    const sentIcon   = sentPrem === 'bullish' ? '▲' : sentPrem === 'bearish' ? '▼' : '→';
+
+    // Net Premium Score
+    const nps        = data.net_prem_score;
+    const npsColor   = nps > 10 ? 'var(--color-accent)' : nps < -10 ? '#f23645' : '#ffb800';
+    const npsW       = Math.min(Math.abs(nps), 100);
+    const npsDir     = nps >= 0 ? 'var(--color-accent)' : '#f23645';
+
+    // PC ratio prima
+    const pcr        = data.pc_ratio_prem;
+    const pcrColor   = pcr === null ? '#ffb800' : pcr < 0.7 ? 'var(--color-accent)' : pcr > 1.3 ? '#f23645' : '#ffb800';
+    const pcrText    = pcr === null ? 'N/A' : pcr.toFixed(2) + 'x';
+
+    // Badges especiales
+    const hasUnusual = data.unusual && data.unusual.length > 0;
+    const hasBlocks  = data.blocks  && data.blocks.length  > 0;
+    const hasSweeps  = data.sweeps  && data.sweeps.length  > 0;
+    const hasEarnings= data.next_earnings;
 
     const flowRows = (data.flow || []).map(r => {
         const isBull   = r.color === 'bullish';
         const color    = isBull ? '#00ffad' : '#f23645';
         const bg       = isBull ? 'rgba(0,255,173,0.03)' : 'rgba(242,54,69,0.03)';
         const expShort = r.exp ? r.exp.substring(2).replace(/-/g, '/') : '';
-        const scoreC   = r.score >= 7 ? '#ffb800' : r.score >= 5 ? 'var(--color-accent)' : 'var(--color-muted)';
+        const scoreC   = r.signal === 'UNUSUAL' ? '#ff6b35' : r.score >= 7 ? '#ffb800' : r.score >= 5 ? 'var(--color-accent)' : 'var(--color-muted)';
+        const flags    = [
+            r.signal === 'UNUSUAL' ? '🚨' : '',
+            r.is_block   ? '🏦' : '',
+            r.is_sweep   ? '⚡' : '',
+            r.near_earnings ? '📅' : '',
+        ].filter(Boolean).join('');
         return '<tr style="border-bottom:1px solid var(--color-border);background:' + bg + ';">'
             + '<td style="padding:8px 10px;"><span style="background:' + color + '22;color:' + color + ';border:1px solid ' + color + '44;border-radius:3px;padding:2px 7px;font-size:10px;">' + r.order_type + '</span></td>'
             + '<td style="padding:8px 10px;color:var(--color-text);font-size:12px;">$' + r.strike + ' <span style="color:var(--color-muted);font-size:10px;">' + r.strike_pct + '</span></td>'
@@ -438,23 +532,49 @@ function renderTickerResult(data) {
             + '<td style="padding:8px 10px;color:var(--color-muted);font-size:11px;">' + r.oi.toLocaleString() + '</td>'
             + '<td style="padding:8px 10px;color:var(--color-muted);font-size:11px;">' + r.vol_oi_ratio + 'x</td>'
             + '<td style="padding:8px 10px;color:var(--color-text);font-size:12px;font-weight:500;">' + r.premium_fmt + '</td>'
-            + '<td style="padding:8px 10px;color:' + scoreC + ';font-weight:500;">' + r.score + '</td>'
+            + '<td style="padding:8px 10px;color:' + scoreC + ';font-weight:500;">' + r.score + ' ' + flags + '</td>'
             + '</tr>';
     }).join('');
 
+    // NPS bar
+    const npsBar = '<div style="margin:0.75rem 0;">'
+        + '<div style="display:flex;justify-content:space-between;margin-bottom:4px;">'
+        + '<span style="color:var(--color-muted);font-size:10px;letter-spacing:.08em;">NET PREMIUM SCORE</span>'
+        + '<span style="color:' + npsColor + ';font-size:12px;font-weight:500;">' + (nps > 0 ? '+' : '') + nps + '%</span>'
+        + '</div>'
+        + '<div style="height:6px;background:var(--color-border);border-radius:3px;overflow:hidden;">'
+        + '<div style="height:100%;width:' + npsW + '%;background:' + npsDir + ';border-radius:3px;margin-left:' + (nps < 0 ? (50 - npsW/2) : 50) + '%;transition:width .3s;"></div>'
+        + '</div>'
+        + '<div style="display:flex;justify-content:space-between;margin-top:2px;">'
+        + '<span style="color:#f23645;font-size:9px;">BAJISTA</span>'
+        + '<span style="color:var(--color-muted);font-size:9px;">NEUTRAL</span>'
+        + '<span style="color:var(--color-accent);font-size:9px;">ALCISTA</span>'
+        + '</div>'
+        + '</div>';
+
+    // Badges fila
+    const badgeRow = '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:0.75rem;">'
+        + (hasUnusual ? '<span style="color:#ff6b35;font-size:10px;background:#ff6b3522;border:1px solid #ff6b3544;padding:2px 8px;border-radius:3px;">🚨 UNUSUAL</span>' : '')
+        + (hasBlocks  ? '<span style="color:#b044ff;font-size:10px;background:#b044ff22;border:1px solid #b044ff44;padding:2px 8px;border-radius:3px;">🏦 BLOCK TRADES</span>' : '')
+        + (hasSweeps  ? '<span style="color:#00d9ff;font-size:10px;background:#00d9ff22;border:1px solid #00d9ff44;padding:2px 8px;border-radius:3px;">⚡ SWEEPS</span>' : '')
+        + (hasEarnings? '<span style="color:#ffd60a;font-size:10px;background:#ffd60a22;border:1px solid #ffd60a44;padding:2px 8px;border-radius:3px;">📅 Earnings: ' + data.next_earnings + '</span>' : '')
+        + '</div>';
+
     return '<div style="background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius);padding:1.25rem;">'
-        + '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem;padding-bottom:1rem;border-bottom:1px solid var(--color-border);">'
+        + '<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:1rem;padding-bottom:1rem;border-bottom:1px solid var(--color-border);">'
         + '<div>'
         + '<div style="color:var(--color-accent);font-size:20px;letter-spacing:0.1em;">' + data.ticker + '</div>'
         + '<div style="color:var(--color-muted);font-size:12px;">$' + data.price + ' · ' + data.timestamp + '</div>'
         + '</div>'
-        + '<div style="display:flex;gap:1rem;">'
-        + kpi('NET SCORE ' + tt('net-score-options'),   (data.net_score > 0 ? '+' : '') + data.net_score, scoreColor)
-        + kpi('CALLS PREM',  data.total_call_prem,  'var(--color-accent)')
-        + kpi('PUTS PREM',   data.total_put_prem,   '#f23645')
-        + kpi('SENTIMIENTO', sentIcon + ' ' + data.sentiment.toUpperCase(), sentColor)
+        + '<div style="display:flex;gap:0.75rem;flex-wrap:wrap;">'
+        + kpi('SENTIMIENTO (prima)', sentIcon + ' ' + sentPrem.toUpperCase(), sentColor)
+        + kpi('BULL PREM', data.bull_prem, 'var(--color-accent)')
+        + kpi('BEAR PREM', data.bear_prem, '#f23645')
+        + kpi('P/C RATIO (prima)', pcrText, pcrColor)
         + '</div>'
         + '</div>'
+        + npsBar
+        + badgeRow
         + '<div style="overflow:auto;">'
         + '<table style="width:100%;border-collapse:collapse;font-family:var(--font-mono);">'
         + '<thead><tr style="border-bottom:1px solid var(--color-border);">'
@@ -480,7 +600,7 @@ function renderHistory(data, ticker, period) {
     const rows = data.records.map(r => {
         const isBull   = (r.action === 'buy' && r.type === 'call') || (r.action === 'sell' && r.type === 'put');
         const color    = isBull ? 'var(--color-accent)' : '#f23645';
-        const sigColor = r.signal === 'HIGH' ? '#ffb800' : r.signal === 'MEDIUM' ? 'var(--color-accent)' : 'var(--color-muted)';
+        const sigColor = r.signal === 'UNUSUAL' ? '#ff6b35' : r.signal === 'HIGH' ? '#ffb800' : r.signal === 'MEDIUM' ? 'var(--color-accent)' : 'var(--color-muted)';
         const expShort = r.exp ? r.exp.substring(2).replace(/-/g, '/') : '';
         return '<div style="display:grid;grid-template-columns:90px 70px 60px 80px 60px 60px 70px 60px 50px;gap:4px;padding:7px 12px;border-bottom:1px solid var(--color-border);font-size:11px;align-items:center;">'
             + '<div style="color:var(--color-muted);">' + r.scan_date + '</div>'

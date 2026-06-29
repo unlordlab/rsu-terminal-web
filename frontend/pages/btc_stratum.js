@@ -1,6 +1,5 @@
 import { tt } from '/components/tooltip.js';
-
-export async function render(container) {
+import { errorMessage } from '/core/ui.js';
     container.innerHTML = pageShell();
     const result = container.querySelector('#btc-result');
 
@@ -41,7 +40,7 @@ async function loadDashboard(el) {
         el.innerHTML = renderDashboard(data);
         renderChart(data);
     } catch(e) {
-        el.innerHTML = '<div style="padding:1rem;color:#f23645;font-size:12px;">✗ ' + e.message + '</div>';
+        el.innerHTML = errorMessage(e.message);
     }
 }
 
@@ -287,7 +286,7 @@ async function loadBacktest(el) {
         el.innerHTML = renderBacktest(data);
         renderBacktestChart(data);
     } catch(e) {
-        el.innerHTML = '<div style="padding:1rem;color:#f23645;font-size:12px;">✗ ' + e.message + '</div>';
+        el.innerHTML = errorMessage(e.message);
     }
 }
 

@@ -28,26 +28,6 @@ CÓMO USARLO:
 Warren Buffett: "Sé temeroso cuando otros son codiciosos, y codicioso cuando otros son temerosos."`
     },
 
-    "vix": {
-        title: "VIX — Índice de Volatilidad",
-        short: "El 'índice del miedo'. Mide la volatilidad implícita esperada del S&P 500 a 30 días.",
-        long: `El VIX (CBOE Volatility Index) mide cuánta volatilidad espera el mercado en los próximos 30 días, calculado a partir de los precios de opciones del S&P 500.
-
-NIVELES CLAVE:
-- < 15 → Complacencia. Mercado tranquilo. Ojo con la trampa.
-- 15-20 → Normal. Sin señal clara.
-- 20-25 → Precaución. Volatilidad elevándose.
-- 25-30 → Estrés. Mercado nervioso.
-- > 30 → Miedo. Zona histórica de oportunidad.
-- > 40 → Pánico extremo. Máximas oportunidades históricas.
-
-TERM STRUCTURE:
-Cuando el VIX spot > futuros = BACKWARDATION → señal de pánico, posible suelo.
-Cuando el VIX spot < futuros = CONTANGO → mercado tranquilo, normal.
-
-El VIX y el SPX tienen correlación negativa de ~-0.7. Cuando el mercado cae, el VIX sube.`
-    },
-
     "vix-term-structure": {
         title: "VIX Term Structure",
         short: "Curva de futuros del VIX. Contango = normal. Backwardation = estrés/oportunidad.",
@@ -65,6 +45,334 @@ La diferencia entre el VIX spot y el futuro más lejano.
 - Spread negativo → backwardation → oportunidad potencial
 
 Los traders profesionales monitorean esta curva para timing de entradas en volatilidad.`
+    },
+
+    "fed-balance": {
+        title: "Balance de la Reserva Federal",
+        short: "Tamaño del balance de la Fed (WALCL) y liquidez neta del sistema. QE expande, QT contrae.",
+        long: `El balance de la Reserva Federal (serie WALCL en FRED) refleja el total de activos que la Fed tiene en su hoja de balance — principalmente bonos del Tesoro y MBS comprados durante programas de expansión cuantitativa (QE).
+
+QE vs QT:
+- Quantitative Easing (QE): la Fed compra activos, expandiendo el balance e inyectando liquidez al sistema.
+- Quantitative Tightening (QT): la Fed deja vencer activos sin reinvertir (o vende), contrayendo el balance y retirando liquidez.
+
+LIQUIDEZ NETA (Balance − TGA − RRP):
+Esta es la métrica que muchos consideran más relevante que el balance bruto, porque resta dos "aparcamientos" de liquidez que no circulan en el mercado:
+▸ TGA (Treasury General Account): la cuenta del Tesoro en la Fed. Cuando sube, retira liquidez del sistema; cuando baja, la inyecta.
+▸ RRP (Reverse Repo Facility): liquidez que fondos money market depositan en la Fed a cambio de un interés, efectivamente "aparcada" fuera del mercado.
+
+POR QUÉ IMPORTA PARA LOS MERCADOS:
+La liquidez neta tiende a correlacionar con el apetito de riesgo en activos como acciones y cripto — más liquidez neta circulando suele coincidir con entornos más favorables para activos de riesgo, y viceversa durante fases de contracción.`
+    },
+
+    "fed-balance-total": {
+        title: "Balance Total — WALCL",
+        short: "Tamaño bruto del balance de la Fed en dólares. La serie base detrás de todo el análisis de liquidez.",
+        long: `WALCL es el código de la serie en FRED para el balance total de activos de la Reserva Federal — la cifra bruta antes de restar TGA y RRP.
+
+QUÉ INCLUYE:
+Principalmente bonos del Tesoro americano y MBS (mortgage-backed securities) que la Fed ha comprado a lo largo de sus distintos programas de expansión cuantitativa desde 2008, y especialmente desde 2020.
+
+CÓMO LEER EL CAMBIO SEMANAL:
+▸ Δ Semanal positivo → la Fed está expandiendo el balance (QE activo o reinversión de vencimientos)
+▸ Δ Semanal negativo → la Fed está contrayendo el balance (QT — deja vencer activos sin reinvertir)
+
+Esta cifra bruta es el punto de partida, pero la Liquidez Neta (que resta TGA y RRP) suele ser más relevante para entender cuánta liquidez circula realmente en el mercado.`
+    },
+
+    "fed-net-liquidity": {
+        title: "Liquidez Neta (Balance − TGA − RRP)",
+        short: "El balance de la Fed menos los dos 'aparcamientos' de liquidez que no circulan en el mercado.",
+        long: `La Liquidez Neta resta del balance bruto de la Fed dos partidas que, aunque forman parte del sistema financiero, no están circulando activamente en los mercados de riesgo:
+
+TGA (Treasury General Account):
+La cuenta corriente del Tesoro de EE.UU. en la Fed. Cuando el Tesoro acumula efectivo ahí (por ejemplo, tras emitir deuda), retira esa liquidez del sistema. Cuando el Tesoro gasta ese efectivo, lo devuelve al mercado.
+
+RRP (Reverse Repo Facility):
+Liquidez que fondos del mercado monetario depositan voluntariamente en la Fed a cambio de un interés garantizado, en lugar de prestarla en el mercado. Es liquidez "aparcada" de forma segura pero inactiva para activos de riesgo.
+
+POR QUÉ ESTA MÉTRICA IMPORTA MÁS QUE EL BALANCE BRUTO:
+Dos periodos con el mismo balance bruto pueden tener condiciones de liquidez muy distintas si el TGA o el RRP varían. La Liquidez Neta intenta capturar cuánto dinero está realmente disponible para fluir hacia acciones, bonos y otros activos de riesgo.`
+    },
+
+    "liquidity-overview": {
+        title: "Módulo de Liquidez",
+        short: "Sigue el dinero disponible en el sistema con dos métricas complementarias, superpuestas contra el SPX.",
+        long: `Seguir la liquidez del sistema financiero es, para muchos inversores macro, uno de los factores más determinantes de la dirección de fondo del mercado — más incluso que los fundamentales de empresas individuales en ciertos entornos.
+
+DOS MÉTRICAS, DOS VELOCIDADES:
+▸ Net Liquidity (WALCL − TGA − RRP): táctica, se actualiza semanalmente, captura movimientos de liquidez de semanas a pocos meses. Es la que más rápido reacciona a decisiones de la Fed y del Tesoro.
+▸ M2 Money Supply: estructural, se actualiza semanalmente (serie WM2NS), representa el contexto de fondo de varios trimestres o años. Aunque su frecuencia de publicación es semanal, cambia mucho más lento que la Net Liquidity porque agrega depósitos de toda la economía, no movimientos tácticos de la Fed.
+
+POR QUÉ SE MUESTRAN JUNTAS Y CONTRA EL SPX:
+Ninguna de las dos predice el mercado por sí sola con precisión de timing exacto, pero ambas han mostrado correlación histórica relevante con el apetito de riesgo. Superponerlas contra el SPX permite ver visualmente si la liquidez está expandiéndose o contrayéndose en paralelo al movimiento del índice, o si están divergiendo — una divergencia sostenida suele ser una señal de alerta digna de investigar más a fondo.
+
+Ninguna métrica de liquidez sustituye al análisis técnico o fundamental — es una capa adicional de contexto macro sobre la "marea" en la que se mueven todos los activos de riesgo.`
+    },
+
+    "m2-money-supply": {
+        title: "M2 Money Supply",
+        short: "Cantidad agregada de dinero amplio en la economía: efectivo, depósitos y fondos monetarios minoristas.",
+        long: `M2 es uno de los agregados monetarios más seguidos para entender cuánto dinero "ancho" existe en la economía en un momento dado — no solo efectivo y depósitos a la vista (eso sería M1), sino también depósitos a plazo de menor cuantía y fondos del mercado monetario minoristas.
+
+DIFERENCIA CLAVE CON NET LIQUIDITY:
+La serie WM2NS que se usa aquí se publica semanalmente, pero aun así M2 es un indicador mucho más estructural — no reacciona a movimientos tácticos del TGA o del RRP de un día para otro. Refleja más bien la política monetaria de fondo (expansiva o restrictiva) acumulada a lo largo de meses y años, ya que agrega el total de depósitos y efectivo en circulación en toda la economía.
+
+POR QUÉ IMPORTA EL DATO YoY (interanual):
+El crecimiento o contracción de M2 respecto al año anterior es la forma más habitual de leer esta serie. Periodos de fuerte expansión de M2 (como 2020-2021) han coincidido históricamente con entornos muy favorables para activos de riesgo; periodos de contracción histórica de M2 (como 2022-2023) coincidieron con uno de los ciclos de ajuste más duros para acciones y cripto en décadas recientes.
+
+A diferencia del balance de la Fed, M2 incluye también el efecto de la actividad bancaria comercial (créditos, depósitos), no solo las decisiones directas de la Reserva Federal — por eso aporta una perspectiva complementaria, no redundante, a la Net Liquidity.`
+    },
+
+    "liquidity-correlation": {
+        title: "Correlación Net Liquidity ↔ SPX",
+        short: "Coeficiente de correlación entre la Liquidez Neta y el S&P 500 en los últimos ~2 años (semanal).",
+        long: `Este coeficiente mide, de forma puramente estadística, cuánto se han movido en la misma dirección la Liquidez Neta y el S&P 500 a lo largo del periodo mostrado, usando datos semanales.
+
+CÓMO LEER EL NÚMERO (rango de -1 a +1):
+▸ Cercano a +1 → fuerte correlación positiva. Cuando la liquidez sube, el SPX tiende a subir también, y viceversa.
+▸ Cercano a 0 → poca relación lineal aparente en el periodo medido.
+▸ Cercano a -1 → correlación negativa. Movimientos en direcciones opuestas.
+
+LIMITACIONES IMPORTANTES A TENER EN CUENTA:
+Correlación no implica causalidad directa ni constante en el tiempo — la relación entre liquidez y mercados ha sido más fuerte en algunos periodos (2020-2022) que en otros, y puede debilitarse cuando otros factores (beneficios empresariales, geopolítica, valoración) dominan el movimiento del mercado en una ventana de tiempo concreta.
+
+Este número es una foto del periodo mostrado, no una constante universal — conviene observar cómo evoluciona con el tiempo más que fijarse en un valor puntual aislado.`
+    },
+
+    "fed-monthly-change": {
+        title: "Cambio Mensual del Balance",
+        short: "Variación del balance total de la Fed en las últimas ~5 semanas. Confirma si la tendencia reciente es QE o QT.",
+        long: `Esta cifra compara el balance actual con el de hace aproximadamente 5 semanas, dando una lectura de tendencia más estable que el cambio semanal aislado (que puede ser ruidoso por operaciones técnicas puntuales).
+
+CÓMO USARLA:
+▸ Varias semanas consecutivas de cambio mensual positivo → confirma una fase de expansión (QE) sostenida, no solo un repunte puntual.
+▸ Varias semanas consecutivas de cambio mensual negativo → confirma una fase de contracción (QT) sostenida.
+
+Un solo dato semanal puede estar distorsionado por vencimientos de deuda, operaciones de financiación a corto plazo, u otros factores técnicos. El cambio mensual filtra parte de ese ruido y refleja mejor la dirección de fondo de la política de balance de la Fed.`
+    },
+
+    "yield-curve": {
+        title: "Curva de Tipos US Treasury",
+        short: "Rentabilidades de bonos del Tesoro en distintos plazos (3M a 30Y). Su forma anticipa expectativas económicas.",
+        long: `La curva de tipos muestra la rentabilidad (yield) que exige el mercado por prestar dinero al gobierno de EE.UU. en distintos plazos: 3 meses, 2, 5, 10 y 30 años.
+
+FORMA NORMAL (curva ascendente):
+Plazos más largos pagan más rentabilidad que los cortos — compensación lógica por asumir más riesgo de inflación y de tipo de interés a largo plazo. Refleja expectativas de crecimiento económico saludable.
+
+FORMA INVERTIDA:
+Cuando los plazos cortos pagan más que los largos, el mercado está señalando que espera que la economía se debilite y que la Fed tenga que bajar tipos en el futuro. Es una de las señales adelantadas de recesión más estudiadas históricamente.
+
+POR QUÉ SE MIRA PLAZO A PLAZO:
+La forma completa de la curva (no solo el spread 10Y-2Y) puede revelar matices — por ejemplo, una inversión solo en el tramo corto cuenta una historia distinta a una inversión en toda la curva.`
+    },
+
+    "treasury-spread": {
+        title: "Spread 10Y − 2Y",
+        short: "Diferencia entre el bono a 10 años y el de 2 años. El indicador de inversión de curva más seguido.",
+        long: `El spread 10Y-2Y es la diferencia entre la rentabilidad del bono del Tesoro a 10 años y la del bono a 2 años. Es probablemente el indicador de forma de curva más citado en medios financieros.
+
+LECTURA:
+▸ Spread positivo (curva normal) → el bono a 10 años paga más que el de 2 años, como es habitual en un entorno de crecimiento esperado.
+▸ Spread negativo (curva invertida) → el bono a 2 años paga más que el de 10 años. Señal histórica de alerta de recesión.
+
+DATO HISTÓRICO IMPORTANTE:
+Cada recesión en EE.UU. desde los años 1970 ha sido precedida por una inversión de este spread, normalmente entre 6 y 18 meses antes del inicio de la recesión. Sin embargo, no toda inversión ha sido seguida de recesión inmediata — el indicador señala riesgo elevado, no certeza ni timing exacto.
+
+La normalización del spread (vuelta a positivo) tras un periodo invertido históricamente ha coincidido, en varios ciclos, con el inicio efectivo de la fase recesiva — no con su descarte.`
+    },
+
+    "fed-funds-rate": {
+        title: "Fed Funds Rate",
+        short: "Tipo de interés de referencia que fija la Reserva Federal. La palanca principal de política monetaria.",
+        long: `El Fed Funds Rate es el tipo de interés objetivo que la Reserva Federal fija para los préstamos interbancarios a un día. Es la herramienta principal de política monetaria de EE.UU. e influye, directa o indirectamente, en casi todos los demás tipos de interés de la economía.
+
+CLASIFICACIÓN DE POSTURA (según el nivel mostrado en este widget):
+▸ RESTRICTIVA (≥ 4.5%) → tipos altos, política diseñada para enfriar la inflación y la actividad económica.
+▸ NEUTRAL (3% – 4.5%) → nivel que ni estimula ni frena significativamente la economía.
+▸ EXPANSIVA (&lt; 3%) → tipos bajos, política diseñada para estimular crecimiento y empleo.
+
+POR QUÉ NO ES "SUBIDA = MALO" DE FORMA AUTOMÁTICA:
+A diferencia de otros indicadores macro de este panel, una subida de tipos no siempre es negativa para los mercados — depende de si responde a una economía que necesita enfriarse (a menudo visto como manejable) o a una inflación fuera de control (a menudo visto como más preocupante). El contexto que la acompaña importa tanto como la cifra en sí.`
+    },
+
+    "cpi-yoy": {
+        title: "IPC YoY — Inflación interanual",
+        short: "Variación de precios al consumo respecto al mismo mes del año anterior. El termómetro de inflación más seguido.",
+        long: `El IPC (Índice de Precios al Consumo) YoY mide cuánto han subido los precios de una cesta representativa de bienes y servicios respecto al mismo mes hace un año.
+
+POR QUÉ ES EL DATO MACRO MÁS OBSERVADO:
+La inflación es uno de los dos mandatos principales de la Reserva Federal (junto al pleno empleo). Datos de IPC por encima de lo esperado suelen interpretarse como presión para que la Fed mantenga o suba tipos; datos por debajo de lo esperado abren la puerta a posibles bajadas.
+
+LECTURA EN ESTE WIDGET:
+La flecha y el color reflejan si la cifra ha subido o bajado respecto al periodo anterior — en el contexto de inflación, una subida (▲) generalmente se interpreta como menos favorable para los mercados, ya que reduce el margen de la Fed para flexibilizar política monetaria.
+
+El IPC general puede diferir significativamente del PCE Core, que la Fed sigue de cerca con más peso para sus decisiones.`
+    },
+
+    "unemployment-rate": {
+        title: "Tasa de Desempleo",
+        short: "Porcentaje de la población activa sin empleo y buscando trabajo. El otro mandato clave de la Fed.",
+        long: `La tasa de desempleo mide qué porcentaje de la fuerza laboral disponible (personas que quieren y pueden trabajar) no tiene empleo actualmente.
+
+EL DOBLE MANDATO DE LA FED:
+Junto a la estabilidad de precios (inflación), el pleno empleo es el segundo objetivo legal explícito de la Reserva Federal. Un desempleo muy bajo puede generar presión salarial e inflacionaria; un desempleo en aumento suele preceder o acompañar fases de debilidad económica.
+
+CÓMO SE INTERPRETA EN ESTE WIDGET:
+Una subida de la tasa de desempleo generalmente se considera una señal de debilitamiento económico — por eso, igual que con el IPC, una subida (▲) se marca como menos favorable en el color del indicador.
+
+DATO A TENER EN CUENTA:
+El desempleo es un indicador retrasado (lagging) — tiende a confirmar fases económicas que ya están en marcha, más que anticiparlas. Otros indicadores de este panel, como la curva de tipos, tienden a adelantarse más en el ciclo.`
+    },
+
+    "core-pce": {
+        title: "PCE Core",
+        short: "Medida de inflación preferida por la Fed, excluyendo alimentos y energía por su volatilidad.",
+        long: `El PCE Core (Personal Consumption Expenditures, excluyendo alimentos y energía) es la medida de inflación que la Reserva Federal ha declarado explícitamente como su referencia preferida para sus decisiones de política monetaria — por encima incluso del IPC, que es el dato más conocido públicamente.
+
+POR QUÉ EXCLUYE ALIMENTOS Y ENERGÍA:
+Estos dos componentes son altamente volátiles por factores externos (clima, geopolítica, oferta puntual) que no reflejan necesariamente presión inflacionaria de fondo en la economía. Excluirlos da una lectura más "limpia" de la tendencia subyacente.
+
+POR QUÉ SE SIGUE MENOS QUE EL IPC EN MEDIOS GENERALISTAS:
+A pesar de ser el indicador que más pesa en las decisiones reales de la Fed, el PCE Core recibe menos cobertura mediática que el IPC porque se publica con algo más de retraso y es menos intuitivo para el público general. Para entender hacia dónde se inclina la política monetaria, el PCE Core suele ser más informativo que el IPC.`
+    },
+
+    "vix-levels": {
+        title: "VIX Niveles",
+        short: "Gauge de 5 zonas del VIX spot con histórico diario de 6 meses.",
+        long: `Este gauge clasifica el VIX spot actual en 5 zonas según su nivel absoluto, complementando la lectura de la Term Structure (que compara spot vs futuros).
+
+ZONAS:
+- &lt; 12 → Complacencia. Volatilidad muy baja, posible exceso de confianza del mercado.
+- 12-20 → Normal. Rango habitual de un mercado sin estrés.
+- 20-25 → Precaución. Volatilidad por encima de lo normal, vigilar.
+- 25-35 → Miedo. Estrés de mercado elevado, movimientos amplios.
+- &gt; 35 → Pánico. Capitulación, históricamente cerca de suelos de mercado importantes.
+
+DIFERENCIA CON LA TERM STRUCTURE:
+El gauge de niveles te dice CUÁNTO miedo hay ahora mismo en términos absolutos. La Term Structure te dice si el mercado espera que ese miedo aumente (contango) o ya está descontando que se calme (backwardation). Usar ambos juntos da una lectura más completa que cualquiera de los dos por separado.`
+    },
+
+    "crypto-prices": {
+        title: "Criptomonedas",
+        short: "Precios en tiempo casi real de las 6 principales criptomonedas por capitalización.",
+        long: `Seguimiento de las 6 criptomonedas más relevantes por capitalización de mercado: Bitcoin, Ethereum, BNB, Solana, XRP y Cardano.
+
+POR QUÉ SEGUIR CRIPTO EN UNA TERMINAL DE ACCIONES:
+Bitcoin en particular ha mostrado periodos de correlación creciente con activos de riesgo tradicionales (Nasdaq, growth stocks), especialmente en entornos de liquidez monetaria expansiva o restrictiva. Monitorizar el sentimiento cripto puede dar una lectura adicional sobre el apetito de riesgo global, complementaria a los indicadores de renta variable tradicional.
+
+Los datos se actualizan con la misma frecuencia que el resto de activos de mercado de la terminal.`
+    },
+
+    "crypto-fear-greed": {
+        title: "Crypto Fear & Greed Index",
+        short: "Sentimiento del mercado cripto de 0 (miedo extremo) a 100 (codicia extrema). Fuente: alternative.me",
+        long: `El Crypto Fear & Greed Index es un indicador independiente del Fear & Greed de acciones (CNN), específico para el mercado de criptomonedas. Lo calcula alternative.me combinando:
+
+▸ Volatilidad de Bitcoin comparada con sus promedios históricos
+▸ Momentum y volumen de mercado
+▸ Sentimiento en redes sociales relacionado con cripto
+▸ Dominancia de Bitcoin sobre el resto del mercado cripto
+▸ Tendencias de búsqueda relacionadas con criptomonedas
+
+CÓMO INTERPRETARLO:
+- 0-25 → Miedo extremo → Posible zona de capitulación / oportunidad
+- 25-45 → Miedo → Sentimiento negativo dominante
+- 45-55 → Neutral → Sin sesgo claro
+- 55-75 → Codicia → Optimismo elevado
+- 75-100 → Codicia extrema → Riesgo de sobrecalentamiento
+
+El mercado cripto tiende a moverse en ciclos de sentimiento más extremos y rápidos que el mercado de acciones, por lo que este índice puede ser más volátil que su equivalente de renta variable.`
+    },
+
+    "trump-truth-social": {
+        title: "Trump · Truth Social (archivo público)",
+        short: "Posts recientes de Donald Trump en Truth Social, vía trumpstruth.org. Etiquetados por impacto en mercado.",
+        long: `Trump es actualmente uno de los activos macro más volátiles del mercado — un post sobre aranceles, la Fed, o geopolítica puede mover el S&P 500 1-2% en minutos, antes de que esa información aparezca en ningún RSS financiero convencional.
+
+FUENTE:
+Los posts proceden de trumpstruth.org, un archivo público de Truth Social gestionado por Defending Democracy Together. No es la fuente oficial de Truth Social (que no tiene API pública) — es un archivo de acceso libre que archiva los posts públicos de Trump con RSS nativo.
+
+CLASIFICACIÓN DE IMPACTO:
+Igual que en el feed principal, los posts se clasifican automáticamente por keywords:
+▸ HIGH (rojo) → mención de aranceles, Fed, recesión, crash, guerra, sanción, emergencia
+▸ MED (ámbar) → earnings, fusiones, PIB, inflación, tipos de interés
+▸ Sin badge → posts de contenido político/personal sin impacto directo inmediato en mercados
+
+CÓMO USARLO:
+No todos los posts de Trump mueven mercados — muchos son de contenido político o personal. Los que históricamente han causado más movimiento son los relacionados con aranceles (en particular contra China), comentarios sobre la Fed o sobre tipos de interés, y anuncios de política exterior. El badge HIGH intenta destacarlos, pero el juicio final es siempre del trader.
+
+El panel se actualiza automáticamente cada 5 minutos junto al feed principal.`
+    },
+
+    "reddit-pulse": {
+        title: "Reddit Pulse — Social Buzz",
+        short: "Tickers con mayor actividad y mención en Reddit y StockTwits, ordenados por nivel de conversación social.",
+        long: `Reddit Pulse rastrea qué acciones están generando más conversación en comunidades de inversión retail como Reddit (r/wallstreetbets, r/stocks, etc.) y StockTwits, combinando ambas fuentes en un ranking único.
+
+QUÉ MIDE Y QUÉ NO MIDE:
+Este indicador mide volumen de conversación social, no calidad del análisis ni dirección "correcta" del mercado. Una acción puede aparecer arriba en el ranking tanto por entusiasmo alcista genuino como por pánico, controversia, o simple curiosidad mediática.
+
+CÓMO USARLO CON CRITERIO:
+El sentimiento retail extremo (en cualquier dirección) ha demostrado históricamente ser, en ocasiones, un indicador contrario útil — picos de euforia social coincidiendo con techos locales, y picos de pánico social coincidiendo con suelos locales. No es una señal de entrada por sí sola, sino un dato de contexto sobre el sentimiento retail dominante en un momento dado.
+
+Este tipo de actividad social ganó notoriedad especialmente desde el episodio de GameStop en enero de 2021, cuando el volumen de conversación en Reddit precedió movimientos de precio extraordinarios en varios tickers.`
+    },
+
+    "social-buzz": {
+        title: "Buzz — Volumen de Conversación",
+        short: "Medida relativa (0-100) de cuánta actividad social está generando un ticker en este momento.",
+        long: `El "Buzz" es una puntuación relativa de 0 a 100 que refleja el volumen de menciones y conversación que un ticker está generando en las fuentes sociales rastreadas, comparado con el resto de tickers del ranking en ese mismo momento.
+
+NO ES UN INDICADOR DE DIRECCIÓN:
+Un Buzz alto solo indica que se está hablando mucho de ese ticker — no indica si la conversación dominante es alcista o bajista. Para eso está la columna de Señal, que sí intenta capturar el tono del sentimiento.
+
+CÓMO LEERLO:
+Picos repentinos de Buzz en un ticker que normalmente no aparece en el ranking suelen coincidir con alguna noticia, catalizador, o movimiento de precio reciente que ha captado la atención retail — vale la pena investigar qué lo está causando antes de actuar.`
+    },
+
+    "social-signal": {
+        title: "Señal — Tono del Sentimiento Social",
+        short: "Clasificación cualitativa del tono dominante (alcista, bajista, mixto) en la conversación sobre ese ticker.",
+        long: `La columna de Señal resume, de forma simplificada, si el tono general de la conversación social sobre un ticker se inclina alcista, bajista, o está mixto/dividido en un momento dado.
+
+LIMITACIONES A TENER EN CUENTA:
+La clasificación de tono en redes sociales es inherentemente imperfecta — el sarcasmo, el humor interno de ciertas comunidades, y la jerga específica de foros como r/wallstreetbets pueden generar lecturas que no siempre capturan el matiz real de la conversación.
+
+CÓMO INTEGRARLO EN EL ANÁLISIS:
+Esta señal funciona mejor como una pieza adicional de contexto sobre el sentimiento retail, combinada con el resto de herramientas de la terminal (estructura técnica, fundamentales, flujo institucional), no como una señal aislada para tomar decisiones de entrada o salida.`
+    },
+
+    "economic-calendar": {
+        title: "Calendario Económico",
+        short: "Próximos eventos macroeconómicos relevantes de la semana, con su nivel de impacto esperado.",
+        long: `El Calendario Económico recoge las publicaciones de datos macro y eventos de política monetaria programados para la semana en curso, ordenados cronológicamente.
+
+QUÉ INCLUYE TÍPICAMENTE:
+Decisiones de tipos de interés, publicaciones de inflación (IPC, PCE), datos de empleo, PIB, índices de confianza del consumidor, y otros indicadores que el mercado sigue de cerca por su capacidad de mover precios en el corto plazo.
+
+CÓMO USAR LAS COLUMNAS:
+▸ Actual: el dato ya publicado (si el evento ya ocurrió)
+▸ Previo: el dato del periodo anterior, para comparar la tendencia
+▸ Estimado: la expectativa de consenso del mercado antes de la publicación
+
+LA SORPRESA IMPORTA MÁS QUE EL DATO EN SÍ:
+Los mercados suelen reaccionar más a la diferencia entre el dato Actual y el Estimado (la "sorpresa") que al valor absoluto del dato. Un dato "malo" pero mejor de lo esperado puede generar una reacción alcista, y viceversa.
+
+Las horas mostradas están en horario de Madrid (CET/CEST) para facilitar la planificación.`
+    },
+
+    "event-impact": {
+        title: "Nivel de Impacto del Evento",
+        short: "Indicador visual (●●●/●●○/●○○) de cuánto puede mover los mercados cada publicación económica.",
+        long: `Cada evento del calendario se clasifica en uno de tres niveles de impacto esperado sobre los mercados:
+
+▸ ●●● ALTO (rojo): eventos con histórico de generar movimientos significativos y volátiles — decisiones de tipos de la Fed, IPC, informe de empleo (Nonfarm Payrolls).
+▸ ●●○ MEDIO (ámbar): eventos relevantes pero con impacto históricamente más moderado o contenido a sectores específicos.
+▸ ●○○ BAJO (gris): publicaciones de seguimiento rutinario, con impacto de mercado típicamente limitado salvo sorpresas importantes.
+
+CÓMO USARLO PARA PLANIFICAR:
+Antes de eventos de impacto Alto, muchos traders reducen tamaño de posición, evitan abrir nuevas operaciones justo antes de la publicación, o amplían stops para evitar ser expulsados por el ruido de volatilidad puntual que suele acompañar a estos datos.`
     },
 
     "credit-spreads": {
@@ -106,6 +414,54 @@ EJEMPLOS HISTÓRICOS:
 - 2021-2022: AD Line divergió negativamente mientras el SPX marcaba máximos → predijo la corrección.
 
 Un mercado sano tiene AD Line confirmando los máximos del índice.`
+    },
+
+    "market-indices": {
+        title: "Índices Principales",
+        short: "S&P 500, Nasdaq 100, Dow Jones, Russell 2000 y VIX — la foto rápida del mercado americano.",
+        long: `Este widget muestra los cinco índices/indicadores de referencia más seguidos del mercado americano, cada uno con un enfoque distinto:
+
+▸ S&P 500 (SPX): las 500 mayores empresas cotizadas de EE.UU. El índice de referencia general del mercado.
+▸ Nasdaq 100 (NDX): las 100 mayores empresas no financieras del Nasdaq, con fuerte sesgo tecnológico y de crecimiento.
+▸ Dow Jones (DJI): 30 empresas industriales de gran capitalización. El índice más antiguo, aunque menos representativo por su reducido número de componentes.
+▸ Russell 2000 (RUT): referencia de small caps — empresas de menor capitalización, más sensibles al ciclo económico doméstico.
+▸ VIX: el "índice del miedo", mide la volatilidad implícita esperada del S&P 500. No es un índice de precio sino de expectativa de movimiento.
+
+POR QUÉ MIRARLOS JUNTOS:
+Comparar el comportamiento relativo entre ellos da contexto adicional — por ejemplo, si el Nasdaq lidera al alza mientras el Russell 2000 se queda atrás, sugiere un mercado impulsado por grandes tecnológicas más que por una recuperación económica amplia.`
+    },
+
+    "market-breadth": {
+        title: "Market Breadth",
+        short: "Salud interna del mercado: SMA50/200, Golden/Death Cross, RSI, McClellan y % de sectores en tendencia alcista.",
+        long: `Market Breadth combina varios indicadores técnicos del SPY para dar una lectura compuesta de la salud interna del mercado, más allá del precio del índice en sí.
+
+COMPONENTES:
+▸ SMA50/SMA200: medias móviles de referencia. Precio sobre ambas = tendencia alcista de fondo.
+▸ Golden Cross / Death Cross: SMA50 cruzando por encima (Golden) o por debajo (Death) de la SMA200. Señal de cambio de régimen de medio-largo plazo.
+▸ RSI(14): momentum de corto plazo. &gt;70 sobrecompra, &lt;30 sobreventa.
+▸ Oscilador McClellan: mide la aceleración/desaceleración de la amplitud (EMA19-EMA39). Valores extremos anticipan giros.
+▸ % Sectores sobre SMA50: cuántos de los 11 sectores GICS (XLK, XLF, XLE...) cotizan sobre su media de 50 sesiones — mide si el rally es amplio o concentrado en pocos sectores.
+
+CÓMO LEERLO:
+Si el SPY sube pero el % de sectores sobre SMA50 cae, el rally se está estrechando — señal de alerta similar a una divergencia de AD Line. Cuantos más componentes confirmen la misma dirección, más sólida es la tendencia.`
+    },
+
+    "mcclellan-oscillator": {
+        title: "Oscilador McClellan",
+        short: "Mide la aceleración de la amplitud del mercado mediante EMA19-EMA39. Extremos anticipan giros de corto plazo.",
+        long: `El Oscilador McClellan es un indicador de amplitud que mide la diferencia entre dos medias exponenciales de la línea Avance/Declive (o, como proxy, del propio índice).
+
+CÁLCULO:
+EMA(19) − EMA(39) de los datos de amplitud, normalizado para que sea comparable entre periodos.
+
+INTERPRETACIÓN:
+▸ &gt; +50: sobrecompra de amplitud — el mercado puede estar extendido a corto plazo.
+▸ Entre -20 y +20: zona neutra, sin señal direccional clara.
+▸ &lt; -50: sobreventa de amplitud — posible zona de rebote técnico.
+
+DIFERENCIA CON EL RSI:
+El RSI mide momentum de PRECIO de un solo activo. El McClellan mide momentum de PARTICIPACIÓN — cuántas acciones están detrás del movimiento. Un McClellan muy negativo con precio estable puede anticipar un rebote técnico de corto plazo aunque el contexto de fondo siga siendo bajista.`
     },
 
     // ── OPTIONS FLOW ──────────────────────────────────────────────────────────
@@ -363,32 +719,50 @@ Compara la IV actual con el rango histórico del último año. IV Rank 80% = la 
     "rsu-algoritmo": {
         title: "RSU Algoritmo — Detector de Fondos",
         short: "Sistema multi-factor que detecta condiciones de fondo de mercado. Score 0-100.",
-        long: `El RSU Algoritmo analiza 6 factores simultáneamente para determinar si el mercado está creando un fondo comprable.
+        long: `El RSU Algoritmo analiza 5 factores simultáneamente para determinar si el mercado está creando un fondo comprable.
 
-LOS 6 FACTORES:
+LOS 5 FACTORES:
 
-1. DIVERGENCIA ALCISTA (15pts)
-Precio marcando mínimos pero RSI no los confirma. Señal clásica de agotamiento vendedor.
+1. FOLLOW THROUGH DAY (30pts)
+Concepto IBD de William O'Neil. Día de rally en volumen alto tras una corrección. El factor de mayor peso, pero su fiabilidad histórica real (~55% de éxito en estudios independientes) es más moderada de lo que sugiere el marketing de IBD (70-80%) — trátalo como una señal de probabilidad favorable, no como confirmación fuerte por sí sola.
 
-2. FOLLOW THROUGH DAY (35pts)
-Concepto IBD. Día de rally en volumen alto tras una corrección. Históricamente marca el inicio de nuevas tendencias alcistas. El más importante del algoritmo.
+2. RSI SOBREVENDIDO DIARIO (19pts)
+RSI(14) mínimo en ventana de 10 días. < 25 = extremo, máxima puntuación. Mide agotamiento del momentum vendedor en temporalidad diaria.
 
-3. RSI OVERSOLD (15pts)
-RSI mínimo en ventana de 10 días. < 25 = extremo, máxima puntuación.
+3. VIX SPIKE — CAPITULACIÓN (24pts)
+Pico de volatilidad en ventana de 10 días. El miedo extremo (VIX > 35) suele coincidir con capitulación vendedora — el punto en que los últimos vendedores forzados ya han salido del mercado.
 
-4. VIX SPIKE (20pts)
-Pico de volatilidad. El miedo extremo históricamente = oportunidad. VIX > 35 = máxima puntuación.
+4. McCLELLAN OSCILLATOR (17pts)
+Amplitud del mercado (proxy basado en momentum de SPY cuando no hay datos sectoriales reales disponibles). Valores extremadamente negativos sugieren sobreventa generalizada.
 
-5. McCLELLAN OSCILLATOR (20pts)
-Amplitud del mercado. Valores extremadamente negativos = mayoría de acciones sobrevendidas = suelo potencial.
-
-6. VOLUMEN (10pts)
-Confirmación con volumen elevado. Sin volumen, no hay convicción.
+5. VOLUMEN (10pts)
+Confirmación con volumen elevado. Sin volumen, no hay convicción institucional real detrás del movimiento.
 
 INTERPRETACIÓN:
-- > 70 + volumen → VERDE → Fondo probable. Entrada gradual.
+- ≥ 70 + volumen → VERDE → Fondo probable. Entrada gradual.
 - 50-70 → ÁMBAR → Condiciones desarrollándose. Preparar lista.
-- < 30 → ROJO → Sin condiciones. Preservar capital.`
+- < 30 → ROJO → Sin condiciones. Preservar capital.
+
+IMPORTANTE: este es un sistema de heurísticas de análisis técnico clásico, no una estrategia con ventaja estadística demostrada de forma independiente. Usa el botón de Backtest para ver cómo se ha comportado realmente sobre 10 años de histórico de SPY antes de darle un peso desproporcionado en tus decisiones.`
+    },
+
+    "algoritmo-backtest": {
+        title: "Backtest del Algoritmo",
+        short: "Recalcula el algoritmo día a día sobre 10 años de histórico de SPY y compara contra el rendimiento base del índice.",
+        long: `Este backtest responde a la pregunta más importante sobre cualquier indicador: ¿aporta una ventaja real, o es ruido que parece útil en retrospectiva?
+
+METODOLOGÍA:
+- Se recalcula el score exacto del algoritmo (la misma lógica que ves en vivo) para cada día de los últimos 10 años de SPY.
+- Una "señal" se registra cuando el semáforo se enciende en VERDE (score ≥70 con volumen confirmado) tras no estarlo el día anterior — el momento exacto de encendido, no cada día que permanece encendido.
+- Para cada señal, se mide el retorno real de SPY en los siguientes 5, 10, 20 y 60 días de trading.
+
+LA COMPARACIÓN CLAVE — BASELINE:
+El "Baseline SPY" es el retorno medio que habría dado SPY en esos mismos horizontes calculado sobre TODOS los días del periodo, no solo los días de señal. Esta es la comparación honesta: si el retorno medio tras una señal VERDE no supera claramente al baseline, el algoritmo no está aportando ventaja real sobre estar simplemente invertido siempre — solo está coincidiendo con un mercado que en general tiende a subir con el tiempo.
+
+LIMITACIÓN CONOCIDA:
+El McClellan Oscillator se calcula con el proxy basado en SPY de forma consistente en todo el periodo (no datos sectoriales reales), ya que recalcular 9 ETFs sectoriales en miles de días históricos sería excesivamente costoso. Esto hace que el backtest sea fiel al comportamiento real del sistema en producción cuando los datos sectoriales no están disponibles, pero no representa el McClellan "ideal" con amplitud real de mercado.
+
+Un número de señales bajo (algo esperable en 10 años, ya que un fondo de mercado real no ocurre con frecuencia) limita la significancia estadística de las conclusiones — interpreta los resultados con esa cautela.`
     },
 
     "ftd": {
@@ -402,17 +776,17 @@ Un día en que un índice principal (SPX, Nasdaq) sube ≥1.7% en volumen mayor 
 POR QUÉ FUNCIONA:
 Tras una corrección, el mercado necesita confirmar que hay demanda institucional real. Los grandes fondos no pueden disimular sus compras — dejan huella en el volumen. El FTD es esa huella.
 
-ESTADÍSTICAS HISTÓRICAS:
-- Todo gran mercado alcista desde 1900 comenzó con un FTD.
-- ~75% de los FTDs llevan a mercados alcistas sostenidos.
-- ~25% fallan (mercado vuelve a mínimos tras el FTD).
+ESTADÍSTICAS HISTÓRICAS — IMPORTANTE LEER:
+IBD afirma públicamente una tasa de éxito del 70-80% para los FTDs. Sin embargo, estudios cuantitativos independientes que reprodujeron la metodología con los criterios más generosos posibles encontraron una tasa real de éxito de aproximadamente 55% desde 1971 — apenas mejor que el azar en términos de predicción aislada.
+
+Esto no invalida el concepto (sigue siendo uno de los pilares más estudiados del análisis técnico de mercado), pero sí significa que un FTD por sí solo es una señal de probabilidad moderadamente favorable, no una confirmación fuerte. Combinarlo con otros factores (volumen, contexto de tendencia, amplitud) — como hace el RSU Algoritmo — es más razonable que confiar en el FTD de forma aislada.
 
 ADVERTENCIAS:
 - FTD bajo la EMA21 → posible trampa alcista
 - FTD en volumen solo moderado → menos convicción
 - Múltiples FTDs fallidos seguidos → mercado muy débil
 
-Sin FTD, no hay confirmación de fondo. Con FTD, empieza la acción.`
+Sin FTD, no hay confirmación de fondo. Con FTD, aumenta la probabilidad, pero no la garantiza.`
     },
 
     // ── CANSLIM ───────────────────────────────────────────────────────────────
@@ -436,6 +810,41 @@ EPS RATING:
 Calidad y consistencia del crecimiento de beneficios vs el universo. Combina crecimiento trimestral y anual.
 
 La metodología completa está en el libro "How to Make Money in Stocks" de William O'Neil.`
+    },
+
+    "ibd-composite": {
+        title: "IBD Composite Rating",
+        short: "Rating combinado de 1 a 99 que resume RS Rating, EPS Rating, SMR y Acc/Dis en una sola cifra.",
+        long: `El Composite Rating de IBD combina en una sola métrica los principales ratings individuales que IBD calcula para cada acción:
+
+▸ RS Rating (fuerza relativa de precio vs el mercado)
+▸ EPS Rating (calidad y consistencia del crecimiento de beneficios)
+▸ SMR Rating (ventas, margen y retorno sobre capital)
+▸ Acc/Dis Rating (acumulación o distribución institucional reciente)
+
+ESCALA:
+Va de 1 a 99, igual que el RS Rating. Cuanto más alto, mejor se posiciona la acción frente al resto del universo en el conjunto de estos factores combinados.
+
+CÓMO USARLO:
+Un Composite alto (90+) sugiere que la acción destaca de forma consistente en varios frentes a la vez, no solo en uno. Es un filtro rápido para descartar candidatos antes de revisar el detalle de cada rating individual.
+
+No sustituye al análisis del setup técnico ni del contexto de mercado — es un filtro de calidad fundamental-técnica combinada, no una señal de entrada por sí sola.`
+    },
+
+    "canslim-i": {
+        title: "I — Institutional Sponsorship",
+        short: "El factor 'I' de CAN SLIM: porcentaje de la acción en manos de fondos e instituciones de calidad.",
+        long: `La "I" de CAN SLIM representa el respaldo institucional — qué proporción de las acciones en circulación está en manos de fondos de inversión, gestoras y otros inversores institucionales.
+
+POR QUÉ IMPORTA:
+Las instituciones mueven el volumen suficiente para sostener tendencias duraderas. Una acción con poco o nulo respaldo institucional puede subir, pero suele carecer del combustible necesario para sostener un movimiento de varios meses.
+
+EL EQUILIBRIO CORRECTO:
+▸ Demasiado bajo → falta de demanda institucional real detrás del movimiento
+▸ Demasiado alto (sobre-poseída) → poco margen para nuevas compras institucionales que empujen el precio, y mayor riesgo de ventas masivas si el sentimiento cambia
+
+QUÉ BUSCAR:
+O'Neil recomendaba buscar acciones con un número creciente de fondos de calidad acumulando posición trimestre a trimestre — no necesariamente el porcentaje más alto posible, sino una tendencia de acumulación reciente y de gestoras con buen histórico.`
     },
 
     "trend-template": {
@@ -566,6 +975,96 @@ INTERPRETACIÓN:
 - 0-34 → EVITAR → Fundamentales débiles
 
 Es una herramienta de filtrado, no una recomendación de inversión.`
+    },
+
+    "piotroski-score": {
+        title: "Piotroski F-Score — Salud Financiera Fundamental",
+        short: "Puntuación 0-9 ideada por Joseph Piotroski que mide la solidez fundamental de una empresa comparando su último ejercicio fiscal contra el anterior.",
+        long: `El Piotroski F-Score evalúa 9 criterios contables binarios (1 punto si se cumple, 0 si no) repartidos en 3 bloques. Cuanto más alto, más sólidos son los fundamentales recientes de la empresa.
+
+RENTABILIDAD (4 puntos):
+1. ROA positivo en el último ejercicio
+2. Flujo de caja operativo (CFO) positivo
+3. ROA superior al del ejercicio anterior
+4. CFO superior al beneficio neto (calidad del beneficio, pocos "ajustes contables")
+
+APALANCAMIENTO Y LIQUIDEZ (3 puntos):
+5. Deuda a largo plazo sobre activos estable o decreciente
+6. Ratio de liquidez (current ratio) en mejora
+7. Sin emisión de nuevas acciones (sin dilución)
+
+EFICIENCIA OPERATIVA (2 puntos):
+8. Margen bruto en mejora
+9. Rotación de activos (ventas/activos) en mejora
+
+INTERPRETACIÓN:
+- 8-9 → EXCELENTE → Fundamentales en clara mejora
+- 6-7 → SÓLIDO → Mayoría de factores positivos
+- 4-5 → NEUTRAL → Mix de señales
+- 0-3 → DÉBIL → Deterioro fundamental, requiere cautela
+
+Es un score de "momentum fundamental" interanual, complementario al RSU Score (que es más bien una foto del momento actual). Funciona mejor en empresas con histórico de varios años — en compañías muy jóvenes o con datos incompletos puede no calcularse.`
+    },
+
+    "sector-valuation": {
+        title: "Valoración vs Sector",
+        short: "Múltiplos de valoración coloreados según si la empresa cotiza más cara o más barata que la mediana de su sector.",
+        long: `Cada múltiplo de valoración (P/E, P/S, EV/EBITDA, PEG, P/B) se compara contra una mediana de referencia del sector GICS al que pertenece la empresa.
+
+CÓMO LEER LOS COLORES:
+- Verde → la empresa cotiza más barata que su sector en ese múltiplo (potencialmente infravalorada en términos relativos)
+- Rojo → la empresa cotiza más cara que su sector en ese múltiplo (prima de valoración frente a sus comparables)
+
+El porcentaje entre paréntesis indica cuánto se desvía el valor de la empresa respecto a esa mediana sectorial.
+
+IMPORTANTE:
+Una valoración "cara" frente al sector no es automáticamente mala — puede estar justificada por crecimiento superior, mejor rentabilidad, o ventajas competitivas. Esta comparación es un punto de partida para preguntar "¿por qué?", no una conclusión en sí misma. Las medianas usadas son de referencia general del mercado US, no datos de un proveedor en tiempo real.`
+    },
+
+    "analyst-ratings-history": {
+        title: "Histórico de Ratings de Analistas",
+        short: "Cambios de calificación reales por firma de Wall Street (Morgan Stanley, Goldman Sachs, etc.), con grado anterior y nuevo.",
+        long: `Esta tabla muestra el historial real de cambios de calificación (rating) emitidos por firmas de análisis de Wall Street para esta empresa — quién lo emitió, cuándo, y qué cambio exacto de grado representó.
+
+TIPOS DE ACCIÓN:
+▸ UPGRADE → la firma mejora su calificación (ej. de Hold a Buy)
+▸ DOWNGRADE → la firma empeora su calificación (ej. de Buy a Hold)
+▸ INICIA COBERTURA → la firma empieza a cubrir esta empresa por primera vez
+▸ REITERA / MANTIENE → la firma confirma su calificación anterior sin cambios
+
+POR QUÉ ESTO ES DIFERENTE A UN CONSENSO AGREGADO:
+A diferencia de un simple recuento de "cuántos analistas dicen comprar/mantener/vender", aquí ves la trazabilidad real: qué firma específica cambió de opinión, cuándo, y en qué dirección exacta. Esto permite detectar patrones — por ejemplo, varias downgrades seguidas en pocos días suele ser una señal más fuerte que una sola opinión aislada.
+
+LIMITACIONES A TENER EN CUENTA:
+Los cambios de rating de analistas tienden a llegar después de que el mercado ya haya movido el precio en esa dirección (son reactivos, no siempre predictivos). Además, distintas firmas usan escalas de calificación diferentes entre sí (lo que un banco llama "Neutral" otro lo llama "Hold"), así que comparar grados entre firmas distintas requiere cierta cautela.`
+    },
+
+    "sector-profitability": {
+        title: "Rentabilidad vs Sector",
+        short: "ROE, márgenes y apalancamiento comparados contra la mediana del sector de la empresa.",
+        long: `Las métricas de rentabilidad (ROE, ROA, márgenes neto/operativo/bruto) y de apalancamiento (D/E Ratio) se comparan contra la mediana típica del sector GICS de la empresa.
+
+CÓMO LEER LOS COLORES:
+- Verde → la empresa es más rentable o tiene menos deuda relativa que su sector
+- Rojo → la empresa es menos rentable o tiene más deuda relativa que su sector
+
+Para ROE, ROA y los tres márgenes, más alto siempre es mejor. Para el D/E Ratio, menos deuda relativa al patrimonio se considera más favorable, por lo que el color se invierte respecto a las demás métricas de esta tarjeta.
+
+Comparar rentabilidad dentro del mismo sector es más significativo que comparar entre sectores distintos — un margen neto del 8% puede ser excelente en retail y mediocre en software, por eso el contexto sectorial importa.`
+    },
+
+    "sector-growth": {
+        title: "Crecimiento vs Sector",
+        short: "Crecimiento de ingresos y beneficios comparado contra la mediana de crecimiento del sector.",
+        long: `Revenue Growth y Earnings Growth se comparan contra el ritmo de crecimiento típico del sector GICS de la empresa.
+
+CÓMO LEER LOS COLORES:
+- Verde → la empresa crece por encima del ritmo habitual de su sector
+- Rojo → la empresa crece por debajo del ritmo habitual de su sector
+
+Sectores como Tecnología o Consumo Discrecional tienden a tener medianas de crecimiento más altas que sectores maduros como Utilities o Consumo Básico — por eso un 8% de crecimiento puede ser sobresaliente en un sector y decepcionante en otro.
+
+Current Ratio, Free Cash Flow, Dividend Yield y número de analistas no tienen una comparación sectorial aplicada, ya que dependen más de la estructura de capital específica de cada empresa que de su sector.`
     },
 
     // ── RS/RW ─────────────────────────────────────────────────────────────────

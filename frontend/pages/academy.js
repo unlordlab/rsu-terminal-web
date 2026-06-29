@@ -8,6 +8,8 @@ import { CHARTS  } from '/pages/academy_charts.js';
 // ── DATOS DE MÓDULOS ─────────────────────────────────────────────────────────
 
 const MODULES = [
+    { id:0,  title:'RSU Terminal',                icon:'🖥️', description:'Entiende qué es RSU Terminal, la metodología detrás y cómo sacar el máximo partido a cada herramienta.', duration:'40 min',
+      videos:[{title:'Qué es RSU Terminal',duration:'10:00'},{title:'La Metodología RSU',duration:'10:00'},{title:'Las Herramientas',duration:'12:00'},{title:'Flujo de Trabajo Semanal',duration:'8:00'}]},
     { id:1,  title:'Configuración de Gráficos',   icon:'📊', description:'Configura correctamente tus gráficos en múltiples temporalidades. El análisis top-down empieza aquí.', duration:'45 min',
       videos:[{title:'Gráfico Mensual — La visión macro',duration:'12:00'},{title:'Gráfico Semanal — La tendencia media',duration:'11:00'},{title:'Gráfico Diario — El setup operativo',duration:'12:00'},{title:'Velas Limpias — Sin ruido visual',duration:'10:00'}]},
     { id:2,  title:'Estructura de Mercado',        icon:'🏗️', description:'Identifica la tendencia antes de operar. Máximos y mínimos crecientes o decrecientes lo dicen todo.', duration:'50 min',
@@ -29,7 +31,7 @@ const MODULES = [
     { id:10, title:'Alineación Multi-Temporalidad',icon:'🔭', description:'La alineación crea potencia. Cuando mensual, semanal y diario coinciden, la probabilidad dispara.', duration:'1h 20min',
       videos:[{title:'Sesgo Mensual',duration:'20:00'},{title:'Estructura Semanal',duration:'20:00'},{title:'Setup Diario',duration:'20:00'},{title:'Trigger en TF Menor',duration:'20:00'}]},
     { id:11, title:'Planificación del Trade',      icon:'📋', description:'Sin plan no hay trading. Define entrada, stop y objetivo antes de pulsar el botón.', duration:'1h',
-      videos:[{title:'Zona de Entrada',duration:'15:00'},{title:'Stop Loss',duration:'15:00'},{title:'Niveles Objetivo',duration:'15:00'},{title:'Ratio Riesgo/Recompensa',duration:'15:00'}]},
+      videos:[{title:'Definir el Setup',duration:'15:00'},{title:'Ratio Riesgo/Recompensa',duration:'15:00'},{title:'Tamaño de Posición',duration:'15:00'},{title:'El Plan de Trade',duration:'15:00'}]},
     { id:12, title:'Gestión del Riesgo',           icon:'🛡️', description:'Sobrevive primero, gana después. La gestión del riesgo es lo único que te mantiene en el juego.', duration:'1h 10min',
       videos:[{title:'Riesgo Fijo por Trade',duration:'17:00'},{title:'Sizing de Posición',duration:'18:00'},{title:'Sin Revenge Trading',duration:'17:00'},{title:'Protección de Capital',duration:'18:00'}]},
     { id:13, title:'Ejecución',                    icon:'⚡', description:'La disciplina es el edge. Espera confirmación, sigue el plan y sal sin ego.', duration:'1h',
@@ -38,13 +40,23 @@ const MODULES = [
       videos:[{title:'Falsas Rupturas',duration:'16:00'},{title:'Entradas Tardías',duration:'16:00'},{title:'Sobretrading',duration:'17:00'},{title:'Ignorar el Volumen',duration:'16:00'}]},
     { id:15, title:'Revisión Post-Trade',          icon:'📓', description:'Journal o repite el dolor. La revisión sistemática es lo que separa a los traders rentables.', duration:'50 min',
       videos:[{title:'Captura de Pantalla',duration:'12:00'},{title:'Registro de Errores',duration:'13:00'},{title:'Revisión del Setup',duration:'13:00'},{title:'Lecciones Aprendidas',duration:'12:00'}]},
+    { id:16, title:'Las 4 Etapas (Weinstein)',     icon:'🔄', description:'Acumulación, avance, distribución y declive. El mapa de ciclo de vida que dice cuándo comprar y cuándo no.', duration:'1h',
+      videos:[{title:'Etapa 1 — Acumulación',duration:'15:00'},{title:'Etapa 2 — Avance',duration:'15:00'},{title:'Etapa 3 — Distribución',duration:'15:00'},{title:'Etapa 4 — Declive',duration:'15:00'}]},
+    { id:17, title:'El Mercado Descuenta Información', icon:'⏳', description:'Por qué el precio se mueve ANTES de la noticia. Buy the rumour, sell the news — y cómo no quedar atrapado en el lado equivocado.', duration:'1h',
+      videos:[{title:'La Máquina de Descontar',duration:'15:00'},{title:'Buy the Rumour',duration:'15:00'},{title:'Sell the News',duration:'15:00'},{title:'Earnings y Eventos Macro',duration:'15:00'}]},
+    { id:18, title:'Risk/Reward',                  icon:'⚖️', description:'No es una cifra que se calcula — es el resultado de dónde compras. Una buena zona de demanda mejora el riesgo, la recompensa y la psicología a la vez.', duration:'1h',
+      videos:[{title:'La Zona de Entrada lo Decide Todo',duration:'15:00'},{title:'Anatomía de una Buena Zona de Demanda',duration:'15:00'},{title:'El Lado Psicológico del Buen R:R',duration:'15:00'},{title:'Aplicar el R:R desde la Zona, no desde la Calculadora',duration:'15:00'}]},
+    { id:19, title:'Métodos de Confirmación de Entrada', icon:'🎯', description:'6 técnicas para confirmar que una entrada tiene base real: trendlines, soporte/resistencia, Fibonacci, consolidaciones, gaps y volumen.', duration:'1h 30min',
+      videos:[{title:'Reversión y Ruptura de Línea de Tendencia',duration:'15:00'},{title:'Soporte y Resistencia como Confirmación',duration:'15:00'},{title:'Retroceso de Fibonacci',duration:'15:00'},{title:'Consolidaciones',duration:'15:00'},{title:'Gaps de Precio',duration:'15:00'},{title:'Volumen Clímax y Tendencia',duration:'15:00'}]},
 ];
 
 const PHASES = [
-    { label:'📍 FASE 1 // ANÁLISIS TÉCNICO FUNDAMENTAL', modules:[0,1,2,3,4] },
-    { label:'🔬 FASE 2 // LECTURA DE MERCADO AVANZADA',  modules:[5,6,7,8] },
-    { label:'🎯 FASE 3 // ESTRATEGIA Y PLANIFICACIÓN',   modules:[9,10,11] },
-    { label:'🚀 FASE 4 // EJECUCIÓN Y MENTALIDAD',       modules:[12,13,14] },
+    { label:'🖥️ INTRO // RSU TERMINAL',              modules:[0] },
+    { label:'📍 FASE 1 // ANÁLISIS TÉCNICO FUNDAMENTAL', modules:[1,2,3,4] },
+    { label:'🔬 FASE 2 // LECTURA DE MERCADO AVANZADA',  modules:[5,6,7,8,17] },
+    { label:'🎯 FASE 3 // ESTRATEGIA Y PLANIFICACIÓN',   modules:[9,10,11,18,19] },
+    { label:'🚀 FASE 4 // EJECUCIÓN Y MENTALIDAD',       modules:[12,13,14,15] },
+    { label:'🔄 FASE 5 // CICLO DE VIDA DEL PRECIO',     modules:[16] },
 ];
 
 // ── ESTILOS ───────────────────────────────────────────────────────────────────

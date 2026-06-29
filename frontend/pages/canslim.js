@@ -1,7 +1,21 @@
 import { tt } from '/components/tooltip.js';
+import { errorMessage } from '/core/ui.js';
+
+let _lastScanData = null;
+
+window.__canslimBack = function() {
+    if (!_lastScanData) return;
+    const scanEl = document.querySelector('#canslim-scan-result');
+    const resEl  = document.querySelector('#canslim-result');
+    if (scanEl) scanEl.innerHTML = renderScanResults(_lastScanData);
+    if (resEl)  resEl.innerHTML  = '';
+    if (scanEl) scanEl.scrollIntoView({ behavior: 'smooth', block: 'start' });
+};
 
 export async function render(container) {
-    container.innerHTML = header()
+    container.innerHTML =
+        header()
+        + '<div id="canslim-market" style="margin-bottom:1.5rem;"></div>'
         + '<div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem;margin-bottom:1.5rem;">'
         + analyzerPanel()
         + scannerPanel()
@@ -9,6 +23,7 @@ export async function render(container) {
         + '<div id="canslim-result"></div>'
         + '<div id="canslim-scan-result"></div>';
 
+    loadMarket(container);
     setupAnalyzer(container);
     setupScanner(container);
 }
@@ -16,24 +31,93 @@ export async function render(container) {
 function header() {
     return '<div style="margin-bottom:1.5rem;">'
         + '<div style="color:var(--color-accent);font-size:18px;letter-spacing:0.1em;text-shadow:var(--glow-text);margin-bottom:4px;">CAN SLIM</div>'
-        + '<div style="color:var(--color-muted);font-size:12px;">Screener IBD · Trend Template Minervini · S&P 500</div>'
+        + '<div style="color:var(--color-muted);font-size:12px;">Screener IBD · Trend Template Minervini · S&P 500 completo (503 acciones)</div>'
         + '</div>';
 }
+
+// ── MARKET WIDGET ─────────────────────────────────────────────────────────────
+
+async function loadMarket(container) {
+    const el = container.querySelector('#canslim-market');
+    el.innerHTML = '<div style="background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius);padding:1.25rem;"><div style="color:var(--color-muted);font-size:12px;">Cargando estado del mercado...</div></div>';
+    try {
+        const token = sessionStorage.getItem('rsu_token');
+        const res   = await fetch('/api/v1/canslim/market', {
+            headers: token ? { 'Authorization': 'Bearer ' + token } : {}
+        });
+        const data  = await res.json();
+        if (!data.ok) throw new Error(data.error || 'Error');
+        el.innerHTML = renderMarket(data);
+    } catch(e) {
+        el.innerHTML = errorMessage(e.message);
+    }
+}
+
+function renderMarket(data) {
+    const s    = data.spy;
+    const color = data.color;
+    const chgC  = s.chg_pct >= 0 ? 'var(--color-accent)' : '#f23645';
+    const vixC  = data.vix >= 30 ? '#f23645' : data.vix >= 20 ? '#ffb800' : 'var(--color-accent)';
+
+    // Score bar
+    const scoreBar = '<div style="height:6px;background:var(--color-border);border-radius:3px;overflow:hidden;margin-top:6px;">'
+        + '<div style="height:100%;width:' + data.score + '%;background:' + color + ';border-radius:3px;"></div>'
+        + '</div>';
+
+    // Indicators row
+    const indicators = [
+        { label: 'SPY', val: '$' + s.price, sub: (s.chg_pct >= 0 ? '+' : '') + s.chg_pct + '% hoy', color: chgC },
+        { label: 'SPY vs MA50', val: s.above_ma50 ? '▲ SOBRE' : '▼ BAJO', sub: 'MA50: $' + s.ma50, color: s.above_ma50 ? 'var(--color-accent)' : '#f23645' },
+        { label: 'SPY vs MA200', val: s.above_ma200 ? '▲ SOBRE' : '▼ BAJO', sub: 'MA200: $' + s.ma200, color: s.above_ma200 ? 'var(--color-accent)' : '#f23645' },
+        { label: 'VIX', val: data.vix.toFixed(1), sub: 'Riesgo: ' + data.vix_risk, color: vixC },
+        { label: 'SPY 1M', val: (s.perf_1m >= 0 ? '+' : '') + s.perf_1m + '%', sub: 'Rendimiento', color: s.perf_1m >= 0 ? 'var(--color-accent)' : '#f23645' },
+        { label: 'SPY 3M', val: (s.perf_3m >= 0 ? '+' : '') + s.perf_3m + '%', sub: 'Rendimiento', color: s.perf_3m >= 0 ? 'var(--color-accent)' : '#f23645' },
+        { label: 'Del máximo', val: s.pct_from_high + '%', sub: 'vs máximo 52s', color: s.pct_from_high >= -5 ? 'var(--color-accent)' : s.pct_from_high >= -15 ? '#ffb800' : '#f23645' },
+    ].map(i =>
+        '<div style="background:var(--color-surface2,#111);border:1px solid var(--color-border);border-radius:var(--radius);padding:10px 14px;text-align:center;">'
+        + '<div style="color:var(--color-muted);font-size:10px;letter-spacing:.08em;margin-bottom:4px;">' + i.label + '</div>'
+        + '<div style="color:' + i.color + ';font-size:14px;font-weight:500;">' + i.val + '</div>'
+        + '<div style="color:' + i.color + ';font-size:10px;opacity:.7;margin-top:2px;">' + i.sub + '</div>'
+        + '</div>'
+    ).join('');
+
+    return '<div style="background:var(--color-surface);border:2px solid ' + color + '44;border-radius:var(--radius);padding:1.25rem;">'
+        + '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem;">'
+        + '<div>'
+        + '<div style="color:var(--color-muted);font-size:10px;letter-spacing:.1em;margin-bottom:4px;">M — MARKET DIRECTION (CAN SLIM)</div>'
+        + '<div style="display:flex;align-items:center;gap:12px;">'
+        + '<span style="color:' + color + ';font-size:15px;letter-spacing:.06em;font-weight:500;">► ' + data.status_es + '</span>'
+        + '<span style="background:' + color + '22;color:' + color + ';border:1px solid ' + color + '44;border-radius:3px;padding:2px 10px;font-size:11px;">' + data.score + '/100</span>'
+        + '</div>'
+        + scoreBar
+        + '</div>'
+        + '<div style="text-align:right;">'
+        + '<div style="color:' + (data.can_buy ? 'var(--color-accent)' : '#f23645') + ';font-size:13px;font-weight:500;">'
+        + (data.can_buy ? '✓ MERCADO OPERATIVO' : '✗ EVITAR NUEVAS ENTRADAS')
+        + '</div>'
+        + '<div style="color:var(--color-muted);font-size:10px;margin-top:4px;">Actualizado: ' + data.timestamp + '</div>'
+        + '</div>'
+        + '</div>'
+        + '<div style="display:grid;grid-template-columns:repeat(7,1fr);gap:8px;">' + indicators + '</div>'
+        + '</div>';
+}
+
+// ── PANELS ────────────────────────────────────────────────────────────────────
 
 function analyzerPanel() {
     return '<div style="background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius);padding:1.25rem;">'
         + '<div style="color:var(--color-accent);font-size:13px;letter-spacing:0.08em;margin-bottom:1rem;">ANÁLISIS INDIVIDUAL ' + tt('canslim') + '</div>'
         + '<div style="display:flex;gap:8px;">'
-        + '<input id="ticker-input" type="text" placeholder="AAPL, NVDA, MSFT..." style="flex:1;background:var(--color-bg);border:1px solid var(--color-border);border-radius:var(--radius);padding:8px 12px;color:var(--color-text);font-family:var(--font-mono);font-size:13px;outline:none;">'
+        + '<input id="ticker-input" type="text" placeholder="AAPL, NVDA, KTOS..." style="flex:1;background:var(--color-bg);border:1px solid var(--color-border);border-radius:var(--radius);padding:8px 12px;color:var(--color-text);font-family:var(--font-mono);font-size:13px;outline:none;">'
         + '<button id="analyze-btn" style="background:var(--color-accent);color:#000;border:none;border-radius:var(--radius);padding:8px 16px;font-family:var(--font-mono);font-size:12px;cursor:pointer;letter-spacing:0.05em;">ANALIZAR</button>'
         + '</div>'
-        + '<div style="color:var(--color-muted);font-size:11px;margin-top:8px;">Introduce cualquier ticker del mercado americano</div>'
+        + '<div style="color:var(--color-muted);font-size:11px;margin-top:8px;">Cualquier ticker del mercado americano</div>'
         + '</div>';
 }
 
 function scannerPanel() {
     return '<div style="background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius);padding:1.25rem;">'
-        + '<div style="color:var(--color-accent);font-size:13px;letter-spacing:0.08em;margin-bottom:1rem;">SCANNER S&P 500</div>'
+        + '<div style="color:var(--color-accent);font-size:13px;letter-spacing:0.08em;margin-bottom:1rem;">SCANNER S&P 500 COMPLETO</div>'
         + '<div style="display:flex;gap:8px;align-items:center;">'
         + '<div style="color:var(--color-muted);font-size:12px;">Score mínimo:</div>'
         + '<select id="min-score" style="background:var(--color-bg);border:1px solid var(--color-border);border-radius:var(--radius);padding:8px 12px;color:var(--color-text);font-family:var(--font-mono);font-size:12px;">'
@@ -41,11 +125,13 @@ function scannerPanel() {
         + '<option value="60" selected>60 — Estándar</option>'
         + '<option value="80">80 — Estricto</option>'
         + '</select>'
-        + '<button id="scan-btn" style="background:var(--color-secondary);color:#000;border:none;border-radius:var(--radius);padding:8px 16px;font-family:var(--font-mono);font-size:12px;cursor:pointer;letter-spacing:0.05em;flex:1;">ESCANEAR S&P 500</button>'
+        + '<button id="scan-btn" style="background:var(--color-secondary);color:#000;border:none;border-radius:var(--radius);padding:8px 16px;font-family:var(--font-mono);font-size:12px;cursor:pointer;letter-spacing:0.05em;flex:1;">ESCANEAR S&P 500 (503)</button>'
         + '</div>'
-        + '<div style="color:var(--color-muted);font-size:11px;margin-top:8px;">Escanea las primeras 200 acciones del S&P 500 · ~60 segundos</div>'
+        + '<div style="color:var(--color-muted);font-size:11px;margin-top:8px;">RS real calculado como percentil vs universo · ~90 segundos</div>'
         + '</div>';
 }
+
+// ── SETUP ──────────────────────────────────────────────────────────────────────
 
 function setupAnalyzer(container) {
     const input  = container.querySelector('#ticker-input');
@@ -59,13 +145,16 @@ function setupAnalyzer(container) {
         btn.style.opacity = '0.7';
         result.innerHTML  = '<div style="padding:1rem;color:var(--color-muted);font-size:12px;">Analizando ' + ticker + '...</div>';
         try {
-            const res  = await fetch('/api/v1/canslim/analyze/' + ticker, { headers: authHeader() });
-            const data = await res.json();
+            const token = sessionStorage.getItem('rsu_token');
+            const res   = await fetch('/api/v1/canslim/analyze/' + ticker, {
+                headers: token ? { 'Authorization': 'Bearer ' + token } : {}
+            });
+            const data  = await res.json();
             if (!data.ok) throw new Error(data.error || 'Error de análisis');
             result.innerHTML = renderAnalysis(data);
             renderChart(data);
         } catch(e) {
-            result.innerHTML = '<div style="padding:1rem;color:#f23645;font-size:12px;">✗ ' + e.message + '</div>';
+            result.innerHTML = errorMessage(e.message);
         } finally {
             btn.textContent   = 'ANALIZAR';
             btn.style.opacity = '1';
@@ -85,33 +174,65 @@ function setupScanner(container) {
         const minScore    = select.value;
         btn.textContent   = 'ESCANEANDO...';
         btn.style.opacity = '0.7';
-        result.innerHTML  = '<div style="padding:1rem;color:var(--color-muted);font-size:12px;">Escaneando S&P 500... esto puede tardar ~60 segundos</div>';
+        result.innerHTML  = '<div style="padding:1rem;color:var(--color-muted);font-size:12px;">Escaneando S&P 500 completo (503 acciones)... RS real calculado como percentil. ~90 segundos.</div>';
         try {
-            const res  = await fetch('/api/v1/canslim/scan?min_score=' + minScore, { headers: authHeader() });
-            const data = await res.json();
+            const token = sessionStorage.getItem('rsu_token');
+            const res   = await fetch('/api/v1/canslim/scan?min_score=' + minScore + '&max_results=50', {
+                headers: token ? { 'Authorization': 'Bearer ' + token } : {}
+            });
+            const data  = await res.json();
             if (!data.ok) throw new Error('Error en el scan');
+            _lastScanData = data;
             result.innerHTML = renderScanResults(data);
         } catch(e) {
-            result.innerHTML = '<div style="padding:1rem;color:#f23645;font-size:12px;">✗ ' + e.message + '</div>';
+            result.innerHTML = errorMessage(e.message);
         } finally {
-            btn.textContent   = 'ESCANEAR S&P 500';
+            btn.textContent   = 'ESCANEAR S&P 500 (503)';
             btn.style.opacity = '1';
         }
     });
 }
 
+// ── RENDER ANALYSIS ───────────────────────────────────────────────────────────
+
 function renderAnalysis(data) {
     const chgColor   = data.chg_pct >= 0 ? 'var(--color-accent)' : '#f23645';
     const chgStr     = (data.chg_pct >= 0 ? '+' : '') + data.chg_pct.toFixed(2) + '%';
-    const scoreColor = data.canslim_score >= 70 ? 'var(--color-accent)' : data.canslim_score >= 50 ? '#ffb800' : '#f23645';
-    const mktcapStr  = data.mktcap >= 1e12 ? '$' + (data.mktcap/1e12).toFixed(1) + 'T'
+    const mktcapStr  = !data.mktcap ? 'N/A'
+                     : data.mktcap >= 1e12 ? '$' + (data.mktcap/1e12).toFixed(1) + 'T'
                      : data.mktcap >= 1e9  ? '$' + (data.mktcap/1e9).toFixed(1)  + 'B'
                      : '$' + (data.mktcap/1e6).toFixed(0) + 'M';
 
+    const scores = data.scores || {};
+    const techScore  = scores.tech  || 0;
+    const fundScore  = scores.fundamental || 0;
+    const combined   = data.canslim_score || 0;
+    const fundAvail  = scores.fund_available !== false;
+
+    const techColor  = techScore  >= 70 ? 'var(--color-accent)' : techScore  >= 50 ? '#ffb800' : '#f23645';
+    const fundColor  = !fundAvail ? '#555' : fundScore  >= 70 ? 'var(--color-accent)' : fundScore  >= 40 ? '#ffb800' : '#f23645';
+    const combColor  = combined   >= 70 ? 'var(--color-accent)' : combined   >= 50 ? '#ffb800' : '#f23645';
+
+    // Badges CAN SLIM
+    const letters   = data.can_slim_letters || {};
+    const letterKeys = ['C','A','N','S','L','I','M'];
+    const letterMap  = Object.entries(letters);
+    const badges = letterKeys.map((l, i) => {
+        const entry = letterMap[i];
+        const val   = entry ? entry[1] : false;
+        const noData = val === null;
+        const ok    = val === true;
+        const bg     = ok ? 'var(--color-accent)' : noData ? '#333' : 'transparent';
+        const border = ok ? 'var(--color-accent)' : noData ? '#555' : '#f23645';
+        const color  = ok ? '#000' : noData ? '#888' : '#f23645';
+        const title  = entry ? entry[0] : l;
+        return '<div style="width:32px;height:32px;border-radius:4px;background:' + bg + ';border:2px solid ' + border + ';display:flex;align-items:center;justify-content:center;font-family:var(--font-mono);font-size:13px;font-weight:bold;color:' + color + ';" title="' + title + '">' + l + '</div>';
+    }).join('');
+
     const ibdRows = [
-        ['RS Rating',      data.ibd.rs,        ratingColor(data.ibd.rs, 80, 60)],
+        ['RS Rating ' + tt('rs-rating'),  data.ibd.rs,        ratingColor(data.ibd.rs, 80, 60)],
         ['EPS Rating',     data.ibd.eps,       ratingColor(data.ibd.eps, 80, 60)],
-        ['Composite',      data.ibd.composite, ratingColor(data.ibd.composite, 80, 60)],
+        ['Composite ' + tt('ibd-composite'), data.ibd.composite, ratingColor(data.ibd.composite, 80, 60)],
         ['SMR Rating',     data.ibd.smr,       gradeColor(data.ibd.smr)],
         ['Acc/Dis Rating', data.ibd.acc_dis,   gradeColor(data.ibd.acc_dis)],
     ].map(([label, val, color]) =>
@@ -121,66 +242,128 @@ function renderAnalysis(data) {
         + '</div>'
     ).join('');
 
-    const trendRows = Object.entries(data.trend.conditions).map(([label, ok]) =>
+    const trendRows = Object.entries(data.trend.conditions || {}).map(([label, ok]) =>
         '<div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--color-border);font-size:11px;">'
         + '<span style="color:var(--color-muted);">' + label + '</span>'
         + '<span style="color:' + (ok ? 'var(--color-accent)' : '#f23645') + ';">' + (ok ? '✓' : '✗') + '</span>'
         + '</div>'
     ).join('');
 
+    // Fundamentales + institucional
+    const f = data.fundamentals || {};
+    const instPct    = f.inst_pct || 0;
+    const instOk     = f.inst_data_ok;
+    const instSource = f.inst_pct_source || 'N/A';
+    const instColor  = !instOk ? '#555' : instPct > 60 ? 'var(--color-accent)' : instPct > 40 ? '#ffb800' : '#f23645';
+    const instVal    = instOk ? instPct.toFixed(1) + '%' : 'Sin dato';
+
     const fundRows = [
-        ['EPS Growth',    data.fundamentals.eps_growth.toFixed(1) + '%'],
-        ['Sales Growth',  data.fundamentals.sales_growth.toFixed(1) + '%'],
-        ['ROE',           data.fundamentals.roe.toFixed(1) + '%'],
-        ['Profit Margin', data.fundamentals.margins.toFixed(1) + '%'],
-    ].map(([label, val]) =>
+        ['EPS Growth',    (f.eps_growth   || 0).toFixed(1) + '%', f.eps_growth   >= 25 ? 'var(--color-accent)' : f.eps_growth >= 10 ? '#ffb800' : '#f23645'],
+        ['Sales Growth',  (f.sales_growth || 0).toFixed(1) + '%', f.sales_growth >= 25 ? 'var(--color-accent)' : f.sales_growth >= 10 ? '#ffb800' : '#f23645'],
+        ['ROE',           (f.roe          || 0).toFixed(1) + '%', f.roe >= 20 ? 'var(--color-accent)' : f.roe >= 10 ? '#ffb800' : '#f23645'],
+        ['Profit Margin', (f.margins      || 0).toFixed(1) + '%', f.margins >= 15 ? 'var(--color-accent)' : f.margins >= 5 ? '#ffb800' : '#f23645'],
+    ].map(([label, val, c]) =>
         '<div style="display:flex;justify-content:space-between;padding:7px 0;border-bottom:1px solid var(--color-border);font-size:12px;">'
         + '<span style="color:var(--color-muted);">' + label + '</span>'
-        + '<span style="color:var(--color-text);">' + val + '</span>'
+        + '<span style="color:' + c + ';">' + val + '</span>'
         + '</div>'
     ).join('');
+
+    // Inst holders table
+    const holders    = f.inst_holders || [];
+    const holdersHtml = holders.length
+        ? '<div style="margin-top:8px;border-top:1px solid var(--color-border);padding-top:8px;">'
+          + '<div style="color:var(--color-muted);font-size:10px;letter-spacing:.06em;margin-bottom:6px;">TOP HOLDERS INSTITUCIONALES ' + (instSource === 'major_holders' ? '✓' : '≈') + '</div>'
+          + holders.map(h =>
+              '<div style="display:flex;justify-content:space-between;font-size:10px;padding:3px 0;color:var(--color-muted);">'
+              + '<span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:65%;">' + h.name + '</span>'
+              + '<span style="color:var(--color-text);">' + (h.pct_out > 0 ? h.pct_out.toFixed(2) + '%' : (h.shares/1e6).toFixed(1) + 'M sh') + '</span>'
+              + '</div>'
+          ).join('')
+          + '</div>'
+        : '';
+
+    // Score doble barra
+    const scoreBars = '<div style="margin-top:1rem;padding-top:1rem;border-top:1px solid var(--color-border);">'
+        // Score técnico
+        + '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">'
+        + '<span style="color:var(--color-muted);font-size:10px;letter-spacing:.06em;">SCORE TÉCNICO <span style="font-size:9px;opacity:.6;">(RS + Trend + Vol)</span></span>'
+        + '<span style="color:' + techColor + ';font-size:13px;font-weight:500;">' + techScore + '/100</span>'
+        + '</div>'
+        + '<div style="background:var(--color-border);border-radius:3px;height:5px;margin-bottom:10px;">'
+        + '<div style="height:100%;width:' + techScore + '%;background:' + techColor + ';border-radius:3px;"></div>'
+        + '</div>'
+        // Score fundamental
+        + '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">'
+        + '<span style="color:var(--color-muted);font-size:10px;letter-spacing:.06em;">SCORE FUNDAMENTAL <span style="font-size:9px;opacity:.6;">(EPS + Sales + ROE + Margin)</span></span>'
+        + '<span style="color:' + fundColor + ';font-size:13px;font-weight:500;">' + (fundAvail ? fundScore + '/100' : 'Sin datos') + '</span>'
+        + '</div>'
+        + '<div style="background:var(--color-border);border-radius:3px;height:5px;margin-bottom:10px;">'
+        + '<div style="height:100%;width:' + (fundAvail ? fundScore : 0) + '%;background:' + fundColor + ';border-radius:3px;"></div>'
+        + '</div>'
+        // Score combinado
+        + '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">'
+        + '<span style="color:var(--color-muted);font-size:10px;letter-spacing:.06em;">CAN SLIM SCORE ' + (fundAvail ? '(60% Téc + 40% Fund)' : '(solo técnico · sin fundamentales)') + '</span>'
+        + '<span style="color:' + combColor + ';font-size:16px;font-weight:500;">' + combined + '/100</span>'
+        + '</div>'
+        + '<div style="background:var(--color-border);border-radius:3px;height:7px;">'
+        + '<div style="height:100%;width:' + combined + '%;background:' + combColor + ';border-radius:3px;transition:width .5s;"></div>'
+        + '</div>'
+        + (!fundAvail ? '<div style="color:#888;font-size:10px;margin-top:6px;">⚠ yfinance no devuelve fundamentales para este ticker. Score calculado solo sobre criterios técnicos.</div>' : '')
+        + '</div>';
+
+    const nearHighColor = data.near_new_high ? 'var(--color-accent)' : '#ffb800';
 
     return '<div style="margin-top:1.5rem;">'
         + '<div style="background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius);padding:1.25rem;margin-bottom:1rem;">'
         + '<div style="display:flex;justify-content:space-between;align-items:flex-start;">'
         + '<div>'
-        + '<div style="display:flex;align-items:baseline;gap:12px;">'
-        + '<span style="color:var(--color-accent);font-size:22px;letter-spacing:0.1em;">' + data.ticker + '</span>'
+        + '<div style="display:flex;align-items:center;gap:12px;margin-bottom:6px;">'
+        + '<span style="color:var(--color-accent);font-size:22px;letter-spacing:0.1em;cursor:pointer;" onmouseover="this.style.textDecoration=\'underline\'" onmouseout="this.style.textDecoration=\'none\'" onclick="window.__navigate(\'/research?ticker=' + data.ticker + '\')">' + data.ticker + '</span>'
         + '<span style="color:var(--color-muted);font-size:13px;">' + data.name + '</span>'
         + '</div>'
-        + '<div style="color:var(--color-muted);font-size:11px;margin-top:4px;">' + data.sector + ' · ' + data.industry + '</div>'
+        + '<div style="color:var(--color-muted);font-size:11px;margin-bottom:10px;">' + data.sector + ' · ' + data.industry + '</div>'
+        + '<div style="display:flex;gap:6px;align-items:center;">'
+        + badges
+        + '<span style="color:var(--color-muted);font-size:11px;margin-left:4px;">IBD: <span style="color:' + ratingColor(data.ibd.composite, 80, 60) + ';">' + data.ibd.composite + '</span></span>'
+        + tt('ibd-composite')
+        + '</div>'
+        + '<div style="margin-top:6px;display:flex;gap:12px;">'
+        + '<span style="color:var(--color-muted);font-size:11px;">Stage: <span style="color:' + (data.trend.passed ? 'var(--color-accent)' : '#f23645') + ';">' + (data.trend.passed ? '✅ ' + data.trend.score + '/7' : '✗ ' + data.trend.score + '/7') + '</span></span>'
+        + '<span style="color:var(--color-muted);font-size:11px;">Del máx: <span style="color:' + nearHighColor + ';">' + (data.pct_from_high || 0) + '%</span></span>'
+        + '<span style="color:var(--color-muted);font-size:11px;">Inst: <span style="color:' + instColor + ';">' + instVal + '</span></span>'
+        + '</div>'
         + '</div>'
         + '<div style="text-align:right;">'
         + '<div style="color:var(--color-text);font-size:20px;">$' + data.price.toLocaleString('en-US') + '</div>'
         + '<div style="color:' + chgColor + ';font-size:12px;">' + chgStr + ' hoy</div>'
-        + '<div style="color:var(--color-muted);font-size:11px;margin-top:2px;">' + mktcapStr + ' market cap</div>'
+        + '<div style="color:var(--color-muted);font-size:11px;margin-top:2px;">' + mktcapStr + ' market cap ' + tt('market-cap') + '</div>'
         + '</div>'
         + '</div>'
-        + '<div style="margin-top:1rem;padding-top:1rem;border-top:1px solid var(--color-border);">'
-        + '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">'
-        + '<span style="color:var(--color-muted);font-size:11px;letter-spacing:0.08em;">CAN SLIM SCORE</span>'
-        + '<span style="color:' + scoreColor + ';font-size:18px;font-weight:500;">' + data.canslim_score + '/100</span>'
-        + '</div>'
-        + '<div style="background:var(--color-surface2,#1a1a1a);border-radius:4px;height:8px;">'
-        + '<div style="height:100%;width:' + data.canslim_score + '%;background:' + scoreColor + ';border-radius:4px;transition:width 0.5s;"></div>'
-        + '</div>'
-        + '</div>'
+        + scoreBars
         + '</div>'
         + '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:1rem;margin-bottom:1rem;">'
+        // IBD
         + '<div style="background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius);padding:1rem;">'
-        + '<div style="color:var(--color-accent);font-size:12px;letter-spacing:0.08em;margin-bottom:0.75rem;">IBD RATINGS ' + tt('rs-rating') + '</div>'
+        + '<div style="color:var(--color-accent);font-size:12px;letter-spacing:0.08em;margin-bottom:0.75rem;">IBD RATINGS</div>'
         + ibdRows
         + '</div>'
+        // Trend
         + '<div style="background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius);padding:1rem;">'
         + '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.75rem;">'
         + '<div style="color:var(--color-accent);font-size:12px;letter-spacing:0.08em;">TREND TEMPLATE ' + tt('trend-template') + '</div>'
-        + '<div style="color:' + (data.trend.passed ? 'var(--color-accent)' : '#f23645') + ';font-size:11px;">' + data.trend.score + '/7 ' + (data.trend.passed ? '✓ PASS' : '✗ FAIL') + '</div>'
+        + '<div style="color:' + (data.trend.passed ? 'var(--color-accent)' : '#f23645') + ';font-size:11px;">' + data.trend.score + '/7 ' + (data.trend.passed ? '✓' : '✗') + '</div>'
         + '</div>'
         + trendRows
         + '</div>'
+        // Fundamentales
         + '<div style="background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius);padding:1rem;">'
-        + '<div style="color:var(--color-accent);font-size:12px;letter-spacing:0.08em;margin-bottom:0.75rem;">FUNDAMENTALES</div>'
+        + '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.75rem;">'
+        + '<div style="color:var(--color-accent);font-size:12px;letter-spacing:0.08em;">FUNDAMENTALES</div>'
+        + '<div style="color:' + instColor + ';font-size:10px;">' + instVal + ' inst ' + tt('canslim-i') + '</div>'
+        + '</div>'
         + fundRows
+        + holdersHtml
         + '<div style="margin-top:0.75rem;padding-top:0.75rem;border-top:1px solid var(--color-border);">'
         + '<div style="color:var(--color-muted);font-size:11px;margin-bottom:4px;">RENDIMIENTO</div>'
         + '<div style="display:flex;gap:1rem;font-size:12px;">'
@@ -191,65 +374,128 @@ function renderAnalysis(data) {
         + '</div>'
         + '</div>'
         + '</div>'
+        // Chart
         + '<div style="background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius);padding:1rem;">'
-        + '<div style="color:var(--color-accent);font-size:12px;letter-spacing:0.08em;margin-bottom:0.75rem;">PRECIO — ÚLTIMOS 60 DÍAS</div>'
-        + '<canvas id="canslim-chart" height="80"></canvas>'
+        + '<div style="color:var(--color-accent);font-size:12px;letter-spacing:0.08em;margin-bottom:0.75rem;">PRECIO · MAs 50/200 · ÚLTIMOS 60 DÍAS</div>'
+        + '<div style="position:relative;width:100%;height:220px;overflow:hidden;">'
+        + '<canvas id="canslim-chart"></canvas>'
+        + '</div>'
+        + '</div>'
+        // Botón volver
+        + '<div style="margin-top:0.75rem;">'
+        + '<button onclick="window.__canslimBack()" style="background:transparent;border:1px solid var(--color-border);color:var(--color-muted);border-radius:var(--radius);padding:6px 14px;font-family:var(--font-mono);font-size:11px;cursor:pointer;transition:all .15s;" onmouseover="this.style.borderColor=\'var(--color-accent)\';this.style.color=\'var(--color-accent)\'" onmouseout="this.style.borderColor=\'var(--color-border)\';this.style.color=\'var(--color-muted)\'">← Volver a resultados del scan</button>'
         + '</div>'
         + '</div>';
 }
 
 function renderChart(data) {
-    const script  = document.createElement('script');
-    script.src    = 'https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js';
-    script.onload = function() {
+    // Destroy previous chart if exists
+    if (window._canslimChart) {
+        try { window._canslimChart.destroy(); } catch(_) {}
+        window._canslimChart = null;
+    }
+
+    function buildChart() {
         const ctx = document.getElementById('canslim-chart');
         if (!ctx) return;
         const color = data.chg_pct >= 0 ? '#00ffad' : '#f23645';
-        new Chart(ctx, {
+
+        const datasets = [
+            {
+                label:           'Precio',
+                data:            data.chart.closes,
+                borderColor:     color,
+                backgroundColor: color + '18',
+                borderWidth:     1.5,
+                pointRadius:     0,
+                fill:            true,
+                tension:         0.3,
+                yAxisID:         'y',
+            }
+        ];
+
+        if (data.chart.ma50 && data.chart.ma50.some(v => v !== null)) {
+            datasets.push({
+                label:       'MA50',
+                data:        data.chart.ma50,
+                borderColor: '#ffb800',
+                borderWidth: 1,
+                pointRadius: 0,
+                fill:        false,
+                tension:     0.3,
+                yAxisID:     'y',
+                spanGaps:    true,
+            });
+        }
+        if (data.chart.ma200 && data.chart.ma200.some(v => v !== null)) {
+            datasets.push({
+                label:       'MA200',
+                data:        data.chart.ma200,
+                borderColor: '#888',
+                borderWidth: 1,
+                pointRadius: 0,
+                fill:        false,
+                tension:     0.3,
+                yAxisID:     'y',
+                spanGaps:    true,
+            });
+        }
+
+        window._canslimChart = new Chart(ctx, {
             type: 'line',
-            data: {
-                labels: data.chart.dates,
-                datasets: [{
-                    data:            data.chart.closes,
-                    borderColor:     color,
-                    backgroundColor: color + '18',
-                    borderWidth:     1.5,
-                    pointRadius:     0,
-                    fill:            true,
-                    tension:         0.3,
-                }]
-            },
+            data: { labels: data.chart.dates, datasets },
             options: {
-                responsive: true, maintainAspectRatio: false,
-                plugins: { legend: { display: false } },
+                responsive:          false,
+                maintainAspectRatio: false,
+                animation:           false,
+                plugins: {
+                    legend: {
+                        display: true,
+                        labels:  { color: '#666', font: { size: 10 }, boxWidth: 20 }
+                    }
+                },
                 scales: {
-                    x: { ticks: { color: '#555', font: { size: 10 }, maxTicksLimit: 6 }, grid: { color: 'rgba(255,255,255,0.04)' } },
-                    y: { ticks: { color: '#555', font: { size: 10 } }, grid: { color: 'rgba(255,255,255,0.04)' } }
+                    x: { ticks: { color: '#555', font: { size: 9 }, maxTicksLimit: 6 }, grid: { color: 'rgba(255,255,255,0.04)' } },
+                    y: { ticks: { color: '#555', font: { size: 9 } }, grid: { color: 'rgba(255,255,255,0.04)' } }
                 }
             }
         });
-    };
-    document.head.appendChild(script);
+    }
+
+    if (window.Chart) {
+        buildChart();
+    } else {
+        const script  = document.createElement('script');
+        script.src    = 'https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js';
+        script.onload = buildChart;
+        document.head.appendChild(script);
+    }
 }
+
+// ── SCAN RESULTS ──────────────────────────────────────────────────────────────
 
 function renderScanResults(data) {
     if (!data.candidates || data.candidates.length === 0) {
-        return '<div style="padding:1rem;color:var(--color-muted);font-size:12px;margin-top:1rem;">No se encontraron candidatos con el score mínimo seleccionado.</div>';
+        return '<div style="padding:1rem;color:var(--color-muted);font-size:12px;margin-top:1rem;">No se encontraron candidatos.</div>';
     }
 
-    const header = '<div style="display:grid;grid-template-columns:80px 80px 90px 70px 70px 80px 80px 80px;gap:8px;padding:8px 14px;border-bottom:1px solid var(--color-border);font-size:10px;color:var(--color-muted);letter-spacing:0.05em;">'
-        + '<div>TICKER</div><div>PRECIO</div><div>12M PERF</div><div>RS</div><div>ACC/DIS</div><div>VOL RATIO</div><div>TREND</div><div>SCORE</div>'
+    const cols = 'grid-template-columns:80px 80px 90px 60px 70px 70px 80px 70px 80px';
+
+    const header = '<div style="display:grid;' + cols + ';gap:8px;padding:8px 14px;border-bottom:1px solid var(--color-border);font-size:10px;color:var(--color-muted);letter-spacing:0.05em;">'
+        + '<div>TICKER</div><div>PRECIO</div><div>12M PERF</div><div>RS</div><div>ACC/DIS</div><div>NEAR HIGH</div><div>VOL RATIO</div><div>TREND</div><div>SCORE</div>'
         + '</div>';
 
     const rows = data.candidates.map(c => {
         const perfColor  = c.perf_12m >= 0 ? 'var(--color-accent)' : '#f23645';
         const scoreColor = c.score >= 70 ? 'var(--color-accent)' : c.score >= 50 ? '#ffb800' : '#f23645';
-        return '<div style="display:grid;grid-template-columns:80px 80px 90px 70px 70px 80px 80px 80px;gap:8px;padding:9px 14px;border-bottom:1px solid var(--color-border);font-size:12px;align-items:center;cursor:pointer;" class="scan-row" data-ticker="' + c.ticker + '">'
-            + '<div onclick="goToResearch(\'' + c.ticker + '\')" class="ticker-link" style="color:var(--color-accent);font-weight:500;">' + c.ticker + '</div>'
+        const nearColor  = c.near_new_high ? 'var(--color-accent)' : '#ffb800';
+        return '<div style="display:grid;' + cols + ';gap:8px;padding:9px 14px;border-bottom:1px solid var(--color-border);font-size:12px;align-items:center;cursor:pointer;" class="scan-row" data-ticker="' + c.ticker + '">'
+            + '<div style="color:var(--color-accent);font-weight:500;">' + c.ticker + '</div>'
             + '<div style="color:var(--color-text);">$' + c.price.toLocaleString('en-US') + '</div>'
             + '<div style="color:' + perfColor + ';">' + (c.perf_12m >= 0 ? '+' : '') + c.perf_12m.toFixed(1) + '%</div>'
             + '<div style="color:' + ratingColor(c.rs, 80, 60) + ';">' + c.rs + '</div>'
             + '<div style="color:' + gradeColor(c.acc_dis) + ';">' + c.acc_dis + '</div>'
+            + '<div style="color:' + nearColor + ';">' + (c.near_new_high ? '✓' : c.pct_from_high + '%') + '</div>'
             + '<div style="color:' + (c.vol_ratio >= 1.5 ? 'var(--color-accent)' : 'var(--color-muted)') + ';">' + c.vol_ratio.toFixed(1) + 'x</div>'
             + '<div style="color:' + (c.trend ? 'var(--color-accent)' : '#f23645') + ';">' + (c.trend ? '✓' : '✗') + '</div>'
             + '<div style="color:' + scoreColor + ';font-weight:500;">' + c.score + '</div>'
@@ -260,17 +506,17 @@ function renderScanResults(data) {
         + '<span>Escaneados: <b style="color:var(--color-text);">' + data.scanned + '</b></span>'
         + '<span>Candidatos: <b style="color:var(--color-accent);">' + data.total + '</b></span>'
         + '<span>Mostrando: <b style="color:var(--color-text);">' + data.candidates.length + '</b></span>'
-        + '<span style="margin-left:auto;">Actualizado: ' + data.timestamp + '</span>'
+        + '<span style="margin-left:auto;">' + data.timestamp + '</span>'
         + '</div>';
 
     const html = '<div style="margin-top:1.5rem;background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius);overflow:hidden;">'
-        + '<div style="padding:10px 14px;border-bottom:1px solid var(--color-border);color:var(--color-accent);font-size:13px;letter-spacing:0.08em;">RESULTADOS DEL SCAN</div>'
-        + summary + header + rows
+        + '<div style="padding:10px 14px;border-bottom:1px solid var(--color-border);color:var(--color-accent);font-size:13px;letter-spacing:0.08em;">RESULTADOS — RS REAL (PERCENTIL vs UNIVERSO)</div>'
+        + summary + header + '<div style="max-height:600px;overflow-y:auto;">' + rows + '</div>'
         + '</div>';
 
     setTimeout(() => {
         document.querySelectorAll('.scan-row').forEach(row => {
-            row.addEventListener('mouseenter', () => row.style.background = 'var(--color-surface2,#1a1a1a)');
+            row.addEventListener('mouseenter', () => row.style.background = 'rgba(255,255,255,0.02)');
             row.addEventListener('mouseleave', () => row.style.background = 'transparent');
             row.addEventListener('click', () => {
                 const ticker = row.getAttribute('data-ticker');
@@ -283,6 +529,8 @@ function renderScanResults(data) {
 
     return html;
 }
+
+// ── UTILS ─────────────────────────────────────────────────────────────────────
 
 function ratingColor(val, high, mid) {
     if (val >= high) return 'var(--color-accent)';

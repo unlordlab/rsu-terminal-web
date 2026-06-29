@@ -1,4 +1,8 @@
-const WS_URL = 'ws://localhost:8000/ws';
+// URL dinámica basada en el host actual — funciona en localhost Y en producción
+// sin ningún cambio de configuración. Usa wss:// automáticamente si la página
+// se sirve sobre HTTPS (Hetzner con Nginx + certificado).
+const WS_PROTOCOL = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+const WS_URL      = WS_PROTOCOL + '//' + window.location.host + '/ws';
 const RECONNECT_DELAY = 5000;
 
 let socket     = null;

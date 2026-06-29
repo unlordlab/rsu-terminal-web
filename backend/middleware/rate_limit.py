@@ -15,6 +15,7 @@ HEAVY_ENDPOINTS = {
     "/api/v1/btc-stratum/backtest",
     "/api/v1/canslim/scan",
     "/api/v1/rsrw/scan",
+    "/api/v1/algoritmo/backtest",
 }
 
 def _get_key(request: Request) -> str:

@@ -36,30 +36,17 @@ def _get_quick_prices() -> list:
 
 def _get_cartera_prices() -> list:
     try:
+        from services.cartera_service import get_cartera, fetch_live_prices
         data     = get_cartera()
         abiertas = data.get('abiertas', [])
         if not abiertas:
             return []
         tickers = list(dict.fromkeys([p['ticker'] for p in abiertas]))[:30]
-        result  = []
-        for ticker in tickers:
-            try:
-                t    = yf.Ticker(ticker)
-                hist = t.history(period="2d", interval="1d")
-                if len(hist) < 2: continue
-                prev = float(hist['Close'].iloc[-2])
-                last = float(hist['Close'].iloc[-1])
-                chg  = (last - prev) / prev * 100
-                result.append({
-                    "ticker": ticker,
-                    "price":  round(last, 2),
-                    "chg":    round(chg, 2),
-                })
-            except Exception:
-                continue
-        return result
+        prices  = fetch_live_prices(tickers)
+        return list(prices.values())
     except Exception:
         return []
+
 
 async def _build_payload() -> dict:
     loop         = asyncio.get_event_loop()

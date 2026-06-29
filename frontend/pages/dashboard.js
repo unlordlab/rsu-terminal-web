@@ -1,4 +1,5 @@
 import { api } from '/core/api.js';
+import { errorMessage } from '/core/ui.js';
 
 export async function render(container) {
     container.innerHTML = `
@@ -6,6 +7,7 @@ export async function render(container) {
             <div style="color:var(--color-accent);font-size:18px;letter-spacing:0.1em;text-shadow:var(--glow-text);margin-bottom:4px;">DASHBOARD</div>
             <div style="color:var(--color-muted);font-size:12px;">Bienvenido a RSU Terminal v2.0</div>
         </div>
+        <div id="daily-quote" style="margin-bottom:1.5rem;"></div>
         <div id="algoritmo-widget" style="margin-bottom:1.5rem;"></div>
         <div id="health-card" style="
             background: var(--color-surface);
@@ -43,6 +45,7 @@ export async function render(container) {
     });
 
     loadAlgoritmo(container.querySelector('#algoritmo-widget'));
+    renderDailyQuote(container.querySelector('#daily-quote'));
 
     try {
         const health = await fetch('/health').then(r => r.json());
@@ -58,6 +61,48 @@ export async function render(container) {
             card.innerHTML = '<span style="color:#f23645;">✗ SERVIDOR OFFLINE</span>';
         }
     }
+}
+
+// ── FRASE DEL DÍA ────────────────────────────────────────────────────────────
+// Adaptado del header de la antigua RSU Terminal (Streamlit). La frase se fija
+// una vez por sesión de navegador (sessionStorage), igual que hacía session_state.
+
+const DAILY_QUOTES = [
+    ["En un mercado alcista, las malas noticias se ignoran y las buenas noticias se celebran; en un mercado bajista, las buenas noticias se ignoran y las malas noticias se exageran.", ""],
+    ["Hay una guerra de clases, de acuerdo, pero es mi clase, la clase rica, la que está haciendo la guerra, y la estamos ganando.", "Warren Buffett"],
+    ["El mercado de valores es un mecanismo para transferir dinero de los impacientes a los pacientes.", "Warren Buffett"],
+    ["El mercado no te gana; te ganas tú mismo al no poder controlar tus emociones.", "Jesse Livermore"],
+    ["Las manos fuertes no compran en la euforia, compran cuando las manos débiles ya no pueden soportar más dolor.", ""],
+    ["Cuando el último escéptico se vuelve alcista, es hora de vender.", ""],
+    ["El mercado puede permanecer irracional más tiempo del que tú puedes permanecer solvente.", "John Maynard Keynes"],
+    ["El éxito en el trading consiste en comprarle a los pesimistas y venderle a los optimistas.", ""],
+    ["La bolsa es un lugar donde las crisis se preparan... es el árbol donde los pequeños inversores son sacudidos para que sus ahorros caigan en los bolsillos de los grandes especuladores.", "Friedrich Engels"],
+    ["He estado especulando... en acciones americanas, pero sobre todo en las inglesas... No requiere mucho tiempo y uno puede correr algún riesgo para quitarle el dinero a sus enemigos.", "Karl Marx"],
+];
+
+function renderDailyQuote(el) {
+    if (!el) return;
+
+    let stored = null;
+    try { stored = JSON.parse(sessionStorage.getItem('rsu_daily_quote') || 'null'); } catch {}
+
+    let quote = stored;
+    if (!quote || !Array.isArray(quote) || quote.length !== 2) {
+        quote = DAILY_QUOTES[Math.floor(Math.random() * DAILY_QUOTES.length)];
+        try { sessionStorage.setItem('rsu_daily_quote', JSON.stringify(quote)); } catch {}
+    }
+
+    const [text, author] = quote;
+    const attribution = author ? ' — ' + author : '';
+
+    el.innerHTML = '<div style="background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius);padding:14px 20px;text-align:center;">'
+        + '<div style="display:inline-block;font-family:var(--font-mono);font-size:12px;color:var(--color-muted);'
+        + 'letter-spacing:0.02em;font-style:italic;line-height:1.6;max-width:760px;'
+        + 'border-left:2px solid var(--color-accent);border-right:2px solid var(--color-accent);'
+        + 'padding:4px 16px;">'
+        + '\u201C' + text + '\u201D' + attribution
+        + '</div>'
+        + '</div>';
 }
 
 async function loadAlgoritmo(el) {
@@ -172,7 +217,7 @@ async function loadAlgoritmo(el) {
         renderAlgoChart(chartId, data.chart, data.color);
 
     } catch(e) {
-        el.innerHTML = '<div style="background:var(--color-surface);border:1px solid #f2364544;border-radius:var(--radius);padding:1rem 1.25rem;color:#f23645;font-size:12px;">✗ Error: ' + e.message + '</div>';
+        el.innerHTML = '<div style="background:var(--color-surface);border:1px solid #f2364544;border-radius:var(--radius);">' + errorMessage('Error: ' + e.message, {padding: '1rem 1.25rem'}) + '</div>';
     }
 }
 

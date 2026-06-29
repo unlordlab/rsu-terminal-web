@@ -1,6 +1,9 @@
+import { tt } from '/components/tooltip.js';
+import { errorMessage } from '/core/ui.js';
+
 export async function render(container) {
     container.innerHTML = '<div style="margin-bottom:1.5rem;">'
-        + '<div style="color:var(--color-accent);font-size:18px;letter-spacing:0.1em;text-shadow:var(--glow-text);margin-bottom:4px;">RSU ALGORITMO</div>'
+        + '<div style="color:var(--color-accent);font-size:18px;letter-spacing:0.1em;text-shadow:var(--glow-text);margin-bottom:4px;">RSU ALGORITMO ' + tt('rsu-algoritmo') + '</div>'
         + '<div style="color:var(--color-muted);font-size:12px;">Detector de fondos · Multi-factor V2.1 · SPY</div>'
         + '</div>'
         + '<div id="algo-content"><div style="color:var(--color-muted);font-size:12px;padding:1rem;">Cargando...</div></div>';
@@ -124,13 +127,106 @@ export async function render(container) {
             + '<canvas id="' + chartId + '"></canvas>'
             + '</div>'
             + '<div style="color:var(--color-muted);font-size:10px;margin-top:8px;text-align:right;">Actualizado: ' + data.timestamp + ' · Ventana de condiciones: 10 días</div>'
+            + '</div>'
+
+            // Fila 4: backtest
+            + '<div id="backtest-section" style="background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius);padding:1.25rem;margin-top:1rem;">'
+            + '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem;">'
+            + '<div style="color:var(--color-accent);font-size:12px;letter-spacing:0.08em;">BACKTEST · ¿TIENE VENTAJA REAL? ' + tt('algoritmo-backtest') + '</div>'
+            + '<button id="run-backtest-btn" style="background:var(--color-bg,#0a0a0a);color:var(--color-accent);border:1px solid var(--color-accent);border-radius:var(--radius);padding:6px 14px;font-family:var(--font-mono);font-size:11px;cursor:pointer;letter-spacing:0.05em;">EJECUTAR BACKTEST (10 AÑOS)</button>'
+            + '</div>'
+            + '<div id="backtest-content" style="color:var(--color-muted);font-size:12px;">Pulsa el botón para recalcular el algoritmo sobre 10 años de histórico de SPY y comparar contra el rendimiento base del índice. Puede tardar 10-20 segundos.</div>'
             + '</div>';
 
         renderChart(chartId, data.chart, data.color);
 
+        container.querySelector('#run-backtest-btn').addEventListener('click', () => runBacktest(container));
+
     } catch(e) {
-        el.innerHTML = '<div style="padding:1rem;color:#f23645;font-size:12px;">✗ ' + e.message + '</div>';
+        el.innerHTML = errorMessage(e.message);
     }
+}
+
+async function runBacktest(container) {
+    const btn     = container.querySelector('#run-backtest-btn');
+    const content = container.querySelector('#backtest-content');
+    btn.disabled  = true;
+    btn.textContent = 'CALCULANDO...';
+    content.innerHTML = '<div style="color:var(--color-muted);">Recalculando el algoritmo día a día sobre 10 años de histórico — esto puede tardar 10-20 segundos...</div>';
+
+    try {
+        const token = sessionStorage.getItem('rsu_token');
+        const res   = await fetch('/api/v1/algoritmo/backtest?years=10', {
+            headers: token ? { 'Authorization': 'Bearer ' + token } : {}
+        });
+        const data  = await res.json();
+        if (!data.ok) throw new Error(data.error || 'Sin datos');
+
+        content.innerHTML = renderBacktestResults(data);
+
+    } catch(e) {
+        content.innerHTML = errorMessage(e.message);
+    } finally {
+        btn.disabled = false;
+        btn.textContent = 'RECALCULAR';
+    }
+}
+
+function renderBacktestResults(data) {
+    const horizontes = [
+        { key: 'd5',  label: '5 días' },
+        { key: 'd10', label: '10 días' },
+        { key: 'd20', label: '20 días' },
+        { key: 'd60', label: '60 días' },
+    ];
+
+    const statsRows = horizontes.map(h => {
+        const s = data.stats[h.key];
+        if (!s) return '';
+        const ventajaColor = s.ventaja_pp > 0 ? 'var(--color-accent)' : '#f23645';
+        const ventajaStr   = (s.ventaja_pp > 0 ? '+' : '') + s.ventaja_pp + ' pp';
+        return '<div style="display:grid;grid-template-columns:80px 1fr 1fr 1fr 1fr;gap:10px;padding:10px 0;border-bottom:1px solid var(--color-border);align-items:center;font-size:12px;">'
+            + '<div style="color:var(--color-text);font-weight:500;">' + h.label + '</div>'
+            + '<div><span style="color:var(--color-muted);font-size:10px;">Señal: </span><span style="color:' + (s.retorno_medio_senal >= 0 ? 'var(--color-accent)' : '#f23645') + ';">' + (s.retorno_medio_senal >= 0 ? '+' : '') + s.retorno_medio_senal + '%</span></div>'
+            + '<div><span style="color:var(--color-muted);font-size:10px;">Baseline SPY: </span><span style="color:var(--color-text);">' + (s.retorno_baseline >= 0 ? '+' : '') + s.retorno_baseline + '%</span></div>'
+            + '<div><span style="color:var(--color-muted);font-size:10px;">Ventaja: </span><span style="color:' + ventajaColor + ';font-weight:600;">' + ventajaStr + '</span></div>'
+            + '<div><span style="color:var(--color-muted);font-size:10px;">Éxito: </span><span style="color:var(--color-text);">' + s.tasa_exito_pct + '% (' + s.n_senales + ')</span></div>'
+            + '</div>';
+    }).join('');
+
+    const senalesHtml = data.senales.length === 0
+        ? '<div style="color:var(--color-muted);font-size:12px;padding:1rem 0;">No se detectaron señales VERDE en el periodo analizado.</div>'
+        : '<div style="max-height:300px;overflow-y:auto;margin-top:0.5rem;">'
+          + '<div style="display:grid;grid-template-columns:90px 70px 60px 60px 60px 60px;gap:8px;padding:6px 0;border-bottom:1px solid var(--color-border);font-size:10px;color:var(--color-muted);position:sticky;top:0;background:var(--color-surface);">'
+          + '<div>FECHA</div><div>SCORE</div><div>+5d</div><div>+10d</div><div>+20d</div><div>+60d</div>'
+          + '</div>'
+          + data.senales.map(s => {
+              const r = s.retornos;
+              const fmt = v => v == null ? '<span style="color:#555;">—</span>' : '<span style="color:' + (v >= 0 ? 'var(--color-accent)' : '#f23645') + ';">' + (v >= 0 ? '+' : '') + v + '%</span>';
+              return '<div style="display:grid;grid-template-columns:90px 70px 60px 60px 60px 60px;gap:8px;padding:6px 0;border-bottom:1px solid var(--color-border);font-size:11px;align-items:center;">'
+                  + '<div style="color:var(--color-text);">' + s.fecha + '</div>'
+                  + '<div style="color:var(--color-muted);">' + s.score + '/100</div>'
+                  + '<div>' + fmt(r.d5) + '</div><div>' + fmt(r.d10) + '</div><div>' + fmt(r.d20) + '</div><div>' + fmt(r.d60) + '</div>'
+                  + '</div>';
+          }).join('')
+          + '</div>';
+
+    return '<div style="margin-bottom:1rem;font-size:11px;color:var(--color-muted);">'
+        + 'Periodo: ' + data.periodo_inicio + ' → ' + data.periodo_fin + ' (' + data.total_dias + ' días) · '
+        + '<span style="color:var(--color-accent);">' + data.n_senales + ' señales VERDE detectadas</span>'
+        + '</div>'
+
+        + '<div style="display:grid;grid-template-columns:80px 1fr 1fr 1fr 1fr;gap:10px;padding:6px 0;border-bottom:1px solid var(--color-border);font-size:10px;color:var(--color-muted);">'
+        + '<div>HORIZONTE</div><div>RETORNO SEÑAL</div><div>BASELINE SPY</div><div>VENTAJA</div><div>TASA ÉXITO</div>'
+        + '</div>'
+        + statsRows
+
+        + '<div style="margin-top:1rem;color:var(--color-muted);font-size:11px;letter-spacing:0.05em;">HISTORIAL DE SEÑALES</div>'
+        + senalesHtml
+
+        + '<div style="margin-top:1rem;padding:0.75rem;background:rgba(255,184,0,0.05);border:1px solid rgba(255,184,0,0.15);border-radius:var(--radius);font-size:10px;color:#ffb800;">'
+        + '⚠ ' + data.metodologia
+        + '</div>';
 }
 
 function renderChart(chartId, chart, color) {

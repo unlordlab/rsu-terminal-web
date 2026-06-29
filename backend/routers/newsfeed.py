@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, Query
 from typing import Optional
 from auth import verify_token
-from services.newsfeed_service import get_newsfeed, get_newsfeed_prices
+from services.newsfeed_service import get_newsfeed, get_newsfeed_prices, get_trump_feed
 
 router = APIRouter(prefix="/api/v1/newsfeed", tags=["newsfeed"])
 
@@ -17,3 +17,10 @@ async def newsfeed(
 @router.get("/prices")
 async def prices(user=Depends(verify_token)):
     return get_newsfeed_prices()
+
+@router.get("/trump")
+async def trump_feed(
+    limit: int = Query(15, ge=1, le=30),
+    user=Depends(verify_token)
+):
+    return get_trump_feed(limit=limit)

@@ -10,7 +10,7 @@ async def rsrw_gist(user=Depends(verify_token)):
 
 @router.get("/scan")
 async def rsrw_scan(
-    max_tickers: int = Query(150, ge=10, le=500),
+    max_tickers: int = Query(500, ge=10, le=510),
     user=Depends(verify_token)
 ):
     return get_rsrw_scan(max_tickers)

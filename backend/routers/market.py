@@ -5,11 +5,33 @@ from services.market_service import (
     get_commodities, get_sectors,
     get_economic_calendar, get_vix_term_structure,
     get_reddit_pulse, get_nightly_briefing,
-    get_credit_spreads
+    get_credit_spreads, get_market_breadth, get_advance_decline,
+    get_fed_macro, get_vix_levels, get_crypto_prices, get_crypto_fear_greed,
+    get_liquidity
 )
 from services.earnings_service import get_earnings_calendar, get_earnings_ticker
 
 router = APIRouter(prefix="/api/v1/market", tags=["market"])
+
+@router.get("/vix-levels")
+async def vix_levels(user=Depends(verify_token)):
+    return get_vix_levels()
+
+@router.get("/crypto")
+async def crypto(user=Depends(verify_token)):
+    return get_crypto_prices()
+
+@router.get("/crypto-fear-greed")
+async def crypto_fear_greed(user=Depends(verify_token)):
+    return get_crypto_fear_greed()
+
+@router.get("/breadth")
+async def breadth(user=Depends(verify_token)):
+    return get_market_breadth()
+
+@router.get("/ad-line")
+async def ad_line(user=Depends(verify_token)):
+    return get_advance_decline()
 
 @router.get("/indices")
 async def indices(user=Depends(verify_token)):
@@ -60,6 +82,9 @@ async def credit_spreads(user=Depends(verify_token)):
     return get_credit_spreads()
 
 @router.get("/fed-macro")
-async def fed_macro():
-    from services.market_service import get_fed_macro
+async def fed_macro(user=Depends(verify_token)):
     return get_fed_macro()
+
+@router.get("/liquidity")
+async def liquidity(user=Depends(verify_token)):
+    return get_liquidity()

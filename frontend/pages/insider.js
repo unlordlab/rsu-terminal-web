@@ -1,4 +1,5 @@
 import { tt } from '/components/tooltip.js';
+import { errorMessage } from '/core/ui.js';
 
 export async function render(container) {
     container.innerHTML = pageShell();
@@ -203,4 +204,4 @@ function fmtVal(val) {
 }
 
 function loading() { return '<div style="padding:1rem;color:var(--color-muted);font-size:12px;">Cargando datos SEC EDGAR...</div>'; }
-function error(msg) { return '<div style="padding:1rem;color:#f23645;font-size:12px;">✗ ' + msg + '</div>'; }
+function error(msg) { return errorMessage(msg); }

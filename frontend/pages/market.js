@@ -36,10 +36,27 @@ export async function render(container) {
         + '<div id="widget-sectors" style="display:flex;flex-direction:column;"></div>'
         + '</div>'
 
+        // Fila 2b — Market Breadth + AD Line
+        + '<div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem;margin-bottom:1rem;">'
+        + '<div id="widget-breadth" style="display:flex;flex-direction:column;height:440px;"></div>'
+        + '<div id="widget-adline"  style="display:flex;flex-direction:column;height:440px;"></div>'
+        + '</div>'
+
+        // Fila 2c — VIX Niveles + Cripto
+        + '<div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem;margin-bottom:1rem;">'
+        + '<div id="widget-vix-levels" style="display:flex;flex-direction:column;height:400px;"></div>'
+        + '<div id="widget-crypto"     style="display:flex;flex-direction:column;height:400px;"></div>'
+        + '</div>'
+
         // Fila 3 — 2 columnas altura fija con scroll
         + '<div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem;margin-bottom:1rem;">'
         + '<div id="widget-spreads" style="display:flex;flex-direction:column;max-height:480px;"></div>'
         + '<div id="widget-reddit"  style="display:flex;flex-direction:column;max-height:480px;"></div>'
+        + '</div>'
+
+        // Fila 3b — Liquidez (Net Liquidity + M2 vs SPX)
+        + '<div style="margin-bottom:1rem;">'
+        + '<div id="widget-liquidity" style="display:flex;flex-direction:column;height:520px;"></div>'
         + '</div>'
 
         // Fila 4 — Fed & Macro
@@ -60,8 +77,13 @@ export async function render(container) {
     loadEarnings(container.querySelector('#widget-earnings'));
     loadSectors(container.querySelector('#widget-sectors'), '1d');
     loadVix(container.querySelector('#widget-vix'));
+    loadBreadth(container.querySelector('#widget-breadth'));
+    loadAdLine(container.querySelector('#widget-adline'));
+    loadVixLevels(container.querySelector('#widget-vix-levels'));
+    loadCrypto(container.querySelector('#widget-crypto'));
     loadSpreads(container.querySelector('#widget-spreads'));
     loadReddit(container.querySelector('#widget-reddit'));
+    loadLiquidity(container.querySelector('#widget-liquidity'));
     loadFedMacro(container.querySelector('#widget-fed-macro'));
     loadCalendar(container.querySelector('#widget-calendar'));
 
@@ -142,7 +164,7 @@ async function loadIndices(el) {
                 arrow + ' ' + Math.abs(idx.pct).toFixed(2) + '%',
                 color);
         }).join('');
-        el.innerHTML = widgetShell('INDICES ' + tt('ad-line'), 'Mercados principales', rows, data.timestamp);
+        el.innerHTML = widgetShell('INDICES ' + tt('market-indices'), 'Mercados principales', rows, data.timestamp);
     } catch(e) {
         el.innerHTML = widgetShell('INDICES', 'Mercados principales', widgetError(e.message));
     }
@@ -333,7 +355,7 @@ async function loadEarningsSurprise(ticker, container) {
         detail.innerHTML = html;
 
     } catch(e) {
-        detail.innerHTML = '<div style="padding:0.75rem;color:#f23645;font-size:11px;">✗ ' + e.message + '</div>';
+        detail.innerHTML = widgetError(e.message);
     }
 }
 
@@ -488,6 +510,328 @@ async function loadVix(el) {
     }
 }
 
+async function loadBreadth(el) {
+    el.innerHTML = widgetShell('MARKET BREADTH ' + tt('market-breadth'), 'SMA50/200 · RSI · McClellan · % sectores', loading());
+    try {
+        const res  = await fetch('/api/v1/market/breadth', { headers: authHeader() });
+        const data = await res.json();
+        if (!data.ok && data.price == null) throw new Error(data.error || 'Sin datos');
+
+        // Guarda defensiva: _sanitize_breadth() en el backend convierte NaN/Inf en null
+        // incluso cuando ok=True (p.ej. si rolling(50).mean() produce NaN por huecos en
+        // el histórico de yfinance), así que cualquiera de estos campos puede llegar null
+        // sin que la guarda anterior lo capture. Sin esto, .toFixed() sobre null rompe el widget.
+        if (data.price == null || data.sma50 == null || data.rsi == null
+            || data.mcclellan == null || data.pct_above_sma50 == null) {
+            throw new Error('Datos incompletos de mercado (posible hueco en histórico). Reintentando en el próximo ciclo.');
+        }
+
+        const trendColor    = data.trend === 'ALCISTA' ? '#00ffad' : '#f23645';
+        const strengthColor = data.strength === 'FUERTE' ? '#00ffad' : '#ff9800';
+        const sma50Color    = data.above_sma50 ? '#00ffad' : '#f23645';
+        const sma200Color   = data.above_sma200 ? '#00ffad' : '#f23645';
+        const goldenColor   = data.golden_cross ? '#00ffad' : '#f23645';
+        const goldenText    = data.golden_cross ? 'GOLDEN CROSS ✓' : 'DEATH CROSS ✗';
+        const rsi           = data.rsi;
+        const rsiColor      = rsi > 70 ? '#f23645' : (rsi < 30 ? '#00ffad' : '#ff9800');
+        const mcColor       = data.mcclellan > 0 ? '#00ffad' : '#f23645';
+        const pctColor      = data.pct_above_sma50 >= 60 ? '#00ffad' : (data.pct_above_sma50 <= 40 ? '#f23645' : '#ff9800');
+        const sma200Str     = data.sma200 == null ? 'N/D (insuf. datos)' : '$' + data.sma200.toFixed(2);
+        const sma200ColorUse= data.sma200 == null ? 'var(--color-muted)' : sma200Color;
+
+        const metricBox = (label, valueHtml) =>
+            '<div style="background:var(--color-bg);border:1px solid var(--color-border);border-radius:6px;padding:8px 12px;margin-bottom:6px;display:flex;justify-content:space-between;align-items:center;">'
+            + '<span style="color:var(--color-muted);font-size:11px;">' + label + '</span>'
+            + '<span style="font-size:12px;font-weight:600;">' + valueHtml + '</span>'
+            + '</div>';
+
+        const content = '<div style="padding:12px 14px;">'
+            + metricBox('Precio SPY', '<span style="color:var(--color-text);cursor:pointer;" onmouseover="this.style.textDecoration=\'underline\'" onmouseout="this.style.textDecoration=\'none\'" onclick="window.__navigate(\'/research?ticker=SPY\')">$' + data.price.toFixed(2) + '</span>')
+            + metricBox('SMA 50', '<span style="color:' + sma50Color + ';">$' + data.sma50.toFixed(2) + '</span>')
+            + metricBox('SMA 200', '<span style="color:' + sma200ColorUse + ';">' + sma200Str + '</span>')
+            + '<div style="background:' + goldenColor + '11;border:1px solid ' + goldenColor + '44;border-radius:6px;padding:8px 12px;margin-bottom:6px;display:flex;justify-content:space-between;align-items:center;">'
+            + '<span style="color:var(--color-muted);font-size:11px;">Señal</span>'
+            + '<span style="color:' + goldenColor + ';font-size:12px;font-weight:600;">' + goldenText + '</span>'
+            + '</div>'
+
+            // McClellan
+            + '<div style="background:var(--color-bg);border:1px solid var(--color-border);border-radius:6px;padding:8px 12px;margin-bottom:6px;">'
+            + '<div style="display:flex;justify-content:space-between;margin-bottom:4px;">'
+            + '<span style="color:var(--color-muted);font-size:11px;">Oscilador McClellan ' + tt('mcclellan-oscillator') + '</span>'
+            + '<span style="color:' + mcColor + ';font-size:11px;font-weight:600;">' + (data.mcclellan >= 0 ? '+' : '') + data.mcclellan.toFixed(1) + ' · ' + data.mcclellan_state + '</span>'
+            + '</div>'
+            + '<div style="width:100%;height:8px;background:var(--color-border);border-radius:4px;overflow:hidden;">'
+            + '<div style="height:100%;width:' + Math.min(Math.abs(data.mcclellan)/50*100, 100) + '%;background:' + mcColor + ';"></div>'
+            + '</div>'
+            + '<div style="font-size:9px;color:var(--color-muted);margin-top:3px;">Señal: &gt;+50 sobrecompra · &lt;-50 sobreventa</div>'
+            + '</div>'
+
+            // % sectores sobre SMA50
+            + '<div style="background:var(--color-bg);border:1px solid var(--color-border);border-radius:6px;padding:8px 12px;margin-bottom:10px;">'
+            + '<div style="display:flex;justify-content:space-between;margin-bottom:4px;">'
+            + '<span style="color:var(--color-muted);font-size:11px;">% Sectores S&P sobre SMA50</span>'
+            + '<span style="color:' + pctColor + ';font-size:12px;font-weight:600;">' + data.pct_above_sma50.toFixed(0) + '%</span>'
+            + '</div>'
+            + '<div style="width:100%;height:8px;background:var(--color-border);border-radius:4px;overflow:hidden;">'
+            + '<div style="height:100%;width:' + data.pct_above_sma50 + '%;background:' + pctColor + ';"></div>'
+            + '</div>'
+            + '<div style="font-size:9px;color:var(--color-muted);margin-top:3px;">' + data.sectors_checked + ' sectores XL evaluados · clic en RS/RW para detalle sectorial</div>'
+            + '</div>'
+
+            // RSI gauge
+            + '<div style="margin-bottom:4px;">'
+            + '<div style="display:flex;justify-content:space-between;margin-bottom:4px;">'
+            + '<span style="color:var(--color-muted);font-size:11px;">RSI (14)</span>'
+            + '<span style="color:' + rsiColor + ';font-size:11px;font-weight:600;">' + rsi.toFixed(1) + ' — ' + data.rsi_state + '</span>'
+            + '</div>'
+            + '<div style="width:100%;height:10px;border-radius:5px;background:linear-gradient(to right, #00ffad 0%, #ff9800 50%, #f23645 100%);position:relative;">'
+            + '<div style="position:absolute;top:-3px;left:' + Math.min(rsi,100) + '%;width:3px;height:16px;background:#fff;border-radius:2px;transform:translateX(-50%);"></div>'
+            + '</div>'
+            + '<div style="display:flex;justify-content:space-between;font-size:8px;color:var(--color-muted);margin-top:2px;"><span>0</span><span>30</span><span>50</span><span>70</span><span>100</span></div>'
+            + '</div>'
+
+            + '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:10px;">'
+            + '<div style="background:var(--color-bg);border:1px solid var(--color-border);border-radius:6px;padding:8px;text-align:center;">'
+            + '<div style="color:var(--color-muted);font-size:10px;">Tendencia</div>'
+            + '<div style="color:' + trendColor + ';font-size:12px;font-weight:600;">' + data.trend + '</div>'
+            + '</div>'
+            + '<div style="background:var(--color-bg);border:1px solid var(--color-border);border-radius:6px;padding:8px;text-align:center;">'
+            + '<div style="color:var(--color-muted);font-size:10px;">Fuerza</div>'
+            + '<div style="color:' + strengthColor + ';font-size:12px;font-weight:600;">' + data.strength + '</div>'
+            + '</div>'
+            + '</div>'
+            + '</div>';
+
+        el.innerHTML = widgetShell('MARKET BREADTH ' + tt('market-breadth'), 'SMA50/200 · RSI · McClellan · % sectores', content, data.timestamp);
+    } catch(e) {
+        el.innerHTML = widgetShell('MARKET BREADTH', 'SMA50/200 · RSI · McClellan · % sectores', widgetError(e.message));
+    }
+}
+
+async function loadAdLine(el) {
+    el.innerHTML = widgetShell('AMPLITUD: LÍNEA A/D ' + tt('ad-line'), 'Advance/Decline NYSE', loading());
+    try {
+        const res  = await fetch('/api/v1/market/ad-line', { headers: authHeader() });
+        const data = await res.json();
+        if (!data.ok) throw new Error('Sin datos');
+
+        const isReal      = data.real_data;
+        const badgeText    = isReal ? '[NYSE REAL]' : '[PROXY SPY]';
+        const badgeColor   = isReal ? '#00ffad' : '#ff9800';
+        const spyColor     = data.spy_change >= 0 ? '#00ffad' : '#f23645';
+        const netColor     = data.current_net >= 0 ? '#00ffad' : '#f23645';
+        const netArrow     = data.current_net >= 0 ? '▲' : '▼';
+        const history      = data.history || [];
+
+        const pill = (label, valueHtml) =>
+            '<span style="display:inline-flex;align-items:center;gap:4px;background:var(--color-bg);border:1px solid var(--color-border);border-radius:4px;padding:3px 8px;font-size:10px;font-family:var(--font-mono);margin-right:6px;">'
+            + label + ' ' + valueHtml + '</span>';
+
+        const chartId = 'ad-chart-' + Date.now();
+
+        const content = '<div style="padding:12px 14px;">'
+            + '<div style="display:flex;align-items:center;gap:6px;margin-bottom:10px;">'
+            + '<span style="font-size:10px;color:' + badgeColor + ';font-family:var(--font-mono);">' + badgeText + '</span>'
+            + '</div>'
+            + '<div style="margin-bottom:10px;">'
+            + pill('S&amp;P', '<span style="color:' + spyColor + ';font-weight:600;cursor:pointer;" onmouseover="this.style.textDecoration=\'underline\'" onmouseout="this.style.textDecoration=\'none\'" onclick="window.__navigate(\'/research?ticker=SPY\')">' + data.spy_current.toLocaleString('en-US') + ' (' + (data.spy_change >= 0 ? '+' : '') + data.spy_change.toFixed(2) + ')</span>')
+            + pill('AVANZAN', '<span style="color:#00ffad;font-weight:600;">▲' + data.current_adv.toLocaleString('en-US') + '</span>')
+            + pill('DECLINAN', '<span style="color:#f23645;font-weight:600;">▼' + data.current_dec.toLocaleString('en-US') + '</span>')
+            + pill('NETO', '<span style="color:' + netColor + ';font-weight:600;">' + netArrow + (data.current_net >= 0 ? '+' : '') + data.current_net.toLocaleString('en-US') + '</span>')
+            + '</div>'
+            + '<div style="position:relative;height:240px;"><canvas id="' + chartId + '"></canvas></div>'
+            + '<div style="font-size:9px;color:var(--color-muted);margin-top:6px;text-align:center;">'
+            + (isReal ? 'NYSE Advancing/Declining Issues · Yahoo Finance ^ADV ^DEC' : 'Proxy sintético basado en SPY — ^ADV/^DEC no disponibles')
+            + '</div>'
+            + '</div>';
+
+        el.innerHTML = widgetShell('AMPLITUD: LÍNEA A/D ' + tt('ad-line'), 'Advance/Decline NYSE', content, data.timestamp);
+
+        function buildChart() {
+            const ctx = document.getElementById(chartId);
+            if (!ctx || !window.Chart) return;
+            const labels  = history.map(h => h.date.slice(5));
+            const adVals  = history.map(h => h.ad);
+            const spyVals = history.map(h => h.spy);
+            new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels,
+                    datasets: [
+                        {
+                            label: 'S&P 500', data: spyVals, yAxisID: 'y1',
+                            borderColor: '#3b82f6', backgroundColor: 'transparent',
+                            borderWidth: 1.5, pointRadius: 0, tension: 0.3,
+                        },
+                        {
+                            label: 'Línea A/D (K)', data: adVals, yAxisID: 'y2',
+                            borderColor: '#f23645', backgroundColor: 'transparent',
+                            borderWidth: 1.5, pointRadius: 0, tension: 0.3,
+                        },
+                    ]
+                },
+                options: {
+                    responsive: true, maintainAspectRatio: false,
+                    plugins: {
+                        legend: { display: true, labels: { color: '#888', font: { size: 9 }, boxWidth: 14 } },
+                        tooltip: { backgroundColor: '#0d0d0d', borderWidth: 1 },
+                    },
+                    scales: {
+                        x:  { ticks: { color: '#666', font: { size: 8 }, maxTicksLimit: 6 }, grid: { color: 'rgba(255,255,255,0.04)' } },
+                        y1: { position: 'left',  ticks: { color: '#3b82f6', font: { size: 8 } }, grid: { display: false } },
+                        y2: { position: 'right', ticks: { color: '#f23645', font: { size: 8 } }, grid: { display: false } },
+                    }
+                }
+            });
+        }
+
+        if (window.Chart) {
+            buildChart();
+        } else {
+            const script  = document.createElement('script');
+            script.src    = 'https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js';
+            script.onload = buildChart;
+            document.head.appendChild(script);
+        }
+    } catch(e) {
+        el.innerHTML = widgetShell('AMPLITUD: LÍNEA A/D', 'Advance/Decline NYSE', widgetError(e.message));
+    }
+}
+
+async function loadVixLevels(el) {
+    el.innerHTML = widgetShell('VIX NIVELES ' + tt('vix-levels'), 'Gauge de zonas · Histórico 6 meses', loading());
+    try {
+        const res  = await fetch('/api/v1/market/vix-levels', { headers: authHeader() });
+        const data = await res.json();
+        if (!data.ok) throw new Error(data.error || 'Sin datos');
+
+        const changeColor = data.change >= 0 ? '#f23645' : '#00ffad';
+        const chartId = 'vixlvl-chart-' + Date.now();
+
+        // 5 zone gauge: <12 / 12-20 / 20-25 / 25-35 / 35+
+        const zones = [
+            { max: 12, color: '#3b82f6', label: 'Complacencia' },
+            { max: 20, color: '#00ffad', label: 'Normal' },
+            { max: 25, color: '#ff9800', label: 'Precaución' },
+            { max: 35, color: '#ff6b35', label: 'Miedo' },
+            { max: 60, color: '#f23645', label: 'Pánico' },
+        ];
+        const gaugeMax = 60;
+        const markerPct = Math.min(data.current / gaugeMax, 1) * 100;
+
+        let gaugeBands = '';
+        let prevPct = 0;
+        zones.forEach(z => {
+            const pct = Math.min(z.max / gaugeMax, 1) * 100;
+            gaugeBands += '<div style="position:absolute;left:' + prevPct + '%;width:' + (pct - prevPct) + '%;height:100%;background:' + z.color + ';opacity:0.55;"></div>';
+            prevPct = pct;
+        });
+
+        const content = '<div style="padding:12px 14px;">'
+            + '<div style="display:flex;align-items:baseline;gap:10px;margin-bottom:4px;">'
+            + '<span style="font-size:28px;font-weight:600;color:' + data.zone_color + ';cursor:pointer;" onmouseover="this.style.textDecoration=\'underline\'" onmouseout="this.style.textDecoration=\'none\'" onclick="window.__navigate(\'/research?ticker=%5EVIX\')">' + data.current.toFixed(2) + '</span>'
+            + '<span style="color:' + changeColor + ';font-size:13px;font-weight:600;">' + (data.change >= 0 ? '+' : '') + data.change.toFixed(2) + ' (' + (data.pct >= 0 ? '+' : '') + data.pct.toFixed(2) + '%)</span>'
+            + '<span style="background:' + data.zone_color + '18;color:' + data.zone_color + ';border:1px solid ' + data.zone_color + '50;padding:2px 8px;border-radius:4px;font-size:10px;font-weight:600;margin-left:auto;">' + data.zone + '</span>'
+            + '</div>'
+            + '<div style="color:var(--color-muted);font-size:10px;margin-bottom:10px;">' + data.zone_label + '</div>'
+
+            // Gauge
+            + '<div style="position:relative;width:100%;height:16px;border-radius:8px;overflow:hidden;margin-bottom:4px;">' + gaugeBands
+            + '<div style="position:absolute;top:-3px;left:' + markerPct + '%;width:3px;height:22px;background:#fff;border-radius:2px;transform:translateX(-50%);box-shadow:0 0 4px rgba(0,0,0,0.6);"></div>'
+            + '</div>'
+            + '<div style="display:flex;justify-content:space-between;font-size:8px;color:var(--color-muted);margin-bottom:14px;"><span>0</span><span>12</span><span>20</span><span>25</span><span>35</span><span>60+</span></div>'
+
+            + '<div style="position:relative;height:170px;"><canvas id="' + chartId + '"></canvas></div>'
+            + '</div>';
+
+        el.innerHTML = widgetShell('VIX NIVELES ' + tt('vix-levels'), 'Gauge de zonas · Histórico 6 meses', content, data.timestamp);
+
+        function buildChart() {
+            const ctx = document.getElementById(chartId);
+            if (!ctx || !window.Chart) return;
+            const labels = data.history.map(h => h.date.slice(5));
+            const values = data.history.map(h => h.value);
+            new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels,
+                    datasets: [{
+                        label: 'VIX', data: values,
+                        borderColor: data.zone_color, backgroundColor: data.zone_color + '15',
+                        borderWidth: 1.5, pointRadius: 0, fill: true, tension: 0.25,
+                    }]
+                },
+                options: {
+                    responsive: true, maintainAspectRatio: false,
+                    plugins: { legend: { display: false } },
+                    scales: {
+                        x: { ticks: { color: '#666', font: { size: 8 }, maxTicksLimit: 6 }, grid: { display: false } },
+                        y: { ticks: { color: '#666', font: { size: 8 } }, grid: { color: 'rgba(255,255,255,0.04)' } },
+                    }
+                }
+            });
+        }
+
+        if (window.Chart) { buildChart(); }
+        else {
+            const script  = document.createElement('script');
+            script.src    = 'https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js';
+            script.onload = buildChart;
+            document.head.appendChild(script);
+        }
+    } catch(e) {
+        el.innerHTML = widgetShell('VIX NIVELES', 'Gauge de zonas · Histórico 6 meses', widgetError(e.message));
+    }
+}
+
+async function loadCrypto(el) {
+    el.innerHTML = widgetShell('CRIPTOMONEDAS ' + tt('crypto-prices'), 'Top 6 · Fear &amp; Greed cripto', loading());
+    try {
+        const [cryptoRes, fgRes] = await Promise.all([
+            fetch('/api/v1/market/crypto', { headers: authHeader() }),
+            fetch('/api/v1/market/crypto-fear-greed', { headers: authHeader() }),
+        ]);
+        const cryptoData = await cryptoRes.json();
+        const fgData      = await fgRes.json();
+        if (!cryptoData.ok) throw new Error('Sin datos');
+
+        const fgColor = fgData.value >= 75 ? '#00ffad' : fgData.value >= 55 ? '#7fd858' : fgData.value >= 45 ? '#ff9800' : fgData.value >= 25 ? '#ff6b35' : '#f23645';
+        const fgChangeColor = fgData.change >= 0 ? '#00ffad' : '#f23645';
+
+        const rows = cryptoData.data.map(c => {
+            if (!c.ok) return errorRow(c.ticker, c.name);
+            const up         = c.pct >= 0;
+            const color      = up ? 'var(--color-accent)' : '#f23645';
+            const arrow      = up ? '▲' : '▼';
+            const priceStr   = c.price >= 1
+                ? '$' + c.price.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+                : '$' + c.price.toFixed(4);
+            const fullTicker = c.ticker + '-USD'; // research espera el par completo (ej. BTC-USD), igual que Forex muestra EUR/USD
+            return wsRow(fullTicker, c.name,
+                priceStr,
+                arrow + ' ' + Math.abs(c.pct).toFixed(2) + '%',
+                color);
+        }).join('');
+
+        const fgBlock = '<div style="display:flex;align-items:center;gap:12px;padding:10px 14px;border-bottom:1px solid var(--color-border);">'
+            + '<div style="width:48px;height:48px;border-radius:50%;border:3px solid ' + fgColor + ';display:flex;align-items:center;justify-content:center;flex-shrink:0;">'
+            + '<span style="color:' + fgColor + ';font-size:15px;font-weight:700;">' + fgData.value + '</span>'
+            + '</div>'
+            + '<div>'
+            + '<div style="color:' + fgColor + ';font-size:12px;font-weight:600;">' + fgData.classification + '</div>'
+            + '<div style="color:var(--color-muted);font-size:10px;">Fear &amp; Greed Cripto ' + tt('crypto-fear-greed')
+            + ' · <span style="color:' + fgChangeColor + ';">' + (fgData.change >= 0 ? '+' : '') + fgData.change + ' vs ayer</span></div>'
+            + '</div>'
+            + '</div>';
+
+        const content = fgBlock + '<div style="max-height:280px;overflow-y:auto;">' + rows + '</div>';
+
+        el.innerHTML = widgetShell('CRIPTOMONEDAS ' + tt('crypto-prices'), 'Top 6 · Fear &amp; Greed cripto', content, cryptoData.timestamp);
+    } catch(e) {
+        el.innerHTML = widgetShell('CRIPTOMONEDAS', 'Top 6 · Fear &amp; Greed cripto', widgetError(e.message));
+    }
+}
+
 async function loadSpreads(el) {
     el.innerHTML = widgetShell('CREDIT SPREADS', 'OAS · FRED · ICE BofA', loading());
     try {
@@ -546,14 +890,14 @@ async function loadSpreads(el) {
 }
 
 async function loadReddit(el) {
-    el.innerHTML = widgetShell('REDDIT PULSE', 'Social buzz · Reddit + StockTwits', loading());
+    el.innerHTML = widgetShell('REDDIT PULSE ' + tt('reddit-pulse'), 'Social buzz · Reddit + StockTwits', loading());
     try {
         const res  = await fetch('/api/v1/market/reddit', { headers: authHeader() });
         const data = await res.json();
         if (!data.ok) throw new Error('Sin datos');
         const sources = data.sources.join(' + ');
         const header  = '<div style="display:grid;grid-template-columns:30px 60px 80px 70px 1fr;gap:6px;padding:7px 12px;border-bottom:1px solid var(--color-border);font-size:10px;color:var(--color-muted);">'
-            + '<div>#</div><div>TICKER</div><div>PRECIO</div><div>BUZZ</div><div>SEÑAL</div>'
+            + '<div>#</div><div>TICKER</div><div>PRECIO</div><div>BUZZ ' + tt('social-buzz') + '</div><div>SEÑAL ' + tt('social-signal') + '</div>'
             + '</div>';
         const rows = data.data.map((item, i) => {
             const up       = item.change >= 0;
@@ -569,27 +913,212 @@ async function loadReddit(el) {
                 + '<div style="color:var(--color-muted);font-size:10px;">' + item.social_hype + '</div>'
                 + '</div>';
         }).join('');
-        el.innerHTML = widgetShell('REDDIT PULSE', sources, header + rows, data.timestamp);
+        el.innerHTML = widgetShell('REDDIT PULSE ' + tt('reddit-pulse'), sources, header + rows, data.timestamp);
     } catch(e) {
-        el.innerHTML = widgetShell('REDDIT PULSE', 'Social buzz', widgetError(e.message));
+        el.innerHTML = widgetShell('REDDIT PULSE ' + tt('reddit-pulse'), 'Social buzz', widgetError(e.message));
     }
 }
 
 async function loadBriefing(el) {
-    el.innerHTML = widgetShell('NIGHTLY BRIEFING', 'Análisis de mercado · IA', loading());
+    el.innerHTML = widgetShell('RESUMEN DE MERCADO DIARIO', 'Análisis de mercado · IA', loading());
     try {
         const res  = await fetch('/api/v1/market/briefing', { headers: authHeader() });
         const data = await res.json();
         if (!data.ok) throw new Error(data.error || 'Sin briefing');
-        const html = renderMarkdown(data.content);
-        const updated = data.updated ? '<span style="color:var(--color-muted);font-size:11px;">Generado: ' + data.updated + '</span>' : '';
-        el.innerHTML = widgetShell('NIGHTLY BRIEFING', updated, '<div style="padding:1rem 1.25rem;max-height:200px;overflow-y:auto;">' + html + '</div>', data.timestamp);
+        const html    = renderMarkdown(data.content);
+        const updated = data.updated ? 'Generado: ' + data.updated : '';
+
+        // Header con botón expandir
+        const header = '<div style="display:flex;justify-content:space-between;align-items:center;padding:10px 14px;border-bottom:1px solid var(--color-border);flex-shrink:0;">'
+            + '<div style="color:var(--color-accent);font-size:13px;letter-spacing:0.08em;text-shadow:var(--glow-text);">RESUMEN DE MERCADO DIARIO</div>'
+            + '<div style="display:flex;align-items:center;gap:10px;">'
+            + '<span style="color:var(--color-muted);font-size:11px;">' + updated + '</span>'
+            + '<button id="briefing-expand-btn" title="Leer completo" style="'
+            +   'background:rgba(0,255,173,0.08);border:1px solid rgba(0,255,173,0.3);'
+            +   'color:var(--color-accent);border-radius:50%;width:22px;height:22px;'
+            +   'cursor:pointer;font-size:14px;display:flex;align-items:center;justify-content:center;'
+            +   'transition:all 0.2s;font-family:var(--font-mono);line-height:1;padding:0;flex-shrink:0;">+</button>'
+            + '</div>'
+            + '</div>';
+
+        el.innerHTML = '<div style="background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius);overflow:hidden;height:100%;display:flex;flex-direction:column;">'
+            + header
+            + '<div style="flex:1;overflow:hidden;">'
+            + '<div style="padding:1rem 1.25rem;max-height:200px;overflow-y:auto;mask-image:linear-gradient(to bottom,black 60%,transparent 100%);-webkit-mask-image:linear-gradient(to bottom,black 60%,transparent 100%);">' + html + '</div>'
+            + '</div>'
+            + (data.timestamp ? '<div style="padding:6px 14px;font-size:10px;color:var(--color-muted);border-top:1px solid var(--color-border);flex-shrink:0;">Actualizado: ' + data.timestamp + '</div>' : '')
+            + '</div>';
+
+        // Bind expand button → open tooltip modal with full briefing
+        const btn = el.querySelector('#briefing-expand-btn');
+        if (btn) {
+            btn.addEventListener('mouseenter', () => { btn.style.background = 'rgba(0,255,173,0.18)'; btn.style.borderColor = 'var(--color-accent)'; });
+            btn.addEventListener('mouseleave', () => { btn.style.background = 'rgba(0,255,173,0.08)'; btn.style.borderColor = 'rgba(0,255,173,0.3)'; });
+            btn.addEventListener('click', () => {
+                // Re-use the tooltip modal system
+                if (window.Tooltip && typeof window.Tooltip.openModal === 'function') {
+                    window.Tooltip.openModal({ title: 'RESUMEN DE MERCADO DIARIO — Análisis completo', long: data.content });
+                } else {
+                    // Fallback: inject modal directly
+                    openBriefingModal(data.content, html);
+                }
+            });
+        }
     } catch(e) {
-        el.innerHTML = widgetShell('NIGHTLY BRIEFING', 'Análisis de mercado · IA', widgetError(e.message));
+        el.innerHTML = widgetShell('RESUMEN DE MERCADO DIARIO', 'Análisis de mercado · IA', widgetError(e.message));
     }
 }
+
+function openBriefingModal(rawContent, htmlContent) {
+    let overlay = document.getElementById('briefing-modal-overlay');
+    if (!overlay) {
+        overlay = document.createElement('div');
+        overlay.id = 'briefing-modal-overlay';
+        overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.8);z-index:9999;display:flex;align-items:center;justify-content:center;padding:1.5rem;';
+        overlay.innerHTML = '<div id="briefing-modal" style="background:var(--color-surface);border:1px solid var(--color-secondary,#00d9ff);border-radius:10px;padding:1.5rem;max-width:720px;width:100%;max-height:85vh;display:flex;flex-direction:column;box-shadow:0 0 40px rgba(0,217,255,0.15);">'
+            + '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem;padding-bottom:0.75rem;border-bottom:1px solid var(--color-border);">'
+            + '<div style="color:var(--color-secondary,#00d9ff);font-size:15px;letter-spacing:0.08em;font-family:var(--font-mono);">RESUMEN DE MERCADO DIARIO — Análisis completo</div>'
+            + '<button id="briefing-modal-close" style="background:none;border:1px solid var(--color-border);color:var(--color-muted);width:28px;height:28px;border-radius:50%;cursor:pointer;font-size:14px;display:flex;align-items:center;justify-content:center;transition:all 0.2s;">✕</button>'
+            + '</div>'
+            + '<div id="briefing-modal-body" style="overflow-y:auto;flex:1;color:var(--color-muted);font-size:13px;line-height:1.8;"></div>'
+            + '</div>';
+        document.body.appendChild(overlay);
+        document.getElementById('briefing-modal-close').addEventListener('click', () => { overlay.remove(); document.body.style.overflow = ''; });
+        overlay.addEventListener('click', e => { if (e.target === overlay) { overlay.remove(); document.body.style.overflow = ''; } });
+        document.addEventListener('keydown', function esc(e) { if (e.key === 'Escape') { overlay.remove(); document.body.style.overflow = ''; document.removeEventListener('keydown', esc); } });
+    }
+    document.getElementById('briefing-modal-body').innerHTML = htmlContent;
+    document.body.style.overflow = 'hidden';
+}
+async function loadLiquidity(el) {
+    el.innerHTML = widgetShell('LIQUIDEZ ' + tt('liquidity-overview'), 'Net Liquidity · M2 · Overlay SPX', loading());
+    try {
+        const res  = await fetch('/api/v1/market/liquidity', { headers: authHeader() });
+        const data = await res.json();
+        if (!data.ok) throw new Error(data.error || 'Sin datos de liquidez');
+
+        const nl  = data.net_liquidity || {};
+        const m2  = data.m2 || {};
+        const spx = data.spx || [];
+        const corr = data.correlation;
+
+        const nlChgColor = (nl.w_change || 0) >= 0 ? 'var(--color-accent)' : '#f23645';
+        const nlChgStr   = nl.w_change != null ? (nl.w_change > 0 ? '+' : '') + nl.w_change + 'B' : 'N/D';
+        const m2ChgColor = (m2.yoy_pct || 0) >= 0 ? 'var(--color-accent)' : '#f23645';
+        const m2YoyStr   = m2.yoy_pct != null ? (m2.yoy_pct > 0 ? '+' : '') + m2.yoy_pct + '% YoY' : 'N/D';
+        const corrColor  = corr == null ? 'var(--color-muted)' : (corr >= 0.5 ? 'var(--color-accent)' : (corr <= -0.2 ? '#f23645' : '#ffb800'));
+        const corrStr    = corr != null ? corr.toFixed(2) : 'N/D';
+
+        const cardsSection = '<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:1rem;padding:1rem;border-bottom:1px solid var(--color-border);">'
+
+            + '<div style="background:var(--color-bg,#0a0a0a);border:1px solid var(--color-border);border-radius:var(--radius);padding:0.75rem;text-align:center;">'
+            + '<div style="color:var(--color-muted);font-size:10px;margin-bottom:4px;">NET LIQUIDITY ' + tt('fed-net-liquidity') + '</div>'
+            + '<div style="color:var(--color-text);font-size:20px;font-weight:500;">$' + (nl.current != null ? nl.current.toFixed(2) + 'T' : 'N/D') + '</div>'
+            + '<div style="color:' + nlChgColor + ';font-size:10px;margin-top:4px;">Δ Semanal: ' + nlChgStr + '</div>'
+            + '</div>'
+
+            + '<div style="background:var(--color-bg,#0a0a0a);border:1px solid var(--color-border);border-radius:var(--radius);padding:0.75rem;text-align:center;">'
+            + '<div style="color:var(--color-muted);font-size:10px;margin-bottom:4px;">M2 MONEY SUPPLY ' + tt('m2-money-supply') + '</div>'
+            + '<div style="color:var(--color-text);font-size:20px;font-weight:500;">$' + (m2.current != null ? m2.current.toFixed(2) + 'T' : 'N/D') + '</div>'
+            + '<div style="color:' + m2ChgColor + ';font-size:10px;margin-top:4px;">' + m2YoyStr + '</div>'
+            + '</div>'
+
+            + '<div style="background:var(--color-bg,#0a0a0a);border:1px solid var(--color-border);border-radius:var(--radius);padding:0.75rem;text-align:center;">'
+            + '<div style="color:var(--color-muted);font-size:10px;margin-bottom:4px;">CORRELACIÓN NET LIQ. ↔ SPX ' + tt('liquidity-correlation') + '</div>'
+            + '<div style="color:' + corrColor + ';font-size:20px;font-weight:500;">' + corrStr + '</div>'
+            + '<div style="color:var(--color-muted);font-size:10px;margin-top:4px;">Últimos ~2 años, semanal</div>'
+            + '</div>'
+
+            + '</div>';
+
+        const chartId = 'liquidity-chart-' + Date.now();
+        const chartSection = '<div style="padding:1rem;flex:1;display:flex;flex-direction:column;">'
+            + '<div style="color:var(--color-muted);font-size:10px;letter-spacing:0.05em;margin-bottom:0.5rem;">NET LIQUIDITY (verde) · M2 (cian, escala propia) · S&P 500 (ámbar, eje der) — cada serie con su propia escala para ver la variación real de cada una</div>'
+            + '<div style="flex:1;min-height:0;position:relative;"><canvas id="' + chartId + '"></canvas></div>'
+            + '</div>';
+
+        const footerNote = '<div style="padding:0.6rem 1rem;font-size:10px;color:var(--color-muted);border-top:1px solid var(--color-border);">'
+            + '⚡ Fuente: FRED (WALCL, WTREGEN, RRPONTSYD, WM2NS) + Yahoo Finance (^GSPC) · Net Liquidity y M2 semanal/mensual, alineados por fecha más cercana'
+            + '</div>';
+
+        el.innerHTML = widgetShell('LIQUIDEZ ' + tt('liquidity-overview'), 'Net Liquidity · M2 · Overlay SPX', cardsSection + chartSection + footerNote, data.timestamp);
+
+        // Renderizar gráfico de doble eje
+        const renderChart = () => {
+            const ctx = document.getElementById(chartId);
+            if (!ctx || !window.Chart) return;
+
+            // Unificar fechas: usamos las fechas de Net Liquidity como eje base (más granular, semanal)
+            const nlHist  = nl.history || [];
+            const m2Hist  = m2.history || [];
+            const m2Map   = {};
+            m2Hist.forEach(h => { m2Map[h.date] = h.value; });
+            const spxMap  = {};
+            spx.forEach(s => { spxMap[s.date] = s.value; });
+
+            const labels = nlHist.map(h => h.date);
+            const nlData = nlHist.map(h => h.value);
+
+            // Para M2 (mensual) y SPX (semanal), buscar el valor más cercano hacia atrás por cada fecha de NL
+            function nearestValue(map, sortedDates, targetDate) {
+                if (map[targetDate] != null) return map[targetDate];
+                let best = null;
+                for (const d of sortedDates) {
+                    if (d <= targetDate) best = map[d];
+                    else break;
+                }
+                return best;
+            }
+            const m2Dates  = Object.keys(m2Map).sort();
+            const spxDates = Object.keys(spxMap).sort();
+            const m2Data   = labels.map(d => nearestValue(m2Map, m2Dates, d));
+            const spxData  = labels.map(d => nearestValue(spxMap, spxDates, d));
+
+            new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: labels.map(d => d.substring(5)),
+                    datasets: [
+                        { label: 'Net Liquidity ($T)', data: nlData,  borderColor: '#00ffad', backgroundColor: 'transparent', borderWidth: 1.8, pointRadius: 0, yAxisID: 'yLeft', tension: 0.25 },
+                        { label: 'M2 ($T)',             data: m2Data,  borderColor: '#00d9ff', backgroundColor: 'transparent', borderWidth: 1.5, pointRadius: 0, yAxisID: 'yMid',  tension: 0.25, borderDash: [4,3] },
+                        { label: 'S&P 500',              data: spxData, borderColor: '#ffb800', backgroundColor: 'transparent', borderWidth: 1.5, pointRadius: 0, yAxisID: 'yRight', tension: 0.25 },
+                    ]
+                },
+                options: {
+                    responsive: true, maintainAspectRatio: false,
+                    interaction: { mode: 'index', intersect: false },
+                    plugins: {
+                        legend: { labels: { color: '#888', font: { size: 10 } } },
+                        tooltip: { mode: 'index', intersect: false }
+                    },
+                    scales: {
+                        x: { ticks: { color: '#555', font: { size: 8 }, maxTicksLimit: 10, maxRotation: 0 }, grid: { color: 'rgba(255,255,255,0.03)' } },
+                        // Net Liquidity (~$5-7T) y M2 (~$20-23T) difieren ~4x en magnitud — comparten
+                        // escala los aplanaría visualmente, así que cada uno tiene su propio eje autoescalado.
+                        yLeft:  { position: 'left',  ticks: { color: '#00ffad', font: { size: 9 }, callback: v => '$' + v.toFixed(1) + 'T' }, grid: { color: 'rgba(255,255,255,0.03)' } },
+                        yMid:   { display: false },
+                        yRight: { position: 'right', ticks: { color: '#ffb800', font: { size: 9 } }, grid: { display: false } },
+                    }
+                }
+            });
+        };
+
+        if (!window.Chart) {
+            const s = document.createElement('script');
+            s.src   = 'https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js';
+            s.onload = renderChart;
+            document.head.appendChild(s);
+        } else {
+            setTimeout(renderChart, 50);
+        }
+
+    } catch(e) {
+        el.innerHTML = widgetShell('LIQUIDEZ ' + tt('liquidity-overview'), 'Net Liquidity · M2 · Overlay SPX', widgetError(e.message));
+    }
+}
+
 async function loadFedMacro(el) {
-    el.innerHTML = widgetShell('FED & MACRO ' + tt('credit-spreads'), 'Balance Fed · Curva de Tipos · Indicadores FRED', loading());
+    el.innerHTML = widgetShell('FED & MACRO', 'Balance Fed · Curva de Tipos · Indicadores FRED', loading());
     try {
         const res  = await fetch('/api/v1/market/fed-macro', { headers: authHeader() });
         const data = await res.json();
@@ -609,28 +1138,28 @@ async function loadFedMacro(el) {
 
             // Status
             + '<div style="background:var(--color-bg,#0a0a0a);border:1px solid ' + balColor + '44;border-radius:var(--radius);padding:0.75rem;text-align:center;">'
-            + '<div style="color:var(--color-muted);font-size:10px;margin-bottom:4px;">POLÍTICA FED ' + tt('vix') + '</div>'
+            + '<div style="color:var(--color-muted);font-size:10px;margin-bottom:4px;">POLÍTICA FED ' + tt('fed-balance') + '</div>'
             + '<div style="color:' + balColor + ';font-size:20px;font-weight:500;">' + (b.status || 'N/D') + '</div>'
             + '<div style="color:var(--color-muted);font-size:10px;margin-top:4px;">' + (b.date || '') + '</div>'
             + '</div>'
 
             // Balance total
             + '<div style="background:var(--color-bg,#0a0a0a);border:1px solid var(--color-border);border-radius:var(--radius);padding:0.75rem;text-align:center;">'
-            + '<div style="color:var(--color-muted);font-size:10px;margin-bottom:4px;">BALANCE TOTAL (WALCL)</div>'
+            + '<div style="color:var(--color-muted);font-size:10px;margin-bottom:4px;">BALANCE TOTAL (WALCL) ' + tt('fed-balance-total') + '</div>'
             + '<div style="color:var(--color-text);font-size:18px;font-weight:500;">' + (b.total || 'N/D') + '</div>'
             + '<div style="color:' + wChgColor + ';font-size:10px;margin-top:4px;">Δ Semanal: ' + wChgStr + '</div>'
             + '</div>'
 
             // Liquidez neta
             + '<div style="background:var(--color-bg,#0a0a0a);border:1px solid var(--color-border);border-radius:var(--radius);padding:0.75rem;text-align:center;">'
-            + '<div style="color:var(--color-muted);font-size:10px;margin-bottom:4px;">LIQ. NETA (Bal−TGA−RRP)</div>'
+            + '<div style="color:var(--color-muted);font-size:10px;margin-bottom:4px;">LIQ. NETA (Bal−TGA−RRP) ' + tt('fed-net-liquidity') + '</div>'
             + '<div style="color:var(--color-text);font-size:18px;font-weight:500;">' + (b.net_liq || 'N/D') + '</div>'
             + '<div style="color:var(--color-muted);font-size:10px;margin-top:4px;">TGA: ' + (b.tga || 'N/D') + ' · RRP: ' + (b.rrp || 'N/D') + '</div>'
             + '</div>'
 
             // Cambio mensual
             + '<div style="background:var(--color-bg,#0a0a0a);border:1px solid var(--color-border);border-radius:var(--radius);padding:0.75rem;text-align:center;">'
-            + '<div style="color:var(--color-muted);font-size:10px;margin-bottom:4px;">Δ MENSUAL BALANCE</div>'
+            + '<div style="color:var(--color-muted);font-size:10px;margin-bottom:4px;">Δ MENSUAL BALANCE ' + tt('fed-monthly-change') + '</div>'
             + '<div style="color:' + wChgColor + ';font-size:18px;font-weight:500;">' + mChgStr + '</div>'
             + '<div style="color:var(--color-muted);font-size:10px;margin-top:4px;">vs hace 5 semanas</div>'
             + '</div>'
@@ -700,14 +1229,14 @@ async function loadFedMacro(el) {
 
             // Curva visual
             + '<div>'
-            + '<div style="color:var(--color-muted);font-size:10px;letter-spacing:0.05em;margin-bottom:0.75rem;">CURVA DE TIPOS US TREASURY ' + tt('credit-spreads') + '</div>'
+            + '<div style="color:var(--color-muted);font-size:10px;letter-spacing:0.05em;margin-bottom:0.75rem;">CURVA DE TIPOS US TREASURY ' + tt('yield-curve') + '</div>'
             + yieldBars
             + '</div>'
 
             // Spread + estado
             + '<div style="display:flex;flex-direction:column;gap:8px;">'
             + '<div style="background:var(--color-bg,#0a0a0a);border:1px solid ' + spColor + '44;border-radius:var(--radius);padding:0.75rem;text-align:center;">'
-            + '<div style="color:var(--color-muted);font-size:10px;margin-bottom:4px;">SPREAD 10Y − 2Y</div>'
+            + '<div style="color:var(--color-muted);font-size:10px;margin-bottom:4px;">SPREAD 10Y − 2Y ' + tt('treasury-spread') + '</div>'
             + '<div style="color:' + spColor + ';font-size:22px;font-weight:500;">' + (sp10_2 != null ? (sp10_2 >= 0 ? '+' : '') + sp10_2.toFixed(2) + '%' : 'N/D') + '</div>'
             + '<div style="color:' + spColor + ';font-size:10px;font-weight:500;margin-top:4px;">' + spLabel + '</div>'
             + '</div>'
@@ -750,7 +1279,7 @@ async function loadFedMacro(el) {
             const postura = obj.value >= 4.5 ? 'RESTRICTIVA' : obj.value >= 3 ? 'NEUTRAL' : 'EXPANSIVA';
             const pColor  = obj.value >= 4.5 ? '#f23645' : obj.value >= 3 ? '#ffb800' : '#00ffad';
             return '<div style="background:var(--color-bg,#0a0a0a);border:1px solid ' + pColor + '44;border-radius:var(--radius);padding:0.75rem;text-align:center;">'
-                + '<div style="color:var(--color-muted);font-size:10px;margin-bottom:4px;">FED FUNDS RATE</div>'
+                + '<div style="color:var(--color-muted);font-size:10px;margin-bottom:4px;">FED FUNDS RATE ' + tt('fed-funds-rate') + '</div>'
                 + '<div style="color:var(--color-text);font-size:18px;font-weight:500;">' + obj.value.toFixed(2) + '<span style="color:var(--color-muted);font-size:10px;"> %</span></div>'
                 + '<div style="color:' + pColor + ';font-size:10px;font-weight:500;margin-top:4px;">' + postura + '</div>'
                 + '<div style="color:var(--color-muted);font-size:9px;margin-top:2px;">' + (obj.date || '').substring(0, 7) + '</div>'
@@ -761,9 +1290,9 @@ async function loadFedMacro(el) {
             + '<div style="color:var(--color-muted);font-size:10px;letter-spacing:0.05em;margin-bottom:0.75rem;">INDICADORES MACROECONÓMICOS · FRED</div>'
             + '<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:0.75rem;">'
             + fedFundsCard(fedFunds)
-            + indCard('IPC YoY', cpi, 'Index', null)
-            + indCard('DESEMPLEO', unemployment, '%', null)
-            + indCard('PCE CORE', corePce, 'Index', null)
+            + indCard('IPC YoY', cpi, 'Index', 'cpi-yoy')
+            + indCard('DESEMPLEO', unemployment, '%', 'unemployment-rate')
+            + indCard('PCE CORE', corePce, 'Index', 'core-pce')
             + '</div>'
             + '<div style="margin-top:0.75rem;padding:0.6rem 0.75rem;background:var(--color-bg,#0a0a0a);border-radius:var(--radius);font-size:10px;color:var(--color-muted);">'
             + '⚡ Fuente: FRED (Federal Reserve Bank of St. Louis) · CSV público sin API key · Actualizado cada 30 min'
@@ -771,7 +1300,7 @@ async function loadFedMacro(el) {
             + '</div>';
 
         const content = balSection + sparkHtml + yieldsSection + indicatorsSection;
-        el.innerHTML  = widgetShell('FED & MACRO ' + tt('credit-spreads'), 'Balance Fed · Curva de Tipos · Indicadores FRED', content, data.timestamp);
+        el.innerHTML  = widgetShell('FED & MACRO', 'Balance Fed · Curva de Tipos · Indicadores FRED', content, data.timestamp);
 
         // Cargar Chart.js si no está y renderizar sparkline
         if (history.length >= 4 && !window.Chart) {
@@ -785,7 +1314,7 @@ async function loadFedMacro(el) {
     }
 }
 async function loadCalendar(el) {
-    el.innerHTML = widgetShell('CALENDARIO ECONÓMICO', 'Esta semana · Hora Madrid', loading());
+    el.innerHTML = widgetShell('CALENDARIO ECONÓMICO ' + tt('economic-calendar'), 'Esta semana · Hora Madrid', loading());
     try {
         const res  = await fetch('/api/v1/market/calendar', { headers: authHeader() });
         const data = await res.json();
@@ -793,7 +1322,7 @@ async function loadCalendar(el) {
         const impColor = { High: '#f23645', Medium: '#ffb800', Low: '#555' };
         const impLabel = { High: '●●●', Medium: '●●○', Low: '●○○' };
         const header = '<div style="display:grid;grid-template-columns:60px 55px 1fr 50px 80px 80px 80px;gap:8px;padding:7px 14px;border-bottom:1px solid var(--color-border);font-size:10px;color:var(--color-muted);">'
-            + '<div>FECHA</div><div>HORA</div><div>EVENTO</div><div>IMP</div><div>ACTUAL</div><div>PREV.</div><div>ESTIMADO</div></div>';
+            + '<div>FECHA</div><div>HORA</div><div>EVENTO</div><div>IMP ' + tt('event-impact') + '</div><div>ACTUAL</div><div>PREV.</div><div>ESTIMADO</div></div>';
         const rows = data.data.map(ev => {
             const ic = impColor[ev.impact] || '#555';
             const il = impLabel[ev.impact] || '●○○';
@@ -808,9 +1337,9 @@ async function loadCalendar(el) {
                 + '<div style="color:var(--color-muted);text-align:right;">' + ev.forecast + '</div>'
                 + '</div>';
         }).join('');
-        el.innerHTML = widgetShell('CALENDARIO ECONÓMICO', 'Esta semana · Hora Madrid', header + rows, data.timestamp);
+        el.innerHTML = widgetShell('CALENDARIO ECONÓMICO ' + tt('economic-calendar'), 'Esta semana · Hora Madrid', header + rows, data.timestamp);
     } catch(e) {
-        el.innerHTML = widgetShell('CALENDARIO ECONÓMICO', 'Esta semana · Hora Madrid', widgetError(e.message));
+        el.innerHTML = widgetShell('CALENDARIO ECONÓMICO ' + tt('economic-calendar'), 'Esta semana · Hora Madrid', widgetError(e.message));
     }
 }
 
@@ -992,7 +1521,14 @@ function escMD(text) {
         .replace(/>/g, '&gt;');
 }
 function loading()        { return '<div style="padding:1rem;color:var(--color-muted);font-size:12px;">Cargando...</div>'; }
-function widgetError(msg) { return '<div style="padding:1rem;color:#f23645;font-size:12px;">✗ ' + msg + '</div>'; }
+function widgetError(msg) {
+    const isRateLimit = /demasiadas peticiones|rate limit|máximo \d+ requests/i.test(msg || '');
+    if (isRateLimit) {
+        return '<div style="padding:1rem;color:#ffb800;font-size:12px;display:flex;align-items:center;gap:6px;">'
+            + '<span style="font-size:14px;">⏱</span><span>' + msg + '</span></div>';
+    }
+    return '<div style="padding:1rem;color:#f23645;font-size:12px;">✗ ' + msg + '</div>';
+}
 
 function errorRow(ticker, name) {
     return '<div style="display:flex;justify-content:space-between;align-items:center;padding:10px 14px;border-bottom:1px solid var(--color-border);">'

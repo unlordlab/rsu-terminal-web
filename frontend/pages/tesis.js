@@ -1,3 +1,5 @@
+import { errorMessage } from '/core/ui.js';
+
 let currentPage  = 1;
 let activeRating = 'Todos';
 let searchQuery  = '';
@@ -83,7 +85,7 @@ async function loadGallery(container) {
         renderPagination(container, data);
 
     } catch(e) {
-        if (grid) grid.innerHTML = '<div style="padding:1rem;color:#f23645;font-size:12px;grid-column:1/-1;">✗ ' + e.message + '</div>';
+        if (grid) grid.innerHTML = errorMessage(e.message, {extraStyle: 'grid-column:1/-1;'});
     }
 }
 
@@ -189,7 +191,7 @@ async function loadDetail(container, ticker, fecha) {
         });
 
     } catch(e) {
-        mainEl.innerHTML = '<div style="padding:1rem;color:#f23645;font-size:12px;">✗ ' + e.message + '</div>';
+        mainEl.innerHTML = errorMessage(e.message);
     }
 }
 

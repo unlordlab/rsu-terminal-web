@@ -1,7 +1,8 @@
 import { tt } from '/components/tooltip.js';
+import { errorMessage } from '/core/ui.js';
 export async function render(container) {
     container.innerHTML = '<div style="margin-bottom:1.5rem;">'
-        + '<div style="color:var(--color-accent);font-size:18px;letter-spacing:0.1em;text-shadow:var(--glow-text);margin-bottom:4px;">SPXL STRATEGY</div>'
+        + '<div style="color:var(--color-accent);font-size:18px;letter-spacing:0.1em;text-shadow:var(--glow-text);margin-bottom:4px;">SPXL STRATEGY ' + tt('spxl') + '</div>'
         + '<div style="color:var(--color-muted);font-size:12px;">Estrategia DCA apalancada · 6 fases · 3x S&P 500</div>'
         + '</div>'
         + '<div id="spxl-live" style="margin-bottom:1.5rem;"><div style="color:var(--color-muted);font-size:12px;padding:1rem;">Cargando datos en vivo...</div></div>'
@@ -71,7 +72,7 @@ async function loadLive(container) {
         renderSparkline(data);
 
     } catch(e) {
-        el.innerHTML = '<div style="padding:1rem;color:#f23645;font-size:12px;">✗ ' + e.message + '</div>';
+        el.innerHTML = errorMessage(e.message);
     }
 }
 
@@ -80,7 +81,7 @@ function renderPhases(container, data) {
     if (!el) return;
 
     el.innerHTML = '<div style="background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius);overflow:hidden;margin-bottom:1rem;">'
-        + '<div style="padding:10px 14px;border-bottom:1px solid var(--color-border);color:var(--color-accent);font-size:12px;letter-spacing:0.08em;">PLAN DE COMPRAS · 6 FASES DCA</div>'
+        + '<div style="padding:10px 14px;border-bottom:1px solid var(--color-border);color:var(--color-accent);font-size:12px;letter-spacing:0.08em;">PLAN DE COMPRAS · 6 FASES DCA ' + tt('spxl-phases') + '</div>'
         + '<table style="width:100%;border-collapse:collapse;font-family:var(--font-mono);font-size:12px;">'
         + '<thead><tr style="border-bottom:1px solid var(--color-border);">'
         + ['FASE','CAÍDA REQUERIDA','PRECIO OBJETIVO','ASIGNACIÓN'].map(h =>
@@ -176,7 +177,7 @@ async function loadBacktest(container, capital) {
         renderEquityChart(data);
 
     } catch(e) {
-        el.innerHTML = '<div style="padding:1rem;color:#f23645;font-size:12px;">✗ ' + e.message + '</div>';
+        el.innerHTML = errorMessage(e.message);
     } finally {
         btn.textContent   = 'EJECUTAR';
         btn.style.opacity = '1';

@@ -1,4 +1,5 @@
 import { tt } from '/components/tooltip.js';
+import { isRateLimitMessage, errorMessage } from '/core/ui.js';
 
 export async function render(container) {
     container.innerHTML = pageHeader()
@@ -42,8 +43,9 @@ function scanPanel() {
         + '<label style="color:var(--color-muted);font-size:12px;">Tickers:</label>'
         + '<select id="rsrw-max-tickers" style="background:var(--color-bg,#0a0a0a);border:1px solid var(--color-border);border-radius:var(--radius);padding:6px 10px;color:var(--color-text);font-family:var(--font-mono);font-size:12px;">'
         + '<option value="100">100 — Rápido (~30s)</option>'
-        + '<option value="150" selected>150 — Estándar (~60s)</option>'
-        + '<option value="250">250 — Completo (~2min)</option>'
+        + '<option value="150">150 — Estándar (~60s)</option>'
+        + '<option value="250">250 — Amplio (~2min)</option>'
+        + '<option value="500" selected>500 — S&amp;P 500 completo (~4-5min)</option>'
         + '</select>'
         + '<button id="rsrw-scan-btn" style="background:var(--color-secondary);color:#000;border:none;border-radius:var(--radius);padding:8px 16px;font-family:var(--font-mono);font-size:12px;cursor:pointer;letter-spacing:0.05em;">ESCANEAR AHORA</button>'
         + '</div>'
@@ -172,7 +174,7 @@ function setupTicker(container) {
             result.innerHTML = renderTickerResult(data);
             renderTickerChart(data);
         } catch(e) {
-            result.innerHTML = '<div style="padding:1rem;color:#f23645;font-size:12px;">✗ ' + e.message + '</div>';
+            result.innerHTML = errorMessage(e.message);
         } finally {
             btn.textContent   = 'ANALIZAR';
             btn.style.opacity = '1';
@@ -258,7 +260,8 @@ function setupScan(container) {
         const max = select.value;
         btn.textContent   = 'ESCANEANDO...';
         btn.style.opacity = '0.7';
-        result.innerHTML  = '<div style="color:var(--color-muted);font-size:12px;padding:0.5rem;">Escaneando ' + max + ' tickers... puede tardar hasta 2 minutos.</div>';
+        const estimate    = max >= 500 ? '4-5 minutos' : (max >= 250 ? '2 minutos' : '1 minuto');
+        result.innerHTML  = '<div style="color:var(--color-muted);font-size:12px;padding:0.5rem;">Escaneando ' + max + ' tickers... puede tardar hasta ' + estimate + '.</div>';
 
         try {
             const token = sessionStorage.getItem('rsu_token');
@@ -266,12 +269,37 @@ function setupScan(container) {
             const data  = await res.json();
             if (!data.ok) throw new Error(data.error || 'Error en el scan');
 
-            const tempContainer = document.createElement('div');
-            renderSectors(tempContainer, data.sectors);
-            renderTable(tempContainer, 'LÍDERES RS (SCAN LIVE)', data.leaders, true, null, data.total);
-            result.innerHTML = '<div style="margin-top:1rem;">' + tempContainer.innerHTML + '</div>';
+            const requested = data.meta && data.meta.n_requested;
+            const got       = data.total;
+            let coverageHtml = '';
+            if (requested && got) {
+                const pct = Math.round((got / requested) * 100);
+                const color = pct >= 90 ? 'var(--color-accent)' : (pct >= 70 ? '#ff9800' : '#f23645');
+                coverageHtml = '<div style="color:' + color + ';font-size:11px;padding:0.4rem 0.5rem;">'
+                    + '✓ ' + got + ' / ' + requested + ' tickers con histórico suficiente (' + pct + '%)'
+                    + (pct < 90 ? ' — Yahoo puede haber limitado parte de la descarga; revisa la consola del backend para detalle.' : '')
+                    + '</div>';
+            }
+
+            const tempContainer  = document.createElement('div');
+            const sectorsBox     = document.createElement('div');
+            const leadersBox     = document.createElement('div');
+            const laggardsBox    = document.createElement('div');
+            leadersBox.style.marginTop  = '1rem';
+            laggardsBox.style.marginTop = '1rem';
+
+            renderSectors(sectorsBox, data.sectors);
+            renderTable(leadersBox, 'LÍDERES RS (SCAN LIVE)', data.leaders, true, null, data.total);
+            renderTable(laggardsBox, 'REZAGADOS RW (SCAN LIVE)', data.laggards, false, null, data.total);
+
+            tempContainer.appendChild(sectorsBox);
+            tempContainer.appendChild(leadersBox);
+            tempContainer.appendChild(laggardsBox);
+
+            result.innerHTML = coverageHtml;
+            result.appendChild(tempContainer);
         } catch(e) {
-            result.innerHTML = '<div style="padding:1rem;color:#f23645;font-size:12px;">✗ ' + e.message + '</div>';
+            result.innerHTML = errorMessage(e.message);
         } finally {
             btn.textContent   = 'ESCANEAR AHORA';
             btn.style.opacity = '1';
@@ -295,8 +323,11 @@ function loadingCard(title) {
 }
 
 function errorCard(title, msg) {
-    return '<div style="background:var(--color-surface);border:1px solid #f2364544;border-radius:var(--radius);padding:1.25rem;">'
-        + '<div style="color:#f23645;font-size:13px;margin-bottom:0.5rem;">' + title + '</div>'
-        + '<div style="color:#f23645;font-size:12px;">✗ ' + (msg || 'Error') + '</div>'
+    const rateLimited = isRateLimitMessage(msg);
+    const color = rateLimited ? '#ffb800' : '#f23645';
+    const icon  = rateLimited ? '⏱' : '✗';
+    return '<div style="background:var(--color-surface);border:1px solid ' + color + '44;border-radius:var(--radius);padding:1.25rem;">'
+        + '<div style="color:' + color + ';font-size:13px;margin-bottom:0.5rem;">' + title + '</div>'
+        + '<div style="color:' + color + ';font-size:12px;">' + icon + ' ' + (msg || 'Error') + '</div>'
         + '</div>';
 }
