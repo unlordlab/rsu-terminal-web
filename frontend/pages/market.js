@@ -36,6 +36,11 @@ export async function render(container) {
         + '<div id="widget-sectors" style="display:flex;flex-direction:column;"></div>'
         + '</div>'
 
+        // Fila 2a2 — Composición Sectorial (breadth por sector, ancho completo)
+        + '<div style="margin-bottom:1rem;">'
+        + '<div id="widget-sector-composition" style="display:flex;flex-direction:column;"></div>'
+        + '</div>'
+
         // Fila 2b — Market Breadth + AD Line
         + '<div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem;margin-bottom:1rem;">'
         + '<div id="widget-breadth" style="display:flex;flex-direction:column;height:440px;"></div>'
@@ -76,6 +81,7 @@ export async function render(container) {
     loadCommodities(container.querySelector('#widget-commodities'));
     loadEarnings(container.querySelector('#widget-earnings'));
     loadSectors(container.querySelector('#widget-sectors'), '1d');
+    loadSectorComposition(container.querySelector('#widget-sector-composition'));
     loadVix(container.querySelector('#widget-vix'));
     loadBreadth(container.querySelector('#widget-breadth'));
     loadAdLine(container.querySelector('#widget-adline'));
@@ -407,6 +413,105 @@ async function loadSectors(el, period) {
         });
     } catch(e) {
         el.innerHTML = widgetShell('SECTOR PERFORMANCE', 'S&P 500 ETFs', widgetError(e.message));
+    }
+}
+
+async function loadSectorComposition(el) {
+    el.innerHTML = widgetShell('COMPOSICIÓN SECTORIAL', 'Breadth por sector · Universo RS/RW', loading());
+    try {
+        const res  = await fetch('/api/v1/market/sector-composition', { headers: authHeader() });
+        const data = await res.json();
+        if (!data.ok) throw new Error(data.error || 'Sin datos');
+
+        const s = data.sectors;
+        const maxScore = Math.max(...s.map(r => r.avg_score), 1);
+
+        // ── 4 tarjetas resumen ───────────────────────────────────────────────
+        const statCard = (label, value, sub, color) =>
+            '<div style="background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius);padding:0.85rem 1rem;">'
+            + '<div style="color:var(--color-muted);font-size:10px;letter-spacing:0.08em;margin-bottom:6px;">' + label + '</div>'
+            + '<div style="color:' + color + ';font-size:20px;font-weight:500;">' + value + '</div>'
+            + (sub ? '<div style="color:var(--color-muted);font-size:10px;margin-top:2px;">' + sub + '</div>' : '')
+            + '</div>';
+
+        const stats = '<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:0.75rem;margin-bottom:1rem;">'
+            + statCard('SECTOR MÁS FUERTE', data.strongest.sector, 'Avg score ' + data.strongest.avg_score, 'var(--color-accent)')
+            + statCard('SECTOR MÁS DÉBIL', data.weakest.sector, 'Avg score ' + data.weakest.avg_score, '#f23645')
+            + statCard('SECTORES MONITORIZADOS', data.sectors_tracked, 'En la cesta actual', 'var(--color-secondary)')
+            + statCard('UNIVERSO', data.universe_size, 'Tickers con score', 'var(--color-text)')
+            + '</div>';
+
+        // ── Tabla principal ──────────────────────────────────────────────────
+        const heads = ['#', 'SECTOR', 'CESTA', 'EN TOP 20%', 'AVG SCORE', 'MOMENTUM'];
+        const th = heads.map(h =>
+            '<th style="color:var(--color-muted);font-size:10px;letter-spacing:0.08em;padding:7px 10px;border-bottom:1px solid var(--color-border);text-align:left;white-space:nowrap;">' + h + '</th>'
+        ).join('');
+
+        const trs = s.map(r => {
+            const scoreColor = r.avg_score >= 60 ? 'var(--color-accent)' : r.avg_score >= 45 ? '#ffb800' : '#f23645';
+            const w = maxScore > 0 ? (r.avg_score / maxScore * 100) : 0;
+            const momTxt = r.avg_momentum == null ? '—' : (r.avg_momentum >= 0 ? '+' : '') + r.avg_momentum;
+            const momColor = r.avg_momentum == null ? 'var(--color-muted)' : r.avg_momentum >= 0 ? 'var(--color-accent)' : '#f23645';
+            return '<tr style="border-bottom:1px solid var(--color-border);">'
+                + '<td style="padding:6px 10px;color:var(--color-muted);font-size:11px;">' + r.rank + '</td>'
+                + '<td style="padding:6px 10px;color:var(--color-text);font-size:11px;white-space:nowrap;">' + r.sector + '</td>'
+                + '<td style="padding:6px 10px;color:var(--color-muted);font-size:11px;">' + r.basket + '</td>'
+                + '<td style="padding:6px 10px;color:var(--color-muted);font-size:11px;white-space:nowrap;">' + r.leaders + '/' + r.basket + ' · ' + r.leaders_pct + '%</td>'
+                + '<td style="padding:6px 10px;min-width:90px;">'
+                + '<div style="display:flex;align-items:center;gap:6px;">'
+                + '<div style="flex:1;background:var(--color-surface2);border-radius:2px;height:5px;overflow:hidden;min-width:50px;">'
+                + '<div style="height:100%;width:' + w.toFixed(1) + '%;background:' + scoreColor + ';border-radius:2px;"></div>'
+                + '</div>'
+                + '<span style="color:' + scoreColor + ';font-size:11px;width:30px;text-align:right;">' + r.avg_score + '</span>'
+                + '</div></td>'
+                + '<td style="padding:6px 10px;color:' + momColor + ';font-size:11px;">' + momTxt + '</td>'
+                + '</tr>';
+        }).join('');
+
+        const table = '<div style="overflow-x:auto;max-height:480px;overflow-y:auto;">'
+            + '<table style="width:100%;border-collapse:collapse;font-family:var(--font-mono);">'
+            + '<thead style="position:sticky;top:0;background:var(--color-surface);z-index:1;"><tr>' + th + '</tr></thead>'
+            + '<tbody>' + trs + '</tbody>'
+            + '</table></div>';
+
+        // ── Top 5 acelerando / desacelerando (por momentum medio del sector) ──
+        function trendBox(title, rows, color) {
+            if (!rows.length) return '<div style="background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius);padding:1rem;"><div style="color:' + color + ';font-size:11px;letter-spacing:0.08em;margin-bottom:0.5rem;">' + title + '</div><div style="color:var(--color-muted);font-size:11px;">Sin datos de momentum.</div></div>';
+            return '<div style="background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius);padding:1rem;">'
+                + '<div style="color:' + color + ';font-size:11px;letter-spacing:0.08em;margin-bottom:0.5rem;">' + title + '</div>'
+                + rows.map(r => {
+                    const mc = r.avg_momentum >= 0 ? 'var(--color-accent)' : '#f23645';
+                    return '<div style="display:flex;justify-content:space-between;align-items:center;padding:5px 0;border-bottom:1px solid var(--color-border);font-size:11px;">'
+                        + '<span style="color:var(--color-text);">' + r.sector + '</span>'
+                        + '<span style="color:' + mc + ';">' + (r.avg_momentum >= 0 ? '+' : '') + r.avg_momentum + '</span>'
+                        + '</div>';
+                }).join('')
+                + '</div>';
+        }
+
+        const trendRow = '<div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem;margin-top:1rem;">'
+            + trendBox('TOP 5 SECTORES ACELERANDO', data.accelerating, 'var(--color-accent)')
+            + trendBox('TOP 5 SECTORES DESACELERANDO', data.decelerating, '#f23645')
+            + '</div>';
+
+        const note = '<div style="padding:8px 14px;font-size:10px;color:var(--color-muted);border-top:1px solid var(--color-border);margin-top:0.75rem;">'
+            + 'EN TOP 20% = nº de nombres del sector con RS Percentile ≥ 80 sobre el total de la cesta · MOMENTUM = media de RS Momentum del sector (señal de hoy, no histórico) · Actualizado: ' + data.timestamp
+            + '</div>';
+
+        const shell = '<div style="background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius);padding:1.25rem;">'
+            + '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem;">'
+            + '<div style="color:var(--color-accent);font-size:13px;letter-spacing:0.08em;">COMPOSICIÓN SECTORIAL ' + tt('sector-composition') + '</div>'
+            + '<div style="color:var(--color-muted);font-size:11px;">Universo S&P 500 · RS/RW</div>'
+            + '</div>'
+            + stats
+            + table
+            + trendRow
+            + note
+            + '</div>';
+
+        el.innerHTML = shell;
+    } catch(e) {
+        el.innerHTML = widgetShell('COMPOSICIÓN SECTORIAL', 'Breadth por sector', widgetError(e.message));
     }
 }
 

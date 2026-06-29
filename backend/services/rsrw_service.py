@@ -413,6 +413,23 @@ def _df_to_records(df: pd.DataFrame, limit: int = 500) -> list:
         records.append(r)
     return records[:limit]
 
+def get_universe_dataframe():
+    """
+    Devuelve (df, meta) con el DataFrame COMPLETO del universo (todas las
+    acciones, no solo líderes/laggards) tal como lo deja el último scan
+    guardado en el Gist. Pensado para que otros módulos (ej. Composición
+    Sectorial en Market) puedan agregar métricas por sector reutilizando este
+    mismo dato, sin repetir la carga del Gist ni hacer llamadas nuevas a APIs.
+    Devuelve None si el Gist no está disponible o no tiene datos válidos.
+    """
+    data = _load_gist()
+    if not data:
+        return None
+    df, sdf, meta = _parse_gist(data)
+    if df.empty:
+        return None
+    return df, meta
+
 def get_rsrw_from_gist() -> dict:
     try:
         data = _load_gist()

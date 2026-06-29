@@ -1433,3 +1433,97 @@ def get_crypto_fear_greed():
         "ok": False, "value": 50, "classification": "Neutral",
         "yesterday": 50, "change": 0, "source": "N/D", "timestamp": get_timestamp(),
     }
+
+# ── COMPOSICIÓN SECTORIAL (breadth por sector, reutilizando el universo RS/RW) ─
+
+def get_sector_composition():
+    """
+    Agrega por sector el universo S&P 500 ya calculado por el módulo RS/RW
+    (mismo Gist, sin llamadas nuevas a APIs): tamaño de la cesta, % de nombres
+    en el percentil líder (RS_Pct >= 80) y momentum medio del sector (RS_Mom),
+    usado este último como señal de "acelerando/desacelerando" — es el dato de
+    momentum YA calculado hoy por el scan, no un histórico simulado.
+    """
+    try:
+        from services.cache import cache, TTL
+        cached = cache.get("market:sector_composition")
+        if cached:
+            return cached
+
+        from services.rsrw_service import get_universe_dataframe, SP500_SECTOR_MAP, GICS_MAP
+        result = get_universe_dataframe()
+        if not result:
+            return {"ok": False, "error": "Universo RS/RW no disponible (Gist sin datos todavía)"}
+
+        df, meta = result
+
+        # Respaldo: si el Gist no trae un sector válido para un ticker (viene
+        # vacío/None y por tanto cae a "Otros"), usamos el propio mapeo estático
+        # SP500_SECTOR_MAP del RS/RW (el mismo que usa el motor de scan) como
+        # segunda fuente, por ticker. Evita que todo el universo colapse en
+        # "Otros" cuando el campo sector del Gist viene incompleto.
+        fallback_map = {t: GICS_MAP.get(sec, sec) for t, sec in SP500_SECTOR_MAP.items()}
+        n_fallback = [0]
+
+        def _resolve_sector(row):
+            sec = row.get("Sector")
+            if sec and str(sec).strip() not in ("", "nan", "None", "Otros"):
+                return sec
+            fb = fallback_map.get(str(row.name).strip().upper())
+            if fb:
+                n_fallback[0] += 1
+                return fb
+            return sec or "Otros"
+
+        df["Sector"] = df.apply(_resolve_sector, axis=1)
+        if n_fallback[0]:
+            print(f"[Sector Composition] {n_fallback[0]} ticker(s) resueltos vía SP500_SECTOR_MAP (el Gist no traía sector válido para ellos)")
+
+        df = df.dropna(subset=["Sector", "RS_Pct"])
+        if df.empty:
+            return {"ok": False, "error": "Sin datos de sector en el universo"}
+
+        grouped = []
+        for sector, g in df.groupby("Sector"):
+            basket = len(g)
+            if basket == 0:
+                continue
+            leaders     = int((g["RS_Pct"] >= 80).sum())
+            avg_score   = round(float(g["RS_Pct"].mean()), 1)
+            avg_mom     = round(float(g["RS_Mom"].mean()), 2) if "RS_Mom" in g.columns and g["RS_Mom"].notna().any() else None
+            grouped.append({
+                "sector":      sector,
+                "basket":      basket,
+                "leaders":     leaders,
+                "leaders_pct": round(leaders / basket * 100, 0) if basket else 0,
+                "avg_score":   avg_score,
+                "avg_momentum": avg_mom,
+            })
+
+        if not grouped:
+            return {"ok": False, "error": "Sin sectores con datos suficientes"}
+
+        grouped.sort(key=lambda r: r["avg_score"], reverse=True)
+        for i, r in enumerate(grouped):
+            r["rank"] = i + 1
+
+        with_mom = [r for r in grouped if r["avg_momentum"] is not None]
+        accelerating = sorted(with_mom, key=lambda r: r["avg_momentum"], reverse=True)[:5]
+        decelerating = sorted(with_mom, key=lambda r: r["avg_momentum"])[:5]
+
+        result = {
+            "ok":              True,
+            "sectors":         grouped,
+            "strongest":       grouped[0],
+            "weakest":         grouped[-1],
+            "sectors_tracked": len(grouped),
+            "universe_size":   int(len(df)),
+            "accelerating":    accelerating,
+            "decelerating":    decelerating,
+            "freshness":       meta.get("generated_at", ""),
+            "timestamp":       get_timestamp(),
+        }
+        cache.set("market:sector_composition", result, TTL.get("market", 300))
+        return result
+    except Exception as e:
+        return {"ok": False, "error": str(e)}

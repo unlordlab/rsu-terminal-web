@@ -163,9 +163,10 @@ function piotroskiSection(data) {
         + '</div>'
         + '<div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;">'
         + p.criteria.map(c => {
-            const ok = c.pass === true;
-            const icon = ok ? '✓' : '✗';
-            const color = ok ? 'var(--color-accent)' : '#f23645';
+            let icon, color;
+            if (c.pass === true)       { icon = '✓'; color = 'var(--color-accent)'; }
+            else if (c.pass === false) { icon = '✗'; color = '#f23645'; }
+            else                       { icon = '–'; color = '#666'; }
             return '<div style="display:flex;align-items:center;gap:6px;font-size:11px;color:var(--color-muted);">'
                 + '<span style="color:' + color + ';font-weight:600;">' + icon + '</span>' + c.label
                 + '</div>';

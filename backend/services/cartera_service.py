@@ -163,8 +163,25 @@ def get_cartera():
 
         df[col_estado] = df[col_estado].astype(str).str.strip().str.upper()
         df[col_ticker] = df[col_ticker].astype(str).str.strip()
-        df[col_fecha]  = pd.to_datetime(df[col_fecha], dayfirst=True, errors="coerce")
+
+        # La hoja mezcla fechas DD/MM/AAAA (entradas antiguas) y MM/DD/AAAA (entradas
+        # más recientes). Probamos primero día-primero (convención habitual); para las
+        # que resulten inválidas (ej. "06/29/2026" → día=06, mes=29 no existe),
+        # reintentamos mes-primero antes de descartar la fila. Así no perdemos en
+        # silencio las operaciones más recientes solo porque cambiaron el formato.
+        fecha_raw = df[col_fecha].astype(str)
+        parsed = pd.to_datetime(fecha_raw, dayfirst=True, errors="coerce")
+        need_retry = parsed.isna() & df[col_fecha].notna()
+        if need_retry.any():
+            retry = pd.to_datetime(fecha_raw[need_retry], dayfirst=False, errors="coerce")
+            parsed.loc[need_retry] = retry
+        df[col_fecha] = parsed
+
+        n_before = len(df)
         df = df.dropna(subset=[col_fecha, col_ticker])
+        n_after = len(df)
+        if n_before != n_after:
+            print(f"[Cartera] {n_before - n_after} fila(s) descartada(s) por fecha o ticker inválido tras ambos intentos de parseo")
         df = df[~df[col_ticker].str.upper().isin(["NAN", "NONE", ""])]
 
         abiertas = df[df[col_estado].str.contains("ABIERTA|OPEN", case=False, na=False)].copy()

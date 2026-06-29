@@ -7,7 +7,7 @@ from services.market_service import (
     get_reddit_pulse, get_nightly_briefing,
     get_credit_spreads, get_market_breadth, get_advance_decline,
     get_fed_macro, get_vix_levels, get_crypto_prices, get_crypto_fear_greed,
-    get_liquidity
+    get_liquidity, get_sector_composition
 )
 from services.earnings_service import get_earnings_calendar, get_earnings_ticker
 
@@ -88,3 +88,7 @@ async def fed_macro(user=Depends(verify_token)):
 @router.get("/liquidity")
 async def liquidity(user=Depends(verify_token)):
     return get_liquidity()
+
+@router.get("/sector-composition")
+async def sector_composition(user=Depends(verify_token)):
+    return get_sector_composition()

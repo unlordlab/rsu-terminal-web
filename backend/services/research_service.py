@@ -654,7 +654,7 @@ def _get_piotroski_score(ticker: str) -> dict:
         gross_profit   = line(fin, 'Gross Profit')
 
         if missing_lines:
-            print(f"[Piotroski:{ticker}] Líneas contables no encontradas (criterio(s) afectado(s) puntuado como 'no cumple'): {missing_lines}")
+            print(f"[Piotroski:{ticker}] Líneas contables no encontradas (criterio(s) afectado(s) marcado(s) como 'sin datos'): {missing_lines}")
 
         if total_assets is None or net_income is None or op_cf is None:
             print(f"[Piotroski:{ticker}] Cancelado — faltan líneas base imprescindibles (Total Assets / Net Income / Operating Cash Flow)")
@@ -670,63 +670,83 @@ def _get_piotroski_score(ticker: str) -> dict:
         criteria = []
         score = 0
 
-        c1 = bool(roa0 is not None and roa0 > 0)
-        criteria.append({"label": "ROA positivo", "pass": c1})
-        score += int(c1)
+        def add_criterion(pass_value, label_true, label_false, label_unknown):
+            """
+            pass_value puede ser True, False, o None (dato no disponible).
+            La etiqueta mostrada describe siempre el HECHO real ocurrido, nunca
+            la condición ideal — así el icono (✓/✗) nunca obliga a invertir
+            mentalmente el texto. 'None' se puntúa como 0 (igual que el Piotroski
+            original trata cualquier dato no disponible), pero se muestra distinto
+            (— gris) para no afirmar que pasó algo negativo cuando en realidad
+            no tenemos el dato.
+            """
+            nonlocal score
+            if pass_value is None:
+                criteria.append({"label": label_unknown, "pass": None})
+            elif pass_value:
+                criteria.append({"label": label_true, "pass": True})
+                score += 1
+            else:
+                criteria.append({"label": label_false, "pass": False})
 
-        c2 = bool(cfo0 is not None and cfo0 > 0)
-        criteria.append({"label": "Flujo de caja operativo positivo", "pass": c2})
-        score += int(c2)
+        # 1. ROA positivo
+        c1 = (roa0 > 0) if roa0 is not None else None
+        add_criterion(c1, "ROA positivo", "ROA negativo (pérdidas)", "ROA no disponible")
 
-        c3 = bool(roa0 is not None and roa1 is not None and roa0 > roa1)
-        criteria.append({"label": "ROA en mejora interanual", "pass": c3})
-        score += int(c3)
+        # 2. CFO positivo
+        c2 = (cfo0 > 0) if cfo0 is not None else None
+        add_criterion(c2, "Flujo de caja operativo positivo", "Flujo de caja operativo negativo", "Flujo de caja operativo no disponible")
 
-        c4 = bool(cfo0 is not None and ni0 is not None and cfo0 > ni0)
-        criteria.append({"label": "Calidad del beneficio (CFO > Bº Neto)", "pass": c4})
-        score += int(c4)
+        # 3. ROA en mejora interanual
+        c3 = (roa0 > roa1) if (roa0 is not None and roa1 is not None) else None
+        add_criterion(c3, "ROA mejoró respecto al año anterior", "ROA empeoró respecto al año anterior", "Comparación de ROA no disponible")
 
-        c5 = False
+        # 4. Calidad del beneficio: CFO > Net Income
+        c4 = (cfo0 > ni0) if (cfo0 is not None and ni0 is not None) else None
+        add_criterion(c4, "Beneficio de buena calidad (CFO > Bº Neto)", "Beneficio de baja calidad (CFO < Bº Neto)", "Calidad del beneficio no disponible")
+
+        # 5. Apalancamiento estable o decreciente
+        c5 = None
         if lt_debt is not None and ta0 and ta1:
-            ld0 = _safe(lt_debt.iloc[0]) or 0
-            ld1 = _safe(lt_debt.iloc[1]) or 0
-            c5 = bool((ld0 / ta0) <= (ld1 / ta1))
-        criteria.append({"label": "Apalancamiento estable o decreciente", "pass": c5})
-        score += int(c5)
+            ld0 = _safe(lt_debt.iloc[0])
+            ld1 = _safe(lt_debt.iloc[1])
+            if ld0 is not None and ld1 is not None:
+                c5 = (ld0 / ta0) <= (ld1 / ta1)
+        add_criterion(c5, "Apalancamiento estable o ha bajado", "El apalancamiento ha aumentado", "Apalancamiento no disponible")
 
-        c6 = False
+        # 6. Liquidez (current ratio) en mejora
+        c6 = None
         if current_assets is not None and current_liab is not None:
             ca0, ca1 = _safe(current_assets.iloc[0]), _safe(current_assets.iloc[1])
             cl0, cl1 = _safe(current_liab.iloc[0]), _safe(current_liab.iloc[1])
             if ca0 and cl0 and ca1 and cl1:
-                c6 = bool((ca0 / cl0) > (ca1 / cl1))
-        criteria.append({"label": "Ratio de liquidez en mejora", "pass": c6})
-        score += int(c6)
+                c6 = (ca0 / cl0) > (ca1 / cl1)
+        add_criterion(c6, "Liquidez (current ratio) mejoró", "Liquidez (current ratio) empeoró", "Liquidez no disponible")
 
-        c7 = False
+        # 7. Sin dilución de acciones
+        c7 = None
         if shares_out is not None:
             s0, s1 = _safe(shares_out.iloc[0]), _safe(shares_out.iloc[1])
             if s0 is not None and s1 is not None:
-                c7 = bool(s0 <= s1)
-        criteria.append({"label": "Sin nueva emisión de acciones (dilución)", "pass": c7})
-        score += int(c7)
+                c7 = s0 <= s1
+        add_criterion(c7, "Sin dilución de acciones (nº de acciones estable o ha bajado)", "Hubo dilución de acciones (emisión de nuevas acciones)", "Nº de acciones no disponible")
 
-        c8 = False
+        # 8. Margen bruto en mejora
+        c8 = None
         if gross_profit is not None and revenue is not None:
             gp0, gp1 = _safe(gross_profit.iloc[0]), _safe(gross_profit.iloc[1])
             rv0, rv1 = _safe(revenue.iloc[0]), _safe(revenue.iloc[1])
             if gp0 is not None and rv0 and gp1 is not None and rv1:
-                c8 = bool((gp0 / rv0) > (gp1 / rv1))
-        criteria.append({"label": "Margen bruto en mejora", "pass": c8})
-        score += int(c8)
+                c8 = (gp0 / rv0) > (gp1 / rv1)
+        add_criterion(c8, "Margen bruto mejoró", "Margen bruto empeoró", "Margen bruto no disponible")
 
-        c9 = False
+        # 9. Rotación de activos en mejora
+        c9 = None
         if revenue is not None and ta0 and ta1:
             rv0, rv1 = _safe(revenue.iloc[0]), _safe(revenue.iloc[1])
             if rv0 and rv1:
-                c9 = bool((rv0 / ta0) > (rv1 / ta1))
-        criteria.append({"label": "Rotación de activos en mejora", "pass": c9})
-        score += int(c9)
+                c9 = (rv0 / ta0) > (rv1 / ta1)
+        add_criterion(c9, "Rotación de activos mejoró", "Rotación de activos empeoró", "Rotación de activos no disponible")
 
         if score >= 8:    label, color = "EXCELENTE", "#00ffad"
         elif score >= 6:  label, color = "SÓLIDO", "#90ee90"

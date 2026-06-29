@@ -1097,6 +1097,30 @@ EMA SMOOTHING:
 Aplicamos media móvil exponencial para eliminar el ruido de corto plazo y ver la tendencia real de la fortaleza relativa.`
     },
 
+    "sector-composition": {
+        title: "Composición Sectorial — Breadth por Sector",
+        short: "Cuántos nombres de cada sector lideran el mercado ahora mismo, sobre el universo S&P 500 del módulo RS/RW.",
+        long: `Este panel agrupa por sector GICS el mismo universo de ~500 acciones que ya analiza el RS/RW Scanner, para responder una pregunta distinta: no "qué acciones lideran", sino "qué sectores tienen más nombres liderando".
+
+CESTA:
+Número de acciones del universo que pertenecen a ese sector.
+
+EN TOP 20%:
+De esos nombres, cuántos tienen RS Percentile ≥ 80 (están en el 20% superior de fortaleza relativa del mercado) y qué porcentaje representa sobre el total del sector. Un sector con muchos nombres en este percentil tiene "amplitud" real, no solo 1-2 acciones tirando del carro.
+
+AVG SCORE:
+Media del RS Percentile de todas las acciones del sector. Es la versión "sector" del RS Rating individual — cuanto más alto, más fuerte está el sector en conjunto frente al resto del mercado.
+
+MOMENTUM:
+Media del RS Momentum (ya calculado por el RS/RW Scanner) de las acciones del sector. Es una señal de aceleración/desaceleración basada en el dato de HOY, no en un histórico de varios días — un sector con momentum medio muy positivo tiene más acciones acelerando su fortaleza relativa en este momento, no necesariamente que lo haya hecho de forma sostenida en el tiempo.
+
+DIFERENCIA CON "SECTOR PERFORMANCE":
+El widget de Sector Performance (arriba) mide el rendimiento en precio de los 11 ETFs sectoriales (XLK, XLF...). Este panel mide algo distinto y complementario: la amplitud interna de cada sector — cuántos nombres individuales respaldan ese movimiento, no solo el índice del sector en su conjunto.
+
+LIMITACIÓN A TENER EN CUENTA:
+Los datos dependen de la frescura del último scan del RS/RW (visible en "Actualizado"). No hay histórico de streak ni de variación a 5/10/30 días por sector — solo la foto actual del universo.`
+    },
+
     // ── GENERAL ───────────────────────────────────────────────────────────────
     "market-cap": {
         title: "Market Cap — Capitalización bursátil",
