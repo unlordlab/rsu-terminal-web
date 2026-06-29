@@ -293,6 +293,39 @@ function consensoSection(data) {
                 + '</div>';
         }).join('')
         + '</div>'
+        + consensusTrendBlock(data.recommendations_trend)
+        + '</div>';
+}
+
+function consensusTrendBlock(trend) {
+    if (!trend || trend.length < 2) return '';
+    // El histórico de yfinance viene ordenado 0m, -1m, -2m, -3m (más reciente primero).
+    // Lo invertimos para mostrarlo cronológicamente: izquierda = más antiguo, derecha = actual.
+    const chrono = [...trend].reverse();
+    const current = chrono[chrono.length - 1].buy_pct;
+    const oldest   = chrono[0].buy_pct;
+    const deltaPts = Math.round((current - oldest) * 10) / 10;
+    const deltaColor = deltaPts > 0 ? 'var(--color-accent)' : deltaPts < 0 ? '#f23645' : 'var(--color-muted)';
+    const deltaIcon  = deltaPts > 0 ? '▲' : deltaPts < 0 ? '▼' : '—';
+    const maxPct = Math.max(...chrono.map(c => c.buy_pct), 1);
+
+    return '<div style="padding-top:0.75rem;border-top:1px solid var(--color-border);">'
+        + '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">'
+        + '<span style="color:var(--color-muted);font-size:10px;letter-spacing:0.05em;">TENDENCIA % ALCISTA (' + chrono.length + ' MESES)</span>'
+        + '<span style="color:' + deltaColor + ';font-size:11px;">' + deltaIcon + ' ' + (deltaPts > 0 ? '+' : '') + deltaPts + ' pts vs hace ' + (chrono.length - 1) + ' meses</span>'
+        + '</div>'
+        + '<div style="display:flex;gap:6px;align-items:flex-end;height:50px;">'
+        + chrono.map((c, i) => {
+            const h = Math.max(Math.round(c.buy_pct / maxPct * 42), 3);
+            const isLast = i === chrono.length - 1;
+            const barColor = isLast ? 'var(--color-accent)' : 'var(--color-secondary)';
+            return '<div style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;height:50px;">'
+                + '<div style="font-size:9px;color:var(--color-muted);margin-bottom:2px;">' + c.buy_pct + '%</div>'
+                + '<div style="width:100%;max-width:28px;background:' + barColor + (isLast ? '' : '88') + ';height:' + h + 'px;border-radius:2px;"></div>'
+                + '<div style="font-size:8px;color:var(--color-muted);margin-top:3px;">' + c.period_label + '</div>'
+                + '</div>';
+        }).join('')
+        + '</div>'
         + '</div>';
 }
 

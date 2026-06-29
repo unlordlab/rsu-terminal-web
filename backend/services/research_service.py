@@ -61,6 +61,7 @@ def _get_yfinance(ticker: str) -> dict:
 
         # Recomendaciones
         recommendations = None
+        recommendations_trend = []
         try:
             recs = stock.recommendations
             if recs is not None and not recs.empty:
@@ -72,6 +73,26 @@ def _get_yfinance(ticker: str) -> dict:
                 ss = int(_safe(latest.get('strongSell')) or 0)
                 recommendations = {"strong_buy": sb, "buy": b, "hold": h,
                                    "sell": s, "strong_sell": ss, "total": sb+b+h+s+ss}
+
+                # Histórico de periodos (yfinance trae habitualmente 0m, -1m, -2m, -3m)
+                PERIOD_LABELS = {"0m": "Actual", "-1m": "Hace 1 mes", "-2m": "Hace 2 meses", "-3m": "Hace 3 meses"}
+                for _, row in recs.iterrows():
+                    period = str(row.get('period', ''))
+                    rsb = int(_safe(row.get('strongBuy')) or 0)
+                    rb  = int(_safe(row.get('buy')) or 0)
+                    rh  = int(_safe(row.get('hold')) or 0)
+                    rs  = int(_safe(row.get('sell')) or 0)
+                    rss = int(_safe(row.get('strongSell')) or 0)
+                    rtotal = rsb + rb + rh + rs + rss
+                    if rtotal == 0:
+                        continue
+                    buy_pct = round((rsb + rb) / rtotal * 100, 1)
+                    recommendations_trend.append({
+                        "period":      period,
+                        "period_label": PERIOD_LABELS.get(period, period),
+                        "buy_pct":     buy_pct,
+                        "total":       rtotal,
+                    })
         except Exception: pass
 
         # Precio objetivo
@@ -141,6 +162,7 @@ def _get_yfinance(ticker: str) -> dict:
             "dividend_rate":  _safe(info.get('dividendRate')),
             "n_analysts":  _safe(info.get('numberOfAnalystOpinions')),
             "recommendations": recommendations,
+            "recommendations_trend": recommendations_trend,
             "target_data":    target_data,
             "metrics":        metrics,
             "profitability":  profitability,
@@ -612,10 +634,13 @@ def _get_piotroski_score(ticker: str) -> dict:
         if bs.shape[1] < 2 or fin.shape[1] < 2 or cf.shape[1] < 2:
             return {}
 
+        missing_lines = []
+
         def line(df, *names):
             for n in names:
                 if n in df.index:
                     return df.loc[n]
+            missing_lines.append(names[0])
             return None
 
         total_assets   = line(bs, 'Total Assets')
@@ -628,7 +653,11 @@ def _get_piotroski_score(ticker: str) -> dict:
         revenue        = line(fin, 'Total Revenue')
         gross_profit   = line(fin, 'Gross Profit')
 
+        if missing_lines:
+            print(f"[Piotroski:{ticker}] Líneas contables no encontradas (criterio(s) afectado(s) puntuado como 'no cumple'): {missing_lines}")
+
         if total_assets is None or net_income is None or op_cf is None:
+            print(f"[Piotroski:{ticker}] Cancelado — faltan líneas base imprescindibles (Total Assets / Net Income / Operating Cash Flow)")
             return {}
 
         ta0, ta1 = _safe(total_assets.iloc[0]), _safe(total_assets.iloc[1])
@@ -704,8 +733,9 @@ def _get_piotroski_score(ticker: str) -> dict:
         elif score >= 4:  label, color = "NEUTRAL", "#ffb800"
         else:             label, color = "DÉBIL", "#f23645"
 
-        return {"score": score, "max": 9, "label": label, "color": color, "criteria": criteria}
-    except Exception:
+        return {"score": score, "max": 9, "label": label, "color": color, "criteria": criteria, "missing_lines": missing_lines}
+    except Exception as e:
+        print(f"[Piotroski:{ticker}] Error inesperado al calcular: {e}")
         return {}
 
 def _get_institutional_ownership(ticker: str) -> dict:
@@ -892,6 +922,7 @@ def get_research(ticker: str) -> dict:
         "dividend_yield":     yf_data['dividend_yield'],
         "n_analysts":         yf_data['n_analysts'],
         "recommendations":    yf_data['recommendations'],
+        "recommendations_trend": yf_data['recommendations_trend'],
         "target_data":        yf_data['target_data'],
         "metrics":            yf_data['metrics'],
         "profitability":      yf_data['profitability'],
