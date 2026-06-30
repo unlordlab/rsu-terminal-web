@@ -48,7 +48,7 @@ export async function render(container) {
 function pageHeader() {
     return '<div style="margin-bottom:1.5rem;">'
         + '<div style="color:var(--color-accent);font-size:18px;letter-spacing:0.1em;text-shadow:var(--glow-text);margin-bottom:4px;">RESEARCH ' + tt('rsu-score') + '</div>'
-        + '<div style="color:var(--color-muted);font-size:12px;">Análisis fundamental · yfinance · Finnhub · FMP · Alpha Vantage</div>'
+        + '<div style="color:var(--color-muted);font-size:12px;">Análisis fundamental</div>'
         + '</div>'
         + '<div style="display:flex;gap:8px;margin-bottom:1.5rem;">'
         + '<input id="research-input" type="text" placeholder="AAPL, NVDA, TSLA..." style="flex:1;background:var(--color-bg,#0a0a0a);border:1px solid var(--color-border);border-radius:var(--radius);padding:10px 14px;color:var(--color-text);font-family:var(--font-mono);font-size:14px;outline:none;">'
@@ -158,6 +158,7 @@ function piotroskiSection(data) {
         + '<span style="color:' + p.color + ';font-size:20px;font-weight:500;">' + p.score + '/' + p.max + '</span>'
         + '<span style="color:' + p.color + ';font-size:12px;padding:2px 10px;border:1px solid ' + p.color + '33;border-radius:4px;">' + p.label + '</span>'
         + '</div></div>'
+        + '<div style="color:var(--color-muted);font-size:9px;margin-bottom:10px;">Este score es uno de los 5 componentes que forman el RSU Score (20% del total).</div>'
         + '<div style="background:var(--color-bg,#0a0a0a);border-radius:4px;height:6px;margin-bottom:10px;">'
         + '<div style="height:100%;width:' + (p.score / p.max * 100) + '%;background:' + p.color + ';border-radius:4px;transition:width 0.8s;"></div>'
         + '</div>'
@@ -245,6 +246,7 @@ function metricsSection(data) {
             ['EV/EBITDA',     m.ev_ebitda,      v => v ? v.toFixed(1) + 'x' : 'N/A', sec('ev_ebitda', xFmt)],
             ['PEG',           m.peg_ratio,      v => v ? v.toFixed(2)        : 'N/A', sec('peg_ratio', v => v.toFixed(2))],
             ['P/B',           m.price_to_book,  v => v ? v.toFixed(2) + 'x' : 'N/A', sec('price_to_book', xFmt)],
+            ['FCF Yield' + tt('fcf-yield'), p.fcf_yield, v => v != null ? v.toFixed(2) + '%' : 'N/A'],
         ])
         + metricCard('RENTABILIDAD ' + tt('sector-profitability'), [
             ['ROE',           p.roe,            pctFmt, sec('roe', pctFmt)],
@@ -260,9 +262,15 @@ function metricsSection(data) {
             ['Current Ratio',   p.current_ratio,   v => v ? v.toFixed(2) + 'x'       : 'N/A'],
             ['Free Cash Flow',  p.free_cashflow,   v => v ? _fmtVal(v)                : 'N/A'],
             ['Div. Yield',      data.dividend_yield, v => v ? (v*100).toFixed(2) + '%' : 'N/A'],
-            ['N. Analistas',    data.n_analysts,   v => v ? v + ' analistas'           : 'N/A'],
+            ['Payout Ratio' + tt('payout-ratio'), p.payout_ratio, v => v != null ? payoutFmt(v) : 'N/A'],
+            ['N. Analistas' + tt('n-analysts'), data.n_analysts, v => v ? v + ' analistas' + (data.latest_rating_date ? ' (últ. ' + data.latest_rating_date + ')' : '') : 'N/A'],
         ])
         + '</div>';
+}
+
+function payoutFmt(v) {
+    const color = v > 100 ? '#f23645' : v > 80 ? '#ffb800' : 'inherit';
+    return '<span style="color:' + color + ';">' + v.toFixed(0) + '%</span>';
 }
 
 function consensoSection(data) {
@@ -404,14 +412,28 @@ function technicalSection(data) {
 
     return '<div style="background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius);padding:1.25rem;margin-bottom:1rem;">'
         + '<div style="color:var(--color-accent);font-size:12px;letter-spacing:0.08em;margin-bottom:1rem;">NIVELES TÉCNICOS · CORTO INTERÉS · PRÓXIMO EARNINGS</div>'
-        + '<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:1rem;">'
 
-        // Niveles técnicos
+        // Banner de Tendencia + Fase de mercado + Fuerza Relativa
+        + (t.trend ? trendPhaseBanner(t, data.relative_strength) : '')
+
+        + '<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:1rem;">'
+
+        // Medias móviles simples
         + '<div>'
-        + '<div style="color:var(--color-muted);font-size:10px;margin-bottom:8px;letter-spacing:0.05em;">MEDIAS MÓVILES</div>'
+        + '<div style="color:var(--color-muted);font-size:10px;margin-bottom:8px;letter-spacing:0.05em;">SMA (CLÁSICAS)</div>'
         + techRow('SMA 20',  t.sma20,  t.vs_sma20)
         + techRow('SMA 50',  t.sma50,  t.vs_sma50)
         + techRow('SMA 200', t.sma200, t.vs_sma200)
+        + '</div>'
+
+        // EMAs con pendiente
+        + '<div>'
+        + '<div style="color:var(--color-muted);font-size:10px;margin-bottom:8px;letter-spacing:0.05em;">EMAs · PENDIENTE' + tt('ema-slope') + '</div>'
+        + (t.emas ? emaRow('EMA 10',  t.emas.ema10)
+                  + emaRow('EMA 20',  t.emas.ema20)
+                  + emaRow('EMA 50',  t.emas.ema50)
+                  + emaRow('EMA 200', t.emas.ema200)
+           : '<div style="color:var(--color-muted);font-size:11px;">Sin datos</div>')
         + '</div>'
 
         // 52 semanas
@@ -425,11 +447,18 @@ function technicalSection(data) {
 
         // Short interest + next earnings
         + '<div>'
-        + '<div style="color:var(--color-muted);font-size:10px;margin-bottom:8px;letter-spacing:0.05em;">SHORT INTEREST</div>'
+        + '<div style="color:var(--color-muted);font-size:10px;margin-bottom:8px;letter-spacing:0.05em;">SHORT INTEREST' + tt('short-interest-pct') + '</div>'
         + (s && s.short_pct != null
             ? '<div style="font-size:20px;color:' + (s.short_pct > 20 ? '#f23645' : s.short_pct > 10 ? '#ffb800' : 'var(--color-text)') + ';font-weight:500;">' + s.short_pct + '%</div>'
               + '<div style="color:var(--color-muted);font-size:10px;">del float · ' + (s.date || '') + '</div>'
             : '<div style="color:var(--color-muted);font-size:11px;">Sin datos</div>')
+        + (s && s.short_ratio != null
+            ? '<div style="display:flex;justify-content:space-between;align-items:center;margin-top:8px;font-size:11px;">'
+              + '<span style="color:var(--color-muted);">Days to Cover' + tt('days-to-cover') + '</span>'
+              + '<span style="color:' + (s.short_ratio > 10 ? '#f23645' : s.short_ratio > 5 ? '#ffb800' : 'var(--color-text)') + ';">' + s.short_ratio + 'd</span>'
+              + '</div>'
+            : '')
+        + (s && s.squeeze_score != null ? squeezeGauge(s) : '')
         + (ne && ne.date
             ? '<div style="margin-top:12px;"><div style="color:var(--color-muted);font-size:10px;margin-bottom:4px;letter-spacing:0.05em;">PRÓXIMO EARNINGS</div>'
               + '<div style="color:#ffb800;font-size:14px;font-weight:500;">📅 ' + ne.date + '</div>'
@@ -439,6 +468,81 @@ function technicalSection(data) {
             : '')
         + '</div>'
         + '</div>'
+        + '</div>';
+}
+
+function trendPhaseBanner(t, rs) {
+    const trendColors = { ALCISTA: '#00ffad', BAJISTA: '#f23645', RANGO: '#ffb800' };
+    const trendIcons  = { ALCISTA: '▲', BAJISTA: '▼', RANGO: '↔' };
+    const tColor = trendColors[t.trend] || 'var(--color-muted)';
+    const tIcon  = trendIcons[t.trend] || '';
+    const phaseColors = { 1: '#00d9ff', 2: '#00ffad', 3: '#ffb800', 4: '#f23645' };
+    const pColor = phaseColors[t.market_phase] || 'var(--color-muted)';
+
+    return '<div style="display:flex;gap:1rem;margin-bottom:1rem;flex-wrap:wrap;">'
+        + '<div style="background:' + tColor + '11;border:1px solid ' + tColor + '44;border-radius:var(--radius);padding:8px 14px;flex:1;min-width:140px;">'
+        + '<div style="color:var(--color-muted);font-size:9px;letter-spacing:0.08em;margin-bottom:2px;">TENDENCIA' + tt('asset-trend') + '</div>'
+        + '<div style="color:' + tColor + ';font-size:14px;font-weight:600;letter-spacing:0.05em;">' + tIcon + ' ' + t.trend + '</div>'
+        + '</div>'
+        + '<div style="background:' + pColor + '11;border:1px solid ' + pColor + '44;border-radius:var(--radius);padding:8px 14px;flex:1;min-width:180px;">'
+        + '<div style="color:var(--color-muted);font-size:9px;letter-spacing:0.08em;margin-bottom:2px;">FASE DE MERCADO' + tt('market-phase') + '</div>'
+        + '<div style="color:' + pColor + ';font-size:14px;font-weight:600;letter-spacing:0.05em;">' + (t.phase_label || ('Fase ' + t.market_phase)) + '</div>'
+        + '</div>'
+        + (rs && rs.rs_vs_spy != null
+            ? '<div style="background:' + rs.rs_vs_spy_color + '11;border:1px solid ' + rs.rs_vs_spy_color + '44;border-radius:var(--radius);padding:8px 14px;flex:1;min-width:160px;">'
+              + '<div style="color:var(--color-muted);font-size:9px;letter-spacing:0.08em;margin-bottom:2px;">FUERZA VS SPY (S&P500)' + tt('relative-strength') + '</div>'
+              + '<div style="color:' + rs.rs_vs_spy_color + ';font-size:14px;font-weight:600;letter-spacing:0.05em;">' + rs.rs_vs_spy_label + ' (' + (rs.rs_vs_spy >= 0 ? '+' : '') + rs.rs_vs_spy + 'pp)</div>'
+              + '</div>'
+            : '')
+        + (rs && rs.rs_vs_sector != null
+            ? '<div style="background:' + rs.rs_vs_sector_color + '11;border:1px solid ' + rs.rs_vs_sector_color + '44;border-radius:var(--radius);padding:8px 14px;flex:1;min-width:160px;">'
+              + '<div style="color:var(--color-muted);font-size:9px;letter-spacing:0.08em;margin-bottom:2px;">FUERZA VS ' + (rs.is_industry_level ? 'INDUSTRIA' : 'SECTOR') + ' (' + (rs.sector_etf || '—') + ')</div>'
+              + '<div style="color:' + rs.rs_vs_sector_color + ';font-size:14px;font-weight:600;letter-spacing:0.05em;">' + rs.rs_vs_sector_label + ' (' + (rs.rs_vs_sector >= 0 ? '+' : '') + rs.rs_vs_sector + 'pp)</div>'
+              + (rs.benchmark_label ? '<div style="color:var(--color-muted);font-size:9px;margin-top:2px;">' + rs.benchmark_label + '</div>' : '')
+              + '</div>'
+            : '')
+        + '</div>';
+}
+
+function emaRow(label, ema) {
+    if (!ema || ema.value == null) {
+        return '<div style="display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px solid var(--color-border);font-size:11px;">'
+            + '<span style="color:var(--color-muted);">' + label + '</span>'
+            + '<span style="color:var(--color-muted);">N/A</span>'
+            + '</div>';
+    }
+    const slopeIcons  = { alcista: '↗', bajista: '↘', plana: '→' };
+    const slopeColors = { alcista: '#00ffad', bajista: '#f23645', plana: 'var(--color-muted)' };
+    const sIcon  = slopeIcons[ema.slope] || '';
+    const sColor = slopeColors[ema.slope] || 'var(--color-muted)';
+    const vp     = ema.vs_price;
+    const vpColor = vp == null ? 'var(--color-muted)' : vp >= 0 ? 'var(--color-accent)' : '#f23645';
+    const vpStr   = vp == null ? 'N/A' : (vp >= 0 ? '+' : '') + vp + '%';
+    return '<div style="padding:5px 0;border-bottom:1px solid var(--color-border);font-size:11px;">'
+        + '<div style="display:flex;justify-content:space-between;">'
+        + '<span style="color:var(--color-muted);">' + label + ' $' + ema.value + '</span>'
+        + '<span style="color:' + vpColor + ';">' + vpStr + ' vs precio</span>'
+        + '</div>'
+        + '<div style="text-align:right;font-size:9px;color:' + sColor + ';margin-top:1px;">'
+        + sIcon + ' EMA ' + (ema.slope_pct != null ? (ema.slope_pct >= 0 ? '+' : '') + ema.slope_pct + '%' : 'N/A') + ' pendiente'
+        + '</div>'
+        + '</div>';
+}
+
+function squeezeGauge(s) {
+    const score = s.squeeze_score;
+    const label = s.squeeze_label;
+    const color = score >= 75 ? '#f23645' : score >= 50 ? '#ffb800' : score >= 25 ? '#00d9ff' : 'var(--color-muted)';
+    const pct   = Math.min(score, 100);
+    return '<div style="margin-top:10px;">'
+        + '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">'
+        + '<span style="color:var(--color-muted);font-size:10px;letter-spacing:0.05em;">SQUEEZE GAUGE' + tt('squeeze-gauge') + '</span>'
+        + '<span style="color:' + color + ';font-size:10px;font-weight:600;letter-spacing:0.05em;">' + label + '</span>'
+        + '</div>'
+        + '<div style="position:relative;height:6px;background:var(--color-border);border-radius:3px;overflow:hidden;">'
+        + '<div style="position:absolute;left:0;top:0;height:100%;width:' + pct + '%;background:' + color + ';border-radius:3px;transition:width 0.4s;"></div>'
+        + '</div>'
+        + '<div style="text-align:right;color:' + color + ';font-size:10px;margin-top:2px;">' + score + '/100</div>'
         + '</div>';
 }
 
@@ -474,24 +578,43 @@ function seasonalitySection(data) {
 
 function insiderSection(data) {
     const insider = data.insider_trading;
+    const summary = data.insider_summary;
     if (!insider || !insider.length) return '';
     return '<div style="background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius);overflow:hidden;margin-bottom:1rem;">'
         + '<div style="padding:10px 14px;border-bottom:1px solid var(--color-border);color:var(--color-accent);font-size:12px;letter-spacing:0.08em;">INSIDER TRADING · TRANSACCIONES DIRECTIVOS</div>'
-        + '<div style="display:grid;grid-template-columns:85px 1fr 110px 65px 75px 75px 1fr;gap:8px;padding:6px 14px;border-bottom:1px solid var(--color-border);font-size:10px;color:var(--color-muted);">'
-        + '<div>FECHA</div><div>NOMBRE</div><div>CARGO</div><div>TIPO</div><div>ACCIONES</div><div>VALOR</div><div>NATURALEZA</div>'
+        + (summary ? insiderSummaryBar(summary) : '')
+        + '<div style="display:grid;grid-template-columns:85px 1fr 110px 65px 75px 70px 75px 1fr;gap:8px;padding:6px 14px;border-bottom:1px solid var(--color-border);font-size:10px;color:var(--color-muted);">'
+        + '<div>FECHA</div><div>NOMBRE</div><div>CARGO</div><div>TIPO</div><div>ACCIONES</div><div>PRECIO</div><div>VALOR</div><div>NATURALEZA</div>'
         + '</div>'
-        + insider.map(i => '<div style="display:grid;grid-template-columns:85px 1fr 110px 65px 75px 75px 1fr;gap:8px;padding:8px 14px;border-bottom:1px solid var(--color-border);font-size:11px;align-items:center;">'
+        + insider.map(i => '<div style="display:grid;grid-template-columns:85px 1fr 110px 65px 75px 70px 75px 1fr;gap:8px;padding:8px 14px;border-bottom:1px solid var(--color-border);font-size:11px;align-items:center;">'
             + '<div style="color:var(--color-muted);">' + i.date + '</div>'
             + '<div style="color:var(--color-text);">' + i.name + '</div>'
             + '<div style="color:var(--color-muted);font-size:10px;">' + i.title + '</div>'
             + '<div style="background:' + i.type_color + '22;color:' + i.type_color + ';border:1px solid ' + i.type_color + '44;border-radius:3px;padding:2px 6px;font-size:10px;text-align:center;">' + i.type + '</div>'
             + '<div style="color:var(--color-text);">' + i.shares.toLocaleString('en-US') + '</div>'
+            + '<div style="color:var(--color-text);">' + (i.price ? '$' + i.price.toFixed(2) : 'N/A') + '</div>'
             + '<div style="color:var(--color-text);">' + i.value + '</div>'
             + '<div style="font-size:10px;">'
             + '<span style="color:' + (i.flag_color || 'var(--color-muted)') + ';">' + (i.flag || '') + '</span>'
             + '<div style="color:var(--color-muted);font-size:9px;margin-top:2px;">' + (i.nature || '') + '</div>'
             + '</div>'
             + '</div>').join('')
+        + '</div>';
+}
+
+function insiderSummaryBar(summary) {
+    return '<div style="display:flex;gap:1.5rem;flex-wrap:wrap;align-items:center;padding:10px 14px;border-bottom:1px solid var(--color-border);background:rgba(255,255,255,0.02);">'
+        + '<div>'
+        + '<span style="color:var(--color-muted);font-size:10px;letter-spacing:0.05em;">SENTIMIENTO ' + summary.months + 'M' + tt('insider-summary') + '</span> '
+        + '<span style="color:' + summary.sentiment_color + ';font-size:12px;font-weight:600;letter-spacing:0.05em;">' + summary.sentiment + '</span>'
+        + '</div>'
+        + '<div style="font-size:11px;color:var(--color-muted);">'
+        + '<span style="color:#00ffad;">' + summary.buy_count + ' compras</span> (' + summary.buy_value + ') · '
+        + '<span style="color:#f23645;">' + summary.sell_count + ' ventas</span> (' + summary.sell_value + ')'
+        + '</div>'
+        + '<div style="font-size:11px;color:' + (summary.net_is_buy ? '#00ffad' : '#f23645') + ';">'
+        + 'Neto: ' + (summary.net_is_buy ? '+' : '−') + summary.net_value
+        + '</div>'
         + '</div>';
 }
 // ── HELPERS ───────────────────────────────────────────────────────────────────

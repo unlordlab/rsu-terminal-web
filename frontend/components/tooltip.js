@@ -945,42 +945,287 @@ La disciplina de seguir el plan sin improvisaciones es la clave del sistema.`
     },
 
     // ── RESEARCH ──────────────────────────────────────────────────────────────
+    "relative-strength": {
+        title: "Fuerza Relativa vs SPY y vs Sector",
+        short: "Compara el rendimiento del activo contra el S&P 500 (SPY) y contra el ETF de su propio sector, en 1, 3 y 6 meses ponderados.",
+        long: `Esta métrica responde a una pregunta distinta de la tendencia técnica: no "¿está subiendo el precio?", sino "¿está subiendo MÁS o MENOS que el mercado y que su propio sector?". Una acción puede estar en tendencia alcista (Fase 2) y aun así tener fuerza relativa débil si el resto del mercado sube todavía más rápido.
+
+METODOLOGÍA — MISMA LÓGICA QUE EL MÓDULO RS/RW SCANNER:
+Se calcula el rendimiento del activo, del SPY (proxy del S&P 500) y de un ETF de referencia sectorial, en 3 marcos temporales: 1 mes (21 sesiones), 3 meses (63 sesiones) y 6 meses (126 sesiones).
+
+QUÉ ETF SE USA COMO REFERENCIA — INDUSTRIA ANTES QUE SECTOR:
+El sector GICS (ej. "Industrials") agrupa negocios muy distintos entre sí — desde aeroespacial/defensa hasta maquinaria pesada o transporte — por lo que comparar una empresa de defensa contra el ETF de todo el sector Industrial (XLI) diluye la comparación. Por eso, cuando la industria específica del ticker tiene un ETF más preciso disponible (ej. Aerospace & Defense → ITA, Semiconductors → SOXX, Biotechnology → IBB), se usa ese en vez del ETF de sector genérico. La badge indica "INDUSTRIA" o "SECTOR" según cuál se haya usado, y debajo aparece el nombre de la industria/sector concreto.
+
+PONDERACIÓN:
+▸ 1 mes → 50% del peso (más reciente, más relevante para el momentum actual)
+▸ 3 meses → 30% del peso
+▸ 6 meses → 20% del peso
+
+CÁLCULO:
+Fuerza Relativa = rendimiento del activo − rendimiento del benchmark (SPY o ETF sectorial), en cada periodo, luego promediado con los pesos anteriores. El resultado se expresa en puntos porcentuales (pp) de diferencia.
+
+NIVELES:
+▸ &gt; +5pp → FUERTE → El activo lidera claramente sobre el benchmark
+▸ +1.5 a +5pp → LIGERAMENTE FUERTE
+▸ -1.5 a +1.5pp → NEUTRAL → Se mueve prácticamente igual que el benchmark
+▸ -5 a -1.5pp → LIGERAMENTE DÉBIL
+▸ &lt; -5pp → DÉBIL → El activo está rezagado claramente frente al benchmark
+
+POR QUÉ DOS COMPARACIONES (SPY Y SECTOR) EN VEZ DE UNA:
+Un activo puede ganarle al mercado general simplemente porque todo su sector está en racha (ej. todo el sector Energy sube por una subida del petróleo) sin que la empresa concreta esté haciendo nada especial dentro de su propio grupo — eso lo revela la comparación vs sector. Y al revés: un activo puede perderle a su sector pero seguir ganándole al mercado general, lo cual sigue siendo una señal relativamente positiva. Las dos lecturas juntas dan más contexto que cualquiera de las dos por separado.
+
+RELACIÓN CON EL MÓDULO RS/RW SCANNER:
+Este cálculo usa la misma filosofía de ponderación por periodos que el RS/RW Scanner de la terminal, pero aplicada de forma puntual a un solo ticker dentro de Research, en vez de rankear todo el universo de ~500 acciones. Si quieres ver cómo se posiciona este ticker frente a TODO el mercado en percentil (no solo frente a SPY/sector), el RS/RW Scanner es la herramienta más completa para eso.
+
+LIMITACIÓN:
+Esta fuerza relativa es de precio puro — no incorpora volumen, amplitud ni el RS Rating oficial estilo IBD. Es un proxy rápido y útil, no un sustituto exacto del RS Rating de 1-99 que sí calcula el módulo RS/RW sobre el universo completo.`
+    },
+
+    "fcf-yield": {
+        title: "FCF Yield — Rentabilidad por Flujo de Caja Libre",
+        short: "Free Cash Flow ÷ Capitalización de mercado. Mide cuánto efectivo real genera la empresa por cada euro/dólar de valoración.",
+        long: `El FCF Yield divide el Free Cash Flow (efectivo que genera el negocio tras cubrir su propio capex, antes de dividendos o recompras) entre la capitalización bursátil actual.
+
+FÓRMULA:
+FCF Yield = Free Cash Flow / Market Cap × 100
+
+POR QUÉ ES MÁS FIABLE QUE EL P/E EN ALGUNOS CASOS:
+El beneficio contable (el que usa el P/E) puede distorsionarse por partidas no monetarias: amortizaciones aceleradas, cargos únicos, cambios contables, stock-based compensation no descontado, etc. El FCF es dinero real entrando en caja — mucho más difícil de maquillar de forma sostenida.
+
+INTERPRETACIÓN:
+▸ &gt; 8% → Generación de caja muy fuerte en relación al precio, terreno de "value"
+▸ 4-8% → Rango razonable para la mayoría de empresas maduras y rentables
+▸ 0-4% → Empresa cara en términos de caja, o todavía invirtiendo fuerte en crecimiento (normal en growth/tech temprano)
+▸ Negativo → La empresa está quemando caja; no es necesariamente malo si es fase de inversión agresiva, pero exige vigilar la pista de aterrizaje (runway) de efectivo
+
+LIMITACIÓN:
+El FCF puede ser muy volátil trimestre a trimestre (proyectos de capex puntuales, cambios de working capital), así que un único dato trimestral puede no representar la tendencia real — siempre que sea posible, contrástalo con varios años.`
+    },
+
+    "payout-ratio": {
+        title: "Payout Ratio — Ratio de Reparto de Dividendo",
+        short: "Porcentaje del beneficio por acción (EPS) que la empresa reparte como dividendo. Mide la sostenibilidad del dividendo.",
+        long: `El Payout Ratio indica qué proporción del beneficio neto por acción se destina a pagar dividendos, dejando el resto para reinversión, reducción de deuda o recompras.
+
+FÓRMULA:
+Payout Ratio = Dividendo anual por acción / EPS (beneficio por acción) × 100
+
+INTERPRETACIÓN:
+▸ &lt; 40% → Margen amplio, dividendo muy sostenible y con espacio para crecer
+▸ 40-80% → Rango normal para la mayoría de empresas maduras que reparten dividendo
+▸ 80-100% → Zona de vigilancia: poco margen de seguridad, un mal trimestre puede forzar un recorte
+▸ &gt; 100% → La empresa reparte más de lo que gana — solo sostenible un tiempo limitado, financiado con caja acumulada o deuda, salida en rojo en esta terminal
+
+POR QUÉ ESTE DATO IMPORTA TANTO TRAS EL FIX DEL DIVIDEND YIELD:
+Un yield "real" alto (ej. 6-7%) acompañado de un payout ratio superior al 100% es exactamente el patrón de aviso que precede a recortes de dividendo — el mercado a veces ya está descontando ese riesgo en forma de precio bajo, que es lo que infla el yield artificialmente.
+
+EXCEPCIÓN A TENER EN CUENTA — REITs:
+Los REITs (fondos inmobiliarios cotizados) están obligados por ley a repartir ≥90% de su beneficio imponible, así que un payout alto en ese sector es estructural y normal, no una señal de alarma como en una empresa industrial o tecnológica.`
+    },
+
+    "n-analysts": {
+        title: "Número de Analistas",
+        short: "Cuántas casas de análisis cubren activamente este valor con una recomendación vigente, con la fecha del rating individual más reciente.",
+        long: `Este dato indica cuántos analistas de bancos/casas de inversión tienen actualmente una recomendación publicada sobre el valor.
+
+DE DÓNDE SALE EL NÚMERO:
+Se prioriza el recuento real sumando todas las recomendaciones individuales (Strong Buy + Buy + Hold + Sell + Strong Sell) del periodo más reciente, en vez del campo agregado de Yahoo, que en ocasiones queda desactualizado respecto al consenso real.
+
+POR QUÉ SE MUESTRA LA FECHA DEL ÚLTIMO RATING:
+El número total de analistas (ej. "20 analistas") puede sonar a dato fresco, pero el consenso de precio objetivo que lo acompaña puede arrastrar valoraciones de hace semanas o meses sin que ningún analista haya actualizado su postura recientemente. La fecha del último rating individual te dice cuándo fue la última vez que alguien realmente revisó su opinión sobre el valor — un consenso "vivo" tiene rating recientes; un consenso "dormido" puede llevar tiempo sin que nadie lo toque, aunque el número de analistas siga siendo alto.
+
+CÓMO USARLO:
+Pocos analistas (&lt;5) implica un consenso poco robusto, más sensible a que un solo analista mueva la media con su cambio de opinión. Muchos analistas con rating reciente es la situación más fiable para apoyarte en el consenso de precio objetivo.`
+    },
+
+    "insider-summary": {
+        title: "Sentimiento Insider (6 meses)",
+        short: "Resumen neto de compras vs ventas discrecionales de directivos/insiders en los últimos 6 meses.",
+        long: `Este resumen agrega todas las transacciones de insiders (directivos, consejeros, accionistas significativos) de los últimos 6 meses en un único indicador de sentimiento neto.
+
+QUÉ SE INCLUYE Y QUÉ SE EXCLUYE:
+Solo se cuentan transacciones DISCRECIONALES de mercado real — compras y ventas donde el insider toma una decisión activa. Se excluyen explícitamente movimientos rutinarios y no discrecionales (ejercicios de stock options programados, donaciones, conversiones de valores, liquidaciones fiscales automáticas), que no reflejan una opinión real del insider sobre la valoración del activo.
+
+CÓMO SE CALCULA EL SENTIMIENTO:
+Se compara el valor en $ comprado vs vendido en ese periodo. Si la diferencia neta (compras − ventas) supera el 30% del volumen total transaccionado, se etiqueta COMPRADOR o VENDEDOR; si está más equilibrado, queda NEUTRAL.
+
+POR QUÉ LAS COMPRAS PESAN MÁS QUE LAS VENTAS COMO SEÑAL:
+Los insiders venden por mil motivos no relacionados con su opinión sobre la empresa (diversificación, compra de una casa, divorcio, impuestos, plan de venta automático 10b5-1 programado meses atrás). Pero casi nunca COMPRAN en el mercado abierto con su propio dinero salvo que crean genuinamente que el precio está barato — por eso, históricamente, las compras de insiders son una señal bastante más informativa que las ventas.
+
+LIMITACIÓN:
+6 meses es una ventana corta. Un solo insider con una compra grande puede inclinar el sentimiento sin que represente una visión colectiva del equipo directivo — revisa siempre la tabla detallada debajo para ver quién está detrás del número.`
+    },
+
+    "ema-slope": {
+        title: "EMAs y su Pendiente",
+        short: "Medias móviles exponenciales (10/20/50/200) con su pendiente reciente: alcista ↗, bajista ↘, o plana →.",
+        long: `Las EMAs (medias móviles exponenciales) dan más peso a los precios recientes que las SMA clásicas, por lo que reaccionan más rápido a cambios de tendencia — útil sobre todo en la EMA10/20 para timing de corto plazo.
+
+LAS 4 EMAs Y SU USO TÍPICO:
+▸ EMA 10: la más reactiva, sigue el pulso de muy corto plazo (días/1-2 semanas)
+▸ EMA 20: referencia de swing trading de corto plazo (2-4 semanas)
+▸ EMA 50: tendencia de medio plazo (1-3 meses), la más vigilada por gestores
+▸ EMA 200: tendencia de largo plazo (6-12 meses), la línea divisoria clásica entre mercado alcista y bajista de fondo
+
+CÓMO SE CALCULA LA PENDIENTE:
+Se compara el valor actual de cada EMA contra su propio valor unas sesiones atrás (más sesiones cuanto más lenta la EMA, para evitar ruido). Si la variación supera un umbral mínimo se marca como ↗ alcista o ↘ bajista; si está dentro del umbral, se marca → plana (la EMA se está aplanando, señal de posible cambio de fase).
+
+DOS NÚMEROS DISTINTOS QUE NO HAY QUE CONFUNDIR:
+Cada fila de EMA muestra dos porcentajes con significados diferentes:
+▸ "% vs precio" (arriba, número grande) → cuánto se aleja el precio ACTUAL de esa media. Ej. si el precio está en $13.14 y la EMA200 en $14.34, la distancia es -8.4% — esto responde "¿qué tan lejos está el precio de esta media?".
+▸ "EMA pendiente" (abajo, número pequeño con flecha) → cuánto ha cambiado el VALOR de la propia EMA en las últimas sesiones, no su relación con el precio. Responde "¿está esta media subiendo o bajando?", independientemente de dónde esté el precio respecto a ella.
+Un precio puede estar muy lejos de una EMA (distancia grande) mientras esa EMA tiene una pendiente pequeña porque se mueve despacio — son lecturas independientes, no la misma cosa medida de dos formas.
+
+POR QUÉ LA PENDIENTE IMPORTA MÁS QUE EL VALOR ABSOLUTO:
+Dos activos pueden cotizar ambos por encima de su EMA50, pero si en uno la EMA50 sigue subiendo con fuerza y en el otro se está aplanando, el segundo está mostrando primeras señales de agotamiento de tendencia mucho antes de que el precio lo confirme.`
+    },
+
+    "asset-trend": {
+        title: "Tendencia del Activo",
+        short: "Clasificación ALCISTA / BAJISTA / RANGO según la alineación y pendiente de las EMAs.",
+        long: `Esta clasificación resume en una sola etiqueta si el activo está en tendencia alcista, bajista, o sin dirección clara (rango/lateral), combinando 5 condiciones de alineación de EMAs:
+
+1. Precio por encima de la EMA20
+2. EMA20 por encima de la EMA50
+3. EMA50 por encima de la EMA200
+4. EMA50 con pendiente alcista
+5. EMA200 con pendiente alcista o plana (no bajista)
+
+CÓMO SE DECIDE LA ETIQUETA:
+▸ 4-5 condiciones cumplidas → ALCISTA: alineación limpia, EMAs ordenadas de corto a largo plazo y subiendo
+▸ 0-1 condiciones cumplidas → BAJISTA: alineación invertida, EMAs ordenadas a la baja
+▸ 2-3 condiciones → RANGO: alineación mixta, sin un sesgo dominante claro — el activo está lateral, en transición entre fases, o las EMAs están entrelazadas
+
+POR QUÉ "RANGO" NO ES UN FALLO DEL SISTEMA:
+Los activos no están siempre en tendencia clara — pasan buena parte del tiempo en fases de transición o consolidación. Detectar correctamente el "RANGO" es tan útil como detectar la tendencia: evita forzar una lectura direccional donde el activo simplemente no la tiene todavía.`
+    },
+
+    "market-phase": {
+        title: "Fase de Mercado (1-4)",
+        short: "Clasificación de las 4 fases clásicas de Stan Weinstein: Acumulación, Avance, Distribución, Declive.",
+        long: `Este sistema de 4 fases, popularizado por Stan Weinstein en "Secrets for Profiting in Bull and Bear Markets", describe el ciclo natural por el que pasa cualquier activo a lo largo del tiempo.
+
+LAS 4 FASES:
+▸ FASE 1 — ACUMULACIÓN: el activo lleva tiempo lateral tras una caída previa, las EMAs están entrelazadas sin pendiente clara, normalmente cerca o por debajo de la EMA200. Los inversores informados empiezan a acumular en silencio antes de que el precio confirme nada.
+▸ FASE 2 — AVANCE (Markup): tendencia alcista confirmada y limpia — EMAs ordenadas (10>20>50>200) y con pendiente ascendente. Es la única fase que O'Neil, Minervini y Weinstein coinciden en señalar como la fase para comprar.
+▸ FASE 3 — DISTRIBUCIÓN: el activo cotiza todavía por encima de la EMA200 (herencia de una Fase 2 previa) pero la alineación de EMAs se ha roto — empieza a moverse lateral en zona alta. Los que compraron en Fase 1-2 comienzan a vender posición a quien compra tarde.
+▸ FASE 4 — DECLIVE / CORRECCIÓN: tendencia bajista confirmada y limpia, EMAs ordenadas a la baja. Fase de salida o de espera, nunca de compra según esta metodología.
+
+CÓMO SE DISTINGUEN 1 Y 3 EN ESTE SISTEMA (ambas son técnicamente "rango"):
+La diferencia clave es la posición respecto a la EMA200: si el precio está por debajo o pegado a ella tras un periodo lateral, se interpreta como acumulación temprana (Fase 1); si está por encima tras un periodo lateral, se interpreta como distribución tras una subida previa (Fase 3).
+
+SUBESTADO ESPECIAL — "FASE 1 · POSIBLE GIRO TEMPRANO":
+Existe un caso intermedio que el sistema trata de forma diferenciada: cuando las EMAs cortas (10 y 20) ya giran al alza y el precio cotiza por encima de la EMA20, pero las EMAs largas (50 y 200) siguen con pendiente bajista. Sin este matiz, ese escenario se clasificaría como BAJISTA/Fase 4 puro, ocultando que ya hay primeras señales de reversión — un rebote real desde mínimos siempre empieza así, con las medias cortas confirmando antes que las largas. Cuando se detecta este patrón, el sistema lo etiqueta como "Fase 1 · Posible Giro Temprano" en vez de Fase 4, para que la primera señal de cambio no quede enmascarada por la inercia bajista de las EMAs largas. Sigue siendo una fase de cautela, no de confirmación — las EMA50/200 todavía no respaldan el giro, así que puede revertirse y volver a Fase 4 si el rebote falla.
+
+LIMITACIÓN A TENER EN CUENTA:
+Esta clasificación se basa puramente en el comportamiento de precio y EMAs (sin datos de volumen institucional real ni acumulación/distribución verificada), por lo que es una aproximación técnica razonable, no una confirmación de manual de Weinstein al 100%. Combínala con el resto de herramientas de la terminal antes de actuar.`
+    },
+
+    "short-interest-pct": {
+        title: "Short Interest — % del Float",
+        short: "Porcentaje de las acciones disponibles para negociar (float) que están actualmente vendidas en corto.",
+        long: `El % de Short Interest sobre el float mide cuántas acciones, de las que realmente circulan en el mercado libre (excluyendo las retenidas por insiders o bloqueadas), están prestadas y vendidas en corto en este momento.
+
+POR QUÉ SE USA EL FLOAT Y NO EL TOTAL DE ACCIONES:
+El float es la cifra relevante porque es la oferta REAL disponible para comprar/vender. Un short interest del 20% sobre un float pequeño es mucho más significativo que el mismo 20% sobre un float gigante — hay menos acciones físicas para que los cortos las recompren si el precio se dispara.
+
+RANGOS ORIENTATIVOS:
+▸ &lt; 5% → Interés corto bajo, sin presión relevante
+▸ 5-10% → Interés corto normal, vigilar si sube
+▸ 10-20% → Interés corto elevado, candidato a movimientos bruscos
+▸ &gt; 20% → Interés corto extremo, zona histórica de squeezes conocidos (GME, AMC superaron el 100% en sus picos)
+
+LIMITACIÓN IMPORTANTE:
+Este dato se reporta con retraso (normalmente con datos de mediados o finales de cada quincena bursátil en EE.UU.), no es en tiempo real. Un short interest alto no garantiza un squeeze — necesita además un catalizador (noticia, earnings, compra coordinada) que fuerce a los cortos a cerrar posiciones.`
+    },
+
+    "days-to-cover": {
+        title: "Days to Cover — Días para Cubrir",
+        short: "Cuántos días de volumen medio de negociación necesitarían los vendedores en corto para recomprar todas sus posiciones.",
+        long: `Days to Cover (también llamado Short Ratio) divide el número total de acciones vendidas en corto entre el volumen medio diario de negociación.
+
+FÓRMULA:
+Days to Cover = Acciones en corto / Volumen medio diario
+
+QUÉ MIDE REALMENTE:
+No es un plazo que los cortos deban cumplir obligatoriamente — es una medida de LIQUIDEZ. Indica cuánto tardaría el mercado en "absorber" toda la recompra de cortos si todos intentaran cerrar posición al mismo tiempo, dado el volumen habitual que se negocia.
+
+INTERPRETACIÓN:
+▸ &lt; 2 días → Liquidez amplia, los cortos podrían salir rápido sin mover mucho el precio
+▸ 2-5 días → Liquidez moderada
+▸ 5-10 días → Liquidez ajustada, una recompra forzada movería el precio de forma notable
+▸ &gt; 10 días → Liquidez muy ajustada, ingrediente clave de un short squeeze severo
+
+POR QUÉ IMPORTA COMBINADO CON EL % DE FLOAT:
+Un % de float corto alto con Days to Cover bajo significa que, aunque hay mucho interés corto, hay suficiente volumen para que se deshaga sin drama. La combinación de AMBOS altos a la vez es la que históricamente ha precedido los squeezes más violentos (GME enero 2021 llegó a tener Days to Cover de varios días con un float muy reducido).`
+    },
+
+    "squeeze-gauge": {
+        title: "Squeeze Gauge — Potencial de Short Squeeze",
+        short: "Score 0-100 propio RSU que combina % de float en corto y días para cubrir en una sola lectura visual.",
+        long: `El Squeeze Gauge combina dos métricas de short interest en un único score de 0 a 100 para facilitar una lectura rápida del riesgo/oportunidad de un short squeeze.
+
+CÁLCULO:
+▸ Componente % Float en corto (peso 60 pts): escala hasta 30% de float corto → máximo de puntos
+▸ Componente Days to Cover (peso 40 pts): escala hasta 10 días → máximo de puntos
+
+Score = min(%float/30 × 60, 60) + min(DTC/10 × 40, 40)
+
+NIVELES:
+▸ 0-25 → BAJO → Sin presión de cortos relevante
+▸ 25-50 → MODERADO → Interés corto a vigilar, sin condiciones extremas todavía
+▸ 50-75 → ALTO → Combinación de % float y liquidez ajustada que históricamente precede movimientos bruscos
+▸ 75-100 → EXTREMO → Condiciones similares a los squeezes más conocidos del mercado (GME, AMC 2021)
+
+QUÉ NO TE DICE EL SCORE — MUY IMPORTANTE:
+Un score alto NO predice que el squeeze vaya a ocurrir, ni cuándo. Mide CONDICIONES NECESARIAS (mucho interés corto + poca liquidez para cubrir), no el catalizador que dispararía el evento — eso requiere un detonante externo (noticia, compra coordinada retail, earnings sorpresa) que ningún indicador cuantitativo puede anticipar con fiabilidad. Trátalo como un mapa de "dónde hay leña apilada", no de "cuándo se va a prender fuego".`
+    },
+
     "rsu-score": {
-        title: "RSU Score — Valoración Integral",
-        short: "Score 0-100 que combina crecimiento, rentabilidad, consenso y potencial de precio objetivo.",
-        long: `El RSU Score es un sistema de valoración propio que combina 5 dimensiones para dar una puntuación global de 0 a 100 a cualquier acción.
+        title: "RSU Score — Valoración Integral Unificada",
+        short: "Score 0-100 que combina calidad fundamental, salud financiera (Piotroski), valoración vs sector, sentimiento de mercado y fase técnica en un único número.",
+        long: `El RSU Score es un sistema de valoración propio que combina 5 dimensiones independientes para dar una puntuación global de 0 a 100 a cualquier acción.
 
 LOS 5 COMPONENTES (20 puntos cada uno):
 
-1. CRECIMIENTO DE INGRESOS (20pts)
-> 25% → 20pts | > 15% → 15pts | > 5% → 10pts | < 5% → 0pts
+1. CALIDAD FUNDAMENTAL (20pts)
+Promedio de crecimiento de ingresos, ROE y margen neto — niveles ABSOLUTOS de rentabilidad actual.
 
-2. ROE — Return on Equity (20pts)
-> 25% → 20pts | > 15% → 15pts | > 8% → 10pts | < 8% → 0pts
+2. SALUD FINANCIERA · PIOTROSKI (20pts)
+El Piotroski F-Score (0-9 criterios, ver tooltip propio) escalado a 20 puntos. A diferencia de la Calidad Fundamental, esto mide la TENDENCIA interanual de la salud financiera, no el nivel absoluto — por eso es un componente separado, no redundante.
 
-3. MARGEN NETO (20pts)
-> 20% → 20pts | > 10% → 15pts | > 2% → 10pts | < 2% → 0pts
+3. VALORACIÓN VS SECTOR (20pts)
+Compara P/E, EV/EBITDA, PEG y P/B contra la mediana del sector. Si no hay benchmark sectorial disponible, usa el PEG absoluto como respaldo.
 
-4. CONSENSO ANALISTAS (20pts)
-> 75% alcistas → 20pts | > 60% → 15pts | > 40% → 10pts | < 40% → 0pts
+4. SENTIMIENTO DE MERCADO (20pts)
+Consenso de analistas + potencial de precio objetivo, ajustado ±3pts según si los insiders están comprando o vendiendo discrecionalmente en los últimos 6 meses.
 
-5. POTENCIAL PRECIO OBJETIVO (20pts)
-Upside > 25% → 20pts | > 15% → 15pts | > 5% → 10pts | < 5% → 0pts
+5. FASE TÉCNICA (20pts)
+Usa la Fase de Mercado (1-4) de Niveles Técnicos: Fase 2 (Markup) = 20pts, Fase 1 (Acumulación) = 13pts, Fase 3 (Distribución) = 7pts, Fase 4 (Declive) = 0pts.
+
+POR QUÉ SE REDISEÑÓ — INTEGRACIÓN DE PIOTROSKI:
+Antes, el RSU Score y el Piotroski F-Score eran dos sistemas totalmente independientes que medían cosas distintas (niveles absolutos vs tendencia interanual) y podían dar lecturas aparentemente contradictorias sin explicación — una empresa con buenos márgenes actuales pero salud financiera deteriorándose podía mostrar RSU alto y Piotroski bajo a la vez. Ahora Piotroski es literalmente el 20% del RSU Score, así que su efecto sobre la puntuación final es explícito y visible en el desglose, no una contradicción aparte que hay que reconciliar mentalmente.
+
+SI FALTA ALGÚN DATO:
+Si una categoría no tiene datos disponibles para el ticker, el score se recalcula sobre las categorías sí disponibles (no se penaliza por ausencia de datos, pero el score será menos representativo cuantas menos categorías tenga detrás — revisa siempre el desglose).
 
 INTERPRETACIÓN:
-- 80-100 → COMPRA FUERTE → Todos los factores alineados
-- 65-79 → COMPRA → Mayoría de factores positivos
-- 50-64 → NEUTRAL → Mix de señales
-- 35-49 → PRECAUCIÓN → Debilidades importantes
-- 0-34 → EVITAR → Fundamentales débiles
+- 80-100 → COMPRA FUERTE → Las 5 dimensiones mayormente alineadas
+- 65-79 → COMPRA → Mayoría de dimensiones positivas
+- 50-64 → NEUTRAL → Mix de señales entre dimensiones
+- 35-49 → PRECAUCIÓN → Varias dimensiones débiles
+- 0-34 → EVITAR → Fundamentales, técnico y/o sentimiento débiles
 
-Es una herramienta de filtrado, no una recomendación de inversión.`
+Es una herramienta de filtrado y contexto, no una recomendación de inversión.`
     },
 
     "piotroski-score": {
         title: "Piotroski F-Score — Salud Financiera Fundamental",
-        short: "Puntuación 0-9 ideada por Joseph Piotroski que mide la solidez fundamental de una empresa comparando su último ejercicio fiscal contra el anterior.",
-        long: `El Piotroski F-Score evalúa 9 criterios contables binarios (1 punto si se cumple, 0 si no) repartidos en 3 bloques. Cuanto más alto, más sólidos son los fundamentales recientes de la empresa.
+        short: "Puntuación 0-9 ideada por Joseph Piotroski que mide la solidez fundamental de una empresa comparando su último ejercicio fiscal contra el anterior. Es el 20% del RSU Score.",
+        long: `El Piotroski F-Score evalúa 9 criterios contables binarios (1 punto si se cumple, 0 si no) repartidos en 3 bloques. Cuanto más alto, más sólida es la TENDENCIA interanual de los fundamentales de la empresa — a diferencia de otras métricas que miran el nivel absoluto, este score mira si las cosas están mejorando o empeorando respecto al ejercicio anterior.
+
+RELACIÓN CON EL RSU SCORE:
+Este score ya no vive de forma aislada — es uno de los 5 componentes que forman el RSU Score (20% del total, ver tooltip "RSU Score"). Eso significa que un Piotroski bajo siempre va a pesar a la baja en el score global, y uno alto siempre suma — ya no pueden contradecirse entre sí porque uno está dentro del otro.
 
 RENTABILIDAD (4 puntos):
 1. ROA positivo en el último ejercicio

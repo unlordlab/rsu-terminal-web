@@ -105,15 +105,79 @@ def _get_yfinance(ticker: str) -> dict:
             "upside": round((tm - cp) / cp * 100, 1) if (tm and cp) else None,
         }
 
+        # n_analysts: el campo numberOfAnalystOpinions de Yahoo a veces no coincide
+        # con el recuento real que sí tenemos en `recommendations` (puede estar
+        # desfasado a un periodo distinto). Usamos recommendations.total como fuente
+        # de verdad cuando está disponible y difiere significativamente.
+        _n_analysts_yahoo = _safe(info.get('numberOfAnalystOpinions'))
+        _n_analysts_real  = recommendations['total'] if recommendations else None
+        if _n_analysts_real is not None and _n_analysts_real > 0:
+            n_analysts_final = _n_analysts_real
+        else:
+            n_analysts_final = _n_analysts_yahoo
+
+        # Fecha del rating individual más reciente (no el agregado, que puede
+        # estar desactualizado varias semanas frente al último analista que actuó).
+        latest_rating_date = None
+        try:
+            upgrades = stock.upgrades_downgrades
+            if upgrades is not None and not upgrades.empty:
+                latest_rating_date = str(upgrades.index.max().date())
+        except Exception:
+            pass
+
+        # Beta: igual que PEG y dividend yield, puede venir nulo o con valores
+        # poco creíbles (beta negativo extremo, o >5, son casi siempre datos rotos
+        # más que activos reales con esa volatilidad relativa).
+        _beta_raw = _safe(info.get('beta'))
+        beta_final = _beta_raw if (_beta_raw is not None and -2 <= _beta_raw <= 5) else None
+
         # Métricas
+        _fpe = _safe(info.get('forwardPE'))
+        _tpe = _safe(info.get('trailingPE'))
+        _eg  = _safe(info.get('earningsGrowth'))
+
+        # PEG manual: P/E (forward si existe, si no trailing) ÷ crecimiento earnings (%)
+        # El campo pegRatio de Yahoo viene roto/desfasado con mucha frecuencia.
+        _peg_calc = None
+        _pe_for_peg = _fpe if (_fpe and _fpe > 0) else _tpe
+        if _pe_for_peg and _eg and _eg > 0:
+            _peg_calc = _pe_for_peg / (_eg * 100)
+
+        # Sanity check: si el cálculo manual falla o sale fuera de rango razonable,
+        # caemos al dato de Yahoo solo si éste también pasa el filtro; si no, N/A.
+        def _peg_sane(v):
+            return v is not None and 0 < v <= 15
+
+        peg_final = _peg_calc if _peg_sane(_peg_calc) else None
+        if peg_final is None:
+            _peg_yahoo = _safe(info.get('pegRatio'))
+            if _peg_sane(_peg_yahoo):
+                peg_final = _peg_yahoo
+
         metrics = {
-            "trailing_pe":    _safe(info.get('trailingPE')),
-            "forward_pe":     _safe(info.get('forwardPE')),
+            "trailing_pe":    _tpe,
+            "forward_pe":     _fpe,
             "price_to_sales": _safe(info.get('priceToSalesTrailing12Months')),
             "ev_ebitda":      _safe(info.get('enterpriseToEbitda')),
-            "peg_ratio":      _safe(info.get('pegRatio')),
+            "peg_ratio":      peg_final,
             "price_to_book":  _safe(info.get('priceToBook')),
         }
+
+        _mktcap   = _safe(info.get('marketCap'))
+        _fcf      = _safe(info.get('freeCashflow'))
+        _eps_ttm  = _safe(info.get('trailingEps'))
+        _div_rate_pf = _safe(info.get('dividendRate'))
+
+        # FCF Yield: FCF / Market Cap. Más fiable que el P/E en empresas con
+        # beneficios contables distorsionados (amortizaciones, partidas no-cash, etc.)
+        fcf_yield = round(_fcf / _mktcap * 100, 2) if (_fcf and _mktcap) else None
+
+        # Dividend Payout Ratio: dividendo anual / EPS. >80-100% es señal de alerta
+        # de sostenibilidad, especialmente relevante cruzado con el yield ya corregido.
+        payout_ratio = None
+        if _div_rate_pf and _eps_ttm and _eps_ttm > 0:
+            payout_ratio = round(_div_rate_pf / _eps_ttm * 100, 1)
 
         profitability = {
             "roe":             _safe(info.get('returnOnEquity')),
@@ -124,8 +188,10 @@ def _get_yfinance(ticker: str) -> dict:
             "revenue_growth":  _safe(info.get('revenueGrowth')),
             "earnings_growth": _safe(info.get('earningsGrowth')),
             "debt_to_equity":  _safe(info.get('debtToEquity')),
-            "free_cashflow":   _safe(info.get('freeCashflow')),
+            "free_cashflow":   _fcf,
+            "fcf_yield":       fcf_yield,
             "current_ratio":   _safe(info.get('currentRatio')),
+            "payout_ratio":    payout_ratio,
         }
 
         # Sparkline
@@ -138,6 +204,28 @@ def _get_yfinance(ticker: str) -> dict:
 
         prev_close = _safe(info.get('previousClose')) or _safe(info.get('regularMarketPreviousClose'))
         chg_pct    = round((cp - prev_close) / prev_close * 100, 2) if prev_close else 0
+
+        # Dividend Yield: el campo dividendYield de Yahoo cambia de formato entre
+        # versiones de yfinance — a veces fracción (0.0168) y a veces ya porcentaje
+        # (1.68), sin aviso. En vez de confiar en ese formato ambiguo, lo calculamos
+        # de forma fiable como dividendRate (importe $ anual, siempre consistente) / precio.
+        _div_rate = _safe(info.get('dividendRate'))
+        if _div_rate and cp:
+            dividend_yield_pct = round(_div_rate / cp * 100, 2)
+        else:
+            _raw_dy = _safe(info.get('dividendYield'))
+            if _raw_dy is None:
+                dividend_yield_pct = None
+            elif _raw_dy > 1:
+                # Ya viene como porcentaje (ej. 1.68 = 1.68%), no multiplicar.
+                dividend_yield_pct = round(_raw_dy, 2)
+            else:
+                # Viene como fracción (ej. 0.0168 = 1.68%).
+                dividend_yield_pct = round(_raw_dy * 100, 2)
+            # Sanity check: ningún yield real de mercado supera ~30%. Si lo supera,
+            # el dato de origen es inservible — mejor N/A que un número que despista.
+            if dividend_yield_pct is not None and dividend_yield_pct > 30:
+                dividend_yield_pct = None
 
         return {
             "ok": True,
@@ -157,10 +245,11 @@ def _get_yfinance(ticker: str) -> dict:
             "week52_high": _safe(info.get('fiftyTwoWeekHigh')),
             "week52_low":  _safe(info.get('fiftyTwoWeekLow')),
             "avg_volume":  _safe(info.get('averageVolume')),
-            "beta":        _safe(info.get('beta')),
-            "dividend_yield": _safe(info.get('dividendYield')),
-            "dividend_rate":  _safe(info.get('dividendRate')),
-            "n_analysts":  _safe(info.get('numberOfAnalystOpinions')),
+            "beta":        beta_final,
+            "dividend_yield": (dividend_yield_pct / 100) if dividend_yield_pct is not None else None,
+            "dividend_rate":  _div_rate,
+            "n_analysts":  n_analysts_final,
+            "latest_rating_date": latest_rating_date,
             "recommendations": recommendations,
             "recommendations_trend": recommendations_trend,
             "target_data":    target_data,
@@ -466,49 +555,131 @@ def _generate_suggestions(yf_data: dict) -> list:
 
     return suggestions or ["ℹ Datos insuficientes para generar sugerencias."]
 
-def _compute_rsu_score(yf_data: dict) -> dict:
-    score    = 0
-    max_score = 100
+def _compute_rsu_score(yf_data: dict, piotroski: dict = None, sector_comparison: dict = None,
+                        insider_summary: dict = None, technical: dict = None) -> dict:
+    """
+    RSU Score unificado (0-100), 5 categorías de 20pts cada una.
+
+    Antes existían dos scores independientes (RSU Score y Piotroski) que podían
+    contradecirse: RSU Score miraba niveles absolutos de rentabilidad/crecimiento
+    + sentimiento de analistas, mientras que Piotroski mira solo la TENDENCIA
+    interanual de la salud financiera, sin importar el nivel absoluto. Una empresa
+    podía tener márgenes altos (RSU Score alto) mientras su salud financiera se
+    deterioraba interanualmente (Piotroski bajo) — ambos scores tenían razón a la
+    vez, pero medían cosas distintas sin comunicarse entre sí.
+
+    Esta versión integra Piotroski COMO categoría explícita (20% del total) en
+    vez de mantenerlo como score separado, junto con valoración relativa al
+    sector, sentimiento de mercado (analistas + insiders) y fase técnica —
+    así un único número resume las 5 dimensiones relevantes sin que ninguna
+    quede "escondida" generando contradicciones aparentes.
+    """
     breakdown = []
     metrics  = yf_data.get('metrics', {})
     prof     = yf_data.get('profitability', {})
     recs     = yf_data.get('recommendations')
     target   = yf_data.get('target_data', {})
 
-    # Crecimiento ingresos (20pts)
+    # ── 1. CALIDAD FUNDAMENTAL (20pts) ──────────────────────────────────────
+    # Niveles absolutos de crecimiento, ROE y margen neto, promediados.
+    sub_pts, sub_max = [], 0
     rg = prof.get('revenue_growth')
     if rg is not None:
-        pts = 20 if rg > 0.25 else 15 if rg > 0.15 else 10 if rg > 0.05 else 0
-        score += pts
-        breakdown.append({"label": "Crecimiento Ingresos", "pts": pts, "max": 20, "val": f"{rg*100:.1f}%"})
-
-    # ROE (20pts)
+        sub_pts.append(20 if rg > 0.25 else 15 if rg > 0.15 else 10 if rg > 0.05 else 0)
+        sub_max += 1
     roe = prof.get('roe')
     if roe is not None:
-        pts = 20 if roe > 0.25 else 15 if roe > 0.15 else 10 if roe > 0.08 else 0
-        score += pts
-        breakdown.append({"label": "ROE", "pts": pts, "max": 20, "val": f"{roe*100:.1f}%"})
-
-    # Margen neto (20pts)
+        sub_pts.append(20 if roe > 0.25 else 15 if roe > 0.15 else 10 if roe > 0.08 else 0)
+        sub_max += 1
     nm = prof.get('net_margin')
     if nm is not None:
-        pts = 20 if nm > 0.20 else 15 if nm > 0.10 else 10 if nm > 0.02 else 0
-        score += pts
-        breakdown.append({"label": "Margen Neto", "pts": pts, "max": 20, "val": f"{nm*100:.1f}%"})
+        sub_pts.append(20 if nm > 0.20 else 15 if nm > 0.10 else 10 if nm > 0.02 else 0)
+        sub_max += 1
+    fund_pts = round(sum(sub_pts) / len(sub_pts)) if sub_pts else None
+    if fund_pts is not None:
+        parts = []
+        if rg is not None: parts.append(f"Crec. {rg*100:.0f}%")
+        if roe is not None: parts.append(f"ROE {roe*100:.0f}%")
+        if nm is not None: parts.append(f"Margen {nm*100:.0f}%")
+        breakdown.append({"label": "Calidad Fundamental", "pts": fund_pts, "max": 20, "val": " · ".join(parts)})
 
-    # Consenso analistas (20pts)
+    # ── 2. SALUD FINANCIERA — PIOTROSKI (20pts) ─────────────────────────────
+    # Tendencia interanual real (no nivel absoluto). Folded in directamente:
+    # ya no es un score aparte que pueda "contradecir" al RSU Score.
+    if piotroski and piotroski.get('max'):
+        pio_pts = round(piotroski['score'] / piotroski['max'] * 20)
+        breakdown.append({"label": "Salud Financiera (Piotroski)", "pts": pio_pts, "max": 20,
+                           "val": f"{piotroski['score']}/{piotroski['max']} criterios"})
+    else:
+        pio_pts = None
+
+    # ── 3. VALORACIÓN RELATIVA AL SECTOR (20pts) ────────────────────────────
+    val_keys = ['trailing_pe', 'forward_pe', 'ev_ebitda', 'peg_ratio', 'price_to_book']
+    if sector_comparison and sector_comparison.get('ok') and sector_comparison.get('items'):
+        items = sector_comparison['items']
+        available = [items[k] for k in val_keys if k in items]
+        if available:
+            fav_count = sum(1 for it in available if it['favorable'])
+            val_pts = round(fav_count / len(available) * 20)
+            breakdown.append({"label": "Valoración vs Sector", "pts": val_pts, "max": 20,
+                               "val": f"{fav_count}/{len(available)} métricas favorables"})
+        else:
+            val_pts = None
+    else:
+        # Fallback sin benchmark sectorial: PEG absoluto como proxy de valoración.
+        peg = metrics.get('peg_ratio')
+        if peg is not None:
+            val_pts = 20 if peg < 1 else 15 if peg < 1.5 else 10 if peg < 2.5 else 0
+            breakdown.append({"label": "Valoración (PEG)", "pts": val_pts, "max": 20, "val": f"PEG {peg:.2f}"})
+        else:
+            val_pts = None
+
+    # ── 4. SENTIMIENTO DE MERCADO (20pts) ───────────────────────────────────
+    # Consenso de analistas + potencial de precio objetivo, ajustado por
+    # sentimiento de insiders (compras/ventas discrecionales reales con su
+    # propio dinero, señal históricamente más informativa que las ventas).
+    sent_components = []
     if recs and recs['total'] > 0:
         buy_pct = (recs['strong_buy'] + recs['buy']) / recs['total'] * 100
-        pts = 20 if buy_pct >= 75 else 15 if buy_pct >= 60 else 10 if buy_pct >= 40 else 0
-        score += pts
-        breakdown.append({"label": "Consenso Analistas", "pts": pts, "max": 20, "val": f"{buy_pct:.0f}% alcistas"})
-
-    # Potencial precio objetivo (20pts)
+        sent_components.append(20 if buy_pct >= 75 else 15 if buy_pct >= 60 else 10 if buy_pct >= 40 else 0)
     upside = target.get('upside')
     if upside is not None:
-        pts = 20 if upside > 25 else 15 if upside > 15 else 10 if upside > 5 else 0
-        score += pts
-        breakdown.append({"label": "Potencial P.Objetivo", "pts": pts, "max": 20, "val": f"{upside:+.1f}%"})
+        sent_components.append(20 if upside > 25 else 15 if upside > 15 else 10 if upside > 5 else 0)
+    if sent_components:
+        sent_pts = sum(sent_components) / len(sent_components)
+        insider_note = ""
+        if insider_summary and insider_summary.get('sentiment'):
+            if insider_summary['sentiment'] == 'COMPRADOR':
+                sent_pts += 3
+                insider_note = " · Insiders comprando"
+            elif insider_summary['sentiment'] == 'VENDEDOR':
+                sent_pts -= 3
+                insider_note = " · Insiders vendiendo"
+        sent_pts = round(max(0, min(20, sent_pts)))
+        val_str = (f"{buy_pct:.0f}% alcistas" if recs and recs['total'] > 0 else "") \
+                   + (f" · {upside:+.0f}% objetivo" if upside is not None else "") + insider_note
+        breakdown.append({"label": "Sentimiento de Mercado", "pts": sent_pts, "max": 20, "val": val_str.strip(" ·")})
+    else:
+        sent_pts = None
+
+    # ── 5. FASE TÉCNICA (20pts) ─────────────────────────────────────────────
+    # Usa la fase de mercado (1-4) ya calculada en Niveles Técnicos, para que
+    # el componente técnico del score sea coherente con lo que se ve en esa
+    # sección — no una lectura técnica distinta e inconexa.
+    PHASE_PTS = {2: 20, 1: 13, 3: 7, 4: 0}
+    if technical and technical.get('market_phase'):
+        tech_pts = PHASE_PTS.get(technical['market_phase'], 10)
+        breakdown.append({"label": "Fase Técnica", "pts": tech_pts, "max": 20,
+                           "val": technical.get('phase_label', f"Fase {technical['market_phase']}")})
+    else:
+        tech_pts = None
+
+    # ── TOTAL ────────────────────────────────────────────────────────────────
+    # Si falta alguna categoría (datos no disponibles), se reescala sobre las
+    # categorías sí disponibles para no penalizar por ausencia de datos.
+    available_cats = [p for p in [fund_pts, pio_pts, val_pts, sent_pts, tech_pts] if p is not None]
+    score = round(sum(available_cats) / len(available_cats) / 20 * 100) if available_cats else 0
+    max_score = 100
 
     color = "#00ffad" if score >= 70 else "#ffb800" if score >= 50 else "#f23645"
     label = "COMPRA FUERTE" if score >= 80 else "COMPRA" if score >= 65 else "NEUTRAL" if score >= 50 else "PRECAUCIÓN" if score >= 35 else "EVITAR"
@@ -572,42 +743,92 @@ def _classify_insider_tx(code: str, is_buy: bool) -> dict:
     return {"nature": "Compra" if is_buy else "Venta",
             "scheduled": None, "flag": "Sin clasificar", "flag_color": "#888"}
 
-def _get_insider_trading(ticker: str) -> list:
+def _get_insider_trading(ticker: str) -> dict:
     try:
         key = settings.finnhub_api_key
-        if not key: return []
+        if not key: return {"transactions": [], "summary": None}
         r = requests.get(
             f"https://finnhub.io/api/v1/stock/insider-transactions?symbol={ticker}&token={key}",
             timeout=8
         )
-        if r.status_code != 200: return []
+        if r.status_code != 200: return {"transactions": [], "summary": None}
         data = r.json().get('data', [])
-        if not isinstance(data, list): return []
+        if not isinstance(data, list): return {"transactions": [], "summary": None}
+
+        from datetime import datetime, timedelta
+        cutoff = datetime.now() - timedelta(days=182)
+
         results = []
-        for item in data[:10]:
+        buy_count = sell_count = 0
+        buy_value = sell_value = 0.0
+
+        for item in data:
             change = _safe(item.get('change', 0)) or 0
             value  = _safe(item.get('transactionPrice', 0)) or 0
             total  = abs(change * value)
             is_buy = change > 0
             cls    = _classify_insider_tx(item.get('transactionCode', ''), is_buy)
-            results.append({
-                "date":     item.get('transactionDate', '')[:10],
-                "name":     item.get('name', ''),
-                "title":    item.get('position', ''),
-                "type":     'COMPRA' if is_buy else 'VENTA',
-                "type_color": '#00ffad' if is_buy else '#f23645',
-                "shares":   int(abs(change)),
-                "price":    round(value, 2),
-                "value":    _fmt_value(total),
-                "code":     (item.get('transactionCode') or '').strip().upper(),
-                "nature":   cls["nature"],
-                "scheduled": cls["scheduled"],
-                "flag":      cls["flag"],
-                "flag_color": cls["flag_color"],
-            })
-        return results
+            tx_date_str = item.get('transactionDate', '')[:10]
+
+            # Resumen 6 meses: solo transacciones discrecionales reales de mercado
+            # (excluye donaciones/conversiones/liquidaciones fiscales rutinarias,
+            # que no reflejan una decisión de compra/venta del insider).
+            try:
+                tx_date = datetime.strptime(tx_date_str, "%Y-%m-%d")
+                if tx_date >= cutoff and cls["scheduled"] is not True:
+                    if is_buy:
+                        buy_count += 1
+                        buy_value += total
+                    else:
+                        sell_count += 1
+                        sell_value += total
+            except Exception:
+                pass
+
+            if len(results) < 10:
+                results.append({
+                    "date":     tx_date_str,
+                    "name":     item.get('name', ''),
+                    "title":    item.get('position', ''),
+                    "type":     'COMPRA' if is_buy else 'VENTA',
+                    "type_color": '#00ffad' if is_buy else '#f23645',
+                    "shares":   int(abs(change)),
+                    "price":    round(value, 2),
+                    "value":    _fmt_value(total),
+                    "code":     (item.get('transactionCode') or '').strip().upper(),
+                    "nature":   cls["nature"],
+                    "scheduled": cls["scheduled"],
+                    "flag":      cls["flag"],
+                    "flag_color": cls["flag_color"],
+                })
+
+        summary = None
+        if buy_count or sell_count:
+            net_value = buy_value - sell_value
+            total_value = buy_value + sell_value
+            sentiment = "NEUTRAL"
+            sentiment_color = "var(--color-muted)"
+            if total_value > 0:
+                net_ratio = net_value / total_value
+                if net_ratio > 0.3:
+                    sentiment, sentiment_color = "COMPRADOR", "#00ffad"
+                elif net_ratio < -0.3:
+                    sentiment, sentiment_color = "VENDEDOR", "#f23645"
+            summary = {
+                "buy_count":   buy_count,
+                "sell_count":  sell_count,
+                "buy_value":   _fmt_value(buy_value),
+                "sell_value":  _fmt_value(sell_value),
+                "net_value":   _fmt_value(abs(net_value)),
+                "net_is_buy":  net_value >= 0,
+                "sentiment":   sentiment,
+                "sentiment_color": sentiment_color,
+                "months":      6,
+            }
+
+        return {"transactions": results, "summary": summary}
     except Exception:
-        return []
+        return {"transactions": [], "summary": None}
 
 def _row_get(row, *names):
     """Busca un valor en una fila de DataFrame yfinance probando varios nombres posibles
@@ -807,11 +1028,36 @@ def _get_short_interest(ticker: str) -> dict:
         short_ratio = _safe(info.get('shortRatio'))  # días para cubrir
         if short_pct is None and short_int is None:
             return {}
+
+        short_pct_fmt = round(short_pct * 100, 2) if short_pct else None
+
+        # Squeeze score 0-100: combina % del float en corto (peso 60) y
+        # días para cubrir (peso 40). Umbrales calibrados sobre referencias
+        # históricas de squeezes conocidos (GME, AMC, etc. > 20% float / >5 DTC).
+        squeeze_score = None
+        if short_pct_fmt is not None or short_ratio is not None:
+            pct_component   = min((short_pct_fmt or 0) / 30 * 60, 60)
+            ratio_component = min((short_ratio or 0) / 10 * 40, 40)
+            squeeze_score = round(pct_component + ratio_component, 1)
+
+        if squeeze_score is None:
+            squeeze_label = None
+        elif squeeze_score >= 75:
+            squeeze_label = "EXTREMO"
+        elif squeeze_score >= 50:
+            squeeze_label = "ALTO"
+        elif squeeze_score >= 25:
+            squeeze_label = "MODERADO"
+        else:
+            squeeze_label = "BAJO"
+
         return {
-            "short_pct":   round(short_pct * 100, 2) if short_pct else None,
-            "short_int":   short_int,
-            "short_ratio": round(short_ratio, 1) if short_ratio else None,
-            "date":        "",
+            "short_pct":      short_pct_fmt,
+            "short_int":      short_int,
+            "short_ratio":    round(short_ratio, 1) if short_ratio else None,  # days to cover
+            "squeeze_score":  squeeze_score,
+            "squeeze_label":  squeeze_label,
+            "date":           "",
         }
     except Exception:
         return {}
@@ -862,19 +1108,117 @@ def _get_seasonality(ticker: str) -> list:
     except Exception:
         return []
 
+def _ema_slope(series, lookback: int, threshold: float):
+    """Calcula la pendiente de una EMA comparando valor actual vs hace `lookback` sesiones.
+    threshold es el % mínimo de variación para considerarla inclinada (si no, 'plana')."""
+    if len(series) <= lookback:
+        return None, None
+    now  = float(series.iloc[-1])
+    prev = float(series.iloc[-1 - lookback])
+    if prev == 0:
+        return None, None
+    pct = round((now - prev) / prev * 100, 2)
+    if pct > threshold:
+        return "alcista", pct
+    if pct < -threshold:
+        return "bajista", pct
+    return "plana", pct
+
 def _get_technical_levels(ticker: str) -> dict:
     try:
         import yfinance as yf
         stock = yf.Ticker(ticker)
-        hist  = stock.history(period="1y", interval="1d").dropna()
+        # 2 años para que las EMAs largas (200) tengan recorrido suficiente de cálculo,
+        # no solo de visualización.
+        hist  = stock.history(period="2y", interval="1d").dropna()
         if len(hist) < 50: return {}
         close  = hist['Close']
         price  = float(close.iloc[-1])
+
         sma50  = round(float(close.tail(50).mean()), 2)
         sma200 = round(float(close.tail(200).mean()), 2) if len(close) >= 200 else None
         sma20  = round(float(close.tail(20).mean()), 2)
         high52 = round(float(close.tail(252).max()), 2) if len(close) >= 252 else round(float(close.max()), 2)
         low52  = round(float(close.tail(252).min()), 2) if len(close) >= 252 else round(float(close.min()), 2)
+
+        # ── EMAs ──────────────────────────────────────────────────────────────
+        ema10_s  = close.ewm(span=10,  adjust=False).mean()
+        ema20_s  = close.ewm(span=20,  adjust=False).mean()
+        ema50_s  = close.ewm(span=50,  adjust=False).mean()
+        ema200_s = close.ewm(span=200, adjust=False).mean() if len(close) >= 200 else None
+
+        ema10  = round(float(ema10_s.iloc[-1]), 2)
+        ema20  = round(float(ema20_s.iloc[-1]), 2)
+        ema50  = round(float(ema50_s.iloc[-1]), 2)
+        ema200 = round(float(ema200_s.iloc[-1]), 2) if ema200_s is not None else None
+
+        # Pendientes: lookback y umbral más amplios para EMAs más lentas.
+        slope10_dir,  slope10_pct  = _ema_slope(ema10_s,  3,  0.4)
+        slope20_dir,  slope20_pct  = _ema_slope(ema20_s,  5,  0.4)
+        slope50_dir,  slope50_pct  = _ema_slope(ema50_s,  10, 0.6)
+        slope200_dir, slope200_pct = _ema_slope(ema200_s, 20, 0.8) if ema200_s is not None else (None, None)
+
+        # ── Clasificación de tendencia (alcista / bajista / rango) ─────────────
+        # Puntuamos 5 condiciones de alineación alcista clásica (price > EMA20 > EMA50 > EMA200,
+        # con EMA50 y EMA200 ascendentes). Cuantas más se cumplan, más limpia la tendencia.
+        bull_conditions = [
+            price > ema20,
+            ema20 > ema50,
+            (ema50 > ema200) if ema200 else (ema50 > sma50),
+            slope50_dir == "alcista",
+            (slope200_dir in ("alcista", "plana")) if slope200_dir else True,
+        ]
+        bull_score = sum(1 for c in bull_conditions if c)
+
+        # ── Detección de "giro temprano" ────────────────────────────────────────
+        # Caso específico: las EMAs cortas (10/20) ya giraron al alza y el precio
+        # está sobre la EMA20, pero las EMAs largas (50/200) siguen bajistas — el
+        # bull_score queda en 0-1 y el sistema clasificaría esto como BAJISTA puro,
+        # ocultando que ya hay primeras señales de reversión. Es justo el patrón
+        # de un rebote desde mínimos que aún no ha sido confirmado por las medias
+        # de medio/largo plazo (ver ejemplo NU: precio rebotando, EMA10 +2.3%,
+        # EMA20 +1.08%, mientras EMA50/200 seguían negativas).
+        early_reversal = (
+            slope10_dir == "alcista" and
+            slope20_dir == "alcista" and
+            price > ema20
+        )
+
+        if bull_score >= 4:
+            trend = "ALCISTA"
+        elif bull_score <= 1 and not early_reversal:
+            trend = "BAJISTA"
+        else:
+            trend = "RANGO"
+
+        # ── Fase de mercado (Weinstein-style, 1-4) ──────────────────────────────
+        # Fase 2 (Markup): tendencia alcista limpia confirmada por las EMAs.
+        # Fase 4 (Declive/Corrección): tendencia bajista limpia, sin señales de giro.
+        # Fase 1 vs Fase 3 (ambas en "rango" sin giro temprano): se distinguen por
+        # la posición relativa al EMA200 — por debajo/cerca tras una caída =
+        # acumulación (1); por encima tras una subida que pierde fuerza =
+        # distribución (3).
+        if trend == "ALCISTA":
+            phase = 2
+            phase_label = "Fase 2 · Avance (Markup)"
+        elif trend == "BAJISTA":
+            phase = 4
+            phase_label = "Fase 4 · Declive / Corrección"
+        elif early_reversal and bull_score <= 1:
+            # RANGO llegó hasta aquí específicamente por el giro temprano, no por
+            # una alineación mixta genuina de 2-3 condiciones — se distingue con
+            # su propia etiqueta para que quede claro que las EMAs largas aún no
+            # confirman.
+            phase = 1
+            phase_label = "Fase 1 · Posible Giro Temprano"
+        else:
+            if ema200 and price >= ema200:
+                phase = 3
+                phase_label = "Fase 3 · Distribución"
+            else:
+                phase = 1
+                phase_label = "Fase 1 · Acumulación"
+
         return {
             "sma20":         sma20,
             "sma50":         sma50,
@@ -886,6 +1230,163 @@ def _get_technical_levels(ticker: str) -> dict:
             "vs_52l":        round((price - low52)  / low52  * 100, 1),
             "above_sma50":   price > sma50,
             "above_sma200":  price > sma200 if sma200 else None,
+
+            "emas": {
+                "ema10":  {"value": ema10,  "slope": slope10_dir,  "slope_pct": slope10_pct,
+                           "vs_price": round((price - ema10) / ema10 * 100, 1)},
+                "ema20":  {"value": ema20,  "slope": slope20_dir,  "slope_pct": slope20_pct,
+                           "vs_price": round((price - ema20) / ema20 * 100, 1)},
+                "ema50":  {"value": ema50,  "slope": slope50_dir,  "slope_pct": slope50_pct,
+                           "vs_price": round((price - ema50) / ema50 * 100, 1)},
+                "ema200": {"value": ema200, "slope": slope200_dir, "slope_pct": slope200_pct,
+                           "vs_price": round((price - ema200) / ema200 * 100, 1) if ema200 else None},
+            },
+            "trend":          trend,
+            "market_phase":   phase,
+            "phase_label":    phase_label,
+            "early_reversal": early_reversal,
+        }
+    except Exception:
+        return {}
+
+# ETF de referencia por sector GICS, usado como FALLBACK cuando no hay un
+# ETF de industria más específico disponible (ver INDUSTRY_ETF_MAP abajo).
+SECTOR_ETF_MAP = {
+    "Technology":             "XLK",
+    "Financial Services":     "XLF",
+    "Healthcare":             "XLV",
+    "Consumer Cyclical":      "XLY",
+    "Consumer Defensive":     "XLP",
+    "Industrials":            "XLI",
+    "Energy":                 "XLE",
+    "Basic Materials":        "XLB",
+    "Utilities":              "XLU",
+    "Real Estate":            "XLRE",
+    "Communication Services": "XLC",
+}
+
+# ETF de referencia por INDUSTRIA (campo info['industry'] de yfinance, más
+# granular que info['sector']). Un sector GICS como "Industrials" agrupa
+# negocios tan distintos como aeroespacial/defensa, maquinaria pesada,
+# transporte o construcción — comparar una empresa de defensa contra XLI
+# (todo el sector industrial) diluye la comparación frente a comparar contra
+# ITA (específico de Aerospace & Defense). Se usa esta tabla PRIMERO; si la
+# industria exacta del ticker no está aquí, se cae al ETF de sector general.
+# Cobertura no exhaustiva — los casos más comunes donde sector ≠ industria real.
+INDUSTRY_ETF_MAP = {
+    "Aerospace & Defense":            "ITA",
+    "Semiconductors":                 "SOXX",
+    "Semiconductor Equipment & Materials": "SOXX",
+    "Software—Application":           "IGV",
+    "Software—Infrastructure":        "IGV",
+    "Biotechnology":                  "IBB",
+    "Drug Manufacturers—General":     "XPH",
+    "Drug Manufacturers—Specialty & Generic": "XPH",
+    "Oil & Gas E&P":                  "XOP",
+    "Oil & Gas Equipment & Services": "XOP",
+    "Banks—Regional":                 "KRE",
+    "Homebuilding":                   "ITB",
+    "Internet Retail":                "ONLN",
+    "Airlines":                       "JETS",
+    "Gold":                           "GDX",
+    "Silver":                         "SIL",
+    "REIT—Residential":               "XLRE",
+    "Insurance—Life":                 "KIE",
+    "Insurance—Property & Casualty":  "KIE",
+    "Asset Management":               "KCE",
+    "Capital Markets":                "KCE",
+    "Utilities—Renewable":            "ICLN",
+    "Solar":                          "TAN",
+}
+
+def _get_relative_strength(ticker: str, sector: str, industry: str = None) -> dict:
+    """
+    Fuerza relativa del activo vs SPY (mercado) y vs su benchmark sectorial,
+    en 3 marcos temporales (1m/3m/6m) ponderados — misma lógica de
+    weighting por periodo que el módulo RS/RW Scanner, aplicada aquí a
+    un solo ticker en vez de a todo el universo.
+
+    El benchmark "sectorial" usa, cuando está disponible, un ETF de
+    INDUSTRIA específica (más preciso) en vez del ETF de sector GICS
+    genérico — ver INDUSTRY_ETF_MAP.
+    """
+    try:
+        industry_etf = INDUSTRY_ETF_MAP.get(industry) if industry else None
+        sector_etf   = industry_etf or SECTOR_ETF_MAP.get(sector)
+        benchmark_label = (industry if industry_etf else sector) or "Sector"
+
+        def _closes(sym):
+            try:
+                h = yf.Ticker(sym).history(period="7mo", interval="1d")
+                return h['Close'].dropna() if (h is not None and not h.empty) else None
+            except Exception:
+                return None
+
+        close_t   = _closes(ticker)
+        close_spy = _closes('SPY')
+        close_sec = _closes(sector_etf) if sector_etf else None
+
+        if close_t is None or close_spy is None or len(close_t) < 21:
+            return {}
+
+        # (días, etiqueta, peso) — mismo esquema de ponderación que RS/RW:
+        # más peso al corto plazo, sin ignorar el medio plazo.
+        PERIODS = [(21, '1m', 0.5), (63, '3m', 0.3), (126, '6m', 0.2)]
+
+        def _ret(close, days):
+            if close is None or len(close) <= days: return None
+            return round((float(close.iloc[-1]) / float(close.iloc[-1 - days]) - 1) * 100, 2)
+
+        periods_data = []
+        w_spy_sum = w_spy_w = 0.0
+        w_sec_sum = w_sec_w = 0.0
+
+        for days, label, weight in PERIODS:
+            t_ret   = _ret(close_t, days)
+            spy_ret = _ret(close_spy, days)
+            sec_ret = _ret(close_sec, days) if close_sec is not None else None
+            if t_ret is None or spy_ret is None:
+                continue
+            rs_spy = round(t_ret - spy_ret, 2)
+            rs_sec = round(t_ret - sec_ret, 2) if sec_ret is not None else None
+            w_spy_sum += rs_spy * weight
+            w_spy_w   += weight
+            if rs_sec is not None:
+                w_sec_sum += rs_sec * weight
+                w_sec_w   += weight
+            periods_data.append({
+                "label": label, "ticker_ret": t_ret, "spy_ret": spy_ret,
+                "sector_ret": sec_ret, "rs_vs_spy": rs_spy, "rs_vs_sector": rs_sec,
+            })
+
+        if not periods_data:
+            return {}
+
+        rs_vs_spy_score    = round(w_spy_sum / w_spy_w, 2) if w_spy_w else None
+        rs_vs_sector_score = round(w_sec_sum / w_sec_w, 2) if w_sec_w else None
+
+        def _classify(score):
+            if score is None: return None, None
+            if score > 5:    return "FUERTE", "#00ffad"
+            if score > 1.5:  return "LIGERAMENTE FUERTE", "#90ee90"
+            if score < -5:   return "DÉBIL", "#f23645"
+            if score < -1.5: return "LIGERAMENTE DÉBIL", "#ff8c00"
+            return "NEUTRAL", "#ffb800"
+
+        spy_label, spy_color       = _classify(rs_vs_spy_score)
+        sector_label, sector_color = _classify(rs_vs_sector_score)
+
+        return {
+            "sector_etf":         sector_etf,
+            "benchmark_label":    benchmark_label,
+            "is_industry_level":  industry_etf is not None,
+            "rs_vs_spy":          rs_vs_spy_score,
+            "rs_vs_spy_label":    spy_label,
+            "rs_vs_spy_color":    spy_color,
+            "rs_vs_sector":       rs_vs_sector_score,
+            "rs_vs_sector_label": sector_label,
+            "rs_vs_sector_color": sector_color,
+            "periods":            periods_data,
         }
     except Exception:
         return {}
@@ -907,6 +1408,7 @@ def get_research(ticker: str) -> dict:
         f_ratings = ex.submit(_get_analyst_ratings_history, ticker)
         f_piotro  = ex.submit(_get_piotroski_score, ticker)
         f_inst    = ex.submit(_get_institutional_ownership, ticker)
+        f_tech    = ex.submit(_get_technical_levels, ticker)
         yf_data   = f_yf.result()
         fh_data   = f_fh.result()
         av_data   = f_av.result()
@@ -917,12 +1419,20 @@ def get_research(ticker: str) -> dict:
         ratings_history = f_ratings.result()
         piotroski = f_piotro.result()
         instit    = f_inst.result()
+        technical = f_tech.result()
 
     if not yf_data.get('ok'):
         return {"ok": False, "error": yf_data.get('error', 'Sin datos')}
 
+    sector_comparison = _get_sector_comparison(yf_data['sector'], yf_data['metrics'], yf_data['profitability'])
+
+    # Fuerza relativa requiere el sector (de yf_data, ya resuelto), por eso se
+    # calcula después — son solo 2-3 descargas de histórico de precio
+    # (ticker, SPY, ETF del sector).
+    relative_strength = _get_relative_strength(ticker, yf_data['sector'], yf_data['industry'])
+
     suggestions = _generate_suggestions(yf_data)
-    rsu_score   = _compute_rsu_score(yf_data)
+    rsu_score   = _compute_rsu_score(yf_data, piotroski, sector_comparison, insider.get("summary"), technical)
 
     result = {
         "ok":                 True,
@@ -956,12 +1466,14 @@ def get_research(ticker: str) -> dict:
         "institutional":      instit,
         "analyst_changes":    fmp_data,
         "ratings_history":    ratings_history,
-        "insider_trading":    insider,
+        "insider_trading":    insider.get("transactions", []),
+        "insider_summary":    insider.get("summary"),
         "short_interest":     short,
         "seasonality":        season,
         "next_earnings":      _get_next_earnings(ticker),
-        "technical_levels":   _get_technical_levels(ticker),
-        "sector_comparison":  _get_sector_comparison(yf_data['sector'], yf_data['metrics'], yf_data['profitability']),
+        "technical_levels":   technical,
+        "sector_comparison":  sector_comparison,
+        "relative_strength":  relative_strength,
         "timestamp":          datetime.now().strftime('%H:%M:%S'),
     }
     cache.set(f"research:{ticker}", result, TTL["research"])

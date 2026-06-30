@@ -1,0 +1,32 @@
+name: Thematic Sector Scan
+
+on:
+  schedule:
+    # Lunes a viernes a las 23:00 CET (22:00 UTC) — tras el cierre del mercado US
+    - cron: '0 22 * * 1-5'
+  workflow_dispatch:  # Permite ejecutar manualmente desde la pestaña Actions
+
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          pip install requests yfinance pandas
+
+      - name: Run Thematic Sector Scan
+        env:
+          GIST_TOKEN:       ${{ secrets.GIST_TOKEN }}
+          THEMATIC_GIST_ID: ${{ secrets.THEMATIC_GIST_ID }}
+        run: |
+          python scripts/thematic_scan.py

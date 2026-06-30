@@ -43,7 +43,7 @@ export async function render(container) {
             + '</div>';
 
         const factores = Object.entries(data.metricas)
-            .filter(([k]) => k !== 'SMA200')
+            .filter(([k]) => k !== 'FTD') // FTD ya no aporta score, se muestra aparte como confirmación
             .map(([key, m]) => {
                 const pct = m.max > 0 ? Math.round(m.score / m.max * 100) : 0;
                 return '<div style="margin-bottom:10px;">'
@@ -68,6 +68,18 @@ export async function render(container) {
               + data.advertencias.map(a => '<div style="color:#ffb800;font-size:12px;padding:3px 0;">' + a + '</div>').join('')
               + '</div>'
             : '';
+
+        const gkColor = (ok) => ok ? 'var(--color-accent)' : 'var(--color-muted)';
+        const gkIcon  = (ok) => ok ? '✓' : '○';
+        const gatekeepersHtml = '<div style="margin-top:1rem;padding:1rem;background:var(--color-bg,#0a0a0a);border-radius:var(--radius);border:1px solid var(--color-border);">'
+            + '<div style="color:var(--color-muted);font-size:11px;letter-spacing:0.08em;margin-bottom:8px;">GATEKEEPERS ' + tt('algoritmo-gatekeepers') + ' (umbral VERDE: ' + data.umbral_verde + '/100)</div>'
+            + '<div style="display:flex;gap:1.5rem;flex-wrap:wrap;font-size:12px;">'
+            + '<div style="color:' + gkColor(data.gatekeeper_a) + ';">' + gkIcon(data.gatekeeper_a) + ' Cerca de EMA200 semanal</div>'
+            + '<div style="color:' + gkColor(data.gatekeeper_b) + ';">' + gkIcon(data.gatekeeper_b) + ' RVOL extremo en el mínimo</div>'
+            + '<div style="color:' + gkColor(data.ftd_confirmado) + ';">' + gkIcon(data.ftd_confirmado) + ' FTD confirmado</div>'
+            + '<div style="color:var(--color-muted);">Drawdown 52w: <span style="color:' + (data.drawdown_52w_pct <= -15 ? '#f23645' : 'var(--color-text)') + ';">' + data.drawdown_52w_pct + '%</span></div>'
+            + '</div>'
+            + '</div>';
 
         const mediasHtml = Object.entries(data.medias).map(([k, v]) =>
             '<div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--color-border);font-size:12px;">'
@@ -97,6 +109,7 @@ export async function render(container) {
             + data.recomendacion
             + '</div>'
             + advertenciasHtml
+            + gatekeepersHtml
             + '</div>'
             + '</div>'
 
@@ -195,25 +208,69 @@ function renderBacktestResults(data) {
     }).join('');
 
     const senalesHtml = data.senales.length === 0
-        ? '<div style="color:var(--color-muted);font-size:12px;padding:1rem 0;">No se detectaron señales VERDE en el periodo analizado.</div>'
-        : '<div style="max-height:300px;overflow-y:auto;margin-top:0.5rem;">'
-          + '<div style="display:grid;grid-template-columns:90px 70px 60px 60px 60px 60px;gap:8px;padding:6px 0;border-bottom:1px solid var(--color-border);font-size:10px;color:var(--color-muted);position:sticky;top:0;background:var(--color-surface);">'
-          + '<div>FECHA</div><div>SCORE</div><div>+5d</div><div>+10d</div><div>+20d</div><div>+60d</div>'
+        ? '<div style="color:var(--color-muted);font-size:12px;padding:1rem 0;">No se detectaron señales VERDE en el periodo analizado — el nuevo sistema con gatekeepers obligatorios es considerablemente más selectivo que la versión anterior.</div>'
+        : '<div style="max-height:340px;overflow-y:auto;margin-top:0.5rem;">'
+          + '<div style="display:grid;grid-template-columns:85px 55px 80px 70px 50px 50px 50px 50px;gap:6px;padding:6px 0;border-bottom:1px solid var(--color-border);font-size:9px;color:var(--color-muted);position:sticky;top:0;background:var(--color-surface);">'
+          + '<div>FECHA</div><div>SCORE</div><div>GATEKEEPER</div><div>DRAWDOWN</div><div>+5d</div><div>+10d</div><div>+20d</div><div>+60d</div>'
           + '</div>'
           + data.senales.map(s => {
               const r = s.retornos;
               const fmt = v => v == null ? '<span style="color:#555;">—</span>' : '<span style="color:' + (v >= 0 ? 'var(--color-accent)' : '#f23645') + ';">' + (v >= 0 ? '+' : '') + v + '%</span>';
-              return '<div style="display:grid;grid-template-columns:90px 70px 60px 60px 60px 60px;gap:8px;padding:6px 0;border-bottom:1px solid var(--color-border);font-size:11px;align-items:center;">'
+              const gk = s.gatekeeper_a ? 'EMA200W' : (s.gatekeeper_b ? 'RVOL' : '—');
+              const ftdTag = s.ftd_confirmado ? ' <span style="color:var(--color-accent);" title="FTD confirmado">✓FTD</span>' : '';
+              return '<div style="display:grid;grid-template-columns:85px 55px 80px 70px 50px 50px 50px 50px;gap:6px;padding:6px 0;border-bottom:1px solid var(--color-border);font-size:10px;align-items:center;">'
                   + '<div style="color:var(--color-text);">' + s.fecha + '</div>'
                   + '<div style="color:var(--color-muted);">' + s.score + '/100</div>'
+                  + '<div style="color:var(--color-secondary,#00d9ff);">' + gk + ftdTag + '</div>'
+                  + '<div style="color:' + (s.drawdown_pct <= -15 ? '#f23645' : 'var(--color-muted)') + ';">' + s.drawdown_pct + '%</div>'
                   + '<div>' + fmt(r.d5) + '</div><div>' + fmt(r.d10) + '</div><div>' + fmt(r.d20) + '</div><div>' + fmt(r.d60) + '</div>'
                   + '</div>';
           }).join('')
           + '</div>';
 
+    const FACTOR_LABELS = {
+        RSI: 'RSI (diario+semanal)', VIX: 'VIX + curva VIX/VIX3M', Breadth: 'McClellan',
+        Volume: 'RVOL en mínimo', EMA200W: 'EMA200 semanal', SMA200: 'Régimen SMA200',
+    };
+
+    let importanciaHtml;
+    if (!data.importancia) {
+        importanciaHtml = '<div style="margin-top:1rem;padding:1rem;background:var(--color-bg,#0a0a0a);border-radius:var(--radius);border:1px solid var(--color-border);">'
+            + '<div style="color:var(--color-muted);font-size:11px;letter-spacing:0.08em;margin-bottom:6px;">IMPORTANCIA DE VARIABLES ' + tt('algoritmo-importancia') + '</div>'
+            + '<div style="color:var(--color-muted);font-size:11px;">Muestra insuficiente (mínimo 8 señales con retorno calculado) para un análisis con sentido estadístico mínimo. Detectadas: ' + data.n_senales + '.</div>'
+            + '</div>';
+    } else {
+        const filas = Object.entries(data.importancia).map(([factor, d]) => {
+            const corr = d.correlacion_d20;
+            const corrColor = corr == null ? 'var(--color-muted)' : (corr > 0.3 ? 'var(--color-accent)' : corr < -0.3 ? '#f23645' : '#ffb800');
+            const corrWidth = corr == null ? 0 : Math.min(100, Math.abs(corr) * 100);
+            const fiableTag = d.fiable
+                ? ''
+                : ' <span style="color:#ffb800;font-size:9px;" title="Grupo alto o bajo con menos de 2 señales — comparación no fiable">⚠ muestra pequeña</span>';
+            return '<div style="margin-bottom:10px;">'
+                + '<div style="display:flex;justify-content:space-between;font-size:11px;margin-bottom:3px;">'
+                + '<span style="color:var(--color-text);">' + (FACTOR_LABELS[factor] || factor) + fiableTag + '</span>'
+                + '<span style="color:' + corrColor + ';font-weight:500;">corr: ' + (corr == null ? 'N/D' : corr) + '</span>'
+                + '</div>'
+                + '<div style="background:var(--color-bg,#0a0a0a);border-radius:3px;height:5px;margin-bottom:4px;">'
+                + '<div style="height:100%;width:' + corrWidth + '%;background:' + corrColor + ';border-radius:3px;"></div>'
+                + '</div>'
+                + '<div style="font-size:10px;color:var(--color-muted);">'
+                + 'Score alto (n=' + d.n_alto + '): <span style="color:' + (d.retorno_medio_score_alto >= 0 ? 'var(--color-accent)' : '#f23645') + ';">' + (d.retorno_medio_score_alto == null ? '—' : (d.retorno_medio_score_alto >= 0 ? '+' : '') + d.retorno_medio_score_alto + '%') + '</span>'
+                + ' · Score bajo (n=' + d.n_bajo + '): <span style="color:' + (d.retorno_medio_score_bajo >= 0 ? 'var(--color-accent)' : '#f23645') + ';">' + (d.retorno_medio_score_bajo == null ? '—' : (d.retorno_medio_score_bajo >= 0 ? '+' : '') + d.retorno_medio_score_bajo + '%') + '</span>'
+                + '</div>'
+                + '</div>';
+        }).join('');
+
+        importanciaHtml = '<div style="margin-top:1rem;padding:1rem;background:var(--color-bg,#0a0a0a);border-radius:var(--radius);border:1px solid var(--color-border);">'
+            + '<div style="color:var(--color-muted);font-size:11px;letter-spacing:0.08em;margin-bottom:10px;">IMPORTANCIA DE VARIABLES ' + tt('algoritmo-importancia') + ' (retorno a ' + data.horizonte_importancia + 'd)</div>'
+            + filas
+            + '</div>';
+    }
+
     return '<div style="margin-bottom:1rem;font-size:11px;color:var(--color-muted);">'
         + 'Periodo: ' + data.periodo_inicio + ' → ' + data.periodo_fin + ' (' + data.total_dias + ' días) · '
-        + '<span style="color:var(--color-accent);">' + data.n_senales + ' señales VERDE detectadas</span>'
+        + '<span style="color:var(--color-accent);">' + data.n_senales + ' señales VERDE puras detectadas</span>'
         + '</div>'
 
         + '<div style="display:grid;grid-template-columns:80px 1fr 1fr 1fr 1fr;gap:10px;padding:6px 0;border-bottom:1px solid var(--color-border);font-size:10px;color:var(--color-muted);">'
@@ -221,8 +278,10 @@ function renderBacktestResults(data) {
         + '</div>'
         + statsRows
 
-        + '<div style="margin-top:1rem;color:var(--color-muted);font-size:11px;letter-spacing:0.05em;">HISTORIAL DE SEÑALES</div>'
+        + '<div style="margin-top:1rem;color:var(--color-muted);font-size:11px;letter-spacing:0.05em;">HISTORIAL DE SEÑALES <span style="font-weight:normal;text-transform:none;letter-spacing:0;">(GATEKEEPER = qué condición estructural validó la señal · ✓FTD = confirmación de volumen ya llegada)</span></div>'
         + senalesHtml
+
+        + importanciaHtml
 
         + '<div style="margin-top:1rem;padding:0.75rem;background:rgba(255,184,0,0.05);border:1px solid rgba(255,184,0,0.15);border-radius:var(--radius);font-size:10px;color:#ffb800;">'
         + '⚠ ' + data.metodologia
