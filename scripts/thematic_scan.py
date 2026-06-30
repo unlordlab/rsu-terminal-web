@@ -233,8 +233,15 @@ def run_scan() -> dict:
     for r in empty:
         r["rank"] = None
 
-    accelerating = sorted(scored, key=lambda r: r["avg_momentum"], reverse=True)[:5]
-    decelerating = sorted(scored, key=lambda r: r["avg_momentum"])[:5]
+    # Desempate: cuando varios sectores empatan en avg_momentum (frecuente en
+    # el extremo +1/0, ya que es la fracción de la cesta acelerando — varios
+    # sectores pueden tener el 100% de sus nombres acelerando a la vez), se
+    # usa avg_score como segundo criterio. En "acelerando" gana el de mayor
+    # score (momentum fuerte + fortaleza real, no solo una cesta pequeña con
+    # ruido). En "desacelerando" gana el de menor score (debilidad real, no
+    # solo una pausa dentro de un sector que sigue siendo fuerte).
+    accelerating = sorted(scored, key=lambda r: (r["avg_momentum"], r["avg_score"]), reverse=True)[:5]
+    decelerating = sorted(scored, key=lambda r: (r["avg_momentum"], r["avg_score"]))[:5]
 
     return {
         "ok":              True,
