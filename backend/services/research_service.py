@@ -746,21 +746,28 @@ def _classify_insider_tx(code: str, is_buy: bool) -> dict:
 def _get_insider_trading(ticker: str) -> dict:
     try:
         key = settings.finnhub_api_key
-        if not key: return {"transactions": [], "summary": None}
+        if not key: return {"transactions": [], "summary": None, "monthly_volume": []}
         r = requests.get(
             f"https://finnhub.io/api/v1/stock/insider-transactions?symbol={ticker}&token={key}",
             timeout=8
         )
-        if r.status_code != 200: return {"transactions": [], "summary": None}
+        if r.status_code != 200: return {"transactions": [], "summary": None, "monthly_volume": []}
         data = r.json().get('data', [])
-        if not isinstance(data, list): return {"transactions": [], "summary": None}
+        if not isinstance(data, list): return {"transactions": [], "summary": None, "monthly_volume": []}
 
         from datetime import datetime, timedelta
         cutoff = datetime.now() - timedelta(days=182)
+        vol_cutoff = datetime.now() - timedelta(days=365)
 
         results = []
         buy_count = sell_count = 0
         buy_value = sell_value = 0.0
+
+        # Volumen mensual (acciones) de los últimos 12 meses, para el gráfico
+        # de barras Compras vs Ventas. Se construye sobre TODAS las
+        # transacciones devueltas por Finnhub (no solo las 10 que se listan
+        # en la tabla), agrupando por mes calendario.
+        monthly = {}
 
         for item in data:
             change = _safe(item.get('change', 0)) or 0
@@ -770,20 +777,32 @@ def _get_insider_trading(ticker: str) -> dict:
             cls    = _classify_insider_tx(item.get('transactionCode', ''), is_buy)
             tx_date_str = item.get('transactionDate', '')[:10]
 
+            try:
+                tx_date = datetime.strptime(tx_date_str, "%Y-%m-%d")
+            except Exception:
+                tx_date = None
+
             # Resumen 6 meses: solo transacciones discrecionales reales de mercado
             # (excluye donaciones/conversiones/liquidaciones fiscales rutinarias,
             # que no reflejan una decisión de compra/venta del insider).
-            try:
-                tx_date = datetime.strptime(tx_date_str, "%Y-%m-%d")
-                if tx_date >= cutoff and cls["scheduled"] is not True:
-                    if is_buy:
-                        buy_count += 1
-                        buy_value += total
-                    else:
-                        sell_count += 1
-                        sell_value += total
-            except Exception:
-                pass
+            if tx_date and tx_date >= cutoff and cls["scheduled"] is not True:
+                if is_buy:
+                    buy_count += 1
+                    buy_value += total
+                else:
+                    sell_count += 1
+                    sell_value += total
+
+            # Volumen mensual: 12 meses, mismas reglas de "discrecional" que el
+            # resumen, para que el gráfico cuente lo mismo que el sentimiento.
+            if tx_date and tx_date >= vol_cutoff and cls["scheduled"] is not True:
+                month_key = tx_date.strftime('%Y-%m')
+                if month_key not in monthly:
+                    monthly[month_key] = {"buy_shares": 0, "sell_shares": 0}
+                if is_buy:
+                    monthly[month_key]["buy_shares"] += int(abs(change))
+                else:
+                    monthly[month_key]["sell_shares"] += int(abs(change))
 
             if len(results) < 10:
                 results.append({
@@ -826,9 +845,29 @@ def _get_insider_trading(ticker: str) -> dict:
                 "months":      6,
             }
 
-        return {"transactions": results, "summary": summary}
+        # Ordenar cronológicamente y rellenar meses sin actividad con 0, para
+        # que el eje del gráfico no tenga huecos irregulares.
+        monthly_volume = []
+        if monthly:
+            cursor = vol_cutoff.replace(day=1)
+            end    = datetime.now().replace(day=1)
+            while cursor <= end:
+                key = cursor.strftime('%Y-%m')
+                m   = monthly.get(key, {"buy_shares": 0, "sell_shares": 0})
+                monthly_volume.append({
+                    "month":       key,
+                    "buy_shares":  m["buy_shares"],
+                    "sell_shares": m["sell_shares"],
+                })
+                # Avanza al primer día del mes siguiente
+                if cursor.month == 12:
+                    cursor = cursor.replace(year=cursor.year + 1, month=1)
+                else:
+                    cursor = cursor.replace(month=cursor.month + 1)
+
+        return {"transactions": results, "summary": summary, "monthly_volume": monthly_volume}
     except Exception:
-        return {"transactions": [], "summary": None}
+        return {"transactions": [], "summary": None, "monthly_volume": []}
 
 def _row_get(row, *names):
     """Busca un valor en una fila de DataFrame yfinance probando varios nombres posibles
@@ -979,6 +1018,70 @@ def _get_piotroski_score(ticker: str) -> dict:
         print(f"[Piotroski:{ticker}] Error inesperado al calcular: {e}")
         return {}
 
+def _get_income_statement(ticker: str) -> list:
+    """Income statement trimestral (Revenue, Gross Profit, Operating Income,
+    Net Income) para el gráfico de evolución financiera. Usa
+    quarterly_income_stmt (yfinance >= 0.2.x) con fallback a
+    quarterly_financials para compatibilidad con versiones antiguas."""
+    try:
+        stock = yf.Ticker(ticker)
+        df = None
+        try:
+            df = stock.quarterly_income_stmt
+        except Exception:
+            df = None
+        if df is None or df.empty:
+            try:
+                df = stock.quarterly_financials
+            except Exception:
+                df = None
+        if df is None or df.empty:
+            return []
+
+        # Columnas = fechas trimestrales (más reciente primero), filas = conceptos
+        cols = list(df.columns)
+        cols = sorted(cols)  # cronológico ascendente para el gráfico
+
+        out = []
+        for col in cols:
+            def pick(*names):
+                for n in names:
+                    try:
+                        if n in df.index:
+                            v = df.loc[n, col]
+                            v = _safe(v)
+                            if v is not None:
+                                return v
+                    except Exception:
+                        continue
+                return None
+
+            revenue          = pick('Total Revenue', 'TotalRevenue')
+            gross_profit     = pick('Gross Profit', 'GrossProfit')
+            operating_income = pick('Operating Income', 'OperatingIncome')
+            net_income       = pick('Net Income', 'NetIncome', 'Net Income Common Stockholders')
+
+            if revenue is None and gross_profit is None and operating_income is None and net_income is None:
+                continue
+
+            try:
+                date_str = col.strftime('%Y-%m-%d') if hasattr(col, 'strftime') else str(col)[:10]
+            except Exception:
+                date_str = str(col)[:10]
+
+            out.append({
+                "date":             date_str,
+                "revenue":          revenue,
+                "gross_profit":     gross_profit,
+                "operating_income": operating_income,
+                "net_income":       net_income,
+            })
+
+        return out
+    except Exception as e:
+        print(f"[IncomeStatement:{ticker}] Error: {e}")
+        return []
+
 def _get_institutional_ownership(ticker: str) -> dict:
     """% del capital en manos de institucionales y principales accionistas."""
     try:
@@ -992,7 +1095,47 @@ def _get_institutional_ownership(ticker: str) -> dict:
         try:
             df = stock.institutional_holders
             if df is not None and not df.empty:
-                for _, r in df.head(8).iterrows():
+                df = df.head(8)
+
+                # FIX: la columna "Value" de yfinance NO es el valor reportado
+                # en el 13F — en versiones recientes yfinance la recalcula como
+                # acciones × precio ACTUAL, así que Valor/Acciones siempre da el
+                # precio de hoy (igual para todas las filas). Para obtener un
+                # precio de referencia real por institución, descargamos el
+                # histórico de precios y usamos el cierre en la fecha de reporte
+                # de cada una (una sola descarga para todas, no una por fila).
+                raw_dates = []
+                for _, r in df.iterrows():
+                    d = _row_get(r, 'Date Reported', 'dateReported')
+                    if d is not None:
+                        raw_dates.append(d if hasattr(d, 'to_pydatetime') else d)
+
+                price_hist = None
+                if raw_dates:
+                    try:
+                        min_d = min(raw_dates)
+                        from datetime import timedelta as _td
+                        start = (min_d.to_pydatetime() if hasattr(min_d, 'to_pydatetime') else min_d) - _td(days=7)
+                        price_hist = stock.history(start=start.strftime('%Y-%m-%d'), end=datetime.now().strftime('%Y-%m-%d'))
+                    except Exception:
+                        price_hist = None
+
+                def _price_on(date_val):
+                    """Cierre real más cercano (mismo día o anterior) a date_val."""
+                    if price_hist is None or price_hist.empty or date_val is None:
+                        return None
+                    try:
+                        ts = date_val.to_pydatetime() if hasattr(date_val, 'to_pydatetime') else date_val
+                        ts = ts.replace(tzinfo=None)
+                        idx = price_hist.index.tz_localize(None) if price_hist.index.tz is not None else price_hist.index
+                        eligible = price_hist.loc[idx <= ts]
+                        if eligible.empty:
+                            eligible = price_hist
+                        return round(float(eligible['Close'].iloc[-1]), 2)
+                    except Exception:
+                        return None
+
+                for _, r in df.iterrows():
                     holder_name = _row_get(r, 'Holder', 'holder')
                     shares      = _safe(_row_get(r, 'Shares', 'shares')) or 0
                     pct_held    = _safe(_row_get(r, 'pctHeld', '% Out', 'pctOut', 'Percentage'))
@@ -1002,12 +1145,16 @@ def _get_institutional_ownership(ticker: str) -> dict:
                         date_str = date_rep.strftime('%Y-%m-%d') if hasattr(date_rep, 'strftime') else str(date_rep)[:10]
                     except Exception:
                         date_str = str(date_rep)[:10] if date_rep else ''
+
+                    ref_price = _price_on(date_rep)
+
                     holders.append({
                         "holder":   holder_name or 'N/D',
                         "shares":   int(shares),
                         "pct_out":  round(pct_held * 100, 2) if pct_held and pct_held < 1 else (round(pct_held, 2) if pct_held else None),
                         "value":    _fmt_value(value),
                         "date":     date_str,
+                        "ref_price": ref_price,
                     })
         except Exception:
             pass
@@ -1409,6 +1556,7 @@ def get_research(ticker: str) -> dict:
         f_piotro  = ex.submit(_get_piotroski_score, ticker)
         f_inst    = ex.submit(_get_institutional_ownership, ticker)
         f_tech    = ex.submit(_get_technical_levels, ticker)
+        f_income  = ex.submit(_get_income_statement, ticker)
         yf_data   = f_yf.result()
         fh_data   = f_fh.result()
         av_data   = f_av.result()
@@ -1420,6 +1568,7 @@ def get_research(ticker: str) -> dict:
         piotroski = f_piotro.result()
         instit    = f_inst.result()
         technical = f_tech.result()
+        income_stmt = f_income.result()
 
     if not yf_data.get('ok'):
         return {"ok": False, "error": yf_data.get('error', 'Sin datos')}
@@ -1468,6 +1617,8 @@ def get_research(ticker: str) -> dict:
         "ratings_history":    ratings_history,
         "insider_trading":    insider.get("transactions", []),
         "insider_summary":    insider.get("summary"),
+        "insider_monthly_volume": insider.get("monthly_volume", []),
+        "income_statement":   income_stmt,
         "short_interest":     short,
         "seasonality":        season,
         "next_earnings":      _get_next_earnings(ticker),
