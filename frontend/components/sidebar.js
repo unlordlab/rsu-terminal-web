@@ -1,5 +1,6 @@
 const NAV_ITEMS = [
     { path: '/',          label: 'Dashboard',    icon: 'D' },
+    { path: '/manifiesto', label: 'Manifiesto',  icon: '📜' },
     { path: '/market',    label: 'Market',       icon: 'M' },
     { path: '/cartera',   label: 'Cartera',      icon: 'C' },
     { path: '/rsrw',      label: 'RS/RW',        icon: 'R' },

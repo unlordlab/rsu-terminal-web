@@ -6,6 +6,7 @@ import { initWebSocket } from '/core/websocket.js';
 
 const ROUTES = {
     '/':           () => import('/pages/dashboard.js'),
+    '/manifiesto': () => import('/pages/manifest.js'),
     '/market':     () => import('/pages/market.js'),
     '/cartera':    () => import('/pages/cartera.js'),
     '/rsrw':       () => import('/pages/rsrw.js'),
@@ -79,7 +80,7 @@ window.fetch = async function(...args) {
 
 export function navigate(path) {
     const cleanPath = path.split('?')[0];
-    const protectedRoutes = ['/', '/market', '/cartera', '/rsrw', '/scanner', '/newsfeed', '/spxl', '/btc-stratum', '/roadmap', '/academy', '/tesis', '/options', '/research', '/disclaimer', '/canslim', '/algoritmo', '/insider'];
+    const protectedRoutes = ['/', '/manifiesto', '/market', '/cartera', '/rsrw', '/scanner', '/newsfeed', '/spxl', '/btc-stratum', '/roadmap', '/academy', '/tesis', '/options', '/research', '/disclaimer', '/canslim', '/algoritmo', '/insider'];
     const needsAuth = protectedRoutes.includes(cleanPath);
     if (needsAuth && !isAuthenticated()) {
         loadView('/login');
