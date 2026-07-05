@@ -9,6 +9,7 @@ const ROUTES = {
     '/market':     () => import('/pages/market.js'),
     '/cartera':    () => import('/pages/cartera.js'),
     '/rsrw':       () => import('/pages/rsrw.js'),
+    '/scanner':    () => import('/pages/scanner.js'),
     '/spxl':       () => import('/pages/spxl.js'),
     '/btc-stratum': () => import('/pages/btc_stratum.js'),
     '/research':   () => import('/pages/research.js'),
@@ -78,7 +79,7 @@ window.fetch = async function(...args) {
 
 export function navigate(path) {
     const cleanPath = path.split('?')[0];
-    const protectedRoutes = ['/', '/market', '/cartera', '/rsrw', '/newsfeed', '/spxl', '/btc-stratum', '/roadmap', '/academy', '/tesis', '/options', '/research', '/disclaimer', '/canslim', '/algoritmo', '/insider'];
+    const protectedRoutes = ['/', '/market', '/cartera', '/rsrw', '/scanner', '/newsfeed', '/spxl', '/btc-stratum', '/roadmap', '/academy', '/tesis', '/options', '/research', '/disclaimer', '/canslim', '/algoritmo', '/insider'];
     const needsAuth = protectedRoutes.includes(cleanPath);
     if (needsAuth && !isAuthenticated()) {
         loadView('/login');

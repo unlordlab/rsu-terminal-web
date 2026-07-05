@@ -3,6 +3,7 @@ const NAV_ITEMS = [
     { path: '/market',    label: 'Market',       icon: 'M' },
     { path: '/cartera',   label: 'Cartera',      icon: 'C' },
     { path: '/rsrw',      label: 'RS/RW',        icon: 'R' },
+    { path: '/scanner',   label: 'Scanner',      icon: '⚡' },
     { path: '/newsfeed',  label: 'News Feed',    icon: 'N' },
     { path: '/tesis',     label: 'Tesis', icon: 'T' },
     { path: '/spxl',      label: 'SPXL',         icon: 'S' },

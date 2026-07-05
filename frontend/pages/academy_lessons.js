@@ -496,6 +496,87 @@ export const LESSONS = {
         ]
     },
 
+    // ── MÓDULO 1, LECCIÓN 5 ────────────────────────────────────────────────
+    '1-5': {
+        moduleId: 1,
+        lessonIndex: 4,
+        title: 'Medias Móviles Exponenciales (EMA)',
+        duration: '14 min',
+        intro: 'Ya has usado la EMA 21 como soporte dinámico en las lecciones anteriores. Esta lección va un paso atrás: qué es exactamente una EMA, en qué se diferencia de una SMA, y cómo convertirla en una herramienta operativa concreta de entrada y salida — no solo una línea en el gráfico.',
+        sections: [
+            {
+                heading: 'Qué es una EMA y por qué no es lo mismo que una SMA',
+                blocks: [
+                    { type: 'text', content: 'Una media móvil simple (SMA) da el mismo peso a cada vela del periodo: el cierre de hace 21 sesiones pesa exactamente igual que el de ayer. Una media móvil exponencial (EMA) pondera de forma decreciente hacia atrás — el precio más reciente tiene más peso que el más antiguo. El resultado práctico: la EMA reacciona antes a un cambio de precio que la SMA del mismo periodo.' },
+                    { type: 'chart', id: 'ema_vs_sma_reaction' },
+                    { type: 'table', headers: ['Característica', 'SMA', 'EMA'], rows: [
+                        ['Peso de cada vela', 'Igual para todas', 'Mayor cuanto más reciente'],
+                        ['Velocidad de reacción', 'Más lenta, más suave', 'Más rápida, sigue el precio de cerca'],
+                        ['Retraso (lag)', 'Mayor', 'Menor, aunque nunca cero'],
+                        ['Uso típico en RSU', 'SMA 50 / SMA 200 — contexto de fondo', 'EMA 21 — soporte dinámico de corto plazo'],
+                    ]},
+                    { type: 'concept', title: 'Por qué esto importa para el trading', content: 'La menor inercia de la EMA la hace más útil como referencia de entrada y salida de corto plazo — reacciona antes cuando la tendencia empieza a perder fuerza. La mayor inercia de la SMA la hace más útil como filtro de contexto de fondo — no te saca de la tendencia por un solo día de ruido. Por eso en RSU Terminal se combinan las dos: EMA 21 para timing, SMA 50/200 para contexto.' },
+                ]
+            },
+            {
+                heading: 'Por qué la EMA 21 y no otro periodo',
+                blocks: [
+                    { type: 'text', content: 'El periodo 21 no es arbitrario: corresponde aproximadamente a un mes de sesiones bursátiles (21 días de trading). Es lo suficientemente corto para reaccionar a la estructura reciente de HH/HL, y lo suficientemente largo para no ser ruido de 2-3 días.' },
+                    { type: 'warning', content: 'Ningún periodo de EMA es mágico. La EMA 21 funciona bien porque es la que más operadores institucionales vigilan — y cuando muchos participantes reaccionan al mismo nivel, ese nivel se vuelve una profecía autocumplida en cierta medida. Cambiar constantemente de periodo buscando "la EMA perfecta" es curve-fitting, no mejora real.' },
+                ]
+            },
+            {
+                heading: 'La EMA como punto de entrada — con confirmación de volumen',
+                blocks: [
+                    { type: 'text', content: 'El error más común es comprar en el primer toque de la EMA sin más. La EMA marca <em>dónde</em> mirar, no <em>cuándo</em> entrar. La entrada válida necesita dos cosas juntas: una reacción de precio en la EMA, y una lectura de volumen que confirme esa reacción.' },
+                    { type: 'chart', id: 'ema_entry_volume' },
+                    { type: 'steps', items: [
+                        'El precio retrocede hacia la EMA 21 en tendencia alcista establecida (HH/HL previos)',
+                        'Durante el retroceso, el volumen debería ser bajo o decreciente — señal de que no hay presión vendedora real, solo una pausa (conecta con la lección de Volumen Clímax: un retroceso con volumen bajo es sano)',
+                        'Aparece una vela de reacción alcista sobre o cerca de la EMA (envolvente, pin bar, cierre fuerte)',
+                        'Esa vela de reacción debe venir acompañada de volumen superior al de los días de retroceso — es la confirmación de que los compradores han vuelto',
+                        'Entrada: en el cierre de la vela de confirmación, o en la ruptura de su máximo al día siguiente',
+                    ]},
+                    { type: 'warning', content: 'Si el retroceso a la EMA viene con volumen creciente en las velas bajistas, no es una pausa sana — puede ser el inicio de una distribución. No compres el toque de EMA solo porque "está ahí"; sin la lectura de volumen, es una moneda al aire.' },
+                ]
+            },
+            {
+                heading: 'La EMA como punto de salida',
+                blocks: [
+                    { type: 'text', content: 'La misma media que sirve para entrar sirve como referencia de salida — pero con un criterio distinto al de la entrada. Para salir, lo relevante no es el toque de la EMA, sino el cierre respecto a ella.' },
+                    { type: 'chart', id: 'ema_exit_signal' },
+                    { type: 'table', headers: ['Señal', 'Interpretación', 'Acción'], rows: [
+                        ['Mecha toca o perfora la EMA, pero el cierre queda por encima', 'Test normal de soporte dinámico dentro de tendencia sana', 'Mantener posición'],
+                        ['Cierre por debajo de la EMA por primera vez en semanas', 'Posible cambio de carácter de la tendencia', 'Reducir posición o poner alerta máxima'],
+                        ['Cierre por debajo de la EMA + volumen elevado', 'Salida de manos fuertes, señal de mayor peso', 'Salir total o parcialmente'],
+                        ['Precio recupera la EMA al día siguiente con fuerza', 'Falsa señal, continuación probable', 'Reevaluar, posible reentrada'],
+                    ]},
+                    { type: 'tip', label: 'TRAILING CON EMA', content: 'Una técnica simple de trailing stop es usar el cierre diario respecto a la EMA 21: mientras el precio cierre por encima, mantienes la posición; el primer cierre por debajo es tu señal de salida. No reacciones a un toque intradía ni a una mecha — solo al cierre. Este método suele capturar el 60-70% del movimiento de una tendencia sin necesidad de vigilar el gráfico constantemente.' },
+                    { type: 'concept', title: 'Entrada y salida no son simétricas', content: 'Para entrar exiges reacción de precio + confirmación de volumen — dos condiciones. Para salir, basta con el cierre por debajo de la EMA — una condición, porque proteger capital debe ser más rápido y menos exigente que arriesgarlo. Pedir la misma confirmación de volumen para salir que para entrar suele significar salir demasiado tarde.' },
+                ]
+            },
+            {
+                heading: 'Golden Cross y Death Cross',
+                blocks: [
+                    { type: 'text', content: 'El Golden Cross y el Death Cross son los cruces de medias más conocidos del análisis técnico, y trabajan con periodos distintos a los de esta lección: no la EMA 21, sino la <strong>SMA 50</strong> y la <strong>SMA 200</strong> — las mismas que ya usas en el gráfico diario y en el Trend Template de Minervini.' },
+                    { type: 'chart', id: 'golden_death_cross' },
+                    { type: 'table', headers: ['Cruce', 'Qué ocurre', 'Lectura de fondo'], rows: [
+                        ['Golden Cross', 'SMA 50 cruza al alza por encima de la SMA 200', 'La tendencia de medio plazo (50) confirma que ya supera a la de largo plazo (200) — sesgo estructural alcista'],
+                        ['Death Cross', 'SMA 50 cruza a la baja por debajo de la SMA 200', 'La tendencia de medio plazo se ha girado por debajo de la de largo plazo — sesgo estructural bajista'],
+                    ]},
+                    { type: 'warning', content: 'El Golden Cross y el Death Cross son señales <em>tardías</em> por definición: como usan dos medias de 50 y 200 sesiones, el cruce ocurre semanas después de que el precio ya haya cambiado de dirección. No son señales de timing de entrada — son confirmación de que el régimen de fondo ha cambiado, útiles para decidir si operar a favor de largos o de cortos, no para marcar el punto exacto de entrada.' },
+                    { type: 'steps', items: [
+                        'Usa el Golden/Death Cross como filtro de régimen, igual que la MA10 mensual de la Lección 1: te dice en qué dirección operar, no cuándo',
+                        'Para el timing de entrada real, sigue apoyándote en la EMA 21 y la confirmación de volumen de la sección anterior',
+                        'Un Golden Cross reciente + retroceso a EMA 21 con volumen bajo es una combinación de alta probabilidad: régimen de fondo alcista confirmado + entrada de precisión',
+                        'Desconfía de un Golden Cross que aparece justo cuando el precio ya está muy extendido sobre ambas medias — puede llegar al final del movimiento en vez de al principio',
+                    ]},
+                    { type: 'tip', label: 'CONTEXTO HISTÓRICO', content: 'El Golden Cross del S&P 500 es una de las señales macro más seguidas por la prensa financiera y por eso tiene un componente de profecía autocumplida: cuando aparece, muchos gestores institucionales que siguen reglas mecánicas empiezan a comprar, lo cual añade demanda real al margen de la señal técnica en sí.' },
+                ]
+            },
+        ]
+    },
+
     // ── MÓDULO 2, LECCIÓN 1 ────────────────────────────────────────────────
     '2-1': {
         moduleId: 2,
@@ -742,278 +823,6 @@ export const LESSONS = {
             },
         ]
     },
-    // ── MÓDULO 3, LECCIÓN 1 ────────────────────────────────────────────────
-    '3-1': {
-        moduleId: 3,
-        lessonIndex: 0,
-        title: 'Tendencia Alcista — Cómo montarla',
-        duration: '9 min',
-        intro: 'Montar una tendencia alcista no es comprar en el mínimo y vender en el máximo. Es identificar que la tendencia existe, encontrar el punto de menor riesgo para unirte, y tener la disciplina de quedarte mientras siga activa.',
-        sections: [
-            {
-                heading: 'Confirmar la tendencia antes de entrar',
-                blocks: [
-                    { type: 'text', content: 'El error más común es intentar comprar <em>antes</em> de que la tendencia esté establecida. Una tendencia alcista confirmada requiere: precio por encima de las medias principales, secuencia HH+HL visible, y volumen que acompaña los impulsos más que las correcciones.' },
-                    { type: 'chart', id: 'uptrend_confirm' },
-                    { type: 'concept', title: 'Los tres filtros de confirmación', content: 'Antes de buscar entrada en tendencia alcista verifica: (1) El precio está por encima de la SMA 200 en el timeframe mayor. (2) La EMA 21 está por encima de la SMA 50. (3) Los últimos dos retrocesos han terminado por encima del mínimo anterior. Con los tres filtros activos, la probabilidad está de tu lado.' },
-                ]
-            },
-            {
-                heading: 'Los tres puntos de entrada en tendencia',
-                blocks: [
-                    { type: 'text', content: 'En una tendencia alcista hay tres zonas de entrada válidas, con diferente relación riesgo/recompensa. Ninguna es perfecta — cada una tiene su coste.' },
-                    { type: 'chart', id: 'uptrend_entries' },
-                    { type: 'table',
-                        headers: ['Entrada', 'Dónde', 'Riesgo', 'Recompensa'],
-                        rows: [
-                            ['Ruptura de HH', 'Al superar el máximo anterior', 'Alto — puede ser fakeout', 'Moderada — entra tarde'],
-                            ['Retroceso a EMA 21', 'Pullback a la media dinámica', 'Medio — stop bajo HL', 'Alta — buena R/R'],
-                            ['Retroceso a soporte', 'Zona de soporte previo o HL', 'Bajo — nivel probado', 'Muy alta — mejor R/R'],
-                        ]
-                    },
-                    { type: 'tip', label: 'ENTRADA ÓPTIMA', content: 'La entrada con mejor ratio riesgo/recompensa en tendencia alcista es el retroceso a un nivel de soporte que coincide con un HL y la EMA 21. Los tres elementos alineados en el mismo nivel crean una zona de alta probabilidad con stop ajustado.' },
-                ]
-            },
-            {
-                heading: 'Gestionar la posición mientras sube',
-                blocks: [
-                    { type: 'text', content: 'Entrar bien es solo el principio. <strong>Quedarse en la tendencia</strong> es lo más difícil. La mayoría de traders salen demasiado pronto porque no tienen reglas claras de gestión.' },
-                    { type: 'chart', id: 'uptrend_management' },
-                    { type: 'steps', items: [
-                        'Entrada: en retroceso a soporte/EMA 21 con catalizador de vela',
-                        'Stop inicial: por debajo del último HL con margen del 0.5%',
-                        'Primer objetivo: resistencia anterior o ratio 2:1 — cerrar 30-50% de la posición',
-                        'Trailing stop: mover al break-even tras el primer objetivo',
-                        'Runner: dejar el 50-70% restante con stop bajo cada nuevo HL',
-                        'Salida final: cierre semanal por debajo de la EMA 21 o pérdida del último HL',
-                    ]},
-                    { type: 'warning', content: 'No muevas el stop al break-even demasiado rápido. Si lo haces en cuanto el precio sube un poco, te sacarán con el primer retroceso normal de la tendencia. Espera a que el precio llegue al primer objetivo o forme un nuevo HL antes de mover el stop.' },
-                ]
-            },
-            {
-                heading: 'Cuándo la tendencia alcista termina',
-                blocks: [
-                    { type: 'text', content: 'Una tendencia alcista no termina porque "ha subido mucho". Termina cuando <strong>cambia la estructura</strong>. Las señales de agotamiento aparecen antes de la ruptura y te dan tiempo para reducir exposición.' },
-                    { type: 'chart', id: 'uptrend_end' },
-                    { type: 'table',
-                        headers: ['Señal', 'Significado', 'Acción'],
-                        rows: [
-                            ['Impulso más corto que el anterior', 'Compradores pierden fuerza', 'Reducir posición 25%'],
-                            ['Retroceso más profundo de lo normal', 'Vendedores más agresivos', 'Reducir posición 25%'],
-                            ['HL roto — precio bajo el último mínimo', 'Estructura comprometida', 'Cerrar posición restante'],
-                            ['Cierre semanal bajo EMA 21', 'Tendencia debilitada', 'Stop ajustado o salida'],
-                            ['Nuevo máximo sin volumen', 'Agotamiento del impulso', 'Vigilar — posible techo'],
-                        ]
-                    },
-                    { type: 'concept', title: 'Salir antes del final', content: 'No necesitas vender en el máximo exacto. De hecho, intentarlo es una trampa. El objetivo es capturar el 60-70% del movimiento con la mayor parte de tu posición. Los últimos tramos de una tendencia son los más volátiles y los de menor R/R para nuevas entradas.' },
-                ]
-            },
-        ]
-    },
-
-    // ── MÓDULO 3, LECCIÓN 2 ────────────────────────────────────────────────
-    '3-2': {
-        moduleId: 3,
-        lessonIndex: 1,
-        title: 'Tendencia Bajista — Cómo evitarla',
-        duration: '8 min',
-        intro: 'En una tendencia bajista, la mayoría de traders pierde dinero de dos formas: comprando porque "está barato" y aguantando posiciones perdedoras esperando que el precio vuelva. Aprender a reconocer y respetar una tendencia bajista vale más que cualquier indicador.',
-        sections: [
-            {
-                heading: 'Reconocer una tendencia bajista real',
-                blocks: [
-                    { type: 'text', content: 'Una tendencia bajista no es una corrección profunda ni un día malo. Es una <strong>secuencia sostenida de LH y LL</strong> que se mantiene durante semanas o meses. La diferencia importa porque define tu postura: evitar longs o buscar cortos activamente.' },
-                    { type: 'chart', id: 'downtrend_confirm' },
-                    { type: 'concept', title: 'El test del precio vs SMA 200', content: 'El indicador más simple para distinguir corrección de tendencia bajista: ¿está el precio por debajo de la SMA 200 en semanal? Si la respuesta es sí durante más de 4 semanas, no estás en corrección — estás en tendencia bajista. Las estadísticas históricas muestran que las posiciones largas bajo SMA 200 semanal tienen una tasa de éxito inferior al 35%.' },
-                ]
-            },
-            {
-                heading: 'Los errores más caros en bajista',
-                blocks: [
-                    { type: 'text', content: 'La tendencia bajista genera trampas específicas que atrapan a traders experimentados. Conocerlas de antemano es la única defensa.' },
-                    { type: 'chart', id: 'downtrend_traps' },
-                    { type: 'steps', items: [
-                        '<strong>El rebote del gato muerto:</strong> caída brusca seguida de rebote fuerte que parece recuperación — es solo el LH formándose',
-                        '<strong>"Ya ha caído mucho":</strong> el precio puede siempre caer más. Sin señal de cambio de estructura, es una trampa',
-                        '<strong>Promediar a la baja:</strong> comprar más mientras el precio cae multiplica las pérdidas en tendencia bajista',
-                        '<strong>Confiar en dividendos o fundamentales:</strong> en tendencia bajista, el precio cae aunque los fundamentales sean buenos',
-                        '<strong>Buscar el suelo exacto:</strong> los suelos se confirman después, nunca antes. Espera la señal, no anticipes',
-                    ]},
-                    { type: 'warning', content: 'El rebote más peligroso en una tendencia bajista es el primero después de una caída grande. Parece una recuperación pero casi siempre es el LH que confirmará la continuación. Espera que el precio supere el LH anterior antes de plantear cualquier posición larga.' },
-                ]
-            },
-            {
-                heading: 'Cómo proteger el capital en bajista',
-                blocks: [
-                    { type: 'text', content: 'En mercado bajista el objetivo no es ganar — es <strong>no perder</strong>. Preservar el capital durante las caídas te permite comprar a mejores precios cuando la tendencia cambie. Esa ventaja compensa con creces el coste de oportunidad de estar fuera.' },
-                    { type: 'chart', id: 'downtrend_defense' },
-                    { type: 'table',
-                        headers: ['Acción', 'Cuándo', 'Objetivo'],
-                        rows: [
-                            ['Reducir exposición a renta variable', 'Precio bajo SMA 200 semanal', 'Limitar pérdidas potenciales'],
-                            ['Aumentar liquidez', 'Estructura LH+LL confirmada', 'Poder comprar más abajo'],
-                            ['Evitar nuevos longs', 'Mientras haya LH activos', 'No luchar contra tendencia'],
-                            ['Coberturas con puts o ETFs inversos', 'Bajista clara y prolongada', 'Beneficio en caída'],
-                            ['Mantener posiciones core largo plazo', 'Solo si horizonte >5 años', 'No vender en pánico'],
-                        ]
-                    },
-                    { type: 'tip', label: 'REGLA DE CASH', content: 'En tendencia bajista severa, tener 40-60% en liquidez no es perder oportunidades — es generar opcionalidad. Cuando la tendencia cambie, ese cash te permite comprar con fuerza cuando otros están liquidando. La paciencia en bajista es una ventaja competitiva real.' },
-                ]
-            },
-            {
-                heading: 'Identificar el final de la tendencia bajista',
-                blocks: [
-                    { type: 'text', content: 'El fin de una tendencia bajista no se identifica por el precio sino por la <strong>estructura</strong>. Hay señales específicas que aparecen antes del cambio real y te permiten prepararte sin adelantarte.' },
-                    { type: 'chart', id: 'downtrend_end' },
-                    { type: 'steps', items: [
-                        'Climax de volumen en caída — venta masiva que agota la oferta disponible',
-                        'Rebote que supera el último LH por primera vez en la tendencia',
-                        'Corrección posterior que no llega al último LL (primer HL)',
-                        'Nuevo impulso que supera el último LH y forma HH',
-                        'Precio recupera la SMA 200 con cierre semanal por encima',
-                    ]},
-                    { type: 'concept', title: 'No comprar en la primera señal', content: 'La primera vez que un rebote supera el LH puede ser una trampa. Espera la confirmación completa: rebote que supera LH, corrección que forma HL, y nuevo impulso que supera el HH. Solo entonces tienes una tendencia alcista incipiente confirmada. Hasta ese momento, el sesgo sigue siendo bajista.' },
-                ]
-            },
-        ]
-    },
-
-    // ── MÓDULO 3, LECCIÓN 3 ────────────────────────────────────────────────
-    '3-3': {
-        moduleId: 3,
-        lessonIndex: 2,
-        title: 'Rango Lateral — Paciencia obligatoria',
-        duration: '8 min',
-        intro: 'El mercado pasa más tiempo en rango lateral que en tendencia. Saber identificar un rango, no operar en él si no es tu estilo, y esperar la ruptura es una habilidad que separa a los traders consistentes de los que sobreoperan.',
-        sections: [
-            {
-                heading: '¿Qué es un rango lateral?',
-                blocks: [
-                    { type: 'text', content: 'Un rango lateral es un periodo donde el precio oscila entre un <strong>soporte definido</strong> y una <strong>resistencia definida</strong>, sin hacer ni HH ni LL. Los máximos y mínimos se mantienen aproximadamente al mismo nivel. El mercado está en equilibrio — ni compradores ni vendedores tienen el control.' },
-                    { type: 'chart', id: 'range_definition' },
-                    { type: 'concept', title: 'Por qué existen los rangos', content: 'Los rangos aparecen cuando el mercado está procesando información. Puede ser acumulación institucional (preparando una subida) o distribución (preparando una bajada). Desde dentro del rango es imposible saber cuál es. Por eso la estrategia más segura es esperar la ruptura y no anticiparla.' },
-                ]
-            },
-            {
-                heading: 'Cómo operar dentro del rango',
-                blocks: [
-                    { type: 'text', content: 'Si tu estilo es operar rangos, la estrategia es simple: <strong>comprar en soporte, vender en resistencia</strong>. Pero tiene condiciones estrictas que muchos ignoran, por eso pierden dinero operando rangos.' },
-                    { type: 'chart', id: 'range_trading' },
-                    { type: 'table',
-                        headers: ['Condición', 'Compra en soporte', 'Venta en resistencia'],
-                        rows: [
-                            ['Distancia mínima', 'Rango amplio (>5% entre S y R)', 'Rango amplio (>5% entre S y R)'],
-                            ['Confirmación', 'Vela de reversión en soporte', 'Vela de reversión en resistencia'],
-                            ['Stop loss', 'Por debajo del soporte', 'Por encima de la resistencia'],
-                            ['Objetivo', 'La resistencia opuesta', 'El soporte opuesto'],
-                            ['Salida anticipada', 'Si el precio se detiene a mitad', 'Si el precio se detiene a mitad'],
-                        ]
-                    },
-                    { type: 'warning', content: 'No operes rangos estrechos (menos del 3-4% de amplitud). Las comisiones y el spread se comen el beneficio potencial. En rangos estrechos la mejor estrategia es no hacer nada y esperar la ruptura.' },
-                ]
-            },
-            {
-                heading: 'Anticipar la ruptura del rango',
-                blocks: [
-                    { type: 'text', content: 'Antes de que el precio rompa el rango hay señales que indican hacia dónde es probable que vaya. No son certezas — son probabilidades que mejoran tu timing.' },
-                    { type: 'chart', id: 'range_breakout_signs' },
-                    { type: 'steps', items: [
-                        '<strong>Compresión del precio:</strong> el rango se va estrechando progresivamente, formando un triángulo dentro del rango — indica ruptura inminente',
-                        '<strong>Volumen decreciente en el rango:</strong> el interés baja hasta que la ruptura lo reactiva bruscamente',
-                        '<strong>Falsa ruptura previa:</strong> frecuentemente hay un spike falso en una dirección antes de la ruptura real en la contraria',
-                        '<strong>Contexto del timeframe mayor:</strong> si el mensual y semanal son alcistas, la probabilidad de ruptura alcista del rango es mayor',
-                        '<strong>Tests repetidos de un lado:</strong> si el precio prueba la resistencia 4-5 veces, suele romper al alza. Si prueba el soporte repetidamente, suele romper a la baja',
-                    ]},
-                    { type: 'tip', label: 'CONTEXTO ES CLAVE', content: 'La ruptura de un rango en tendencia alcista mayor tiene mucha más probabilidad de ser alcista. Antes de operar la ruptura de cualquier rango, consulta el gráfico mensual y semanal. La dirección de la tendencia mayor te dice hacia qué lado sesgar tu expectativa.' },
-                ]
-            },
-            {
-                heading: 'Confirmar la ruptura antes de entrar',
-                blocks: [
-                    { type: 'text', content: 'La mayor trampa en los rangos son las <strong>falsas rupturas</strong>. El precio supera brevemente el soporte o la resistencia, activa los stops de muchos traders, y regresa dentro del rango. Entrar demasiado pronto en una ruptura es el error más costoso.' },
-                    { type: 'chart', id: 'range_false_break' },
-                    { type: 'concept', title: 'La regla del cierre confirmado', content: 'Una ruptura solo es válida cuando el precio cierra por fuera del rango en el timeframe de análisis. Un spike que cruza la resistencia pero cierra dentro del rango no es una ruptura — es una trampa. Espera el cierre. En semanal esto significa esperar al viernes. En diario, al cierre de la sesión. Pierdes los primeros puntos del movimiento pero evitas la mayoría de falsas rupturas.' },
-                    { type: 'tip', label: 'ENTRADA EN RETEST', content: 'La entrada más fiable tras ruptura de rango no es en la propia ruptura sino en el retest. Tras romper la resistencia, el precio frecuentemente vuelve a testear ese nivel (ahora convertido en soporte) antes de continuar al alza. Esa es tu entrada con el mejor R/R y la mayor confirmación.' },
-                ]
-            },
-        ]
-    },
-
-    // ── MÓDULO 3, LECCIÓN 4 ────────────────────────────────────────────────
-    '3-4': {
-        moduleId: 3,
-        lessonIndex: 3,
-        title: 'Validación de Líneas de Tendencia',
-        duration: '8 min',
-        intro: 'Una línea de tendencia mal dibujada es peor que no tener ninguna. Te da una falsa sensación de análisis cuando en realidad estás proyectando lo que quieres ver. Hay reglas precisas para dibujar y validar líneas que realmente funcionan.',
-        sections: [
-            {
-                heading: 'Reglas para dibujar una línea válida',
-                blocks: [
-                    { type: 'text', content: 'No todas las líneas de tendencia son iguales. Una línea válida tiene requisitos mínimos. Sin ellos, es solo una línea arbitraria en un gráfico.' },
-                    { type: 'chart', id: 'trendline_valid' },
-                    { type: 'steps', items: [
-                        '<strong>Mínimo dos puntos de contacto</strong> para trazar la línea — con uno solo no existe tendencia, solo un punto aislado',
-                        '<strong>El tercer toque confirma la validez</strong> — una línea con tres puntos de contacto es una herramienta real',
-                        '<strong>Los puntos deben ser toques limpios</strong>, no cuerpos de vela atravesando la línea — usa las mechas (shadows) como referencia',
-                        '<strong>Cuanto más largo el período que abarca</strong>, más relevante es la línea — una línea semanal supera a una diaria',
-                        '<strong>El ángulo debe ser razonable</strong> — líneas con ángulos superiores a 60° no son sostenibles y se rompen pronto',
-                    ]},
-                    { type: 'warning', content: 'Nunca "ajustes" una línea de tendencia para que toque más puntos. Si tienes que forzar la línea para que conecte con determinados puntos, la línea no es válida. Los puntos deben tocar la línea naturalmente, no la línea buscar los puntos.' },
-                ]
-            },
-            {
-                heading: 'Líneas alcistas vs bajistas',
-                blocks: [
-                    { type: 'text', content: 'Las líneas de tendencia alcistas se dibujan conectando los <strong>mínimos crecientes</strong> (HL). Las bajistas conectan los <strong>máximos decrecientes</strong> (LH). Muchos traders cometen el error opuesto y pierden la referencia correcta.' },
-                    { type: 'chart', id: 'trendline_types' },
-                    { type: 'table',
-                        headers: ['Tipo', 'Puntos de contacto', 'Función'],
-                        rows: [
-                            ['Alcista', 'Mínimos crecientes (HL)', 'Soporte dinámico de la tendencia'],
-                            ['Bajista', 'Máximos decrecientes (LH)', 'Resistencia dinámica de la tendencia'],
-                            ['Canal alcista', 'HL abajo + HH arriba (paralela)', 'Define el rango del movimiento alcista'],
-                            ['Canal bajista', 'LH arriba + LL abajo (paralela)', 'Define el rango del movimiento bajista'],
-                        ]
-                    },
-                    { type: 'tip', label: 'CANALES', content: 'Cuando tienes una línea de tendencia válida, puedes trazar una paralela por el lado opuesto para crear un canal. La línea paralela no necesita toques — es proyectada desde la línea principal. Los extremos del canal son zonas de alta probabilidad de reacción.' },
-                ]
-            },
-            {
-                heading: 'Cuándo una línea de tendencia es rota',
-                blocks: [
-                    { type: 'text', content: 'La ruptura de una línea de tendencia no es automáticamente una señal de trading. Depende de cómo se produce y qué ocurre después.' },
-                    { type: 'chart', id: 'trendline_break' },
-                    { type: 'table',
-                        headers: ['Tipo de ruptura', 'Fiabilidad', 'Acción'],
-                        rows: [
-                            ['Cierre por encima/debajo con volumen', 'Alta', 'Señal válida — esperar retest'],
-                            ['Spike que cruza y regresa', 'Baja — falsa ruptura', 'Ignorar — refuerza la línea'],
-                            ['Ruptura lenta sin volumen', 'Media', 'Esperar confirmación adicional'],
-                            ['Ruptura + retest + rechazo', 'Muy alta', 'Entrada de alta probabilidad'],
-                        ]
-                    },
-                    { type: 'concept', title: 'Ruptura + retest: la entrada clásica', content: 'La secuencia más fiable en torno a líneas de tendencia es: el precio rompe la línea con volumen, se aleja, regresa a testear la línea (ahora en el lado opuesto), y la rechaza. En ese retest es donde la R/R es más favorable. Pierdes los primeros puntos del movimiento pero reduces drásticamente el riesgo de falsa ruptura.' },
-                ]
-            },
-            {
-                heading: 'Errores comunes con líneas de tendencia',
-                blocks: [
-                    { type: 'text', content: 'Las líneas de tendencia son la herramienta más subjetiva del análisis técnico y la más susceptible de ser mal usada. Estos son los errores que debes evitar sistemáticamente.' },
-                    { type: 'chart', id: 'trendline_errors' },
-                    { type: 'steps', items: [
-                        '<strong>Demasiadas líneas:</strong> un gráfico con 10 líneas no te da 10 referencias — te da confusión. Máximo 2-3 líneas activas por gráfico',
-                        '<strong>Líneas de corto plazo sobre las de largo:</strong> siempre prioriza la línea de mayor timeframe. Una línea semanal anula a diez diarias',
-                        '<strong>Ignorar las rupturas:</strong> si una línea de tendencia válida rompe con volumen y cierre, es información. No la ignores porque "no debería haber roto"',
-                        '<strong>Redibujar constantemente:</strong> si cada semana reajustas tus líneas para que encajen con el precio actual, no estás analizando — estás racionalizando',
-                        '<strong>Usar líneas como el único criterio:</strong> las líneas de tendencia son una herramienta más, no el análisis completo. Combínalas con estructura y niveles',
-                    ]},
-                    { type: 'tip', label: 'SIMPLICIDAD', content: 'El mejor análisis de tendencia es el más simple. Una línea alcista que conecta tres mínimos en semanal, válida desde hace 18 meses, vale más que veinte líneas diarias perfectamente dibujadas. La antigüedad y el timeframe de una línea determinan su importancia más que cualquier otra variable.' },
-                ]
-            },
-        ]
-    },
-
     // ── MÓDULO 3, LECCIÓN 1 ────────────────────────────────────────────────
     '3-1': {
         moduleId: 3,
@@ -2333,7 +2142,7 @@ export const LESSONS = {
         moduleId: 8,
         lessonIndex: 2,
         title: 'Volumen Clímax',
-        duration: '8 min',
+        duration: '16 min',
         intro: 'El volumen clímax es el momento en que el mercado se rinde. Una vela enorme con volumen extraordinario que marca el punto de máximo miedo o máxima codicia. Reconocerlo es una de las habilidades más valiosas del trader técnico.',
         sections: [
             {
@@ -2384,6 +2193,59 @@ export const LESSONS = {
                     { type: 'text', content: 'El clímax de volumen es especialmente significativo cuando ocurre exactamente en un nivel técnico relevante: soporte histórico, resistencia mayor, zona de demanda o máximo de 52 semanas. La coincidencia de clímax + nivel clave multiplica la fiabilidad de la señal.' },
                     { type: 'chart', id: 'climax_at_level' },
                     { type: 'tip', label: 'PACIENCIA', content: 'Tras un clímax de volumen, el mercado suele entrar en un período de consolidación de días o semanas antes de que la reversión sea clara. No hay que entrar en el mismo día del clímax. La entrada óptima es en el retest posterior con bajo volumen, no en el clímax en sí.' },
+                ]
+            },
+            {
+                heading: 'Clímax real vs. volumen alto rutinario',
+                blocks: [
+                    { type: 'text', content: 'No todo pico de volumen es capitulación o euforia genuina. Días de vencimiento de opciones (opex), rebalanceos de índices, inclusión/exclusión de un índice, o una noticia puntual sin relación con la tesis de fondo pueden disparar el volumen 3x+ sin que exista un cambio real de sentimiento entre compradores y vendedores.' },
+                    { type: 'table', headers: ['Señal', 'Clímax genuino', 'Volumen alto rutinario'], rows: [
+                        ['Contexto previo', 'Tendencia extendida (varias semanas/meses)', 'Puede aparecer en cualquier punto, sin tendencia extendida'],
+                        ['Tamaño de la vela', 'Rango de vela amplio, muy por encima del ATR habitual', 'Rango de vela normal o solo ligeramente mayor'],
+                        ['Momento del mes', 'Cualquier día', 'Coincide con tercer viernes (opex), rebalanceo trimestral de índice, o fecha de earnings de un competidor/proveedor'],
+                        ['Noticia asociada', 'Ausente o genérica — el movimiento es principalmente técnico/emocional', 'Evento identificable y puntual (M&A, cambio de índice, block trade institucional)'],
+                    ]},
+                    { type: 'warning', content: 'Antes de tratar un pico de volumen como clímax de capitulación o euforia, comprueba la fecha en el calendario (opex, rebalanceos) y busca si hay una noticia concreta detrás. Un volumen alto explicado por un evento mecánico puntual no tiene la misma fiabilidad como señal de reversión que un clímax emocional genuino.' },
+                ]
+            },
+            {
+                heading: 'Clímax apilados: cuando el primero no es el final',
+                blocks: [
+                    { type: 'text', content: 'En caídas severas o burbujas muy extendidas, puede aparecer más de un clímax en secuencia — un primer clímax que parece marcar suelo/techo, seguido de un rebote débil, y después un segundo (o tercer) clímax aún mayor. Comprar o vender agresivamente en el primer clímax de una secuencia de varios es uno de los errores más costosos de esta técnica.' },
+                    { type: 'chart', id: 'climax_stacking' },
+                    { type: 'steps', items: [
+                        'Tras un clímax, espera el retest — no asumas que es el único ni el definitivo',
+                        'Si el retest rompe el mínimo/máximo del clímax anterior con volumen similar o mayor, estás ante un clímax apilado, no ante una confirmación',
+                        'Cada clímax adicional en la secuencia reduce la fiabilidad de "esta vez sí es el suelo/techo" hasta que el volumen empieza a decrecer en los sucesivos retests',
+                        'La señal de mayor fiabilidad no es el primer clímax, sino el clímax en el que el retest posterior se hace con volumen claramente decreciente',
+                    ]},
+                    { type: 'tip', label: 'REGLA RSU', content: 'En movimientos extremos (crashes, burbujas de manía), reduce tamaño de posición en el primer clímax y resérvate munición para una posible segunda entrada si aparece un clímax apilado — no dispares toda la posición en la primera señal.' },
+                ]
+            },
+            {
+                heading: 'Medir el volumen relativo con precisión',
+                blocks: [
+                    { type: 'text', content: 'Decir "volumen 3x+" sin más contexto es impreciso si no se especifica frente a qué se compara. La forma correcta es calcular el volumen relativo (RVOL): volumen de la sesión dividido entre el volumen medio de un periodo de referencia, normalmente 20 o 50 sesiones.' },
+                    { type: 'table', headers: ['RVOL', 'Interpretación'], rows: [
+                        ['< 1.0x', 'Participación por debajo de lo normal — sin relevancia como clímax'],
+                        ['1.5x – 2.5x', 'Volumen elevado pero dentro de rango habitual de días de tendencia'],
+                        ['3x – 5x', 'Zona de clímax — merece atención si coincide con vela amplia y contexto de tendencia extendida'],
+                        ['> 5x', 'Clímax extremo — poco frecuente, normalmente asociado a capitulación o pánico de mercado amplio'],
+                    ]},
+                    { type: 'warning', content: 'Usa siempre el promedio de volumen de los últimos 20-50 días como referencia, no un promedio anual ni el volumen de un solo día anterior. Comparar contra una sola sesión (por ejemplo "el doble que ayer") produce falsos positivos si el día de referencia ya era atípico.' },
+                ]
+            },
+            {
+                heading: 'Gestión de riesgo específica para trades de clímax',
+                blocks: [
+                    { type: 'text', content: 'Operar clímax de volumen implica entrar cerca de la máxima volatilidad reciente del valor. El stop y el tamaño de posición deben reflejar ese riesgo elevado, no el mismo criterio que usarías en una entrada de tendencia establecida.' },
+                    { type: 'steps', items: [
+                        'Stop en clímax bajista: por debajo del mínimo de la vela de clímax (o de su retest, si es más ajustado y sigue siendo técnicamente válido)',
+                        'Stop en clímax alcista (para posiciones cortas o para cerrar largos): por encima del máximo de la vela de clímax',
+                        'Reduce el tamaño de posición inicial frente a una entrada de tendencia estándar — la volatilidad implícita tras un clímax es mayor y el rango de la vela de invalidación suele ser más amplio',
+                        'Considera escalar la entrada: una parte en la confirmación de ruptura del clímax, el resto en el retest de bajo volumen, en vez de una única entrada de tamaño completo',
+                    ]},
+                    { type: 'concept', title: 'Por qué el tamaño de posición importa más aquí que en otros setups', content: 'Un clímax de volumen, por definición, ocurre en el punto de mayor emoción del mercado sobre ese valor. Si la lectura es incorrecta y el clímax resulta ser apilado (ver sección anterior), el movimiento en contra puede ser rápido y amplio. Reducir el tamaño inicial es la forma de participar en la asimetría de la señal sin exponerse al peor escenario.' },
                 ]
             },
         ]
@@ -2921,6 +2783,69 @@ export const LESSONS = {
             },
         ]
     },
+
+    // ── MÓDULO 10, LECCIÓN 5 ───────────────────────────────────────────────
+    '10-5': {
+        moduleId: 10,
+        lessonIndex: 4,
+        title: 'Configurar tu Watchlist',
+        duration: '10 min',
+        intro: 'La watchlist es el resultado tangible de todo el proceso de este módulo: el sesgo mensual, la estructura semanal y el setup diario no sirven de nada si no se traducen en una lista concreta de activos con niveles y triggers definidos. Sin watchlist, cada mañana empiezas de cero. Con ella, empiezas donde lo dejaste el domingo.',
+        sections: [
+            {
+                heading: 'Cuándo se construye y cuándo se revisa',
+                blocks: [
+                    { type: 'text', content: 'La watchlist se construye una vez por semana, el domingo, como parte de la rutina descrita en la lección anterior — no se improvisa un lunes por la mañana con el mercado ya abierto. Fuera de ese momento, solo se hacen ajustes menores: eliminar un ticker que ya no cumple los criterios, o añadir uno excepcional que apareció entre semana con una señal muy clara.' },
+                    { type: 'table', headers: ['Momento', 'Qué se hace', 'Alcance del cambio'], rows: [
+                        ['Domingo (construcción)', 'Revisión completa: sesgo mensual, sectores líderes, scanner CAN SLIM', 'La lista se rehace desde cero'],
+                        ['Pre-market diario', 'Comprobar si algún ticker de la lista llegó a su zona de interés', 'Sin cambios en la composición de la lista'],
+                        ['Entre semana (excepcional)', 'Un ticker rompe estructura de forma clara fuera de la revisión dominical', 'Añadir solo si cumple el mismo checklist que un domingo'],
+                    ]},
+                    { type: 'warning', content: 'Añadir tickers a la watchlist "sobre la marcha" porque han subido mucho ese día es la puerta de entrada más común al sobretrading y al FOMO. Si un ticker no pasó el filtro del domingo, necesita una razón igual de sólida — no solo que "se está moviendo" — para entrar entre semana.' },
+                ]
+            },
+            {
+                heading: 'Qué debe tener un candidato antes de entrar en la lista',
+                blocks: [
+                    { type: 'text', content: 'No cualquier activo que "se ve bien" merece un hueco en la watchlist. Cada candidato debe pasar un checklist mínimo antes de ganarse el seguimiento activo durante la semana.' },
+                    { type: 'steps', items: [
+                        '<strong>Alineación de contexto:</strong> sesgo mensual y estructura semanal coherentes con la dirección que buscas — nunca en contra',
+                        '<strong>Liderazgo relativo:</strong> el activo o su sector muestra fortaleza relativa frente al mercado general (RS Rating alto, sector en rotación positiva)',
+                        '<strong>Zona de interés definida:</strong> un nivel de precio concreto donde ocurriría el setup — no "está cerca de algo interesante" en general',
+                        '<strong>Trigger anticipado:</strong> ya sabes de antemano qué señal específica en qué timeframe activaría la entrada si el precio llega a la zona',
+                        '<strong>R:R potencial mínimo:</strong> con el nivel de entrada y el objetivo técnico más cercano, el ratio proyectado ya alcanza al menos 1:2 antes incluso de que el precio llegue ahí',
+                    ]},
+                    { type: 'concept', title: 'La watchlist no es una lista de deseos', content: 'Una watchlist mal construida es simplemente una lista de activos que "le gustan" al trader, sin criterio objetivo. Una watchlist bien construida es una lista de hipótesis de trading ya definidas: si pasa X en el nivel Y, entro con el plan Z. La diferencia es la que separa preparación de improvisación.' },
+                ]
+            },
+            {
+                heading: 'Tamaño de la lista y priorización',
+                blocks: [
+                    { type: 'text', content: 'El tamaño recomendado es de 5 a 10 activos activos por semana. Menos de 5 puede dejarte sin oportunidades si el mercado no coopera con esos pocos nombres; más de 10-12 satura la capacidad real de vigilar cada zona con la atención que merece.' },
+                    { type: 'table', headers: ['Nº de candidatos disponibles', 'Cómo priorizar'], rows: [
+                        ['Más candidatos que hueco en la lista', 'Prioriza por calidad de zona (fresca, alto volumen) y R:R potencial, no por cuánto ha subido el activo'],
+                        ['Varios candidatos del mismo sector', 'Quédate con el de mejor estructura técnica individual — no dupliques exposición al mismo riesgo sectorial'],
+                        ['Menos de 5 candidatos válidos', 'Es una señal legítima, no un problema — algunas semanas el mercado ofrece pocas oportunidades de calidad'],
+                    ]},
+                    { type: 'warning', content: 'Forzar la lista hasta 10 activos cuando el scanner solo arrojó 3 candidatos de calidad real es el mismo error de fondo que forzar un trade: bajar el estándar por la necesidad de sentir actividad. Una watchlist corta y de alta calidad vale más que una larga y mediocre.' },
+                ]
+            },
+            {
+                heading: 'Cuándo eliminar un ticker de la lista',
+                blocks: [
+                    { type: 'text', content: 'Mantener un ticker en la watchlist indefinidamente "por si acaso" acumula ruido y diluye la atención sobre los candidatos que sí siguen siendo válidos. La poda semanal es tan importante como la incorporación de nuevos nombres.' },
+                    { type: 'steps', items: [
+                        'El precio se alejó significativamente de la zona de interés sin activar el trigger — la oportunidad de esa semana ha pasado',
+                        'El sesgo mensual o la estructura semanal cambiaron y ya no son coherentes con la tesis original',
+                        'El sector perdió liderazgo relativo frente al mercado desde la última revisión',
+                        'El trigger se activó y ya operaste el setup — sale de watchlist activa (ganador o perdedor, entra al journal, no se sigue vigilando igual)',
+                    ]},
+                    { type: 'tip', label: 'REGLA DE LA WATCHLIST', content: 'Solo operas activos que estaban en tu lista del domingo. Esta regla, ya mencionada en el módulo de Sobretrading, es la razón última por la que construir bien la watchlist importa: convierte la disciplina de entrada en algo automático, porque la decisión difícil ya se tomó con calma el fin de semana, no bajo presión con el mercado abierto.' },
+                ]
+            },
+        ]
+    },
+
     // ── MÓDULO 11, LECCIÓN 1 ───────────────────────────────────────────────
     '11-1': {
         moduleId: 11,
@@ -4957,6 +4882,364 @@ export const LESSONS = {
                         'Un pico de volumen clímax tras una extensión ya notable es una señal de alerta, no de confirmación de continuidad',
                         'Tras un volumen clímax, observa si el precio consolida o retrocede — eso valida la lectura de agotamiento',
                         'Si el volumen de tendencia se reanuda tras la pausa, el movimiento de fondo probablemente continúa',
+                    ]},
+                ]
+            },
+        ]
+    },
+
+    // ── MÓDULO 20, LECCIÓN 1 ───────────────────────────────────────────────
+    '20-1': {
+        moduleId: 20,
+        lessonIndex: 0,
+        title: 'Qué Mide el RSU Score',
+        duration: '12 min',
+        intro: 'El RSU Score es un número de 0 a 100 que resume cinco factores fundamentales y de sentimiento de mercado en una sola cifra. No es una recomendación de compra automática — es un punto de partida rápido para decidir si un ticker merece que profundices.',
+        sections: [
+            {
+                heading: 'Los cinco factores, 20 puntos cada uno',
+                blocks: [
+                    { type: 'text', content: 'El RSU Score reparte 100 puntos en cinco bloques iguales de 20 puntos. Cada bloque se puntúa de forma independiente y solo suma si hay dato disponible — si falta un dato (por ejemplo, no hay consenso de analistas para un ticker poco cubierto), ese bloque simplemente no aporta puntos ni resta.' },
+                    { type: 'chart', id: 'rsu_score_breakdown' },
+                    { type: 'table', headers: ['Factor', 'Máx', 'Umbral 20 pts', 'Umbral 15 pts', 'Umbral 10 pts'], rows: [
+                        ['Crecimiento de Ingresos', '20', '> 25%', '> 15%', '> 5%'],
+                        ['ROE', '20', '> 25%', '> 15%', '> 8%'],
+                        ['Margen Neto', '20', '> 20%', '> 10%', '> 2%'],
+                        ['Consenso de Analistas', '20', '≥ 75% alcistas', '≥ 60% alcistas', '≥ 40% alcistas'],
+                        ['Potencial P. Objetivo', '20', '> 25% upside', '> 15% upside', '> 5% upside'],
+                    ]},
+                    { type: 'tip', label: 'IMPORTANTE', content: 'Es un sistema de escalones, no una fórmula continua. Un ROE del 24,9% puntúa igual que uno del 15,1% (15 puntos) — quedarse justo debajo de un umbral tiene más impacto en el score que una mejora de varios puntos dentro del mismo escalón.' },
+                ]
+            },
+            {
+                heading: 'Las cinco etiquetas',
+                blocks: [
+                    { type: 'text', content: 'El score final se traduce en una etiqueta y un color que ves de un vistazo en la cabecera de Research.' },
+                    { type: 'chart', id: 'rsu_score_labels' },
+                    { type: 'table', headers: ['Score', 'Etiqueta', 'Color'], rows: [
+                        ['≥ 80', 'COMPRA FUERTE', 'Verde acento'],
+                        ['65–79', 'COMPRA', 'Verde acento'],
+                        ['50–64', 'NEUTRAL', 'Ámbar'],
+                        ['35–49', 'PRECAUCIÓN', 'Rojo'],
+                        ['< 35', 'EVITAR', 'Rojo'],
+                    ]},
+                    { type: 'warning', content: 'El color (verde/ámbar/rojo) cambia en el umbral de 70 y 50 puntos, mientras que la etiqueta de texto cambia en 80/65/50/35. Entre 65 y 69 verás la etiqueta "COMPRA" en color ámbar, no verde — no es un error, son dos escalas independientes dentro del mismo componente.' },
+                ]
+            },
+            {
+                heading: 'Qué NO mide el RSU Score',
+                blocks: [
+                    { type: 'concept', title: 'Un score fundamental + sentimiento, no técnico', content: 'Los cinco factores del RSU Score son puramente fundamentales (crecimiento, rentabilidad) y de sentimiento de mercado (analistas, precio objetivo). No incluye ningún elemento de estructura de precio, volumen, fase de Weinstein ni momentum — para eso está la sección de Niveles Técnicos aparte, en la misma página de Research.' },
+                    { type: 'text', content: 'Un ticker puede tener un RSU Score de 85 (fundamentales excelentes, analistas muy alcistas) y estar técnicamente en Fase 4 de Weinstein — es decir, en clara tendencia bajista. El score te dice "la empresa es de calidad y el consenso es optimista", no "es buen momento de comprar ahora mismo".' },
+                    { type: 'tip', label: 'REGLA RSU', content: 'Usa el RSU Score para filtrar candidatos (elegir QUÉ mirar), y la estructura técnica — EMAs, fase de Weinstein, soporte/resistencia — para decidir CUÁNDO entrar. Nunca al revés.' },
+                ]
+            },
+        ]
+    },
+
+    // ── MÓDULO 20, LECCIÓN 2 ───────────────────────────────────────────────
+    '20-2': {
+        moduleId: 20,
+        lessonIndex: 1,
+        title: 'Piotroski F-Score — Salud Financiera',
+        duration: '13 min',
+        intro: 'El Piotroski F-Score es un indicador independiente del RSU Score. Mide la salud financiera de una empresa comparando el último ejercicio contable con el anterior, a través de 9 criterios binarios. Cuantos más criterios cumple, más sólida es la base contable del negocio.',
+        sections: [
+            {
+                heading: 'Los 9 criterios',
+                blocks: [
+                    { type: 'text', content: 'Cada criterio suma 1 punto si se cumple, 0 si no se cumple. El score va de 0 a 9. Se agrupan en tres bloques: rentabilidad, apalancamiento/liquidez, y eficiencia operativa.' },
+                    { type: 'chart', id: 'piotroski_criteria' },
+                    { type: 'table', headers: ['Bloque', 'Criterio', 'Pasa si...'], rows: [
+                        ['Rentabilidad', 'ROA positivo', 'Beneficio neto / Activos totales > 0'],
+                        ['Rentabilidad', 'CFO positivo', 'Flujo de caja operativo > 0'],
+                        ['Rentabilidad', 'ROA en mejora', 'ROA de este año > ROA del año anterior'],
+                        ['Rentabilidad', 'Calidad del beneficio', 'CFO > Beneficio neto (el beneficio se traduce en caja real)'],
+                        ['Apalancamiento', 'Deuda LP estable o baja', 'Deuda LP / Activos no ha subido vs. año anterior'],
+                        ['Apalancamiento', 'Liquidez mejora', 'Current Ratio (activo circulante / pasivo circulante) sube'],
+                        ['Apalancamiento', 'Sin dilución', 'El número de acciones en circulación no ha aumentado'],
+                        ['Eficiencia', 'Margen bruto mejora', 'Margen bruto de este año > año anterior'],
+                        ['Eficiencia', 'Rotación de activos mejora', 'Ingresos / Activos totales sube vs. año anterior'],
+                    ]},
+                ]
+            },
+            {
+                heading: 'Las cuatro etiquetas y el caso "sin dato"',
+                blocks: [
+                    { type: 'chart', id: 'piotroski_scale' },
+                    { type: 'table', headers: ['Score', 'Etiqueta'], rows: [
+                        ['≥ 8', 'EXCELENTE'],
+                        ['6–7', 'SÓLIDO'],
+                        ['4–5', 'NEUTRAL'],
+                        ['< 4', 'DÉBIL'],
+                    ]},
+                    { type: 'warning', content: 'Cuando yfinance no reporta una línea contable concreta para un ticker (pasa sobre todo con financieras, REITs o empresas extranjeras), ese criterio se muestra con un guion gris "–" en vez de una X roja. Es una diferencia deliberada: el guion significa "no lo sabemos", la X significa "lo sabemos y no pasa el criterio". No confundas un dato ausente con una mala noticia — pero recuerda que igualmente NO suma el punto.' },
+                ]
+            },
+            {
+                heading: 'RSU Score y Piotroski son independientes',
+                blocks: [
+                    { type: 'text', content: 'Es el error de lectura más común: pensar que el Piotroski F-Score forma parte del cálculo del RSU Score. No es así en la versión actual de la terminal — son dos tarjetas separadas en la página de Research, cada una con su propia escala (0-100 vs 0-9) y su propia lógica. Se complementan, pero no se combinan en un único número.' },
+                    { type: 'concept', title: 'Por qué mirar los dos', content: 'El RSU Score te dice si el mercado y los fundamentales recientes son favorables ahora mismo. El Piotroski te dice si esos fundamentales están construidos sobre una base contable sólida — caja real, sin dilución, sin apalancamiento creciente. Una empresa con RSU Score alto pero Piotroski bajo (4 o menos) puede estar creciendo a base de deuda o de beneficio contable que no se traduce en caja: vale la pena investigar antes de confiar solo en el primer número.' },
+                    { type: 'tip', label: 'LECTURA CONJUNTA', content: 'RSU Score alto + Piotroski alto = fundamentales fuertes y confirmados por la contabilidad. RSU Score alto + Piotroski bajo = revisa antes de comprar, puede haber ruido de corto plazo (recompra de acciones, evento puntual) tapando un deterioro de fondo.' },
+                ]
+            },
+        ]
+    },
+
+    // ── MÓDULO 20, LECCIÓN 3 ───────────────────────────────────────────────
+    '20-3': {
+        moduleId: 20,
+        lessonIndex: 2,
+        title: 'Comparativa Sectorial — Valorar en Contexto',
+        duration: '12 min',
+        intro: 'Un P/E de 30 no significa lo mismo en un valor tecnológico de alto crecimiento que en una utility regulada. La sección de métricas de Research compara cada múltiplo con la mediana del sector para que sepas si lo que ves es caro, barato o normal dentro de su categoría.',
+        sections: [
+            {
+                heading: 'Qué métricas se comparan',
+                blocks: [
+                    { type: 'text', content: 'La comparativa sectorial calcula la mediana del sector para cada métrica y marca si el ticker está en mejor o peor posición ("favorable"). Se aplica a valoración, rentabilidad y crecimiento — no a todas las métricas de la tarjeta, algunas como el Current Ratio o el Free Cash Flow se muestran sin comparación sectorial.' },
+                    { type: 'chart', id: 'sector_comparison_example' },
+                    { type: 'table', headers: ['Bloque', 'Métricas con comparativa sectorial'], rows: [
+                        ['Valoración', 'P/E Trailing, P/E Forward, P/S, EV/EBITDA, PEG, P/B'],
+                        ['Rentabilidad', 'ROE, ROA, Margen Neto, Margen Operativo, Margen Bruto, D/E Ratio'],
+                        ['Crecimiento', 'Revenue Growth, Earnings Growth'],
+                    ]},
+                ]
+            },
+            {
+                heading: 'Cómo leer "favorable"',
+                blocks: [
+                    { type: 'text', content: 'Para métricas de valoración (P/E, EV/EBITDA, P/S, P/B, PEG), "favorable" significa que el múltiplo del ticker está por debajo de la mediana del sector — es decir, cotiza más barato en relación a sus comparables. Para métricas de rentabilidad y crecimiento, "favorable" significa lo contrario: por encima de la mediana es mejor.' },
+                    { type: 'warning', content: 'Barato relativo al sector no es lo mismo que barato en términos absolutos. Un sector entero puede estar sobrevalorado tras un rally — en ese caso, "favorable" solo te dice que destaca dentro de un grupo caro, no que sea una ganga objetiva.' },
+                    { type: 'concept', title: 'Por qué el PEG es especialmente sensible al sector', content: 'El PEG (P/E dividido entre el crecimiento de beneficios) es la métrica más directamente ligada a la filosofía CAN SLIM: paga un múltiplo alto solo si el crecimiento lo justifica. Comparar el PEG contra la mediana sectorial evita el error clásico de descartar una empresa por P/E alto cuando en realidad crece mucho más rápido que sus comparables.' },
+                ]
+            },
+            {
+                heading: 'Los límites de la comparativa',
+                blocks: [
+                    { type: 'text', content: 'La comparativa depende de una clasificación sectorial correcta (dato de yfinance) y de que existan suficientes comparables con datos completos. En sectores poco poblados o con clasificaciones ambiguas (conglomerados, empresas de nicho), la mediana puede estar calculada sobre pocos tickers y ser menos representativa.' },
+                    { type: 'steps', items: [
+                        'Mira primero el múltiplo absoluto — ¿tiene sentido para el tipo de negocio?',
+                        'Después mira la comparativa sectorial — ¿está caro o barato relativo a sus pares?',
+                        'Cruza con el crecimiento — un múltiplo alto con crecimiento acelerado no es lo mismo que un múltiplo alto sin crecimiento',
+                        'Si el sector tiene pocos comparables, dale menos peso a la comparativa y más al análisis absoluto',
+                    ]},
+                ]
+            },
+        ]
+    },
+
+    // ── MÓDULO 20, LECCIÓN 4 ───────────────────────────────────────────────
+    '20-4': {
+        moduleId: 20,
+        lessonIndex: 3,
+        title: 'Cómo Leer Todo Junto',
+        duration: '13 min',
+        intro: 'El poder de la página de Research no está en un solo número, sino en cruzar varias fuentes independientes: RSU Score, Piotroski, comparativa sectorial, insiders e institucionales. Esta lección propone un flujo de lectura ordenado.',
+        sections: [
+            {
+                heading: 'El flujo de lectura recomendado',
+                blocks: [
+                    { type: 'chart', id: 'research_workflow' },
+                    { type: 'steps', items: [
+                        '<strong>RSU Score:</strong> ¿Es COMPRA/COMPRA FUERTE? Si es PRECAUCIÓN/EVITAR, entiende primero qué factor concreto lo está lastrando (mira el desglose de los 5 bloques).',
+                        '<strong>Piotroski F-Score:</strong> ¿Confirma la solidez contable? Presta especial atención a la calidad del beneficio (CFO vs. Beneficio Neto) y a la dilución.',
+                        '<strong>Comparativa sectorial:</strong> ¿El precio actual es razonable frente a sus comparables, o ya recoge todo lo bueno?',
+                        '<strong>Insiders:</strong> ¿Hay compras discrecionales recientes (código P) o solo movimiento rutinario (A/M/F/G/C)?',
+                        '<strong>Institucional:</strong> ¿El % en manos institucionales es alto y estable, o hay señales de rotación reciente?',
+                        '<strong>Estructura técnica:</strong> solo al final, decide el timing de entrada con EMAs, fase de Weinstein y soporte/resistencia — nunca antes que los pasos anteriores.',
+                    ]},
+                ]
+            },
+            {
+                heading: 'Combinaciones que merecen atención extra',
+                blocks: [
+                    { type: 'table', headers: ['RSU Score', 'Piotroski', 'Lectura'], rows: [
+                        ['Alto (≥65)', 'Alto (≥6)', 'Fundamentales fuertes y confirmados — el escenario más limpio'],
+                        ['Alto (≥65)', 'Bajo (<4)', 'Revisa calidad del beneficio y dilución antes de confiar en el score'],
+                        ['Bajo (<50)', 'Alto (≥6)', 'Empresa sólida pero quizás cara o con sentimiento de analistas débil — posible candidata de valor, no de momentum'],
+                        ['Bajo (<50)', 'Bajo (<4)', 'Sin argumento fundamental — exige una tesis técnica o de catalizador muy fuerte para justificar el trade'],
+                    ]},
+                    { type: 'warning', content: 'Ningún cruce de scores sustituye la gestión de riesgo. Incluso el escenario "más limpio" (score alto + Piotroski alto) necesita una entrada técnica válida y un stop definido — la calidad fundamental reduce el riesgo de tesis, no el riesgo de timing.' },
+                ]
+            },
+            {
+                heading: 'Errores comunes al usar estos indicadores',
+                blocks: [
+                    { type: 'text', content: 'El error más frecuente es tratar el RSU Score como una señal binaria de compra/venta, ignorando el desglose. El segundo más frecuente es olvidar que Piotroski compara solo dos ejercicios — una empresa que tuvo un año excepcionalmente malo hace dos ejercicios puede mostrar "mejoras" en varios criterios simplemente por el efecto base, sin que el negocio esté realmente mejorando de forma estructural.' },
+                    { type: 'tip', label: 'BUENA PRÁCTICA', content: 'Revisa el histórico de varios trimestres antes de operar solo con el snapshot actual del score. Un score puntual es una fotografía; la tendencia de varios trimestres es la película, y la película es lo que realmente importa.' },
+                ]
+            },
+        ]
+    },
+
+    // ── MÓDULO 21, LECCIÓN 1 ───────────────────────────────────────────────
+    '21-1': {
+        moduleId: 21,
+        lessonIndex: 0,
+        title: 'Ingresos, Márgenes y Beneficio',
+        duration: '14 min',
+        intro: 'Antes de mirar cualquier múltiplo de valoración, hay que entender si el negocio genera más ingresos, y si esos ingresos se traducen en beneficio real. Esta lección cubre la lectura del estado de resultados trimestral tal y como aparece en Research.',
+        sections: [
+            {
+                heading: 'Las cuatro líneas clave del estado de resultados',
+                blocks: [
+                    { type: 'text', content: 'El gráfico trimestral de Research muestra cuatro magnitudes en cascada: Ingresos (Revenue), Beneficio Bruto (Gross Profit), Beneficio Operativo (Operating Income) y Beneficio Neto (Net Income). Cada una resta un bloque de costes distinto a la anterior, y la distancia entre ellas te dice dónde se está comiendo el margen.' },
+                    { type: 'chart', id: 'income_statement_quarters' },
+                    { type: 'table', headers: ['Línea', 'Qué resta respecto a la anterior', 'Qué revela'], rows: [
+                        ['Ingresos', '—', 'Demanda del producto/servicio, crecimiento top-line'],
+                        ['Beneficio Bruto', 'Coste de los bienes vendidos (COGS)', 'Poder de fijación de precios, eficiencia productiva'],
+                        ['Beneficio Operativo', 'Gastos operativos (I+D, marketing, admin)', 'Disciplina de gasto, escalabilidad del modelo'],
+                        ['Beneficio Neto', 'Intereses, impuestos, partidas extraordinarias', 'Resultado final atribuible al accionista'],
+                    ]},
+                ]
+            },
+            {
+                heading: 'La escalera de márgenes',
+                blocks: [
+                    { type: 'chart', id: 'margin_ladder' },
+                    { type: 'concept', title: 'Por qué comparar márgenes trimestre a trimestre', content: 'El crecimiento de ingresos por sí solo puede ser engañoso: una empresa puede crecer en ventas mientras pierde margen (vendiendo con descuentos agresivos, por ejemplo). Comparar el margen bruto y el margen operativo entre trimestres del mismo negocio revela si ese crecimiento es sano o se está comprando a costa de rentabilidad.' },
+                    { type: 'tip', label: 'PATRÓN CAN SLIM', content: 'La metodología CAN SLIM busca aceleración: no solo que los ingresos crezcan, sino que la tasa de crecimiento del trimestre actual sea mayor que la de trimestres anteriores. Compara al menos 3-4 trimestres del gráfico, no solo el último dato.' },
+                ]
+            },
+            {
+                heading: 'Señales de alerta en el estado de resultados',
+                blocks: [
+                    { type: 'steps', items: [
+                        'Ingresos crecen pero el Beneficio Bruto se queda plano o cae → problema de márgenes, presión de costes o precios',
+                        'Beneficio Operativo cae mientras el Beneficio Bruto sube → gasto operativo descontrolado, falta de disciplina',
+                        'Beneficio Neto muy distinto del Operativo de forma recurrente → revisa partidas extraordinarias, puede estar maquillando el resultado real del negocio',
+                        'Un solo trimestre malo tras varios buenos no invalida la tesis — un patrón de 2-3 trimestres consecutivos sí merece revisión',
+                    ]},
+                ]
+            },
+        ]
+    },
+
+    // ── MÓDULO 21, LECCIÓN 2 ───────────────────────────────────────────────
+    '21-2': {
+        moduleId: 21,
+        lessonIndex: 1,
+        title: 'Rentabilidad y Eficiencia — ROE, ROA',
+        duration: '13 min',
+        intro: 'Los ratios de rentabilidad miden cuánto beneficio genera una empresa por cada unidad de capital o de activos empleados. Son la base cuantitativa detrás del bloque de "Rentabilidad" tanto del RSU Score como de la tarjeta de métricas de Research.',
+        sections: [
+            {
+                heading: 'ROE, ROA y márgenes: qué mide cada uno',
+                blocks: [
+                    { type: 'table', headers: ['Métrica', 'Fórmula', 'Qué responde'], rows: [
+                        ['ROE', 'Beneficio Neto / Patrimonio Neto', '¿Cuánto gana la empresa con el dinero de los accionistas?'],
+                        ['ROA', 'Beneficio Neto / Activos Totales', '¿Cuánto gana la empresa con TODOS sus activos, con deuda incluida?'],
+                        ['Margen Neto', 'Beneficio Neto / Ingresos', '¿Qué porcentaje de cada venta se convierte en beneficio final?'],
+                        ['Margen Operativo', 'Beneficio Operativo / Ingresos', 'Rentabilidad del negocio "core", antes de intereses e impuestos'],
+                        ['Margen Bruto', 'Beneficio Bruto / Ingresos', 'Poder de fijación de precios frente al coste directo del producto'],
+                    ]},
+                    { type: 'warning', content: 'Un ROE muy alto puede ser señal de excelencia operativa — o simplemente de mucho apalancamiento (poca deuda propia, mucha deuda financiera). Un ROE de 40% con un D/E Ratio muy elevado no es comparable a un ROE de 40% con balance conservador. Mira siempre el ROE junto al D/E Ratio.' },
+                ]
+            },
+            {
+                heading: 'D/E Ratio y Current Ratio: la salud del balance',
+                blocks: [
+                    { type: 'text', content: 'El D/E Ratio (deuda sobre patrimonio) y el Current Ratio (activo circulante sobre pasivo circulante) no entran en el cálculo del RSU Score, pero son la base de dos de los nueve criterios del Piotroski F-Score (apalancamiento estable y liquidez en mejora) — conecta lo aprendido en el módulo anterior con estas métricas.' },
+                    { type: 'steps', items: [
+                        'D/E Ratio alto y creciente + ROE alto: la rentabilidad puede depender del apalancamiento, no de la eficiencia del negocio',
+                        'Current Ratio por debajo de 1: la empresa podría tener dificultades para cubrir sus obligaciones a corto plazo con sus activos líquidos',
+                        'Current Ratio muy por encima de 2-3 de forma sostenida: puede indicar capital ocioso mal empleado, no siempre es positivo',
+                    ]},
+                ]
+            },
+            {
+                heading: 'Free Cash Flow: el filtro de calidad final',
+                blocks: [
+                    { type: 'text', content: 'El Free Cash Flow (caja libre) es la caja que genera el negocio después de cubrir sus necesidades de inversión (capex). Es el mismo principio que el criterio de "calidad del beneficio" del Piotroski (CFO > Beneficio Neto): un beneficio contable positivo no vale lo mismo si no se traduce en caja disponible real para la empresa.' },
+                    { type: 'concept', title: 'Por qué el FCF importa para el trader, no solo para el inversor', content: 'Una empresa con FCF positivo y creciente tiene más margen para recomprar acciones, pagar dividendo, reducir deuda o financiar crecimiento sin diluir a los accionistas actuales — todo eso son catalizadores potenciales de precio a medio plazo que un trader técnico puede anticipar si sabe leer este dato.' },
+                ]
+            },
+        ]
+    },
+
+    // ── MÓDULO 21, LECCIÓN 3 ───────────────────────────────────────────────
+    '21-3': {
+        moduleId: 21,
+        lessonIndex: 2,
+        title: 'Valoración — P/E, PEG, EV/EBITDA, P/S, P/B',
+        duration: '14 min',
+        intro: 'Cada múltiplo de valoración responde una pregunta distinta y es más o menos útil según el tipo de negocio. Usar el múltiplo equivocado para el tipo de empresa equivocado es una de las fuentes más comunes de error en análisis fundamental.',
+        sections: [
+            {
+                heading: 'Los cinco múltiplos de la tarjeta de Valoración',
+                blocks: [
+                    { type: 'chart', id: 'valuation_multiples_context' },
+                    { type: 'table', headers: ['Múltiplo', 'Fórmula', 'Mejor para...'], rows: [
+                        ['P/E Trailing', 'Precio / BPA (últimos 12 meses)', 'Empresas maduras y rentables con beneficios estables'],
+                        ['P/E Forward', 'Precio / BPA estimado (próximos 12 meses)', 'Incorporar expectativas de crecimiento futuro'],
+                        ['PEG', 'P/E / Tasa de crecimiento de beneficios', 'Comparar crecimiento vs. precio pagado — clave en CAN SLIM'],
+                        ['EV/EBITDA', 'Valor de Empresa / EBITDA', 'Comparar empresas con distinta estructura de deuda'],
+                        ['P/S', 'Precio / Ventas por acción', 'Empresas de alto crecimiento aún sin beneficio positivo'],
+                        ['P/B', 'Precio / Valor Contable por acción', 'Bancos, aseguradoras y negocios intensivos en activos'],
+                    ]},
+                ]
+            },
+            {
+                heading: 'Por qué el PEG es el más relevante para la filosofía CAN SLIM',
+                blocks: [
+                    { type: 'text', content: 'Un PEG de 1 significa, de forma simplificada, que estás pagando un P/E igual a la tasa de crecimiento de beneficios esperada. Un PEG por debajo de 1 sugiere que el mercado no está pagando toda la prima que el crecimiento futuro justificaría; por encima de 1-1.5, el precio ya descuenta buena parte de las expectativas.' },
+                    { type: 'warning', content: 'El PEG depende de una estimación de crecimiento futuro, que es una proyección, no un hecho. Un PEG bajo basado en estimaciones de crecimiento poco realistas puede parecer una ganga y no serlo. Cruza siempre el PEG con el histórico real de Revenue Growth y Earnings Growth del gráfico trimestral.' },
+                ]
+            },
+            {
+                heading: 'P/S y P/B: cuándo usarlos en vez del P/E',
+                blocks: [
+                    { type: 'steps', items: [
+                        'Si la empresa tiene Beneficio Neto negativo o muy volátil, el P/E no es útil — usa P/S para valorar el negocio en función de sus ventas',
+                        'En sectores intensivos en activos físicos (banca, industria pesada, inmobiliario), el P/B es más relevante porque el valor contable refleja mejor el negocio subyacente',
+                        'El EV/EBITDA es preferible al P/E cuando comparas empresas con niveles de deuda muy distintos, porque el Valor de Empresa incluye la deuda neta y el EBITDA elimina el efecto de la estructura de capital',
+                    ]},
+                    { type: 'tip', label: 'REGLA PRÁCTICA', content: 'Nunca valores usando un único múltiplo aislado. Usa la comparativa sectorial (Módulo 20, Lección 3) para saber si ese múltiplo concreto es caro o barato dentro de su categoría, y cruza al menos dos múltiplos distintos antes de sacar una conclusión.' },
+                ]
+            },
+        ]
+    },
+
+    // ── MÓDULO 21, LECCIÓN 4 ───────────────────────────────────────────────
+    '21-4': {
+        moduleId: 21,
+        lessonIndex: 3,
+        title: 'Catalizadores — Earnings, Insiders, Institucionales',
+        duration: '14 min',
+        intro: 'Los fundamentales dicen si una empresa es de calidad. Los catalizadores dicen cuándo el mercado puede reconocer esa calidad. Esta lección cubre las señales de Research que anticipan movimiento: earnings, insiders, institucionales y corto interés.',
+        sections: [
+            {
+                heading: 'Earnings: el catalizador más predecible',
+                blocks: [
+                    { type: 'chart', id: 'earnings_catalysts_timeline' },
+                    { type: 'text', content: 'Research muestra la fecha del próximo earnings y el histórico trimestral de BPA (EPS). Un patrón de sorpresas positivas consecutivas (BPA real por encima del estimado) suele preceder revisiones al alza de las estimaciones de analistas — que a su vez pueden mover el precio incluso sin que el ticker esté "barato" en términos de múltiplos.' },
+                    { type: 'warning', content: 'La volatilidad implícita sube antes de earnings y el resultado es binario: puede sorprender bien o mal. Si operas alrededor de earnings, reduce el tamaño de posición o ajusta el stop — no trates ese día como una sesión normal.' },
+                ]
+            },
+            {
+                heading: 'Insiders: quién compra con su propio dinero',
+                blocks: [
+                    { type: 'text', content: 'La sección de Insiders de Research clasifica cada transacción por su código de Formulario 4 de la SEC. Solo los códigos P (compra discrecional en mercado abierto) y S (venta discrecional) son señales de convicción real — el resto (A, M, F, G, C) son movimientos rutinarios de compensación que no reflejan una decisión activa del insider sobre el precio actual.' },
+                    { type: 'table', headers: ['Código', 'Naturaleza', 'Señal'], rows: [
+                        ['P', 'Compra discrecional en mercado abierto', 'Señal de confianza — el insider paga con su dinero'],
+                        ['S', 'Venta discrecional en mercado abierto', 'Posible cautela — aunque también puede ser diversificación personal'],
+                        ['A / M / F / G / C', 'Concesión, ejercicio de opciones, impuestos, donación, conversión', 'Rutinaria — ignora estas para señales de trading'],
+                    ]},
+                    { type: 'tip', label: 'CONTEXTO IMPORTA', content: 'Una sola compra P de un directivo menor pesa menos que varias compras P de distintos insiders (especialmente el CEO o CFO) en un periodo corto. Busca clusters de compras, no eventos aislados.' },
+                ]
+            },
+            {
+                heading: 'Institucionales y corto interés',
+                blocks: [
+                    { type: 'text', content: 'El % en manos institucionales y el desglose de holders muestran quién posee el float, pero recuerda la limitación estructural: todos los 13F reportan al mismo cierre de trimestre, por lo que la comparación de precio de referencia se hace contra ese cierre trimestral, no contra el precio individual al que compró cada institución.' },
+                    { type: 'text', content: 'El corto interés, cuando es elevado en relación al volumen medio, añade combustible potencial a un movimiento alcista fuerte (cobertura forzada de cortos). No es una señal por sí sola, pero combinada con una ruptura técnica válida y buen volumen, amplifica el escenario.' },
+                    { type: 'steps', items: [
+                        'Earnings próximos + patrón de sorpresas positivas → catalizador de calendario conocido',
+                        'Cluster de compras insider código P → catalizador de convicción interna',
+                        '% institucional alto y estable + corto interés elevado → catalizador de posicionamiento técnico',
+                        'Ningún catalizador presente → los fundamentales pueden ser correctos pero el timing es incierto, sé más paciente con el tamaño de entrada',
                     ]},
                 ]
             },

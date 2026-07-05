@@ -630,6 +630,182 @@ function daily_exit() {
     </svg>`;
 }
 
+// ─── GRÁFICO: EMA vs SMA — velocidad de reacción ─────────────────────────────
+function ema_vs_sma_reaction() {
+    const W = 680, H = 220;
+    const x0 = 45, y0 = 15, w = W-80, h = 165;
+    // Precio plano y luego un salto brusco sostenido, para exponer la diferencia de reacción
+    const prices = [];
+    for (let i=0;i<15;i++) prices.push(100 + Math.sin(i/2)*1.5);
+    for (let i=0;i<25;i++) prices.push(102 + i*1.3 + Math.sin(i/2)*1.5);
+    const n = prices.length;
+    const mn = Math.min(...prices)-4, mx = Math.max(...prices)+4, range = mx-mn;
+    const px = (i) => x0 + (i/(n-1))*w;
+    const py = (v) => y0 + h - ((v-mn)/range)*h;
+
+    function emaArr(data,span){const k=2/(span+1);let e=data[0];const o=[e];data.slice(1).forEach(p=>{e=p*k+e*(1-k);o.push(e);});return o;}
+    function smaArr(data,span){return data.map((_,i)=> i<span-1 ? data[0] : data.slice(i-span+1,i+1).reduce((a,b)=>a+b)/span);}
+
+    const e10 = emaArr(prices, 10);
+    const s10 = smaArr(prices, 10);
+
+    const priceP = prices.map((p,i)=>`${i===0?'M':'L'} ${px(i).toFixed(1)} ${py(p).toFixed(1)}`).join(' ');
+    const path = (arr, clr, sw) => `<path d="${arr.map((v,i)=>`${i===0?'M':'L'} ${px(i).toFixed(1)} ${py(v).toFixed(1)}`).join(' ')}" fill="none" stroke="${clr}" stroke-width="${sw}"/>`;
+
+    return `<svg viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg">
+        <rect width="${W}" height="${H}" fill="${C.bg}" rx="6"/>
+        ${gridLines(x0,y0,w,h)}
+        <path d="${priceP}" fill="none" stroke="${C.text}" stroke-width="1.5" opacity="0.5"/>
+        ${path(s10, C.cyan, 2)}
+        ${path(e10, C.orange, 2)}
+        <line x1="${px(15).toFixed(1)}" y1="${y0}" x2="${px(15).toFixed(1)}" y2="${y0+h}" stroke="${C.muted}" stroke-width="1" stroke-dasharray="4,4"/>
+        <text x="${px(15)+4}" y="${y0+12}" fill="${C.muted}" font-size="9" font-family="monospace">CAMBIO DE RÉGIMEN</text>
+        <rect x="${x0+5}" y="${y0+5}" width="90" height="40" fill="${C.bg}" opacity="0.85" rx="4"/>
+        <rect x="${x0+8}" y="${y0+8}" width="8" height="8" fill="${C.orange}" rx="1"/>
+        <text x="${x0+20}" y="${y0+16}" fill="${C.orange}" font-size="10" font-family="monospace">EMA (10)</text>
+        <rect x="${x0+8}" y="${y0+24}" width="8" height="8" fill="${C.cyan}" rx="1"/>
+        <text x="${x0+20}" y="${y0+32}" fill="${C.cyan}" font-size="10" font-family="monospace">SMA (10)</text>
+        <text x="${W/2}" y="${H-4}" fill="${C.textDim}" font-size="10" font-family="monospace" text-anchor="middle">
+            MISMO PERIODO — LA EMA SIGUE EL CAMBIO DE PRECIO ANTES QUE LA SMA
+        </text>
+    </svg>`;
+}
+
+// ─── GRÁFICO: Entrada en EMA21 confirmada con volumen ────────────────────────
+function ema_entry_volume() {
+    const W = 680, H = 260;
+    const x0 = 45, y0 = 15, w = W-80, h = 150;
+    const volY0 = y0+h+15, volH = 55;
+    const prices = [100,104,108,112,109,106,108,106,110,118,124,130,136];
+    const vols   = [1.0,1.1,1.3,1.0,0.6,0.5,0.4,0.5,2.2,1.6,1.3,1.2,1.1];
+    const n = prices.length;
+    const mn = 98, mx = 140, range = mx-mn;
+    const px = (i) => x0 + (i/(n-1))*w;
+    const py = (v) => y0 + h - ((v-mn)/range)*h;
+
+    let ema = prices[0], emas=[ema]; const k = 2/22;
+    prices.slice(1).forEach(p => { ema = p*k + ema*(1-k); emas.push(ema); });
+    const emaPath = emas.map((v,i)=>`${i===0?'M':'L'} ${px(i).toFixed(1)} ${py(v).toFixed(1)}`).join(' ');
+
+    let candles='', volBars='';
+    prices.forEach((p,i)=>{
+        if(!i) return;
+        const prev=prices[i-1], bull=p>prev, cx=px(i);
+        candles += candleRow(cx, py(prev), py(p), py(p+(mx-mn)*0.02), py(Math.min(prev,p)-(mx-mn)*0.015), bull, 13);
+        const bh = vols[i]*volH*0.55;
+        const isConfirm = i===8;
+        volBars += `<rect x="${(cx-6).toFixed(1)}" y="${(volY0+volH-bh).toFixed(1)}" width="12" height="${bh.toFixed(1)}" fill="${isConfirm?C.accent:bull?C.accent:C.muted}" opacity="${isConfirm?0.95:0.4}" rx="1"/>`;
+    });
+
+    return `<svg viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg">
+        <rect width="${W}" height="${H}" fill="${C.bg}" rx="6"/>
+        ${gridLines(x0,y0,w,h)}
+        <path d="${emaPath}" fill="none" stroke="${C.orange}" stroke-width="2"/>
+        ${candles}
+        <rect x="${(px(4)-8).toFixed(1)}" y="${y0}" width="${(px(7)-px(4)+16).toFixed(1)}" height="${h}" fill="${C.muted}" opacity="0.08"/>
+        <text x="${px(5.5).toFixed(1)}" y="${y0+12}" fill="${C.muted}" font-size="9" font-family="monospace" text-anchor="middle">RETROCESO · VOL BAJO</text>
+        <circle cx="${px(8).toFixed(1)}" cy="${py(110).toFixed(1)}" r="9" fill="none" stroke="${C.accent}" stroke-width="2"/>
+        <text x="${px(8).toFixed(1)}" y="${(y0-4).toFixed(1)}" fill="${C.accent}" font-size="9" font-family="monospace" text-anchor="middle">CONFIRMACIÓN + VOL↑</text>
+        <line x1="${x0}" y1="${volY0}" x2="${x0+w}" y2="${volY0}" stroke="${C.border}" stroke-width="1"/>
+        ${volBars}
+        <text x="${W/2}" y="${H-3}" fill="${C.textDim}" font-size="10" font-family="monospace" text-anchor="middle">
+            RETROCESO CON VOLUMEN BAJO + VELA DE REACCIÓN CON VOLUMEN ALTO = ENTRADA VÁLIDA
+        </text>
+    </svg>`;
+}
+
+// ─── GRÁFICO: Salida por cierre bajo la EMA vs. mecha (falsa señal) ──────────
+function ema_exit_signal() {
+    const W = 680, H = 230;
+    const x0 = 45, y0 = 15, w = W-80, h = 165;
+    const prices = [100,105,110,108,113,111,116,113,109,115,120,117,111,104];
+    const n = prices.length;
+    const mn = 96, mx = 124, range = mx-mn;
+    const px = (i) => x0 + (i/(n-1))*w;
+    const py = (v) => y0 + h - ((v-mn)/range)*h;
+
+    let ema = prices[0], emas=[ema]; const k = 2/22;
+    prices.slice(1).forEach(p => { ema = p*k + ema*(1-k); emas.push(ema); });
+    const emaPath = emas.map((v,i)=>`${i===0?'M':'L'} ${px(i).toFixed(1)} ${py(v).toFixed(1)}`).join(' ');
+
+    // wick-only touch at index 8 (closes above EMA), real close-below at index 13
+    let candles='';
+    prices.forEach((p,i)=>{
+        if(!i) return;
+        const prev=prices[i-1], bull=p>prev, cx=px(i);
+        const wickDown = (i===8) ? emas[i]-1.5 : Math.min(prev,p)-(mx-mn)*0.015;
+        candles += candleRow(cx, py(prev), py(p), py(p+(mx-mn)*0.02), py(wickDown), bull, 13);
+    });
+
+    return `<svg viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg">
+        <rect width="${W}" height="${H}" fill="${C.bg}" rx="6"/>
+        ${gridLines(x0,y0,w,h)}
+        <path d="${emaPath}" fill="none" stroke="${C.orange}" stroke-width="2"/>
+        ${candles}
+        <circle cx="${px(8).toFixed(1)}" cy="${py(prices[8]).toFixed(1)}" r="8" fill="none" stroke="${C.yellow}" stroke-width="1.5"/>
+        <text x="${px(8).toFixed(1)}" y="${(py(prices[8])-14).toFixed(1)}" fill="${C.yellow}" font-size="8.5" font-family="monospace" text-anchor="middle">MECHA — CIERRE OK</text>
+        <circle cx="${px(13).toFixed(1)}" cy="${py(prices[13]).toFixed(1)}" r="8" fill="none" stroke="${C.red}" stroke-width="2"/>
+        <text x="${px(13).toFixed(1)}" y="${(py(prices[13])+16).toFixed(1)}" fill="${C.red}" font-size="8.5" font-family="monospace" text-anchor="middle">CIERRE BAJO EMA</text>
+        <text x="${W/2}" y="${H-4}" fill="${C.textDim}" font-size="10" font-family="monospace" text-anchor="middle">
+            SOLO EL CIERRE CUENTA — LA MECHA NO ES SEÑAL DE SALIDA
+        </text>
+    </svg>`;
+}
+
+// ─── GRÁFICO: Golden Cross / Death Cross (SMA 50 vs SMA 200) ────────────────
+function golden_death_cross() {
+    const W = 680, H = 230;
+    const x0 = 45, y0 = 15, w = W-80, h = 165;
+    // Precio: caída larga -> suelo -> recuperación sostenida (para exponer ambos cruces)
+    const prices = [];
+    for (let i=0;i<20;i++) prices.push(140 - i*2.6 + Math.sin(i/2)*2);
+    for (let i=0;i<10;i++) prices.push(88 + Math.sin(i/2)*3);
+    for (let i=0;i<30;i++) prices.push(90 + i*2.2 + Math.sin(i/2)*3);
+    const n = prices.length;
+    const mn = Math.min(...prices)-6, mx = Math.max(...prices)+6, range = mx-mn;
+    const px = (i) => x0 + (i/(n-1))*w;
+    const py = (v) => y0 + h - ((v-mn)/range)*h;
+
+    function smaArr(data,span){return data.map((_,i)=> i<span-1 ? null : data.slice(i-span+1,i+1).reduce((a,b)=>a+b)/span);}
+    const s10 = smaArr(prices, 10);  // proxy visual de SMA50 (escalado al dataset corto)
+    const s25 = smaArr(prices, 25);  // proxy visual de SMA200
+
+    const priceP = prices.map((p,i)=>`${i===0?'M':'L'} ${px(i).toFixed(1)} ${py(p).toFixed(1)}`).join(' ');
+    const pathOf = (arr, clr, sw) => {
+        const pts = arr.map((v,i)=> v===null?null:`${(arr[i-1]===null||i===0)?'M':'L'} ${px(i).toFixed(1)} ${py(v).toFixed(1)}`).filter(Boolean).join(' ');
+        return `<path d="${pts}" fill="none" stroke="${clr}" stroke-width="${sw}"/>`;
+    };
+
+    // localizar cruces aproximados para las etiquetas
+    let deathIdx = null, goldenIdx = null;
+    for (let i=1;i<n;i++){
+        if (s10[i]!==null && s25[i]!==null && s10[i-1]!==null && s25[i-1]!==null){
+            if (s10[i-1] >= s25[i-1] && s10[i] < s25[i] && deathIdx===null) deathIdx = i;
+            if (s10[i-1] <= s25[i-1] && s10[i] > s25[i] && deathIdx!==null && goldenIdx===null) goldenIdx = i;
+        }
+    }
+
+    return `<svg viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg">
+        <rect width="${W}" height="${H}" fill="${C.bg}" rx="6"/>
+        ${gridLines(x0,y0,w,h)}
+        <path d="${priceP}" fill="none" stroke="${C.text}" stroke-width="1" opacity="0.35"/>
+        ${pathOf(s10, C.cyan, 2)}
+        ${pathOf(s25, C.red, 2)}
+        ${deathIdx ? `<circle cx="${px(deathIdx).toFixed(1)}" cy="${py(s10[deathIdx]).toFixed(1)}" r="7" fill="none" stroke="${C.red}" stroke-width="2"/>
+        <text x="${px(deathIdx).toFixed(1)}" y="${(py(s10[deathIdx])+18).toFixed(1)}" fill="${C.red}" font-size="9" font-family="monospace" text-anchor="middle">DEATH CROSS</text>` : ''}
+        ${goldenIdx ? `<circle cx="${px(goldenIdx).toFixed(1)}" cy="${py(s10[goldenIdx]).toFixed(1)}" r="7" fill="none" stroke="${C.accent}" stroke-width="2"/>
+        <text x="${px(goldenIdx).toFixed(1)}" y="${(py(s10[goldenIdx])-12).toFixed(1)}" fill="${C.accent}" font-size="9" font-family="monospace" text-anchor="middle">GOLDEN CROSS</text>` : ''}
+        <rect x="${x0+5}" y="${y0+5}" width="95" height="40" fill="${C.bg}" opacity="0.85" rx="4"/>
+        <rect x="${x0+8}" y="${y0+8}" width="8" height="8" fill="${C.cyan}" rx="1"/>
+        <text x="${x0+20}" y="${y0+16}" fill="${C.cyan}" font-size="10" font-family="monospace">SMA 50</text>
+        <rect x="${x0+8}" y="${y0+24}" width="8" height="8" fill="${C.red}" rx="1"/>
+        <text x="${x0+20}" y="${y0+32}" fill="${C.red}" font-size="10" font-family="monospace">SMA 200</text>
+        <text x="${W/2}" y="${H-4}" fill="${C.textDim}" font-size="10" font-family="monospace" text-anchor="middle">
+            AMBOS CRUCES LLEGAN SEMANAS DESPUÉS DE QUE EL PRECIO YA HAYA GIRADO
+        </text>
+    </svg>`;
+}
+
 // ─── GRÁFICO: Gráfico sucio vs limpio ────────────────────────────────────────
 function chart_messy_vs_clean() {
     const W=680, H=220;
@@ -5411,11 +5587,45 @@ function climax_at_level() {
     </svg>`;
 }
 
-function weak_participation() {
+// ─── GRÁFICO: Clímax apilados (dos clímax en secuencia) ──────────────────────
+function climax_stacking() {
     const W=680, H=240;
     const x0=40, y0=15, w=W-80, h=150;
     const volY0=y0+h+15, volH=55;
-    const prices=[100,104,108,112,116,120,124,128,132,136,140,144,148,152,156,160];
+    const prices=[130,120,110,100,92,88,90,96,92,84,76,72,74,80,90,100];
+    const vols=  [0.6,0.9,1.1,1.4,1.7,4.6,0.9,0.6,1.0,1.6,2.0,5.5,1.0,0.7,0.9,1.0];
+    const mn=64, mx=136, range=mx-mn;
+    const px=(i)=>x0+(i/(prices.length-1))*w;
+    const py=(v)=>y0+h-((v-mn)/range)*h;
+
+    let candles='', volBars='';
+    prices.forEach((p,i)=>{
+        if(!i) return;
+        const prev=prices[i-1],bull=p>prev,cx=px(i);
+        candles+=candleRow(cx,py(prev),py(p),py(p+(mx-mn)*0.022),py(Math.min(prev,p)-(mx-mn)*0.018),bull,12);
+        const bh=Math.min(vols[i]*volH*0.85, volH);
+        const isClimax = (i===5 || i===11);
+        volBars+=`<rect x="${(cx-6).toFixed(1)}" y="${(volY0+volH-bh).toFixed(1)}" width="12" height="${bh.toFixed(1)}" fill="${isClimax?C.red:bull?C.accent:C.muted}" opacity="${isClimax?0.9:0.4}" rx="1"/>`;
+    });
+
+    return `<svg viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg">
+        <rect width="${W}" height="${H}" fill="${C.bg}" rx="6"/>
+        ${gridLines(x0,y0,w,h)}
+        ${candles}
+        <circle cx="${px(5).toFixed(1)}" cy="${py(88).toFixed(1)}" r="9" fill="none" stroke="${C.orange}" stroke-width="2"/>
+        <text x="${px(5).toFixed(1)}" y="${(py(80)).toFixed(1)}" fill="${C.orange}" font-size="9" font-family="monospace" text-anchor="middle">1er CLÍMAX</text>
+        <circle cx="${px(11).toFixed(1)}" cy="${py(72).toFixed(1)}" r="9" fill="none" stroke="${C.red}" stroke-width="2"/>
+        <text x="${px(11).toFixed(1)}" y="${(py(64)).toFixed(1)}" fill="${C.red}" font-size="9" font-family="monospace" text-anchor="middle">2º CLÍMAX (mayor)</text>
+        <line x1="${x0}" y1="${volY0}" x2="${x0+w}" y2="${volY0}" stroke="${C.border}" stroke-width="1"/>
+        ${volBars}
+        <text x="${W/2}" y="${H-3}" fill="${C.textDim}" font-size="10" font-family="monospace" text-anchor="middle">
+            Comprar el 1er clímax fue prematuro — el 2º clímax rompe su mínimo con más volumen
+        </text>
+    </svg>`;
+}
+
+function weak_participation() {
+    const W=680, H=240;
     const vols=  [2.0,1.8,1.6,1.5,1.4,1.2,1.1,1.0,0.9,0.8,0.7,0.6,0.5,0.4,0.4,0.3];
     const mn=92, mx=168, range=mx-mn;
     const px=(i)=>x0+(i/(prices.length-1))*w;
@@ -10656,6 +10866,272 @@ function vt_vc_alternation() {
 
 // ─── REGISTRO ─────────────────────────────────────────────────────────────────
 
+// ─── GRÁFICO: Desglose del RSU Score (5 factores x 20 pts) ──────────────────
+function rsu_score_breakdown() {
+    const W = 680, H = 240;
+    const rows = [
+        { label: 'Crecimiento Ingresos', pts: 15, max: 20, val: '18.2%' },
+        { label: 'ROE',                  pts: 20, max: 20, val: '31.4%' },
+        { label: 'Margen Neto',          pts: 10, max: 20, val: '6.8%' },
+        { label: 'Consenso Analistas',   pts: 20, max: 20, val: '82% alcistas' },
+        { label: 'Potencial P.Objetivo', pts: 15, max: 20, val: '+17.3%' },
+    ];
+    const total = rows.reduce((s, r) => s + r.pts, 0);
+    const x0 = 190, barW = 400, rowH = 34, y0 = 24;
+    let bars = '';
+    rows.forEach((r, i) => {
+        const y = y0 + i * rowH;
+        const w = (r.pts / r.max) * barW;
+        const color = r.pts >= 15 ? C.accent : r.pts >= 10 ? C.yellow : C.red;
+        bars += `<text x="${x0-12}" y="${y+15}" fill="${C.textDim}" font-size="11" font-family="monospace" text-anchor="end">${r.label}</text>
+            <rect x="${x0}" y="${y}" width="${barW}" height="18" fill="${C.surface}" stroke="${C.border}" rx="3"/>
+            <rect x="${x0}" y="${y}" width="${w}" height="18" fill="${color}" rx="3"/>
+            <text x="${x0+barW+10}" y="${y+15}" fill="${color}" font-size="11" font-family="monospace">${r.pts}/${r.max}</text>
+            <text x="${x0+barW+55}" y="${y+15}" fill="${C.muted}" font-size="10" font-family="monospace">(${r.val})</text>`;
+    });
+    return `<svg viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg">
+        <rect width="${W}" height="${H}" fill="${C.bg}" rx="6"/>
+        ${bars}
+        <text x="${W/2}" y="${y0+rows.length*rowH+14}" fill="${C.accent}" font-size="13" font-family="monospace" text-anchor="middle">TOTAL: ${total}/100 · EJEMPLO ILUSTRATIVO</text>
+    </svg>`;
+}
+
+// ─── GRÁFICO: Escala de etiquetas del RSU Score ──────────────────────────────
+function rsu_score_labels() {
+    const W = 680, H = 130;
+    const zones = [
+        { from:0,  to:35,  label:'EVITAR',        color:C.red },
+        { from:35, to:50,  label:'PRECAUCIÓN',    color:C.red },
+        { from:50, to:65,  label:'NEUTRAL',        color:C.yellow },
+        { from:65, to:80,  label:'COMPRA',         color:C.accent },
+        { from:80, to:100, label:'COMPRA FUERTE',  color:C.accent },
+    ];
+    const x0 = 30, w = W - 60, y0 = 40, h = 30;
+    let segs = '';
+    zones.forEach(z => {
+        const sx = x0 + (z.from/100)*w;
+        const sw = ((z.to - z.from)/100)*w;
+        segs += `<rect x="${sx.toFixed(1)}" y="${y0}" width="${sw.toFixed(1)}" height="${h}" fill="${z.color}" opacity="0.75"/>
+            <text x="${(sx+sw/2).toFixed(1)}" y="${y0+h+16}" fill="${z.color}" font-size="9" font-family="monospace" text-anchor="middle">${z.label}</text>
+            <text x="${(sx+sw/2).toFixed(1)}" y="${y0+h/2+4}" fill="#000" font-size="10" font-family="monospace" text-anchor="middle" font-weight="600">${z.from}</text>`;
+    });
+    return `<svg viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg">
+        <rect width="${W}" height="${H}" fill="${C.bg}" rx="6"/>
+        <text x="${W/2}" y="20" fill="${C.textDim}" font-size="10" font-family="monospace" text-anchor="middle">ESCALA DEL RSU SCORE (0-100)</text>
+        ${segs}
+        <text x="${x0+w}" y="${y0+h+16}" fill="${C.text}" font-size="9" font-family="monospace" text-anchor="end">100</text>
+    </svg>`;
+}
+
+// ─── GRÁFICO: Los 9 criterios del Piotroski F-Score ──────────────────────────
+function piotroski_criteria() {
+    const W = 680, H = 260;
+    const items = [
+        { l:'ROA positivo', p:true }, { l:'CFO positivo', p:true }, { l:'ROA mejora', p:false },
+        { l:'Calidad beneficio (CFO>BN)', p:true }, { l:'Apalancamiento estable', p:true }, { l:'Liquidez mejora', p:null },
+        { l:'Sin dilución', p:true }, { l:'Margen bruto mejora', p:false }, { l:'Rotación activos mejora', p:true },
+    ];
+    const cols = 3, cw = (W-40)/cols, ch = 60;
+    let cells = '';
+    items.forEach((it, i) => {
+        const col = i % cols, row = Math.floor(i / cols);
+        const x = 20 + col*cw, y = 20 + row*ch;
+        const color = it.p === true ? C.accent : it.p === false ? C.red : C.muted;
+        const icon  = it.p === true ? '✓' : it.p === false ? '✗' : '–';
+        cells += `<rect x="${x}" y="${y}" width="${cw-10}" height="${ch-10}" fill="${C.surface}" stroke="${color}" stroke-width="1" rx="4"/>
+            <text x="${x+14}" y="${y+34}" fill="${color}" font-size="20" font-family="monospace" font-weight="700">${icon}</text>
+            <text x="${x+38}" y="${y+30}" fill="${C.text}" font-size="9.5" font-family="monospace">${it.l}</text>`;
+    });
+    return `<svg viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg">
+        <rect width="${W}" height="${H}" fill="${C.bg}" rx="6"/>
+        ${cells}
+        <text x="${W/2}" y="${H-10}" fill="${C.accent}" font-size="12" font-family="monospace" text-anchor="middle">EJEMPLO: 6/9 → SÓLIDO</text>
+    </svg>`;
+}
+
+// ─── GRÁFICO: Escala del Piotroski (0-9) ─────────────────────────────────────
+function piotroski_scale() {
+    const W = 680, H = 120;
+    const zones = [
+        { from:0, to:4, label:'DÉBIL',    color:C.red },
+        { from:4, to:6, label:'NEUTRAL',  color:C.yellow },
+        { from:6, to:8, label:'SÓLIDO',   color:'#90ee90' },
+        { from:8, to:9, label:'EXCELENTE',color:C.accent },
+    ];
+    const x0 = 30, w = W - 60, y0 = 36, h = 30, max = 9;
+    let segs = '';
+    zones.forEach(z => {
+        const sx = x0 + (z.from/max)*w, sw = ((z.to-z.from)/max)*w;
+        segs += `<rect x="${sx.toFixed(1)}" y="${y0}" width="${sw.toFixed(1)}" height="${h}" fill="${z.color}" opacity="0.8"/>
+            <text x="${(sx+sw/2).toFixed(1)}" y="${y0+h+16}" fill="${z.color}" font-size="10" font-family="monospace" text-anchor="middle">${z.label}</text>`;
+    });
+    return `<svg viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg">
+        <rect width="${W}" height="${H}" fill="${C.bg}" rx="6"/>
+        <text x="${W/2}" y="18" fill="${C.textDim}" font-size="10" font-family="monospace" text-anchor="middle">ESCALA PIOTROSKI F-SCORE (0-9)</text>
+        ${segs}
+        <text x="${x0}" y="${y0+h+16}" fill="${C.text}" font-size="9" font-family="monospace">0</text>
+        <text x="${x0+w}" y="${y0+h+16}" fill="${C.text}" font-size="9" font-family="monospace" text-anchor="end">9</text>
+    </svg>`;
+}
+
+// ─── GRÁFICO: Comparativa sectorial de un múltiplo ───────────────────────────
+function sector_comparison_example() {
+    const W = 680, H = 200;
+    const rows = [
+        { l:'P/E Trailing', ticker:18.4, sector:24.1, favorable:true },
+        { l:'EV/EBITDA',    ticker:11.2, sector:9.8,  favorable:false },
+        { l:'ROE',          ticker:22.5, sector:15.3, favorable:true },
+    ];
+    const x0 = 140, w = 460, rowH = 50, y0 = 20;
+    let bars = '';
+    rows.forEach((r, i) => {
+        const y = y0 + i*rowH;
+        const maxV = Math.max(r.ticker, r.sector) * 1.15;
+        const tw = (r.ticker/maxV)*w, sw = (r.sector/maxV)*w;
+        const col = r.favorable ? C.accent : C.red;
+        bars += `<text x="${x0-10}" y="${y+22}" fill="${C.textDim}" font-size="11" font-family="monospace" text-anchor="end">${r.l}</text>
+            <rect x="${x0}" y="${y}" width="${tw.toFixed(1)}" height="14" fill="${col}" rx="2"/>
+            <text x="${x0+tw+8}" y="${y+11}" fill="${col}" font-size="10" font-family="monospace">TICKER ${r.ticker}</text>
+            <rect x="${x0}" y="${y+20}" width="${sw.toFixed(1)}" height="14" fill="${C.cyan}" opacity="0.5" rx="2"/>
+            <text x="${x0+sw+8}" y="${y+31}" fill="${C.cyan}" font-size="10" font-family="monospace">SECTOR ${r.sector}</text>`;
+    });
+    return `<svg viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg">
+        <rect width="${W}" height="${H}" fill="${C.bg}" rx="6"/>
+        ${bars}
+        <text x="${W/2}" y="${H-8}" fill="${C.textDim}" font-size="9" font-family="monospace" text-anchor="middle">VERDE/ROJO = FAVORABLE O NO FRENTE A LA MEDIANA DEL SECTOR</text>
+    </svg>`;
+}
+
+// ─── GRÁFICO: Flujo de lectura de Research ───────────────────────────────────
+function research_workflow() {
+    const W = 680, H = 160;
+    const steps = ['RSU\nSCORE', 'PIOTROSKI', 'SECTOR', 'INSIDERS', 'INSTITUC.', 'TÉCNICO'];
+    const n = steps.length, boxW = 92, gap = (W - n*boxW) / (n+1);
+    let items = '';
+    steps.forEach((s, i) => {
+        const x = gap + i*(boxW+gap);
+        const y = 55;
+        const lines = s.split('\n');
+        items += `<rect x="${x}" y="${y}" width="${boxW}" height="46" fill="${C.surface}" stroke="${C.accent}" stroke-width="1.2" rx="5"/>
+            ${lines.map((ln,li) => `<text x="${x+boxW/2}" y="${y+20+li*14}" fill="${C.text}" font-size="10.5" font-family="monospace" text-anchor="middle">${ln}</text>`).join('')}
+            <text x="${x-gap/2}" y="${y+27}" fill="${C.accent}" font-size="13" text-anchor="middle">${i>0?'→':''}</text>`;
+    });
+    return `<svg viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg">
+        <rect width="${W}" height="${H}" fill="${C.bg}" rx="6"/>
+        <text x="${W/2}" y="24" fill="${C.textDim}" font-size="10" font-family="monospace" text-anchor="middle">FUNDAMENTALES Y SENTIMIENTO PRIMERO — TIMING TÉCNICO AL FINAL</text>
+        ${items}
+    </svg>`;
+}
+
+// ─── GRÁFICO: Estado de resultados trimestral (cascada) ──────────────────────
+function income_statement_quarters() {
+    const W = 680, H = 240;
+    const quarters = [
+        { rev:100, gp:62, op:28, ni:20 },
+        { rev:112, gp:70, op:33, ni:24 },
+        { rev:121, gp:77, op:37, ni:27 },
+        { rev:138, gp:90, op:45, ni:33 },
+    ];
+    const labels = ['Ingresos', 'Bº Bruto', 'Bº Operativo', 'Bº Neto'];
+    const colors = [C.cyan, C.accent, C.yellow, '#90ee90'];
+    const x0 = 50, y0 = 20, w = W-90, h = 170, groupW = w/quarters.length, barW = groupW/5.5;
+    const maxV = 150;
+    let bars = '';
+    quarters.forEach((q, qi) => {
+        const gx = x0 + qi*groupW;
+        [q.rev, q.gp, q.op, q.ni].forEach((v, vi) => {
+            const bh = (v/maxV)*h;
+            const bx = gx + vi*(barW+3);
+            bars += `<rect x="${bx.toFixed(1)}" y="${(y0+h-bh).toFixed(1)}" width="${barW.toFixed(1)}" height="${bh.toFixed(1)}" fill="${colors[vi]}" rx="1"/>`;
+        });
+        bars += `<text x="${gx+groupW/2-barW}" y="${y0+h+16}" fill="${C.textDim}" font-size="9" font-family="monospace" text-anchor="middle">Q${qi+1}</text>`;
+    });
+    const legend = labels.map((l,i) => `<rect x="${50+i*150}" y="${H-16}" width="10" height="10" fill="${colors[i]}" rx="2"/>
+        <text x="${64+i*150}" y="${H-7}" fill="${colors[i]}" font-size="9.5" font-family="monospace">${l}</text>`).join('');
+    return `<svg viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg">
+        <rect width="${W}" height="${H}" fill="${C.bg}" rx="6"/>
+        ${gridLines(x0,y0,w,h)}
+        ${bars}
+        ${legend}
+    </svg>`;
+}
+
+// ─── GRÁFICO: Escalera de márgenes ────────────────────────────────────────────
+function margin_ladder() {
+    const W = 680, H = 200;
+    const steps = [
+        { l:'Ingresos', v:100, color:C.cyan },
+        { l:'– COGS', v:38, color:C.red },
+        { l:'= Bº Bruto', v:62, color:C.accent },
+        { l:'– Op.Ex', v:28, color:C.red },
+        { l:'= Bº Operativo', v:34, color:C.accent },
+        { l:'– Int./Imp.', v:10, color:C.red },
+        { l:'= Bº Neto', v:24, color:'#90ee90' },
+    ];
+    const x0 = 20, w = W-40, y0=24, h=140, barW = w/steps.length - 8;
+    let bars = '';
+    steps.forEach((s,i) => {
+        const x = x0 + i*(w/steps.length) + 4;
+        const bh = (s.v/100)*h;
+        bars += `<rect x="${x.toFixed(1)}" y="${(y0+h-bh).toFixed(1)}" width="${barW.toFixed(1)}" height="${bh.toFixed(1)}" fill="${s.color}" opacity="${s.l.startsWith('–')?0.55:1}" rx="2"/>
+            <text x="${(x+barW/2).toFixed(1)}" y="${(y0+h-bh-6).toFixed(1)}" fill="${s.color}" font-size="9.5" font-family="monospace" text-anchor="middle">${s.v}</text>
+            <text x="${(x+barW/2).toFixed(1)}" y="${y0+h+16}" fill="${C.textDim}" font-size="8.5" font-family="monospace" text-anchor="middle">${s.l}</text>`;
+    });
+    return `<svg viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg">
+        <rect width="${W}" height="${H}" fill="${C.bg}" rx="6"/>
+        ${bars}
+    </svg>`;
+}
+
+// ─── GRÁFICO: El mismo múltiplo, distinto contexto sectorial ────────────────
+function valuation_multiples_context() {
+    const W = 680, H = 200;
+    const panels = [
+        { sector:'TECNOLOGÍA (alto crecimiento)', pe:30, sectorAvg:34, verdict:'RAZONABLE', color:C.accent },
+        { sector:'UTILITY (crecimiento bajo)',     pe:30, sectorAvg:16, verdict:'CARO',      color:C.red },
+    ];
+    const pw = (W-60)/2;
+    let panelsHtml = '';
+    panels.forEach((p,i) => {
+        const x = 20 + i*(pw+20);
+        panelsHtml += `<rect x="${x}" y="20" width="${pw}" height="150" fill="${C.surface}" stroke="${C.border}" rx="6"/>
+            <text x="${x+pw/2}" y="42" fill="${C.textDim}" font-size="9.5" font-family="monospace" text-anchor="middle">${p.sector}</text>
+            <text x="${x+pw/2}" y="85" fill="${C.text}" font-size="26" font-family="monospace" text-anchor="middle">P/E ${p.pe}x</text>
+            <text x="${x+pw/2}" y="108" fill="${C.muted}" font-size="10" font-family="monospace" text-anchor="middle">Mediana sector: ${p.sectorAvg}x</text>
+            <text x="${x+pw/2}" y="140" fill="${p.color}" font-size="13" font-family="monospace" text-anchor="middle" font-weight="700">${p.verdict}</text>`;
+    });
+    return `<svg viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg">
+        <rect width="${W}" height="${H}" fill="${C.bg}" rx="6"/>
+        <text x="${W/2}" y="14" fill="${C.textDim}" font-size="10" font-family="monospace" text-anchor="middle">MISMO P/E — VEREDICTO OPUESTO SEGÚN EL SECTOR</text>
+        ${panelsHtml}
+    </svg>`;
+}
+
+// ─── GRÁFICO: Línea temporal de catalizadores en torno a earnings ───────────
+function earnings_catalysts_timeline() {
+    const W = 680, H = 150;
+    const events = [
+        { x:0.12, l:'Compras\ninsider (P)', color:C.accent },
+        { x:0.32, l:'Revisión\nanalistas', color:C.cyan },
+        { x:0.55, l:'EARNINGS', color:C.yellow },
+        { x:0.78, l:'Reacción\npost-earnings', color:C.accent },
+        { x:0.95, l:'Ajuste\nestimaciones', color:C.cyan },
+    ];
+    const x0 = 30, w = W-60, y = 75;
+    let items = `<line x1="${x0}" y1="${y}" x2="${x0+w}" y2="${y}" stroke="${C.border}" stroke-width="2"/>`;
+    events.forEach(e => {
+        const cx = x0 + e.x*w;
+        const lines = e.l.split('\n');
+        items += `<circle cx="${cx.toFixed(1)}" cy="${y}" r="5" fill="${e.color}"/>
+            ${lines.map((ln,li) => `<text x="${cx.toFixed(1)}" y="${y-14-li*12}" fill="${e.color}" font-size="9.5" font-family="monospace" text-anchor="middle">${ln}</text>`).join('')}`;
+    });
+    return `<svg viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg">
+        <rect width="${W}" height="${H}" fill="${C.bg}" rx="6"/>
+        <text x="${W/2}" y="18" fill="${C.textDim}" font-size="10" font-family="monospace" text-anchor="middle">CATALIZADORES ALREDEDOR DE UN EVENTO DE EARNINGS</text>
+        ${items}
+    </svg>`;
+}
+
 export const CHARTS = {
     // Módulo 0
     rsu_philosophy, rsu_community, rsu_for_who,
@@ -10759,4 +11235,12 @@ export const CHARTS = {
     consolidation_within_trend, quality_consolidation_signs, consolidation_resolution_entry,
     three_gap_types, gap_context_identification, gap_fill_behavior,
     volume_trend_pattern, volume_climax_pattern, vt_vc_alternation,
+    // Módulo 20
+    rsu_score_breakdown, rsu_score_labels, piotroski_criteria, piotroski_scale, sector_comparison_example, research_workflow,
+    // Módulo 21
+    income_statement_quarters, margin_ladder, valuation_multiples_context, earnings_catalysts_timeline,
+    // Módulo 8 (ampliación)
+    climax_stacking,
+    // Módulo 1 (ampliación — Lección 5, EMAs)
+    ema_vs_sma_reaction, ema_entry_volume, ema_exit_signal, golden_death_cross,
 };

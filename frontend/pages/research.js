@@ -24,6 +24,8 @@ export async function render(container) {
             result.innerHTML = renderResearch(data);
             renderSparkline(data);
             renderEarningsChart(data);
+            renderIncomeStatementChart(data);
+            renderInsiderVolumeChart(data);
         } catch(e) {
             result.innerHTML = errorMessage(e.message);
         } finally {
@@ -70,6 +72,7 @@ function renderResearch(data) {
         + chartSection(data)
         + technicalSection(data)
         + metricsSection(data)
+        + incomeStatementSection(data)
         + consensoSection(data)
         + analystChangesSection(data)
         + institutionalSection(data)
@@ -179,6 +182,8 @@ function piotroskiSection(data) {
 function institutionalSection(data) {
     const inst = data.institutional;
     if (!inst || (inst.pct_institutions == null && (!inst.holders || !inst.holders.length))) return '';
+    const chg = inst.price_change_since_report_pct;
+    const chgColor = chg == null ? 'var(--color-muted)' : (chg >= 0 ? 'var(--color-accent)' : '#f23645');
     return '<div style="background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius);overflow:hidden;margin-bottom:1rem;">'
         + '<div style="display:flex;justify-content:space-between;align-items:center;padding:10px 14px;border-bottom:1px solid var(--color-border);">'
         + '<span style="color:var(--color-accent);font-size:12px;letter-spacing:0.08em;">PROPIEDAD INSTITUCIONAL</span>'
@@ -186,6 +191,13 @@ function institutionalSection(data) {
             ? '<span style="color:var(--color-text);font-size:16px;font-weight:500;">' + inst.pct_institutions + '% <span style="color:var(--color-muted);font-size:11px;font-weight:400;">en manos institucionales</span></span>'
             : '')
         + '</div>'
+        + (inst.report_price != null
+            ? '<div style="padding:8px 14px;border-bottom:1px solid var(--color-border);font-size:11px;color:var(--color-muted);">'
+              + 'Datos del 13F al cierre del trimestre reportado (' + (inst.report_date || 'N/D') + '), cuando la acción cotizaba a <span style="color:var(--color-text);">$' + inst.report_price.toFixed(2) + '</span>.'
+              + (chg != null ? ' Desde entonces, el precio ha ' + (chg >= 0 ? 'subido ' : 'bajado ') + '<span style="color:' + chgColor + ';">' + (chg >= 0 ? '+' : '') + chg + '%</span>.' : '')
+              + tt('institutional-ref-price')
+              + '</div>'
+            : '')
         + (inst.holders && inst.holders.length
             ? '<div style="display:grid;grid-template-columns:1fr 100px 70px 90px;gap:8px;padding:6px 14px;border-bottom:1px solid var(--color-border);font-size:10px;color:var(--color-muted);">'
               + '<div>INSTITUCIÓN</div><div>ACCIONES</div><div>% FLOAT</div><div>VALOR</div>'
@@ -373,6 +385,15 @@ function earningsSection(data) {
     return '<div style="background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius);padding:1.25rem;margin-bottom:1rem;">'
         + '<div style="color:var(--color-accent);font-size:12px;letter-spacing:0.08em;margin-bottom:0.75rem;">EPS TRIMESTRAL · HISTÓRICO</div>'
         + '<div style="position:relative;height:140px;"><canvas id="earnings-chart"></canvas></div>'
+        + '</div>';
+}
+
+function incomeStatementSection(data) {
+    const inc = data.income_statement;
+    if (!inc || !inc.length) return '';
+    return '<div style="background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius);padding:1.25rem;margin-bottom:1rem;">'
+        + '<div style="color:var(--color-accent);font-size:12px;letter-spacing:0.08em;margin-bottom:0.75rem;">CUENTA DE RESULTADOS · TRIMESTRAL' + tt('income-statement') + '</div>'
+        + '<div style="position:relative;height:280px;"><canvas id="income-statement-chart"></canvas></div>'
         + '</div>';
 }
 
@@ -579,10 +600,18 @@ function seasonalitySection(data) {
 function insiderSection(data) {
     const insider = data.insider_trading;
     const summary = data.insider_summary;
+    const monthlyVol = data.insider_monthly_volume;
     if (!insider || !insider.length) return '';
+    const hasVolChart = monthlyVol && monthlyVol.length && monthlyVol.some(m => m.buy_shares || m.sell_shares);
     return '<div style="background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius);overflow:hidden;margin-bottom:1rem;">'
         + '<div style="padding:10px 14px;border-bottom:1px solid var(--color-border);color:var(--color-accent);font-size:12px;letter-spacing:0.08em;">INSIDER TRADING · TRANSACCIONES DIRECTIVOS</div>'
         + (summary ? insiderSummaryBar(summary) : '')
+        + (hasVolChart
+            ? '<div style="padding:14px 14px 4px;border-bottom:1px solid var(--color-border);">'
+              + '<div style="color:var(--color-muted);font-size:10px;letter-spacing:0.05em;margin-bottom:8px;">VOLUMEN MENSUAL DE TRANSACCIONES' + tt('insider-monthly-volume') + '</div>'
+              + '<div style="position:relative;height:180px;"><canvas id="insider-volume-chart"></canvas></div>'
+              + '</div>'
+            : '')
         + '<div style="display:grid;grid-template-columns:85px 1fr 110px 65px 75px 70px 75px 1fr;gap:8px;padding:6px 14px;border-bottom:1px solid var(--color-border);font-size:10px;color:var(--color-muted);">'
         + '<div>FECHA</div><div>NOMBRE</div><div>CARGO</div><div>TIPO</div><div>ACCIONES</div><div>PRECIO</div><div>VALOR</div><div>NATURALEZA</div>'
         + '</div>'
@@ -692,6 +721,78 @@ function renderEarningsChart(data) {
                 responsive: true, maintainAspectRatio: false,
                 plugins: { legend: { labels: { color: '#666', font: { size: 10 } } } },
                 scales: { x: { ticks: { color: '#555', font: { size: 9 } }, grid: { color: 'rgba(255,255,255,0.03)' } }, y: { ticks: { color: '#555', font: { size: 9 } }, grid: { color: 'rgba(255,255,255,0.03)' } } }
+            }
+        });
+    });
+}
+
+function _fmtAxisVal(v) {
+    if (v == null) return '';
+    const av = Math.abs(v);
+    if (av >= 1e9) return '$' + (v/1e9).toFixed(2) + 'B';
+    if (av >= 1e6) return '$' + (v/1e6).toFixed(2) + 'M';
+    if (av >= 1e3) return '$' + (v/1e3).toFixed(0) + 'K';
+    return '$' + v.toFixed(0);
+}
+
+function renderIncomeStatementChart(data) {
+    const inc = data.income_statement;
+    if (!inc || !inc.length) return;
+    loadChartJs(() => {
+        const ctx = document.getElementById('income-statement-chart');
+        if (!ctx) return;
+        new Chart(ctx, {
+            type: 'line',
+            data: {
+                labels: inc.map(r => r.date.substring(0, 7)),
+                datasets: [
+                    { label: 'Ingresos',           data: inc.map(r => r.revenue),          borderColor: '#3b82f6', backgroundColor: '#3b82f622', fill: true,  tension: 0.3, pointRadius: 2, borderWidth: 2 },
+                    { label: 'Beneficio Bruto',     data: inc.map(r => r.gross_profit),     borderColor: '#00ffad', backgroundColor: 'transparent', fill: false, tension: 0.3, pointRadius: 2, borderWidth: 2 },
+                    { label: 'Beneficio Operativo', data: inc.map(r => r.operating_income), borderColor: '#ffb800', backgroundColor: 'transparent', fill: false, tension: 0.3, pointRadius: 2, borderWidth: 2 },
+                    { label: 'Beneficio Neto',      data: inc.map(r => r.net_income),       borderColor: '#a855f7', backgroundColor: 'transparent', fill: false, tension: 0.3, pointRadius: 2, borderWidth: 2 },
+                ]
+            },
+            options: {
+                responsive: true, maintainAspectRatio: false,
+                interaction: { mode: 'index', intersect: false },
+                plugins: {
+                    legend: { position: 'top', labels: { color: '#999', font: { size: 10 }, boxWidth: 10, usePointStyle: true } },
+                    tooltip: { callbacks: { label: c => ' ' + c.dataset.label + ': ' + _fmtAxisVal(c.raw) } }
+                },
+                scales: {
+                    x: { ticks: { color: '#555', font: { size: 9 } }, grid: { color: 'rgba(255,255,255,0.03)' } },
+                    y: { ticks: { color: '#555', font: { size: 9 }, callback: v => _fmtAxisVal(v) }, grid: { color: 'rgba(255,255,255,0.04)' } }
+                }
+            }
+        });
+    });
+}
+
+function renderInsiderVolumeChart(data) {
+    const monthlyVol = data.insider_monthly_volume;
+    if (!monthlyVol || !monthlyVol.length) return;
+    loadChartJs(() => {
+        const ctx = document.getElementById('insider-volume-chart');
+        if (!ctx) return;
+        new Chart(ctx, {
+            type: 'bar',
+            data: {
+                labels: monthlyVol.map(m => m.month),
+                datasets: [
+                    { label: 'Compras', data: monthlyVol.map(m => m.buy_shares),  backgroundColor: '#00ffad', borderRadius: 2 },
+                    { label: 'Ventas',  data: monthlyVol.map(m => -m.sell_shares), backgroundColor: '#f23645', borderRadius: 2 },
+                ]
+            },
+            options: {
+                responsive: true, maintainAspectRatio: false,
+                plugins: {
+                    legend: { position: 'top', labels: { color: '#999', font: { size: 10 }, boxWidth: 10, usePointStyle: true } },
+                    tooltip: { callbacks: { label: c => ' ' + c.dataset.label + ': ' + Math.abs(c.raw).toLocaleString('en-US') + ' acciones' } }
+                },
+                scales: {
+                    x: { ticks: { color: '#555', font: { size: 9 } }, grid: { display: false } },
+                    y: { ticks: { color: '#555', font: { size: 9 }, callback: v => Math.abs(v).toLocaleString('en-US') }, grid: { color: 'rgba(255,255,255,0.04)' } }
+                }
             }
         });
     });

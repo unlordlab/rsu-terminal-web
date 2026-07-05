@@ -4,14 +4,15 @@
 
 import { LESSONS } from '/pages/academy_lessons.js';
 import { CHARTS  } from '/pages/academy_charts.js';
+import { QUIZZES } from '/pages/academy_quizzes.js';
 
 // ── DATOS DE MÓDULOS ─────────────────────────────────────────────────────────
 
 const MODULES = [
     { id:0,  title:'RSU Terminal',                icon:'🖥️', description:'Entiende qué es RSU Terminal, la metodología detrás y cómo sacar el máximo partido a cada herramienta.', duration:'40 min',
       videos:[{title:'Qué es RSU Terminal',duration:'10:00'},{title:'La Metodología RSU',duration:'10:00'},{title:'Las Herramientas',duration:'12:00'},{title:'Flujo de Trabajo Semanal',duration:'8:00'}]},
-    { id:1,  title:'Configuración de Gráficos',   icon:'📊', description:'Configura correctamente tus gráficos en múltiples temporalidades. El análisis top-down empieza aquí.', duration:'45 min',
-      videos:[{title:'Gráfico Mensual — La visión macro',duration:'12:00'},{title:'Gráfico Semanal — La tendencia media',duration:'11:00'},{title:'Gráfico Diario — El setup operativo',duration:'12:00'},{title:'Velas Limpias — Sin ruido visual',duration:'10:00'}]},
+    { id:1,  title:'Configuración de Gráficos',   icon:'📊', description:'Configura correctamente tus gráficos en múltiples temporalidades. El análisis top-down empieza aquí.', duration:'59 min',
+      videos:[{title:'Gráfico Mensual — La visión macro',duration:'12:00'},{title:'Gráfico Semanal — La tendencia media',duration:'11:00'},{title:'Gráfico Diario — El setup operativo',duration:'12:00'},{title:'Velas Limpias — Sin ruido visual',duration:'10:00'},{title:'Medias Móviles Exponenciales (EMA)',duration:'14:00'}]},
     { id:2,  title:'Estructura de Mercado',        icon:'🏗️', description:'Identifica la tendencia antes de operar. Máximos y mínimos crecientes o decrecientes lo dicen todo.', duration:'50 min',
       videos:[{title:'Máximos Crecientes — Señal alcista',duration:'12:00'},{title:'Mínimos Crecientes — Soporte dinámico',duration:'13:00'},{title:'Máximos Decrecientes — Señal bajista',duration:'12:00'},{title:'Mínimos Decrecientes — Presión vendedora',duration:'13:00'}]},
     { id:3,  title:'Análisis de Tendencia',        icon:'📈', description:'Nunca luches contra el mercado. Aprende a identificar y operar a favor de la tendencia dominante.', duration:'55 min',
@@ -25,11 +26,11 @@ const MODULES = [
     { id:7,  title:'Rupturas de Precio',           icon:'💥', description:'Confirma si es real o una trampa. Las rupturas falsas son la fuente de pérdidas más común.', duration:'1h 5min',
       videos:[{title:'Ruptura de Rango',duration:'16:00'},{title:'Ruptura de Tendencia',duration:'16:00'},{title:'Ruptura de Soporte',duration:'17:00'},{title:'Entradas en Retest',duration:'16:00'}]},
     { id:8,  title:'Análisis de Volumen',          icon:'📦', description:'El volumen confirma el precio. Sin volumen, el movimiento no tiene convicción real.', duration:'1h',
-      videos:[{title:'Volumen en Rupturas',duration:'15:00'},{title:'Bajo Volumen en Retrocesos',duration:'15:00'},{title:'Volumen Clímax',duration:'15:00'},{title:'Participación Débil',duration:'15:00'}]},
+      videos:[{title:'Volumen en Rupturas',duration:'15:00'},{title:'Bajo Volumen en Retrocesos',duration:'15:00'},{title:'Volumen Clímax',duration:'16:00'},{title:'Participación Débil',duration:'15:00'}]},
     { id:9,  title:'Patrones de Gráfico',          icon:'🔷', description:'Los patrones solo funcionan con contexto. Aprende a leerlos dentro de la tendencia dominante.', duration:'1h 10min',
       videos:[{title:'Triángulo Ascendente',duration:'17:00'},{title:'Triángulo Descendente',duration:'17:00'},{title:'Rectángulo',duration:'18:00'},{title:'Bandera y Asta',duration:'18:00'}]},
-    { id:10, title:'Alineación Multi-Temporalidad',icon:'🔭', description:'La alineación crea potencia. Cuando mensual, semanal y diario coinciden, la probabilidad dispara.', duration:'1h 20min',
-      videos:[{title:'Sesgo Mensual',duration:'20:00'},{title:'Estructura Semanal',duration:'20:00'},{title:'Setup Diario',duration:'20:00'},{title:'Trigger en TF Menor',duration:'20:00'}]},
+    { id:10, title:'Alineación Multi-Temporalidad',icon:'🔭', description:'La alineación crea potencia. Cuando mensual, semanal y diario coinciden, la probabilidad dispara.', duration:'1h 30min',
+      videos:[{title:'Sesgo Mensual',duration:'20:00'},{title:'Estructura Semanal',duration:'20:00'},{title:'Setup Diario',duration:'20:00'},{title:'Trigger en TF Menor',duration:'20:00'},{title:'Configurar tu Watchlist',duration:'10:00'}]},
     { id:11, title:'Planificación del Trade',      icon:'📋', description:'Sin plan no hay trading. Define entrada, stop y objetivo antes de pulsar el botón.', duration:'1h',
       videos:[{title:'Definir el Setup',duration:'15:00'},{title:'Ratio Riesgo/Recompensa',duration:'15:00'},{title:'Tamaño de Posición',duration:'15:00'},{title:'El Plan de Trade',duration:'15:00'}]},
     { id:12, title:'Gestión del Riesgo',           icon:'🛡️', description:'Sobrevive primero, gana después. La gestión del riesgo es lo único que te mantiene en el juego.', duration:'1h 10min',
@@ -48,6 +49,10 @@ const MODULES = [
       videos:[{title:'La Zona de Entrada lo Decide Todo',duration:'15:00'},{title:'Anatomía de una Buena Zona de Demanda',duration:'15:00'},{title:'El Lado Psicológico del Buen R:R',duration:'15:00'},{title:'Aplicar el R:R desde la Zona, no desde la Calculadora',duration:'15:00'}]},
     { id:19, title:'Métodos de Confirmación de Entrada', icon:'🎯', description:'6 técnicas para confirmar que una entrada tiene base real: trendlines, soporte/resistencia, Fibonacci, consolidaciones, gaps y volumen.', duration:'1h 30min',
       videos:[{title:'Reversión y Ruptura de Línea de Tendencia',duration:'15:00'},{title:'Soporte y Resistencia como Confirmación',duration:'15:00'},{title:'Retroceso de Fibonacci',duration:'15:00'},{title:'Consolidaciones',duration:'15:00'},{title:'Gaps de Precio',duration:'15:00'},{title:'Volumen Clímax y Tendencia',duration:'15:00'}]},
+    { id:20, title:'RSU Score Explicado',        icon:'🧮', description:'Qué mide realmente el RSU Score, cómo se calcula el Piotroski F-Score, y por qué son dos indicadores independientes que hay que leer juntos, no como un semáforo ciego.', duration:'50 min',
+      videos:[{title:'Qué Mide el RSU Score',duration:'12:00'},{title:'Piotroski F-Score — Salud Financiera',duration:'13:00'},{title:'Comparativa Sectorial — Valorar en Contexto',duration:'12:00'},{title:'Cómo Leer Todo Junto',duration:'13:00'}]},
+    { id:21, title:'Análisis Fundamental',       icon:'📐', description:'La base fundamental detrás de CAN SLIM: cómo leer estados financieros, rentabilidad, valoración con múltiplos y los catalizadores que mueven el precio.', duration:'55 min',
+      videos:[{title:'Ingresos, Márgenes y Beneficio',duration:'14:00'},{title:'Rentabilidad y Eficiencia — ROE, ROA',duration:'13:00'},{title:'Valoración — P/E, PEG, EV/EBITDA, P/S, P/B',duration:'14:00'},{title:'Catalizadores — Earnings, Insiders, Institucionales',duration:'14:00'}]},
 ];
 
 const PHASES = [
@@ -57,6 +62,7 @@ const PHASES = [
     { label:'🎯 FASE 3 // ESTRATEGIA Y PLANIFICACIÓN',   modules:[9,10,11,18,19] },
     { label:'🚀 FASE 4 // EJECUCIÓN Y MENTALIDAD',       modules:[12,13,14,15] },
     { label:'🔄 FASE 5 // CICLO DE VIDA DEL PRECIO',     modules:[16] },
+    { label:'🧮 FASE 6 // HERRAMIENTAS PROPIETARIAS RSU', modules:[20,21] },
 ];
 
 // ── ESTILOS ───────────────────────────────────────────────────────────────────
@@ -104,6 +110,9 @@ function injectStyles() {
         .ac-lesson-item:hover { background: rgba(255,255,255,.02); }
         .ac-lesson-item:hover .ac-lesson-title { color: var(--color-accent); }
         .ac-lesson-num { width:28px; height:28px; border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:11px; flex-shrink:0; }
+
+        /* Quiz */
+        .quiz-option:not(:disabled):hover { border-color: var(--color-accent) !important; }
     `;
     document.head.appendChild(s);
 }
@@ -120,7 +129,7 @@ function header() {
     return `<div style="margin-bottom:2rem;">
         <div style="color:var(--color-accent);font-size:18px;letter-spacing:.1em;text-shadow:var(--glow-text);margin-bottom:4px;">RSU ACADEMY</div>
         <div style="color:var(--color-secondary);font-size:13px;letter-spacing:.15em;margin-bottom:4px;">TECHNICAL ANALYSIS BLUEPRINT</div>
-        <div style="color:var(--color-muted);font-size:12px;">15 MÓDULOS // ACCESO COMPLETO // DE CERO A TRADER TÉCNICO</div>
+        <div style="color:var(--color-muted);font-size:12px;">${MODULES.length} MÓDULOS // ACCESO COMPLETO // DE CERO A TRADER TÉCNICO</div>
     </div>`;
 }
 
@@ -228,6 +237,8 @@ function renderModuleDetail(container, m) {
                 </div>`;
             }).join('')}
         </div>
+
+        ${quizBlock(m)}
     `;
 
     container.querySelector('#btn-volver').addEventListener('click', () => render(container));
@@ -240,6 +251,171 @@ function renderModuleDetail(container, m) {
             if (lesson) renderLesson(container, lesson, m);
         });
     });
+
+    const quizBtn = container.querySelector('#btn-start-quiz');
+    if (quizBtn) {
+        quizBtn.addEventListener('click', () => {
+            const quiz = QUIZZES[m.id];
+            if (quiz) renderQuiz(container, quiz, m);
+        });
+    }
+}
+
+// ── BLOQUE DE ACCESO AL QUIZ (en la vista de módulo) ───────────────────────────
+
+function quizBlock(m) {
+    const quiz = QUIZZES[m.id];
+    if (!quiz) return '';
+    return `<div style="background:var(--color-surface);border:1px solid var(--color-accent);border-radius:var(--radius);padding:1.25rem;margin-top:1.5rem;display:flex;align-items:center;justify-content:space-between;gap:1rem;flex-wrap:wrap;">
+        <div>
+            <div style="color:var(--color-accent);font-size:12px;letter-spacing:.08em;margin-bottom:4px;">🎯 QUIZ DEL MÓDULO</div>
+            <div style="color:var(--color-muted);font-size:11px;">${quiz.questions.length} preguntas · repite las que falles hasta acertarlas, sin límite de intentos</div>
+        </div>
+        <button id="btn-start-quiz" style="background:var(--color-accent);color:#000;border:none;border-radius:var(--radius);padding:10px 20px;font-family:var(--font-mono);font-size:12px;font-weight:600;cursor:pointer;letter-spacing:.05em;flex-shrink:0;">EMPEZAR QUIZ →</button>
+    </div>`;
+}
+
+// ── VISTA DE QUIZ ──────────────────────────────────────────────────────────────
+
+function renderQuiz(container, quiz, module) {
+    injectStyles();
+
+    // Estado del quiz: por cada pregunta, si ya se acertó, y cuántos intentos ha llevado
+    const state = quiz.questions.map(() => ({ solved: false, selected: null, attempts: 0 }));
+    let current = 0;
+
+    function draw() {
+        const total = quiz.questions.length;
+        const solvedCount = state.filter(s => s.solved).length;
+
+        if (current >= total) {
+            renderQuizComplete(container, quiz, module, state);
+            return;
+        }
+
+        const q = quiz.questions[current];
+        const s = state[current];
+
+        container.innerHTML = `
+            <div style="display:flex;align-items:center;gap:12px;margin-bottom:1.5rem;flex-wrap:wrap;">
+                <button id="btn-exit-quiz" style="background:transparent;border:1px solid var(--color-border);color:var(--color-muted);border-radius:var(--radius);padding:6px 14px;font-family:var(--font-mono);font-size:12px;cursor:pointer;">← SALIR DEL QUIZ</button>
+                <div style="color:var(--color-muted);font-size:11px;">${quiz.title.toUpperCase()}</div>
+            </div>
+
+            <div style="margin-bottom:1.25rem;">
+                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
+                    <span style="color:var(--color-muted);font-size:11px;letter-spacing:.08em;">PREGUNTA ${current+1} DE ${total}</span>
+                    <span style="color:var(--color-accent);font-size:11px;">${solvedCount}/${total} acertadas</span>
+                </div>
+                <div class="ac-progress"><div class="ac-progress-bar" style="width:${(solvedCount/total*100).toFixed(0)}%"></div></div>
+            </div>
+
+            <div style="background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius);padding:1.5rem;">
+                <div style="color:var(--color-text);font-size:15px;line-height:1.6;margin-bottom:1.25rem;">${q.q}</div>
+                <div id="quiz-options">
+                    ${q.options.map((opt, i) => optionRow(opt, i, s)).join('')}
+                </div>
+                <div id="quiz-feedback"></div>
+            </div>
+        `;
+
+        container.querySelector('#btn-exit-quiz').addEventListener('click', () => renderModuleDetail(container, module));
+
+        if (!s.solved) {
+            container.querySelectorAll('.quiz-option').forEach(btn => {
+                btn.addEventListener('click', () => {
+                    const idx = parseInt(btn.getAttribute('data-idx'));
+                    handleAnswer(idx);
+                });
+            });
+        } else {
+            renderFeedback();
+            renderNextButton();
+        }
+
+        const main = document.getElementById('main');
+        if (main) main.scrollTop = 0;
+    }
+
+    function optionRow(opt, i, s) {
+        const isSelected = s.selected === i;
+        const isCorrect = i === quiz.questions[current].correct;
+        let bg = 'var(--color-bg,#0a0a0a)', border = 'var(--color-border)', color = 'var(--color-text)';
+
+        if (s.solved) {
+            if (isCorrect) { bg = 'rgba(0,255,173,.08)'; border = 'var(--color-accent)'; color = 'var(--color-accent)'; }
+            else if (isSelected) { bg = 'rgba(242,54,69,.08)'; border = '#f23645'; color = '#f23645'; }
+        } else if (isSelected) {
+            bg = 'rgba(242,54,69,.08)'; border = '#f23645'; color = '#f23645';
+        }
+
+        return `<button class="quiz-option" data-idx="${i}" ${s.solved ? 'disabled' : ''} style="display:flex;align-items:center;gap:10px;width:100%;text-align:left;background:${bg};border:1px solid ${border};color:${color};border-radius:var(--radius);padding:12px 14px;margin-bottom:8px;font-family:var(--font-mono);font-size:13px;cursor:${s.solved?'default':'pointer'};transition:all .15s;">
+            <span style="width:20px;height:20px;border-radius:50%;border:1px solid ${border};display:flex;align-items:center;justify-content:center;font-size:11px;flex-shrink:0;">${s.solved && isCorrect ? '✓' : s.solved && isSelected ? '✗' : String.fromCharCode(65+i)}</span>
+            <span>${opt}</span>
+        </button>`;
+    }
+
+    function handleAnswer(idx) {
+        const s = state[current];
+        const q = quiz.questions[current];
+        s.selected = idx;
+        s.attempts++;
+        if (idx === q.correct) s.solved = true;
+        draw();
+    }
+
+    function renderFeedback() {
+        const s = state[current];
+        const q = quiz.questions[current];
+        const fb = container.querySelector('#quiz-feedback');
+        if (!fb) return;
+        const wasFirstTry = s.attempts === 1;
+        fb.innerHTML = `<div style="margin-top:12px;padding:12px 14px;background:rgba(0,255,173,.06);border-left:3px solid var(--color-accent);border-radius:0 6px 6px 0;">
+            <div style="color:var(--color-accent);font-size:11px;letter-spacing:.06em;margin-bottom:5px;">✓ ${wasFirstTry ? 'CORRECTO' : 'CORRECTO — ' + s.attempts + ' INTENTOS'}</div>
+            <div style="color:var(--color-text);font-size:12.5px;line-height:1.6;">${q.explanation}</div>
+        </div>`;
+    }
+
+    function renderNextButton() {
+        const fb = container.querySelector('#quiz-feedback');
+        if (!fb) return;
+        const isLast = current === quiz.questions.length - 1;
+        const btn = document.createElement('button');
+        btn.textContent = isLast ? 'VER RESULTADOS →' : 'SIGUIENTE PREGUNTA →';
+        btn.style.cssText = 'margin-top:14px;background:var(--color-accent);color:#000;border:none;border-radius:var(--radius);padding:10px 20px;font-family:var(--font-mono);font-size:12px;font-weight:600;cursor:pointer;letter-spacing:.05em;width:100%;';
+        btn.addEventListener('click', () => { current++; draw(); });
+        fb.appendChild(btn);
+    }
+
+    draw();
+}
+
+function renderQuizComplete(container, quiz, module, state) {
+    injectStyles();
+    const totalAttempts = state.reduce((sum, s) => sum + s.attempts, 0);
+    const perfectRun = state.every(s => s.attempts === 1);
+
+    container.innerHTML = `
+        <div style="text-align:center;padding:3rem 1.5rem;background:var(--color-surface);border:1px solid var(--color-accent);border-radius:var(--radius);">
+            <div style="font-size:3rem;margin-bottom:1rem;">${perfectRun ? '🏆' : '✅'}</div>
+            <div style="color:var(--color-accent);font-size:18px;letter-spacing:.08em;margin-bottom:8px;">QUIZ COMPLETADO</div>
+            <div style="color:var(--color-text);font-size:13px;margin-bottom:4px;">${quiz.title}</div>
+            <div style="color:var(--color-muted);font-size:12px;margin-bottom:1.5rem;">
+                ${quiz.questions.length}/${quiz.questions.length} preguntas acertadas
+                ${perfectRun ? '· todas a la primera' : '· ' + totalAttempts + ' intentos totales'}
+            </div>
+            <div style="display:flex;gap:10px;justify-content:center;flex-wrap:wrap;">
+                <button id="btn-quiz-back" style="background:transparent;border:1px solid var(--color-border);color:var(--color-muted);border-radius:var(--radius);padding:10px 20px;font-family:var(--font-mono);font-size:12px;cursor:pointer;">← VOLVER AL MÓDULO</button>
+                <button id="btn-quiz-retry" style="background:var(--color-accent);color:#000;border:none;border-radius:var(--radius);padding:10px 20px;font-family:var(--font-mono);font-size:12px;font-weight:600;cursor:pointer;">REPETIR QUIZ</button>
+            </div>
+        </div>
+    `;
+
+    container.querySelector('#btn-quiz-back').addEventListener('click', () => renderModuleDetail(container, module));
+    container.querySelector('#btn-quiz-retry').addEventListener('click', () => renderQuiz(container, quiz, module));
+
+    const main = document.getElementById('main');
+    if (main) main.scrollTop = 0;
 }
 
 // ── VISTA DE LECCIÓN (contenido didáctico) ────────────────────────────────────

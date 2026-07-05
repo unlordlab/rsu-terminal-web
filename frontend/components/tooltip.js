@@ -1038,6 +1038,45 @@ CÓMO USARLO:
 Pocos analistas (&lt;5) implica un consenso poco robusto, más sensible a que un solo analista mueva la media con su cambio de opinión. Muchos analistas con rating reciente es la situación más fiable para apoyarte en el consenso de precio objetivo.`
     },
 
+    "institutional-ref-price": {
+        title: "Precio al Cierre del Trimestre (13F)",
+        short: "Precio al que cotizaba la acción cuando se cerró el trimestre que reportan estos 13F, comparado con el precio actual.",
+        long: `Los informes 13F que presentan las instituciones ante la SEC declaran sus posiciones a CIERRE DE TRIMESTRE, no la fecha real en la que compraron. Por eso todas las instituciones de la tabla reportan a la misma fecha de corte — es una norma regulatoria, no una coincidencia.
+
+QUÉ MUESTRA ESTE DATO:
+El precio de cierre real de la acción en esa fecha de corte trimestral, y cuánto se ha movido el precio desde entonces hasta hoy.
+
+LIMITACIÓN IMPORTANTE:
+Con datos de 13F es imposible saber el precio de entrada real de cada institución — solo cuántas acciones tenían a cierre de trimestre. Si una institución construyó su posición en varios tramos, su coste medio real puede diferir bastante de este precio de referencia trimestral. Para precios de transacción reales y por insider concreto, mirad la sección de Insider Trading (eso sí usa Form 4, que sí declara precio y fecha exactos).`
+    },
+
+    "insider-monthly-volume": {
+        title: "Volumen Mensual Insider",
+        short: "Acciones compradas vs vendidas por insiders cada mes, en los últimos 12 meses (solo transacciones discrecionales).",
+        long: `Este gráfico agrega, mes a mes, el número de acciones que los insiders (directivos, consejeros, accionistas significativos) han comprado o vendido en mercado abierto durante el último año.
+
+QUÉ SE INCLUYE:
+Igual que el resumen de sentimiento, solo cuenta transacciones discrecionales reales (códigos P de compra y S de venta), excluyendo movimientos rutinarios como ejercicios de opciones, donaciones o liquidaciones fiscales automáticas.
+
+CÓMO USARLO:
+Permite ver si la actividad insider es puntual (un mes con mucho volumen y el resto vacío) o sostenida en el tiempo, y si el patrón de compras/ventas se ha invertido recientemente respecto a meses anteriores — algo que el resumen de 6 meses por sí solo no muestra.`
+    },
+
+    "income-statement": {
+        title: "Cuenta de Resultados Trimestral",
+        short: "Evolución de Ingresos, Beneficio Bruto, Operativo y Neto trimestre a trimestre.",
+        long: `Muestra la evolución de las cuatro líneas principales de la cuenta de resultados de la empresa en los últimos trimestres disponibles, según los datos reportados por la propia compañía.
+
+LAS 4 LÍNEAS:
+▸ Ingresos: ventas totales del trimestre
+▸ Beneficio Bruto: ingresos menos coste de los bienes vendidos (COGS)
+▸ Beneficio Operativo: beneficio bruto menos gastos operativos (I+D, marketing, administración)
+▸ Beneficio Neto: lo que queda tras impuestos, intereses y partidas extraordinarias
+
+CÓMO USARLO:
+Si Ingresos crece pero Beneficio Neto se queda plano o cae, la empresa está perdiendo eficiencia (márgenes comprimidos) aunque las ventas vayan bien. Si las cuatro líneas crecen en paralelo, es una señal de fortaleza fundamental sostenida.`
+    },
+
     "insider-summary": {
         title: "Sentimiento Insider (6 meses)",
         short: "Resumen neto de compras vs ventas discrecionales de directivos/insiders en los últimos 6 meses.",

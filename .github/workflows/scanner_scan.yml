@@ -1,0 +1,33 @@
+name: Scanner Universo S&P 500
+
+on:
+  schedule:
+    # Lunes a viernes a las 23:15 CET (22:15 UTC) — 15 min después del Thematic
+    # Scan, para no competir por rate limit de Yahoo en el mismo minuto exacto.
+    - cron: '15 22 * * 1-5'
+  workflow_dispatch:  # Permite ejecutar manualmente desde la pestaña Actions
+
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          pip install requests yfinance pandas numpy
+
+      - name: Run Scanner Universo
+        env:
+          GIST_TOKEN:      ${{ secrets.GIST_TOKEN }}
+          SCANNER_GIST_ID: ${{ secrets.SCANNER_GIST_ID }}
+        run: |
+          python scripts/scanner_universe.py
