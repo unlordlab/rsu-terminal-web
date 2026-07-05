@@ -1157,7 +1157,10 @@ SUBESTADO ESPECIAL — "FASE 1 · POSIBLE GIRO TEMPRANO":
 Existe un caso intermedio que el sistema trata de forma diferenciada: cuando las EMAs cortas (10 y 20) ya giran al alza y el precio cotiza por encima de la EMA20, pero las EMAs largas (50 y 200) siguen con pendiente bajista. Sin este matiz, ese escenario se clasificaría como BAJISTA/Fase 4 puro, ocultando que ya hay primeras señales de reversión — un rebote real desde mínimos siempre empieza así, con las medias cortas confirmando antes que las largas. Cuando se detecta este patrón, el sistema lo etiqueta como "Fase 1 · Posible Giro Temprano" en vez de Fase 4, para que la primera señal de cambio no quede enmascarada por la inercia bajista de las EMAs largas. Sigue siendo una fase de cautela, no de confirmación — las EMA50/200 todavía no respaldan el giro, así que puede revertirse y volver a Fase 4 si el rebote falla.
 
 LIMITACIÓN A TENER EN CUENTA:
-Esta clasificación se basa puramente en el comportamiento de precio y EMAs (sin datos de volumen institucional real ni acumulación/distribución verificada), por lo que es una aproximación técnica razonable, no una confirmación de manual de Weinstein al 100%. Combínala con el resto de herramientas de la terminal antes de actuar.`
+Esta clasificación se basa puramente en el comportamiento de precio y EMAs (sin datos de volumen institucional real ni acumulación/distribución verificada), por lo que es una aproximación técnica razonable, no una confirmación de manual de Weinstein al 100%. Combínala con el resto de herramientas de la terminal antes de actuar.
+
+USO EN EL SCANNER:
+El módulo Scanner reutiliza exactamente esta misma lógica de fase (misma EMA10/20/50/200, mismos umbrales de pendiente) para clasificar las ~500 acciones del S&P 500 en el scan nocturno, sin llamadas de red adicionales por ticker — así el criterio "Fase" del Scanner y la Fase que ves aquí en Research son siempre coherentes entre sí.`
     },
 
     "short-interest-pct": {
@@ -1255,7 +1258,10 @@ INTERPRETACIÓN:
 - 35-49 → PRECAUCIÓN → Varias dimensiones débiles
 - 0-34 → EVITAR → Fundamentales, técnico y/o sentimiento débiles
 
-Es una herramienta de filtrado y contexto, no una recomendación de inversión.`
+Es una herramienta de filtrado y contexto, no una recomendación de inversión.
+
+DIFERENCIA CON EL "SCORE TÉCNICO" DEL SCANNER:
+El módulo Scanner muestra un "Score Técnico" distinto de este RSU Score — ese solo usa datos de precio/volumen (RS Percentile, Fase, RVOL), sin componente fundamental, porque calcular el RSU Score completo para las ~500 acciones del S&P 500 cada noche sería demasiado costoso en llamadas a datos. Si el Scanner te señala un candidato interesante, este RSU Score (con Piotroski, valoración y sentimiento incluidos) es el siguiente paso lógico para confirmarlo con la pata fundamental.`
     },
 
     "piotroski-score": {
@@ -1403,6 +1409,63 @@ El widget de Sector Performance (arriba) mide el rendimiento en precio de los 11
 
 LIMITACIÓN A TENER EN CUENTA:
 Los datos dependen de la frescura del último scan del RS/RW (visible en "Actualizado"). No hay histórico de streak ni de variación a 5/10/30 días por sector — solo la foto actual del universo.`
+    },
+
+    // ── SCANNER ───────────────────────────────────────────────────────────────
+    "scanner": {
+        title: "Scanner — Filtros Configurables S&P 500",
+        short: "Combina RVOL, RS Percentile, Fase Weinstein y Score Técnico sobre las ~500 acciones del S&P 500. Los criterios activados se combinan con AND; el resultado se ordena por Score Técnico.",
+        long: `El Scanner recorre cada noche (vía GitHub Action, tras el cierre de mercado US) el universo completo del S&P 500 y precalcula 4 métricas para cada ticker: RVOL, RS Percentile, Fase Weinstein y Score Técnico. El resultado se guarda en un Gist y se lee desde ahí — ninguna petición tuya al abrir la página dispara llamadas nuevas a Yahoo Finance.
+
+CÓMO SE COMBINAN LOS CRITERIOS — GATEKEEPER + SCORE:
+Cada criterio que actives (RVOL, RS%, Score, Fase, Sector) actúa como filtro obligatorio: un ticker solo aparece en los resultados si cumple TODOS los criterios activados a la vez (lógica AND). Si no activas ninguno, ves el universo completo. De los tickers que pasan el filtro, se ordenan por Score Técnico de mayor a menor — el mismo principio de "gatekeeper primero, score después" que ya usa el RSU Algoritmo y el RSU Score en Research: un score alto nunca compensa no cumplir un requisito estructural que hayas marcado como obligatorio.
+
+POR QUÉ ES DISTINTO DEL RS/RW SCANNER:
+El módulo RS/RW se centra en fuerza/debilidad relativa pura, con líderes y rezagados fijos (top/bottom 20%). El Scanner es más flexible: tú decides qué combinación de condiciones técnicas define tu "setup" (ej. solo acciones en Fase 2 con RVOL alto, o solo un sector concreto por encima de cierto RS), replicando el proceso real de filtrar "buenos activos, a buen precio, con rastro de liquidez" en vez de un ranking fijo de dos categorías.
+
+LIMITACIÓN DE ALCANCE — v1:
+De momento el Scanner cubre RVOL, RS Percentile, Fase Weinstein y Score Técnico. VCP (contracción de volatilidad) e insider buying reciente están planeados para versiones posteriores (v1.1/v1.2) una vez se valide el motor base en producción — ver tooltips "rvol" y "score-tecnico" para el detalle de cada métrica individual.`
+    },
+
+    "rvol": {
+        title: "RVOL — Volumen Relativo",
+        short: "Volumen de la última sesión cerrada dividido entre la media de volumen de los últimos 20 días. RVOL > 1.5x-2x suele indicar interés inusual (institucional o noticia).",
+        long: `RVOL (Relative Volume) mide si el volumen negociado en una sesión es normal o inusualmente alto/bajo comparado con el comportamiento reciente del propio activo.
+
+FÓRMULA:
+RVOL = Volumen de la última sesión cerrada / Media de volumen de los últimos 20 días (excluyendo el día actual del cálculo de la media)
+
+POR QUÉ 20 DÍAS Y NO 14 O 50:
+20 días es el estándar más extendido en herramientas como IBD, Finviz o TradingView — lo bastante corto para reflejar el ritmo de negociación reciente sin diluir el dato en meses de histórico, y lo bastante largo para no ser inflado o desinflado de forma artificial por un solo día extremo. Se eligió específicamente para que el RVOL del Scanner sea coherente con el mismo cálculo ya usado en el RSU Algoritmo y en RS/RW Scanner — mismo número, mismo significado, en toda la terminal.
+
+INTERPRETACIÓN:
+▸ RVOL &lt; 1x → volumen por debajo de lo habitual, poco interés
+▸ RVOL 1x-1.5x → volumen normal
+▸ RVOL 1.5x-2x → interés por encima de lo habitual, empieza a ser relevante
+▸ RVOL &gt; 2x-3x → interés inusual, candidato a movimiento institucional o catalizador (noticia, earnings, ruptura técnica)
+
+POR QUÉ IMPORTA PARA "SEGUIR EL RASTRO DE LIQUIDEZ":
+Las instituciones no pueden ocultar el volumen que mueven — cuando entra dinero grande, deja huella. Un RVOL alto por sí solo no dice si el movimiento es alcista o bajista (para eso hace falta ver el precio y la Fase), pero sí confirma que hay actividad fuera de lo normal detrás del ticker en ese momento.
+
+LIMITACIÓN:
+El scan se calcula 1x/día, con el dato de la última sesión cerrada — no es RVOL intradía en tiempo real. Para movimientos de volumen dentro de la sesión actual, esta cifra no los refleja hasta el scan de la noche siguiente.`
+    },
+
+    "score-tecnico": {
+        title: "Score Técnico (Scanner)",
+        short: "Score 0-100 exclusivo del Scanner: RS Percentile (50%) + Fase Weinstein (30%) + RVOL (20%, satura en 3x). No es el RSU Score de Research.",
+        long: `El Score Técnico es la métrica que usa el Scanner para ordenar los resultados que pasan el filtro de criterios activados. Se calcula únicamente con datos de precio y volumen que ya se descargan en el mismo scan nocturno, sin llamadas adicionales por ticker.
+
+CÁLCULO:
+▸ RS Percentile × 50% (fuerza relativa vs el universo, ver tooltip "RS Rating")
+▸ Fase Weinstein × 30% — Fase 2 (Avance) = 30pts, Fase 1 (Acumulación/Giro) = 18pts, Fase 3 (Distribución) = 10pts, Fase 4 (Declive) = 0pts
+▸ RVOL × 20%, saturando en RVOL = 3x (a partir de ahí no suma más puntos)
+
+POR QUÉ NO ES EL RSU SCORE:
+El RSU Score de Research (ver tooltip propio) incorpora 5 dimensiones incluyendo fundamentales — calidad, Piotroski, valoración vs sector y sentimiento de analistas — que requieren varias llamadas de datos POR TICKER. Ejecutar eso sobre las ~500 acciones del S&P 500 cada noche multiplicaría el riesgo de rate-limit y el tiempo del scan de forma desproporcionada. El Score Técnico es intencionadamente una versión "solo precio/volumen" del mismo espíritu (gatekeeper + score), pensada para rankear rápido un universo grande, no para sustituir el análisis fundamental completo.
+
+CÓMO USARLO EN LA PRÁCTICA:
+Un Score Técnico alto (70+) te dice que el ticker combina fuerza relativa alta, buena fase técnica y volumen por encima de lo normal — es una señal de "vale la pena mirarlo de cerca", no una recomendación de compra. El paso lógico siguiente para un candidato que destaque aquí es abrirlo en Research y revisar su RSU Score completo antes de tomar cualquier decisión.`
     },
 
     // ── GENERAL ───────────────────────────────────────────────────────────────

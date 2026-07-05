@@ -32,7 +32,7 @@ import requests
 from datetime import datetime, timezone
 from services.cache import cache
 
-GIST_ID   = ""  # ← rellenar con el ID del Gist nuevo (ver instrucciones de configuración)
+GIST_ID   = "cb9d69cbf6ca741b4fd86765a41813a7"  # ← rellenar con el ID del Gist nuevo (ver instrucciones de configuración)
 GIST_FILE = "scanner_scan.json"
 CACHE_KEY = "scanner:universe"
 CACHE_TTL = 1800  # 30 min — el dato en sí solo cambia 1x/día, esto es caché local extra

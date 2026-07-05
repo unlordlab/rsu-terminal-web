@@ -1,4 +1,5 @@
 import { isRateLimitMessage, errorMessage } from '/core/ui.js';
+import { tt } from '/components/tooltip.js';
 
 const PHASE_OPTIONS = [
     { value: '', label: 'Todas' },
@@ -21,7 +22,7 @@ export async function render(container) {
 
 function pageHeader() {
     return '<div style="margin-bottom:1.5rem;">'
-        + '<div style="color:var(--color-accent);font-size:18px;letter-spacing:0.1em;text-shadow:var(--glow-text);margin-bottom:4px;">SCANNER</div>'
+        + '<div style="color:var(--color-accent);font-size:18px;letter-spacing:0.1em;text-shadow:var(--glow-text);margin-bottom:4px;">SCANNER ' + tt('scanner') + '</div>'
         + '<div style="color:var(--color-muted);font-size:12px;">RVOL · RS Percentile · Fase Weinstein · Score Técnico · S&amp;P 500</div>'
         + '</div>';
 }
@@ -31,27 +32,12 @@ function criteriaPanel() {
         + '<div style="color:var(--color-accent);font-size:13px;letter-spacing:0.08em;margin-bottom:1rem;">CRITERIOS (activa los que quieras combinar)</div>'
         + '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:1rem;margin-bottom:1rem;">'
 
-        + criterionBlock('rvol', 'RVOL ≥', 'number', '1.5', '0.1')
-        + criterionBlock('rs', 'RS Percentile ≥', 'number', '70', '1')
-        + criterionBlock('score', 'Score Técnico ≥', 'number', '60', '1')
+        + criterionBlock('rvol', 'RVOL ≥ ' + tt('rvol'), 'number', '1.5', '0.1')
+        + criterionBlock('rs', 'RS Percentile ≥ ' + tt('rs-rating'), 'number', '70', '1')
+        + criterionBlock('score', 'Score Técnico ≥ ' + tt('score-tecnico'), 'number', '60', '1')
 
-        + '<div>'
-        + '<label style="display:flex;align-items:center;gap:6px;color:var(--color-muted);font-size:12px;margin-bottom:6px;">'
-        + '<input type="checkbox" id="scanner-phase-toggle"> FASE WEINSTEIN'
-        + '</label>'
-        + '<select id="scanner-phase-value" disabled style="width:100%;background:var(--color-bg,#0a0a0a);border:1px solid var(--color-border);border-radius:var(--radius);padding:6px 8px;color:var(--color-text);font-family:var(--font-mono);font-size:12px;">'
-        + PHASE_OPTIONS.map(o => '<option value="' + o.value + '">' + o.label + '</option>').join('')
-        + '</select>'
-        + '</div>'
-
-        + '<div>'
-        + '<label style="display:flex;align-items:center;gap:6px;color:var(--color-muted);font-size:12px;margin-bottom:6px;">'
-        + '<input type="checkbox" id="scanner-sector-toggle"> SECTOR'
-        + '</label>'
-        + '<select id="scanner-sector-value" disabled style="width:100%;background:var(--color-bg,#0a0a0a);border:1px solid var(--color-border);border-radius:var(--radius);padding:6px 8px;color:var(--color-text);font-family:var(--font-mono);font-size:12px;">'
-        + '<option value="">Cargando sectores...</option>'
-        + '</select>'
-        + '</div>'
+        + selectCriterionBlock('phase', 'FASE WEINSTEIN ' + tt('market-phase'), PHASE_OPTIONS.map(o => '<option value="' + o.value + '">' + o.label + '</option>').join(''))
+        + selectCriterionBlock('sector', 'SECTOR', '<option value="">Cargando sectores...</option>')
 
         + '</div>'
         + '<div style="display:flex;justify-content:space-between;align-items:center;">'
@@ -62,25 +48,68 @@ function criteriaPanel() {
 }
 
 function criterionBlock(id, label, type, placeholder, step) {
-    return '<div>'
-        + '<label style="display:flex;align-items:center;gap:6px;color:var(--color-muted);font-size:12px;margin-bottom:6px;">'
-        + '<input type="checkbox" id="scanner-' + id + '-toggle"> ' + label
-        + '</label>'
+    return '<div id="scanner-' + id + '-card" class="scanner-crit-card" data-active="false" '
+        + 'style="border:1px solid var(--color-border);border-radius:var(--radius);padding:10px;cursor:pointer;transition:border-color .15s,background .15s;">'
+        + '<div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">'
+        + '<span id="scanner-' + id + '-dot" style="width:9px;height:9px;border-radius:50%;border:1px solid var(--color-muted);flex-shrink:0;"></span>'
+        + '<span style="color:var(--color-text);font-size:12px;letter-spacing:0.03em;">' + label + '</span>'
+        + '<input type="checkbox" id="scanner-' + id + '-toggle" style="display:none;">'
+        + '</div>'
         + '<input type="' + type + '" id="scanner-' + id + '-value" step="' + step + '" placeholder="' + placeholder + '" disabled '
-        + 'style="width:100%;background:var(--color-bg,#0a0a0a);border:1px solid var(--color-border);border-radius:var(--radius);padding:6px 8px;color:var(--color-text);font-family:var(--font-mono);font-size:12px;box-sizing:border-box;">'
+        + 'style="width:100%;background:var(--color-bg,#0a0a0a);border:1px solid var(--color-border);border-radius:var(--radius);padding:6px 8px;color:var(--color-text);font-family:var(--font-mono);font-size:12px;box-sizing:border-box;cursor:not-allowed;">'
         + '</div>';
+}
+
+function selectCriterionBlock(id, label, optionsHtml) {
+    return '<div id="scanner-' + id + '-card" class="scanner-crit-card" data-active="false" '
+        + 'style="border:1px solid var(--color-border);border-radius:var(--radius);padding:10px;cursor:pointer;transition:border-color .15s,background .15s;">'
+        + '<div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">'
+        + '<span id="scanner-' + id + '-dot" style="width:9px;height:9px;border-radius:50%;border:1px solid var(--color-muted);flex-shrink:0;"></span>'
+        + '<span style="color:var(--color-text);font-size:12px;letter-spacing:0.03em;">' + label + '</span>'
+        + '<input type="checkbox" id="scanner-' + id + '-toggle" style="display:none;">'
+        + '</div>'
+        + '<select id="scanner-' + id + '-value" disabled '
+        + 'style="width:100%;background:var(--color-bg,#0a0a0a);border:1px solid var(--color-border);border-radius:var(--radius);padding:6px 8px;color:var(--color-text);font-family:var(--font-mono);font-size:12px;box-sizing:border-box;cursor:not-allowed;">'
+        + optionsHtml
+        + '</select>'
+        + '</div>';
+}
+
+function setActive(container, id, active) {
+    const card  = container.querySelector('#scanner-' + id + '-card');
+    const dot   = container.querySelector('#scanner-' + id + '-dot');
+    const toggle = container.querySelector('#scanner-' + id + '-toggle');
+    const value = container.querySelector('#scanner-' + id + '-value');
+    if (!card || !dot || !toggle || !value) return;
+
+    toggle.checked = active;
+    value.disabled = !active;
+    value.style.cursor = active ? 'text' : 'not-allowed';
+    card.dataset.active = String(active);
+    card.style.borderColor = active ? 'var(--color-accent)' : 'var(--color-border)';
+    card.style.background  = active ? 'var(--color-accent)11' : 'transparent';
+    dot.style.background   = active ? 'var(--color-accent)' : 'transparent';
+    dot.style.borderColor  = active ? 'var(--color-accent)' : 'var(--color-muted)';
+
+    if (active) value.focus();
 }
 
 function setupPanel(container) {
     ['rvol', 'rs', 'score', 'phase', 'sector'].forEach(id => {
-        const toggle = container.querySelector('#scanner-' + id + '-toggle');
-        const value  = container.querySelector('#scanner-' + id + '-value');
-        if (!toggle || !value) return;
-        toggle.addEventListener('change', () => {
-            value.disabled = !toggle.checked;
-            if (toggle.checked && (id === 'phase' || id === 'sector')) value.focus();
-            if (toggle.checked && !(id === 'phase' || id === 'sector')) value.focus();
+        const card  = container.querySelector('#scanner-' + id + '-card');
+        const value = container.querySelector('#scanner-' + id + '-value');
+        if (!card || !value) return;
+
+        // Click en cualquier parte de la card activa/desactiva el criterio.
+        card.addEventListener('click', (e) => {
+            if (e.target === value) return; // escribir/seleccionar no debe alternar el estado
+            if (e.target.closest('.tt-trigger')) return; // abrir el tooltip no debe alternar el estado
+            const isActive = card.dataset.active === 'true';
+            setActive(container, id, !isActive);
         });
+
+        // Si el criterio está activo, escribir dentro del campo no debe desactivarlo.
+        value.addEventListener('click', (e) => e.stopPropagation());
     });
 
     const btn = container.querySelector('#scanner-run-btn');
