@@ -102,8 +102,17 @@ function connectWS(abiertas) {
 
     _ws.onerror = () => _ws.close();
 
-    _ws.onclose = () => {
+    _ws.onclose = (event) => {
         setWsStatus('off');
+
+        // 4401 = el backend ha rechazado el token (ausente/inválido/caducado).
+        // Reintentar no serviría de nada: mandamos a login directamente.
+        if (event.code === 4401) {
+            sessionStorage.removeItem('rsu_token');
+            if (window.__navigate) window.__navigate('/login');
+            return;
+        }
+
         _wsRetries++;
         if (_wsRetries < 5) {
             setTimeout(() => connectWS(abiertas), Math.min(5000 * _wsRetries, 30000));

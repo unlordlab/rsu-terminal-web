@@ -32,9 +32,21 @@ export function initWebSocket(token) {
         }
     };
 
-    socket.onclose = () => {
-        console.log('[WS] Desconectado — reconectando en 5s');
+    socket.onclose = (event) => {
         document.dispatchEvent(new CustomEvent('ws:disconnected'));
+
+        // 4401 = el backend ha rechazado el token (ausente/inválido/caducado).
+        // Reintentar aquí solo provocaría un bucle infinito de conexiones
+        // rechazadas: mejor limpiar la sesión y mandar a login, igual que
+        // hace el interceptor de fetch para las peticiones HTTP con 401.
+        if (event.code === 4401) {
+            console.log('[WS] Token inválido o caducado, redirigiendo a login');
+            sessionStorage.removeItem('rsu_token');
+            if (window.__navigate) window.__navigate('/login');
+            return;
+        }
+
+        console.log('[WS] Desconectado — reconectando en 5s');
         reconnectT = setTimeout(() => {
             const t = sessionStorage.getItem('rsu_token');
             if (t) initWebSocket(t);

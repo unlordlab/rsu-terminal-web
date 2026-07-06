@@ -5,6 +5,7 @@ from fastapi.responses import FileResponse
 from contextlib import asynccontextmanager
 import asyncio
 from config import settings
+from auth import verify_token
 from middleware.rate_limit import rate_limit
 from routers import auth, market, cartera, canslim, rsu_algoritmo, research, newsfeed, tesis, spxl, rsrw, ws, options, btc_stratum, insider, scanner
 @asynccontextmanager
@@ -17,7 +18,9 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(
     title=settings.app_name,
-    docs_url="/api/docs",
+    # En producción no exponemos el esquema completo de la API (rutas,
+    # parámetros, modelos) a cualquiera que visite /api/docs sin login.
+    docs_url="/api/docs" if settings.environment != "production" else None,
     lifespan=lifespan,
 )
 
@@ -55,16 +58,23 @@ app.mount("/pages",      StaticFiles(directory="../frontend/pages"),  name="page
 
 @app.get("/health")
 async def health():
-    from services.cache import cache
-    return {"status": "ok", "app": settings.app_name, "cache": cache.stats()}
+    # Endpoint público a propósito (lo usan Docker/uptime checks sin token).
+    # No exponemos aquí el detalle de la caché para no dar información
+    # interna gratis; para eso está /api/v1/cache/stats, que si pide token.
+    return {"status": "ok", "app": settings.app_name}
 
 @app.get("/api/v1/rate-limit/stats")
-async def rate_limit_stats():
+async def rate_limit_stats(user=Depends(verify_token)):
     from middleware.rate_limit import _store
     return {"message": "Rate limiting activo", "active_keys": len(_store), "general_limit": "60/min", "heavy_limit": "10/min"}
 
+@app.get("/api/v1/cache/stats")
+async def cache_stats(user=Depends(verify_token)):
+    from services.cache import cache
+    return {"ok": True, "cache": cache.stats()}
+
 @app.delete("/api/v1/cache/{prefix}")
-async def clear_cache(prefix: str):
+async def clear_cache(prefix: str, user=Depends(verify_token)):
     from services.cache import cache
     cache.clear_prefix(prefix)
     return {"ok": True, "cleared": prefix}

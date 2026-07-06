@@ -1,7 +1,8 @@
-from fastapi import APIRouter, WebSocket, WebSocketDisconnect
+from fastapi import APIRouter, WebSocket, WebSocketDisconnect, status
 from services.market_service import get_indices
 from services.rsu_algoritmo_service import get_rsu_algoritmo
 from services.cartera_service import get_cartera
+from auth import decode_token
 from datetime import datetime, timezone
 import asyncio
 import json
@@ -16,6 +17,23 @@ PRICE_TICKERS = {
     "OIL":  "CL=F",
     "DXY":  "DX-Y.NYB",
 }
+
+# ── AUTENTICACIÓN ─────────────────────────────────────────────────────────────
+#
+# El navegador no permite fijar cabeceras propias (como Authorization) en el
+# handshake de un WebSocket, así que el token viaja como query param
+# (?token=...), tal y como ya lo manda el frontend (core/websocket.js y
+# cartera.js). Antes de aceptar la conexión, lo validamos igual que en las
+# rutas HTTP normales (auth.decode_token). Si falta o no es válido, se
+# rechaza la conexión con el código de cierre 4401 (rango reservado para uso
+# de la aplicación) y no se acepta el socket.
+
+async def _authenticate(websocket: WebSocket) -> bool:
+    token = websocket.query_params.get("token")
+    if not token or decode_token(token) is None:
+        await websocket.close(code=4401)
+        return False
+    return True
 
 # ── HELPERS ───────────────────────────────────────────────────────────────────
 
@@ -135,6 +153,8 @@ cartera_manager = CarteraManager()
 
 @router.websocket("/ws")
 async def websocket_endpoint(websocket: WebSocket):
+    if not await _authenticate(websocket):
+        return
     await manager.connect(websocket)
     try:
         payload = await _build_payload()
@@ -152,6 +172,8 @@ async def websocket_endpoint(websocket: WebSocket):
 
 @router.websocket("/ws/cartera")
 async def websocket_cartera(websocket: WebSocket):
+    if not await _authenticate(websocket):
+        return
     await cartera_manager.connect(websocket)
     try:
         loop   = asyncio.get_event_loop()

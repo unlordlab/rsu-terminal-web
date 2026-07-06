@@ -14,17 +14,29 @@ def create_token(data: dict) -> str:
         algorithm=settings.algorithm
     )
 
-def verify_token(
-    credentials: HTTPAuthorizationCredentials = Depends(bearer)
-) -> dict:
+def decode_token(token: str) -> dict | None:
+    """Decodifica un token JWT en crudo (string). Devuelve None si no es válido.
+
+    Se usa tanto para WebSockets (donde el token llega como query param,
+    ya que el navegador no permite fijar cabeceras en el handshake de WS)
+    como internamente desde verify_token().
+    """
     try:
         return jwt.decode(
-            credentials.credentials,
+            token,
             settings.secret_key,
             algorithms=[settings.algorithm]
         )
     except JWTError:
+        return None
+
+def verify_token(
+    credentials: HTTPAuthorizationCredentials = Depends(bearer)
+) -> dict:
+    payload = decode_token(credentials.credentials)
+    if payload is None:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Token inválido"
         )
+    return payload

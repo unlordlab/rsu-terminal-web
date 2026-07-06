@@ -83,6 +83,10 @@ export function renderSidebar(container, navigate) {
     setActive(location.pathname);
 }
 
+export function setActiveNavItem(path) {
+    setActive(path);
+}
+
 function setActive(path) {
     document.querySelectorAll('.nav-item').forEach(function(link) {
         if (link.getAttribute('data-path') === path) {

@@ -49,6 +49,28 @@
       max-width: 1400px;
     }
 
+    #back-bar {
+      max-width: 1400px;
+      margin-bottom: 1rem;
+    }
+
+    #global-back-btn {
+      background: transparent;
+      border: 1px solid var(--color-border);
+      color: var(--color-muted);
+      border-radius: var(--radius);
+      padding: 6px 14px;
+      font-family: var(--font-mono);
+      font-size: 12px;
+      cursor: pointer;
+      transition: all .15s;
+    }
+
+    #global-back-btn:hover {
+      border-color: var(--color-accent);
+      color: var(--color-accent);
+    }
+
     .loading {
       color: var(--color-muted);
       font-size: 13px;
@@ -72,10 +94,13 @@
     <nav id="sidebar"></nav>
     <header id="topbar"></header>
     <main id="main">
+      <div id="back-bar" style="display:none;">
+        <button id="global-back-btn">← VOLVER</button>
+      </div>
       <div id="view"></div>
     </main>
   </div>
 
-  <script type="module" src="/core/router.js?v=2"></script>
+  <script type="module" src="/core/router.js?v=3"></script>
 </body>
 </html>
