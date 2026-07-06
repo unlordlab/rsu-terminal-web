@@ -1398,6 +1398,83 @@ def get_crypto_prices():
     return result
 
 
+# Stablecoins excluidas del ranking de fuerza relativa — su % de cambio no
+# representa momentum real (solo ruido de depeg), y contaminarían el top.
+_STABLECOIN_SYMBOLS = {
+    "usdt", "usdc", "dai", "busd", "tusd", "fdusd", "usde",
+    "pyusd", "usdd", "frax", "gusd", "usdp", "eurt", "eurc",
+}
+
+def get_crypto_relative_strength(top_n: int = 5):
+    """Top N criptomonedas por fuerza relativa (variación % a 30 días) sobre el
+    universo REAL del mercado cripto — top 250 por capitalización vía CoinGecko
+    (misma fuente que btc_stratum_service.py), no una lista curada a mano.
+    """
+    from services.cache import cache, TTL
+    cache_key = f"market:crypto_rs:{top_n}"
+    cached = cache.get(cache_key)
+    if cached:
+        return cached
+
+    try:
+        import requests
+        r = requests.get(
+            "https://api.coingecko.com/api/v3/coins/markets",
+            params={
+                "vs_currency": "usd",
+                "order": "market_cap_desc",
+                "per_page": 250,
+                "page": 1,
+                "price_change_percentage": "7d,30d",
+                "sparkline": "false",
+            },
+            timeout=10,
+        )
+        data = r.json()
+        if not isinstance(data, list):
+            raise ValueError(f"Respuesta inesperada de CoinGecko: {data}")
+
+        candidates = []
+        for c in data:
+            symbol = (c.get("symbol") or "").lower()
+            if symbol in _STABLECOIN_SYMBOLS:
+                continue
+            pct_30d = c.get("price_change_percentage_30d_in_currency")
+            price   = c.get("current_price")
+            if pct_30d is None or price is None:
+                continue
+            # Filtro de precio: excluye memecoins/micro-caps de céntimo (ej. SHIB,
+            # PEPE) que suelen dominar los rankings de % sin ser posiciones serias.
+            if price <= 1.0:
+                continue
+            candidates.append({
+                "ticker":          symbol.upper(),
+                "name":            c.get("name", symbol.upper()),
+                "price":           price,
+                "pct_30d":         round(pct_30d, 2),
+                "pct_7d":          round(c.get("price_change_percentage_7d_in_currency") or 0, 2),
+                "market_cap_rank": c.get("market_cap_rank"),
+            })
+
+        ranked = sorted(candidates, key=lambda x: x["pct_30d"], reverse=True)
+        for i, item in enumerate(ranked, start=1):
+            item["rank"] = i
+
+        result = {
+            "ok":            True,
+            "data":          ranked[:top_n],
+            "universe_size": len(candidates),
+            "source":        "CoinGecko · Top 250 por market cap",
+            "timestamp":     get_timestamp(),
+        }
+    except Exception as e:
+        result = {"ok": False, "error": str(e), "data": []}
+
+    result = _sanitize_breadth(result)
+    cache.set(cache_key, result, TTL["market"])
+    return result
+
+
 def get_crypto_fear_greed():
     """Crypto Fear & Greed Index vía alternative.me (independiente del Fear & Greed de acciones)."""
     from services.cache import cache, TTL

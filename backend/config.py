@@ -15,6 +15,9 @@ class Settings(BaseSettings):
     ]
     environment: str = "development"
     # Production domain — set via .env: CORS_ORIGINS=["https://tudominio.com"]
+    # Capital total de referencia para el sizing por niveles Core/High/Lottery
+    # (columna "Nivel" en la hoja de Cartera). Ej: CAPITAL_TOTAL=50000
+    capital_total: float = 100000
     # API Keys
     fred_api_key: str = ""
     url_cartera: str = ""

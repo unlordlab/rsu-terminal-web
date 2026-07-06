@@ -7,7 +7,7 @@ from services.market_service import (
     get_reddit_pulse, get_nightly_briefing,
     get_credit_spreads, get_market_breadth, get_advance_decline,
     get_fed_macro, get_vix_levels, get_crypto_prices, get_crypto_fear_greed,
-    get_liquidity, get_sector_composition
+    get_liquidity, get_sector_composition, get_crypto_relative_strength
 )
 from services.earnings_service import get_earnings_calendar, get_earnings_ticker
 
@@ -20,6 +20,12 @@ async def vix_levels(user=Depends(verify_token)):
 @router.get("/crypto")
 async def crypto(user=Depends(verify_token)):
     return get_crypto_prices()
+
+@router.get("/crypto-rs")
+async def crypto_rs(top_n: int = 5, user=Depends(verify_token)):
+    """Top N criptomonedas por fuerza relativa (momentum de precio a 30 días)
+    sobre un universo más amplio que las 6 fijas del widget principal."""
+    return get_crypto_relative_strength(top_n)
 
 @router.get("/crypto-fear-greed")
 async def crypto_fear_greed(user=Depends(verify_token)):

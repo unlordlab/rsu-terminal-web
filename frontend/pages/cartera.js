@@ -9,6 +9,11 @@ import { errorMessage } from '/core/ui.js';
 let _ws        = null;
 let _wsRetries = 0;
 let _carteraData = null;
+let _sparklines   = {};   // { ticker: [closes...] }
+let _sortActive   = { key: 'peso',  dir: -1 };
+let _sortClosed   = { key: 'fecha_display', dir: -1 };
+let _filterActive = '';
+let _filterClosed = '';
 
 // ── Helpers numéricos seguros (null/NaN → 0) ─────────────────────────────────
 const n = (v, d=0) => (v == null || isNaN(v) ? d : Number(v));
@@ -38,37 +43,50 @@ async function loadCartera(container) {
 
         if (m && m.total_inv > 0) html += metricsRow(m);
 
-        html += sectionHeader('01 // POSICIONES ACTIVAS', true);
+        if (data.history && data.history.length > 1) {
+            html += sectionHeader('01 // EVOLUCIÓN DEL VALOR');
+            html += historySection(data.history);
+        }
+
+        html += sectionHeader('02 // POSICIONES ACTIVAS', true);
 
         if (data.abiertas && data.abiertas.length > 0) {
             html += riskPanel(data.abiertas);
-            html += activeTable(data.abiertas);
+            html += '<div id="active-table-wrap"></div>';
         } else {
             html += emptyBox('Sin posiciones activas en este momento.');
         }
 
-        html += sectionHeader('02 // ACTIVIDAD RECIENTE');
+        html += sectionHeader('03 // ACTIVIDAD RECIENTE');
         html += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem;margin-bottom:1.5rem;">'
             + recentBox('ÚLTIMAS ENTRADAS', data.recent,    true)
-            + recentBox('ÚLTIMAS SALIDAS',  data.cerradas ? data.cerradas.slice(0,5) : [], false)
+            + recentBox('ÚLTIMAS SALIDAS',  data.recent_closed || [], false)
             + '</div>';
 
         if (c && c.total > 0) {
-            html += sectionHeader('03 // HISTORIAL CERRADAS');
+            html += sectionHeader('04 // HISTORIAL CERRADAS');
             html += closedStats(c);
-            html += closedTable(data.cerradas);
+            html += '<div id="closed-table-wrap"></div>';
         }
 
-        html += sectionHeader('04 // ASIGNACIÓN ESTRATÉGICA');
+        html += sectionHeader('05 // ASIGNACIÓN ESTRATÉGICA');
         html += allocationWidget();
 
         container.querySelector('#cartera-content').innerHTML = html;
 
-        // Donut chart
+        // Donut chart, gráfico de evolución
         renderDonut();
+        if (data.history && data.history.length > 1) drawHistoryChart(data.history);
+
+        // Tablas ordenables/filtrables
+        if (data.abiertas && data.abiertas.length > 0) renderActiveSection();
+        if (data.cerradas && data.cerradas.length > 0) renderClosedSection();
 
         // Conectar WebSocket
         connectWS(data.abiertas || []);
+
+        // Sparklines (llamada aparte, no bloquea el render principal)
+        loadSparklines(data.abiertas || []);
 
     } catch(e) {
         container.querySelector('#cartera-content').innerHTML =
@@ -133,12 +151,11 @@ function applyLivePrices(prices, abiertas) {
     prices.forEach(p => {
         const { ticker, price, chg } = p;
 
-        // Precio actual
+        // Precio actual y cambio intradiario: son iguales para todos los lotes
+        // del mismo ticker, así que sí se puede actualizar por ticker.
         document.querySelectorAll(`[data-live-price="${ticker}"]`).forEach(el => {
             el.textContent = '$' + usd(price);
         });
-
-        // Cambio intradiario
         document.querySelectorAll(`[data-live-chg="${ticker}"]`).forEach(el => {
             if (chg == null) return;
             const c = chg >= 0 ? 'var(--color-accent)' : '#f23645';
@@ -146,34 +163,36 @@ function applyLivePrices(prices, abiertas) {
             el.textContent   = (chg >= 0 ? '+' : '') + fix(chg) + '%';
         });
 
-        // P&L % recalculado
-        const pos = abiertas.find(a => a.ticker === ticker);
-        if (pos && pos.compra > 0) {
-            const pnl     = (price - pos.compra) / pos.compra * 100;
-            const pnlUsd  = (price - pos.compra) * pos.shares;
+        // P&L % y $: se recalcula POR CADA POSICIÓN individual (id único), no por
+        // ticker — si hay varios lotes del mismo ticker con precios de compra
+        // distintos, cada uno debe llevar su propio P&L, no el del primero que
+        // se encuentre.
+        abiertas.filter(a => a.ticker === ticker).forEach(pos => {
+            if (!(pos.compra > 0)) return;
+            const pnl      = (price - pos.compra) / pos.compra * 100;
+            const pnlUsd   = (price - pos.compra) * pos.shares;
             const pnlColor = pnl >= 0 ? 'var(--color-accent)' : '#f23645';
 
-            document.querySelectorAll(`[data-live-pnl="${ticker}"]`).forEach(el => {
-                el.style.color   = pnlColor;
-                el.textContent   = (n(pnl) >= 0 ? '+' : '') + fix(pnl) + '%';
-            });
-            document.querySelectorAll(`[data-live-pnl-usd="${ticker}"]`).forEach(el => {
-                el.style.color   = pnlColor;
-                el.textContent   = (pnlUsd >= 0 ? '+$' : '-$') + usd(Math.abs(n(pnlUsd)));
-            });
-        }
+            const pnlEl = document.querySelector(`[data-live-pnl-id="${pos.id}"]`);
+            if (pnlEl) {
+                pnlEl.style.color = pnlColor;
+                pnlEl.textContent = (n(pnl) >= 0 ? '+' : '') + fix(pnl) + '%';
+            }
+            const pnlUsdEl = document.querySelector(`[data-live-pnl-usd-id="${pos.id}"]`);
+            if (pnlUsdEl) {
+                pnlUsdEl.style.color = pnlColor;
+                pnlUsdEl.textContent = (pnlUsd >= 0 ? '+$' : '-$') + usd(Math.abs(n(pnlUsd)));
+            }
 
-        // Pulso en la fila
-        const row = document.querySelector(`tr[data-row-ticker="${ticker}"]`);
-        if (row) {
-            row.classList.remove('row-pulse');
-            void row.offsetWidth;
-            row.classList.add('row-pulse');
-        }
-
-        // Indicador live por fila
-        document.querySelectorAll(`[data-live-dot="${ticker}"]`).forEach(el => {
-            el.className = 'row-live-dot active';
+            // Pulso e indicador live, también por posición individual
+            const row = document.querySelector(`tr[data-row-id="${pos.id}"]`);
+            if (row) {
+                row.classList.remove('row-pulse');
+                void row.offsetWidth;
+                row.classList.add('row-pulse');
+            }
+            const dotEl = document.querySelector(`[data-live-dot-id="${pos.id}"]`);
+            if (dotEl) dotEl.className = 'row-live-dot active';
         });
     });
 }
@@ -279,11 +298,22 @@ function metricsRow(m) {
     const valColor = m.val_pct  >= 0 ? 'var(--color-accent)' : '#f23645';
     const pnlSign  = m.pnl_neto >= 0 ? '+' : '';
     const valSign  = m.val_pct  >= 0 ? '+' : '';
-    return `<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:1rem;margin-bottom:1.5rem;">
-        ${metricCard('Capital Invertido',  '$' + usd(m.total_inv), 'Base de referencia', 'var(--color-text)')}
-        ${metricCard('Valor de Mercado',   '$' + usd(m.total_val), valSign + fix(m.val_pct) + '% vs compra', valColor)}
-        ${metricCard('P&L Neto (−comis.)', pnlSign + '$' + usd(Math.abs(n(m.pnl_neto))), pnlSign + fix(m.pnl_pct) + '% sobre capital', pnlColor)}
-    </div>`;
+
+    const hasSim = m.capital_disponible != null;
+    const cols = hasSim ? 4 : 3;
+
+    let cards = metricCard('Capital Invertido',  '$' + usd(m.total_inv), 'Base de referencia', 'var(--color-text)')
+        + metricCard('Valor de Mercado',   '$' + usd(m.total_val), valSign + fix(m.val_pct) + '% vs compra', valColor)
+        + metricCard('P&L Neto (−comis.)', pnlSign + '$' + usd(Math.abs(n(m.pnl_neto))), pnlSign + fix(m.pnl_pct) + '% sobre capital', pnlColor);
+
+    if (hasSim) {
+        const realColor = m.pnl_realizado_acum >= 0 ? 'var(--color-accent)' : '#f23645';
+        const realSign  = m.pnl_realizado_acum >= 0 ? '+' : '';
+        cards += metricCard('Capital Disponible', '$' + usd(m.capital_disponible),
+            'Inicial $' + usd(m.capital_inicial) + ' ' + realSign + '$' + usd(Math.abs(n(m.pnl_realizado_acum))) + ' realiz.', realColor);
+    }
+
+    return `<div style="display:grid;grid-template-columns:repeat(${cols},1fr);gap:1rem;margin-bottom:1.5rem;">${cards}</div>`;
 }
 
 function metricCard(label, value, sub, color) {
@@ -331,53 +361,191 @@ function riskPanel(abiertas) {
         </div>`;
     }
 
-    return `<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:.75rem;margin-bottom:1rem;">
+    const sectorMap = {};
+    abiertas.forEach(r => {
+        const sec = r.sector || 'Sin clasificar';
+        sectorMap[sec] = (sectorMap[sec] || 0) + (r.peso || 0);
+    });
+    const sectorList = Object.entries(sectorMap).sort((a,b) => b[1]-a[1]);
+    const topSector  = sectorList[0];
+
+    // Concentración por sector: agrupa peso% por sector y calcula un índice de
+    // concentración 0-100% (HHI normalizado: suma de pesos% al cuadrado / 100).
+    // 100% = toda la cartera en un solo sector, 0% = perfectamente repartida.
+    const hhi = Object.values(sectorMap).reduce((acc, p) => acc + Math.pow(p, 2), 0) / 100;
+    const hhiLabel = hhi > 25 ? 'Alta' : hhi > 15 ? 'Moderada' : 'Baja';
+    const hhiColor = hhi > 25 ? '#f23645' : hhi > 15 ? '#ff9800' : 'var(--color-accent)';
+
+    const sectorBars = sectorList.slice(0,5).map(([sec, pct]) =>
+        `<div style="margin-bottom:6px;">
+            <div style="display:flex;justify-content:space-between;font-size:10px;color:var(--color-muted);margin-bottom:2px;">
+                <span>${sec}</span><span>${fix(pct,1)}%</span>
+            </div>
+            <div style="height:4px;background:var(--color-border);border-radius:2px;overflow:hidden;">
+                <div style="height:100%;width:${Math.min(pct,100)}%;background:var(--color-secondary);"></div>
+            </div>
+        </div>`
+    ).join('');
+
+    return `<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:.75rem;margin-bottom:.75rem;">
         ${rCard('Mayor posición', biggest.ticker, biggest.peso + '% cartera', 'var(--color-text)')}
         ${rCard('Menor posición', smallest.ticker, smallest.peso + '% cartera', 'var(--color-muted)')}
         ${rCard('Mejor P&L', bestPnl.ticker, (bestPnl.pnl >= 0 ? '+' : '') + fix(bestPnl.pnl) + '%', 'var(--color-accent)')}
         ${rCard('Peor P&L', worstPnl.ticker, (worstPnl.pnl >= 0 ? '+' : '') + fix(worstPnl.pnl) + '%', '#f23645')}
+    </div>
+    <div style="display:grid;grid-template-columns:1.4fr 1fr;gap:.75rem;margin-bottom:1rem;">
+        <div style="background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius);padding:.85rem 1rem;">
+            <div style="color:var(--color-muted);font-size:10px;letter-spacing:.08em;margin-bottom:8px;">EXPOSICIÓN POR SECTOR</div>
+            ${sectorBars || '<div style="color:var(--color-muted);font-size:11px;">Sin datos de sector.</div>'}
+        </div>
+        <div style="background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius);padding:.85rem 1rem;">
+            <div style="color:var(--color-muted);font-size:10px;letter-spacing:.08em;margin-bottom:5px;">CONCENTRACIÓN POR SECTOR</div>
+            <div style="color:${hhiColor};font-size:20px;font-weight:500;">${fix(hhi,1)}%</div>
+            <div style="color:${hhiColor};font-size:11px;margin-top:2px;">${hhiLabel} · sector top: ${topSector ? topSector[0] : '—'} (${topSector ? fix(topSector[1],1) : 0}%)</div>
+        </div>
     </div>`;
 }
 
 // ── TABLA DE POSICIONES ACTIVAS ───────────────────────────────────────────────
 
-function activeTable(rows) {
-    const heads = ['', 'FECHA', 'TICKER', 'P. COMPRA', 'P. ACTUAL', 'HOY %', 'P&L %', 'PESO', 'COMENTARIO'];
-    const th = heads.map(h =>
-        `<th style="color:var(--color-muted);font-size:10px;letter-spacing:.08em;padding:8px 10px;border-bottom:1px solid var(--color-border);text-align:left;white-space:nowrap;">${h}</th>`
-    ).join('');
+function sortRows(rows, sortState) {
+    const { key, dir } = sortState;
+    return [...rows].sort((a, b) => {
+        let av = a[key], bv = b[key];
+        if (key === 'fecha' || key === 'fecha_display') {
+            const af = a.fecha_display || a.fecha, bf = b.fecha_display || b.fecha;
+            av = new Date(af.split('/').reverse().join('-'));
+            bv = new Date(bf.split('/').reverse().join('-'));
+        } else if (typeof av === 'string') {
+            av = (av || '').toLowerCase();
+            bv = (bv || '').toLowerCase();
+        } else {
+            av = n(av); bv = n(bv);
+        }
+        if (av < bv) return -1 * dir;
+        if (av > bv) return  1 * dir;
+        return 0;
+    });
+}
 
-    const trs = rows.map(r => {
+function sortArrow(sortState, key) {
+    if (sortState.key !== key) return '';
+    return sortState.dir === 1 ? ' ▲' : ' ▼';
+}
+
+function renderActiveSection() {
+    if (!_carteraData) return;
+    const wrap = document.getElementById('active-table-wrap');
+    if (!wrap) return;
+    let rows = _carteraData.abiertas || [];
+    if (_filterActive.trim()) {
+        const f = _filterActive.trim().toLowerCase();
+        rows = rows.filter(r => r.ticker.toLowerCase().includes(f) || (r.comment||'').toLowerCase().includes(f) || (r.sector||'').toLowerCase().includes(f) || (r.tier||'').toLowerCase().includes(f));
+    }
+    rows = sortRows(rows, _sortActive);
+    wrap.innerHTML = tableControls('active', _filterActive, rows.length, (_carteraData.abiertas||[]).length) + activeTable(rows);
+    rows.forEach((r, i) => drawSparklineFor(`spark-active-${i}-${r.ticker}`, r.ticker));
+}
+
+function renderClosedSection() {
+    if (!_carteraData) return;
+    const wrap = document.getElementById('closed-table-wrap');
+    if (!wrap) return;
+    let rows = _carteraData.cerradas || [];
+    if (_filterClosed.trim()) {
+        const f = _filterClosed.trim().toLowerCase();
+        rows = rows.filter(r => r.ticker.toLowerCase().includes(f) || (r.comment||'').toLowerCase().includes(f));
+    }
+    rows = sortRows(rows, _sortClosed);
+    wrap.innerHTML = tableControls('closed', _filterClosed, rows.length, (_carteraData.cerradas||[]).length) + closedTable(rows);
+}
+
+function tableControls(scope, filterVal, shown, total) {
+    return `<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:.5rem;">
+        <input type="text" placeholder="Filtrar por ticker, sector o comentario…" value="${filterVal}"
+            oninput="window.__carteraFilter('${scope}', this.value)"
+            style="background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius);color:var(--color-text);font-family:var(--font-mono);font-size:11px;padding:5px 10px;width:280px;">
+        <span style="color:var(--color-muted);font-size:10px;">${shown} / ${total}</span>
+    </div>`;
+}
+
+window.__carteraFilter = function(scope, value) {
+    if (scope === 'active') { _filterActive = value; renderActiveSection(); }
+    else { _filterClosed = value; renderClosedSection(); }
+};
+
+window.__carteraSort = function(scope, key) {
+    const state = scope === 'active' ? _sortActive : _sortClosed;
+    if (state.key === key) state.dir *= -1;
+    else { state.key = key; state.dir = 1; }
+    if (scope === 'active') renderActiveSection(); else renderClosedSection();
+};
+
+function activeTable(rows) {
+    const cols = [
+        { label: '',            key: null },
+        { label: 'FECHA',       key: 'fecha' },
+        { label: 'TICKER',      key: 'ticker' },
+        { label: 'NIVEL',       key: 'tier' },
+        { label: 'SECTOR',      key: 'sector' },
+        { label: 'P. COMPRA',   key: 'compra' },
+        { label: 'P. ACTUAL',   key: 'actual' },
+        { label: 'HOY %',       key: 'chg_hoy' },
+        { label: 'P&L %',       key: 'pnl' },
+        { label: 'PESO',        key: 'peso' },
+        { label: '7D',          key: null },
+        { label: 'COMENTARIO',  key: null },
+    ];
+    const th = cols.map(c => {
+        const arrow = c.key ? sortArrow(_sortActive, c.key) : '';
+        const clickable = c.key ? `cursor:pointer;user-select:none;` : '';
+        const onclick = c.key ? `onclick="window.__carteraSort('active','${c.key}')"` : '';
+        return `<th ${onclick} style="color:var(--color-muted);font-size:10px;letter-spacing:.08em;padding:8px 10px;border-bottom:1px solid var(--color-border);text-align:left;white-space:nowrap;${clickable}">${c.label}${arrow}</th>`;
+    }).join('');
+
+    if (!rows.length) {
+        return `<div style="background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius);overflow:hidden;margin-bottom:1rem;padding:1.25rem;color:var(--color-muted);font-size:12px;">Sin resultados para el filtro actual.</div>`;
+    }
+
+    const trs = rows.map((r, i) => {
         const pnlColor = r.pnl >= 0 ? 'var(--color-accent)' : '#f23645';
         const rowClass = r.pnl >= 0 ? 'cartera-tr row-profit' : 'cartera-tr row-loss';
         const chgColor = r.chg_hoy == null ? 'var(--color-muted)' : r.chg_hoy >= 0 ? 'var(--color-accent)' : '#f23645';
         const chgTxt   = r.chg_hoy == null ? '—' : (r.chg_hoy >= 0 ? '+' : '') + fix(r.chg_hoy) + '%';
         const comment  = r.comment || '—';
-        const days     = Math.round((Date.now() - new Date(r.fecha.split('/').reverse().join('-'))) / 86400000);
+        const sparkId  = `spark-active-${i}-${r.ticker}`;
+        const tierColors = { CORE: '#00ffad', HIGH: '#00d9ff', LOTTERY: '#b044ff' };
+        const tierColor = tierColors[r.tier] || 'var(--color-muted)';
+        const tierBadge = r.tier
+            ? `<span style="background:${tierColor}22;border:1px solid ${tierColor}88;color:${tierColor};border-radius:3px;padding:1px 6px;font-size:10px;letter-spacing:.05em;">${r.tier}</span>`
+            : `<span style="color:var(--color-muted);font-size:10px;">—</span>`;
 
-        return `<tr class="${rowClass}" data-row-ticker="${r.ticker}" style="border-bottom:1px solid var(--color-border);position:relative;">
+        return `<tr class="${rowClass}" data-row-ticker="${r.ticker}" data-row-id="${r.id}" style="border-bottom:1px solid var(--color-border);position:relative;">
             <td style="padding:8px 10px;text-align:center;">
-                <span class="row-live-dot" data-live-dot="${r.ticker}" title="Sin datos live"></span>
+                <span class="row-live-dot" data-live-dot="${r.ticker}" data-live-dot-id="${r.id}" title="Sin datos live"></span>
             </td>
-            <td style="padding:8px 10px;color:var(--color-muted);font-size:11px;white-space:nowrap;">${r.fecha}</td>
+            <td style="padding:8px 10px;color:var(--color-muted);font-size:11px;white-space:nowrap;">${r.fecha_display || r.fecha}</td>
             <td style="padding:8px 10px;">
                 <span class="ticker-link" onclick="window.__navigate('/research?ticker=${r.ticker}')" title="Ver análisis en Research">${r.ticker}</span>
             </td>
+            <td style="padding:8px 10px;">${tierBadge}</td>
+            <td style="padding:8px 10px;color:var(--color-muted);font-size:11px;max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${r.sector || 'Sin clasificar'}</td>
             <td style="padding:8px 10px;color:var(--color-text);font-size:12px;">$${usd(r.compra)}</td>
             <td style="padding:8px 10px;color:var(--color-text);font-size:12px;" data-live-price="${r.ticker}">$${usd(r.actual)}</td>
             <td style="padding:8px 10px;font-size:11px;color:${chgColor};" data-live-chg="${r.ticker}">${chgTxt}</td>
-            <td style="padding:8px 10px;font-size:12px;font-weight:500;" data-live-pnl="${r.ticker}">
+            <td style="padding:8px 10px;font-size:12px;font-weight:500;" data-live-pnl-id="${r.id}">
                 <span style="color:${pnlColor};">${r.pnl >= 0 ? '+' : ''}${fix(r.pnl)}%</span>
             </td>
             <td style="padding:8px 10px;min-width:80px;">
                 <div style="color:var(--color-muted);font-size:10px;">${r.peso}%</div>
                 <div class="peso-bar" style="width:${Math.min(r.peso * 3, 100)}%"></div>
             </td>
+            <td style="padding:8px 10px;"><canvas class="sparkline" id="${sparkId}" width="60" height="20"></canvas></td>
             <td style="padding:8px 10px;color:var(--color-muted);font-size:11px;max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${comment}">${comment}</td>
         </tr>`;
     }).join('');
 
-    return `<div style="background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius);overflow:hidden;margin-bottom:1rem;">
+    return `<div style="background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius);overflow:hidden;margin-bottom:1rem;overflow-x:auto;">
         <table style="width:100%;border-collapse:collapse;font-family:var(--font-mono);">
             <thead><tr>${th}</tr></thead>
             <tbody>${trs}</tbody>
@@ -398,15 +566,29 @@ function closedStats(c) {
 }
 
 function closedTable(rows) {
-    const heads = ['FECHA', 'TICKER', 'P. COMPRA', 'P. SALIDA', 'P&L %', 'COMENTARIO'];
-    const th = heads.map(h =>
-        `<th style="color:var(--color-muted);font-size:10px;letter-spacing:.08em;padding:8px 12px;border-bottom:1px solid var(--color-border);text-align:left;">${h}</th>`
-    ).join('');
+    const cols = [
+        { label: 'FECHA CIERRE', key: 'fecha_display' },
+        { label: 'TICKER',     key: 'ticker' },
+        { label: 'P. COMPRA',  key: 'compra' },
+        { label: 'P. SALIDA',  key: 'actual' },
+        { label: 'P&L %',      key: 'pnl' },
+        { label: 'COMENTARIO', key: null },
+    ];
+    const th = cols.map(c => {
+        const arrow = c.key ? sortArrow(_sortClosed, c.key) : '';
+        const clickable = c.key ? `cursor:pointer;user-select:none;` : '';
+        const onclick = c.key ? `onclick="window.__carteraSort('closed','${c.key}')"` : '';
+        return `<th ${onclick} style="color:var(--color-muted);font-size:10px;letter-spacing:.08em;padding:8px 12px;border-bottom:1px solid var(--color-border);text-align:left;${clickable}">${c.label}${arrow}</th>`;
+    }).join('');
+
+    if (!rows.length) {
+        return `<div style="background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius);overflow:hidden;margin-bottom:1rem;padding:1.25rem;color:var(--color-muted);font-size:12px;">Sin resultados para el filtro actual.</div>`;
+    }
 
     const trs = rows.map(r => {
         const c = r.pnl >= 0 ? 'var(--color-accent)' : '#f23645';
         return `<tr class="cartera-tr" style="border-bottom:1px solid var(--color-border);">
-            <td style="padding:8px 12px;color:var(--color-muted);font-size:11px;">${r.fecha}</td>
+            <td style="padding:8px 12px;color:var(--color-muted);font-size:11px;">${r.fecha_display || r.fecha}</td>
             <td style="padding:8px 12px;">
                 <span class="ticker-link" onclick="window.__navigate('/research?ticker=${r.ticker}')">${r.ticker}</span>
             </td>
@@ -434,7 +616,7 @@ function recentBox(title, rows, isEntradas) {
             ? `<span style="color:var(--color-text);">$${usd(r.compra)}</span>`
             : `<span style="color:${r.pnl >= 0 ? 'var(--color-accent)' : '#f23645'};">${r.pnl >= 0 ? '+' : ''}${fix(r.pnl)}%</span>`;
         return `<div style="display:flex;justify-content:space-between;align-items:center;padding:7px 0;border-bottom:1px solid var(--color-border);font-size:12px;">
-            <span style="color:var(--color-muted);">${r.fecha}</span>
+            <span style="color:var(--color-muted);">${r.fecha_display || r.fecha}</span>
             <span class="ticker-link" onclick="window.__navigate('/research?ticker=${r.ticker}')">${r.ticker}</span>
             ${val}
         </div>`;
@@ -444,6 +626,127 @@ function recentBox(title, rows, isEntradas) {
         <div style="color:${color};font-size:12px;letter-spacing:.08em;margin-bottom:.75rem;">${title}</div>
         ${items}
     </div>`;
+}
+
+// ── SPARKLINES POR FILA ────────────────────────────────────────────────────────
+
+async function loadSparklines(abiertas) {
+    if (!abiertas.length) return;
+    try {
+        const res  = await fetch('/api/v1/cartera/sparklines?days=30', { headers: authHeader() });
+        const data = await res.json();
+        if (!data.ok) return;
+        _sparklines = data.sparklines || {};
+        // Redibuja los sparklines ya presentes en el DOM con los datos recién llegados
+        Object.keys(_sparklines).forEach(ticker => {
+            document.querySelectorAll(`canvas.sparkline[id*="-${ticker}"]`).forEach(c => drawSparkline(c.id, _sparklines[ticker]));
+        });
+    } catch(_) {}
+}
+
+function drawSparklineFor(canvasId, ticker) {
+    const closes = _sparklines[ticker];
+    if (closes) drawSparkline(canvasId, closes);
+}
+
+function drawSparkline(canvasId, closes) {
+    const canvas = document.getElementById(canvasId);
+    if (!canvas || !closes || closes.length < 2) return;
+    const ctx = canvas.getContext('2d');
+    const w = canvas.width, h = canvas.height;
+    ctx.clearRect(0, 0, w, h);
+    const min = Math.min(...closes), max = Math.max(...closes);
+    const range = (max - min) || 1;
+    const rising = closes[closes.length - 1] >= closes[0];
+    ctx.strokeStyle = rising ? '#00ffad' : '#f23645';
+    ctx.lineWidth = 1.2;
+    ctx.beginPath();
+    closes.forEach((v, i) => {
+        const x = (i / (closes.length - 1)) * (w - 2) + 1;
+        const y = h - 1 - ((v - min) / range) * (h - 2);
+        i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+    });
+    ctx.stroke();
+}
+
+// ── GRÁFICO DE EVOLUCIÓN HISTÓRICA ─────────────────────────────────────────────
+
+function historySection(history) {
+    const first = history[0], last = history[history.length - 1];
+    const pnlPct = first.valor > 0 ? ((last.valor - first.valor) / first.valor * 100) : 0;
+    const pnlColor = pnlPct >= 0 ? 'var(--color-accent)' : '#f23645';
+    return `<div style="background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius);padding:1rem 1.25rem;margin-bottom:1rem;">
+        <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:8px;">
+            <div style="color:var(--color-muted);font-size:10px;letter-spacing:.08em;">VALOR DE MERCADO · ÚLTIMOS ${history.length} DÍAS CON DATOS</div>
+            <div style="color:${pnlColor};font-size:13px;font-weight:500;">${pnlPct >= 0 ? '+' : ''}${fix(pnlPct)}% en el periodo</div>
+        </div>
+        <canvas id="cartera-history-chart" width="900" height="220" style="width:100%;height:220px;display:block;"></canvas>
+        <div style="display:flex;justify-content:space-between;color:var(--color-muted);font-size:10px;margin-top:6px;">
+            <span>${first.fecha}</span><span>${last.fecha}</span>
+        </div>
+    </div>`;
+}
+
+function drawHistoryChart(history) {
+    const canvas = document.getElementById('cartera-history-chart');
+    if (!canvas || !history.length) return;
+    // Ajustamos el buffer interno al tamaño real en pantalla para que no se vea borroso
+    const rect = canvas.getBoundingClientRect();
+    const dpr = window.devicePixelRatio || 1;
+    canvas.width  = Math.max(rect.width, 300) * dpr;
+    canvas.height = 220 * dpr;
+    const ctx = canvas.getContext('2d');
+    ctx.scale(dpr, dpr);
+    const w = rect.width || 900, h = 220;
+    const padL = 55, padR = 10, padT = 10, padB = 10;
+
+    const valores    = history.map(p => p.valor);
+    const invertidos = history.map(p => p.invertido);
+    const allVals    = valores.concat(invertidos.filter(v => v > 0));
+    const min = Math.min(...allVals) * 0.98;
+    const max = Math.max(...allVals) * 1.02;
+    const range = (max - min) || 1;
+
+    const xAt = i => padL + (i / (history.length - 1)) * (w - padL - padR);
+    const yAt = v => padT + (1 - (v - min) / range) * (h - padT - padB);
+
+    ctx.clearRect(0, 0, w, h);
+
+    // Grid + etiquetas del eje Y
+    ctx.strokeStyle = 'rgba(255,255,255,.06)';
+    ctx.fillStyle   = 'var(--color-muted)';
+    ctx.font        = '9px monospace';
+    ctx.textAlign   = 'right';
+    for (let k = 0; k <= 3; k++) {
+        const v = min + (range * k / 3);
+        const y = yAt(v);
+        ctx.beginPath(); ctx.moveTo(padL, y); ctx.lineTo(w - padR, y); ctx.stroke();
+        ctx.fillText('$' + Math.round(v).toLocaleString('en-US'), padL - 6, y + 3);
+    }
+
+    // Línea de capital invertido (referencia, discontinua)
+    ctx.strokeStyle = 'var(--color-muted)';
+    ctx.setLineDash([4, 3]);
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    invertidos.forEach((v, i) => { const x = xAt(i), y = yAt(v || valores[i]); i === 0 ? ctx.moveTo(x,y) : ctx.lineTo(x,y); });
+    ctx.stroke();
+    ctx.setLineDash([]);
+
+    // Línea de valor de mercado
+    const rising = valores[valores.length-1] >= valores[0];
+    ctx.strokeStyle = rising ? '#00ffad' : '#f23645';
+    ctx.lineWidth = 1.6;
+    ctx.beginPath();
+    valores.forEach((v, i) => { const x = xAt(i), y = yAt(v); i === 0 ? ctx.moveTo(x,y) : ctx.lineTo(x,y); });
+    ctx.stroke();
+
+    // Relleno suave bajo la curva
+    ctx.lineTo(xAt(valores.length-1), h - padB);
+    ctx.lineTo(xAt(0), h - padB);
+    ctx.closePath();
+    ctx.fillStyle = rising ? 'rgba(0,255,173,.06)' : 'rgba(242,54,69,.06)';
+    ctx.fill();
 }
 
 // ── ALLOCATION WIDGET ─────────────────────────────────────────────────────────

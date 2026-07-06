@@ -902,6 +902,17 @@ async function loadCrypto(el) {
         const fgData      = await fgRes.json();
         if (!cryptoData.ok) throw new Error('Sin datos');
 
+        // Aislado en su propio try/catch: si el endpoint de fuerza relativa falla
+        // (ej. CoinGecko no responde, ruta no desplegada aún), el resto del
+        // widget (Fear&Greed + lista fija de 6) sigue funcionando igual.
+        let rsData = null;
+        try {
+            const rsRes = await fetch('/api/v1/market/crypto-rs?top_n=5', { headers: authHeader() });
+            rsData = await rsRes.json();
+        } catch (rsErr) {
+            rsData = { ok: false, error: 'No se pudo contactar con /crypto-rs: ' + rsErr.message };
+        }
+
         const fgColor = fgData.value >= 75 ? '#00ffad' : fgData.value >= 55 ? '#7fd858' : fgData.value >= 45 ? '#ff9800' : fgData.value >= 25 ? '#ff6b35' : '#f23645';
         const fgChangeColor = fgData.change >= 0 ? '#00ffad' : '#f23645';
 
@@ -931,7 +942,41 @@ async function loadCrypto(el) {
             + '</div>'
             + '</div>';
 
-        const content = fgBlock + '<div style="max-height:280px;overflow-y:auto;">' + rows + '</div>';
+        const rsBlock = (() => {
+            if (!rsData || !rsData.ok) {
+                const errMsg = (rsData && rsData.error) ? rsData.error : 'Sin respuesta del servidor';
+                return '<div style="padding:8px 14px;border-bottom:1px solid var(--color-border);">'
+                    + '<div style="color:var(--color-secondary);font-size:10px;letter-spacing:.08em;margin-bottom:4px;">🔥 TOP 5 FUERZA RELATIVA · 30D</div>'
+                    + '<div style="color:#f23645;font-size:11px;">Error: ' + errMsg + '</div>'
+                    + '</div>';
+            }
+            if (!rsData.data || !rsData.data.length) {
+                return '<div style="padding:8px 14px;border-bottom:1px solid var(--color-border);">'
+                    + '<div style="color:var(--color-secondary);font-size:10px;letter-spacing:.08em;margin-bottom:4px;">🔥 TOP 5 FUERZA RELATIVA · 30D</div>'
+                    + '<div style="color:var(--color-muted);font-size:11px;">Sin datos disponibles.</div>'
+                    + '</div>';
+            }
+            return '<div style="padding:8px 14px;border-bottom:1px solid var(--color-border);">'
+            + '<div style="color:var(--color-secondary);font-size:10px;letter-spacing:.08em;margin-bottom:6px;">🔥 TOP 5 FUERZA RELATIVA · 30D</div>'
+            + rsData.data.map(c => {
+                const color = c.pct_30d >= 0 ? 'var(--color-accent)' : '#f23645';
+                const arrow = c.pct_30d >= 0 ? '▲' : '▼';
+                const priceStr = c.price >= 1
+                    ? '$' + c.price.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+                    : c.price >= 0.01
+                        ? '$' + c.price.toFixed(4)
+                        : '$' + c.price.toFixed(8);
+                return '<div style="display:flex;justify-content:space-between;align-items:center;padding:4px 0;font-size:11px;">'
+                    + '<span style="color:var(--color-muted);width:16px;display:inline-block;">' + c.rank + '</span>'
+                    + '<span class="ticker-link" style="flex:1;margin:0 6px;" onclick="window.__navigate(\'/research?ticker=' + c.ticker + '-USD\')">' + c.ticker + '</span>'
+                    + '<span style="color:var(--color-text);margin-right:8px;">' + priceStr + '</span>'
+                    + '<span style="color:' + color + ';font-weight:500;">' + arrow + ' ' + Math.abs(c.pct_30d).toFixed(2) + '%</span>'
+                    + '</div>';
+            }).join('')
+            + '</div>';
+        })();
+
+        const content = fgBlock + '<div style="max-height:280px;overflow-y:auto;">' + rows + '</div>' + rsBlock;
 
         el.innerHTML = widgetShell('CRIPTOMONEDAS ' + tt('crypto-prices'), 'Top 6 · Fear &amp; Greed cripto', content, cryptoData.timestamp);
     } catch(e) {
