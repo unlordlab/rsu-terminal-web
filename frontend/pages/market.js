@@ -976,7 +976,7 @@ async function loadCrypto(el) {
             + '</div>';
         })();
 
-        const content = fgBlock + '<div style="max-height:280px;overflow-y:auto;">' + rows + '</div>' + rsBlock;
+        const content = fgBlock + rows + rsBlock;
 
         el.innerHTML = widgetShell('CRIPTOMONEDAS ' + tt('crypto-prices'), 'Top 6 · Fear &amp; Greed cripto', content, cryptoData.timestamp);
     } catch(e) {
