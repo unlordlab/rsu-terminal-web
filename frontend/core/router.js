@@ -3,6 +3,7 @@ import { initTheme } from '/core/theme.js';
 import { renderSidebar, setActiveNavItem } from '/components/sidebar.js';
 import { renderTopbar } from '/components/topbar.js';
 import { initWebSocket } from '/core/websocket.js';
+import { api, setSession, getToken } from '/core/api.js';
 
 const ROUTES = {
     '/':           () => import('/pages/dashboard.js'),
@@ -23,13 +24,15 @@ const ROUTES = {
     '/tesis':      () => import('/pages/tesis.js'),
     '/algoritmo':  () => import('/pages/algoritmo.js'),
     '/login':      () => import('/pages/login.js'),
+    '/register':   () => import('/pages/register.js'),
+    '/admin':      () => import('/pages/admin.js'),
     '/disclaimer': () => import('/pages/disclaimer.js'),
 };
 
 const TOKEN_KEY = 'rsu_token';
 
 function isAuthenticated() {
-    return !!sessionStorage.getItem(TOKEN_KEY);
+    return !!getToken();
 }
 
 // Interceptor global de fetch: cubre dos casos transversales a toda la app,
@@ -47,7 +50,8 @@ window.fetch = async function(...args) {
     const response = await _originalFetch.apply(this, args);
     const url = typeof args[0] === 'string' ? args[0] : (args[0] && args[0].url) || '';
 
-    if (response.status === 401 && url.includes('/api/v1/') && location.pathname !== '/login') {
+    if (response.status === 401 && url.includes('/api/v1/') && !url.includes('/auth/admin') && location.pathname !== '/login') {
+        localStorage.removeItem(TOKEN_KEY);
         sessionStorage.removeItem(TOKEN_KEY);
         navigate('/login');
         return response;
@@ -183,7 +187,7 @@ function goBack() {
 export function navigate(path, options = {}) {
     const isPopState = !!options.isPopState;
     const cleanPath = path.split('?')[0];
-    const protectedRoutes = ['/', '/manifiesto', '/market', '/cartera', '/rsrw', '/scanner', '/newsfeed', '/spxl', '/btc-stratum', '/roadmap', '/academy', '/tesis', '/options', '/research', '/disclaimer', '/canslim', '/algoritmo', '/insider'];
+    const protectedRoutes = ['/', '/manifiesto', '/market', '/cartera', '/rsrw', '/scanner', '/newsfeed', '/spxl', '/btc-stratum', '/roadmap', '/academy', '/tesis', '/options', '/research', '/disclaimer', '/canslim', '/algoritmo', '/insider', '/admin'];
     const needsAuth = protectedRoutes.includes(cleanPath);
 
     if (needsAuth && !isAuthenticated()) {
@@ -207,10 +211,24 @@ export function navigate(path, options = {}) {
 }
 
 initTheme();
-const token = sessionStorage.getItem('rsu_token');
+const token = getToken();
 if (token) initWebSocket(token);
 renderSidebar(document.getElementById('sidebar'), navigate);
 renderTopbar(document.getElementById('topbar'), navigate);
+
+// El tier guardado en sessionStorage es el que tenía el usuario en el
+// último login/registro. Si el admin lo ha subido de tier desde entonces,
+// esto lo refresca sin obligar a re-loguear, y repinta sidebar/topbar.
+if (token) {
+    api.get('/auth/me').then(me => {
+        if (me?.tier) {
+            setSession(token, me.tier, me.email);
+            renderSidebar(document.getElementById('sidebar'), navigate);
+            renderTopbar(document.getElementById('topbar'), navigate);
+            setActiveNavItem(location.pathname);
+        }
+    }).catch(() => {});
+}
 
 const backBtn = document.getElementById('global-back-btn');
 if (backBtn) backBtn.addEventListener('click', goBack);

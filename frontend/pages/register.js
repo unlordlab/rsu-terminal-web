@@ -29,7 +29,7 @@ export async function render(container) {
                     color: var(--color-muted);
                     font-size: 12px;
                     margin-bottom: 2rem;
-                ">Acceso restringido · Comunidad de traders</div>
+                ">Crea tu cuenta · Plan gratuito por defecto</div>
 
                 <div style="margin-bottom: 1rem;">
                     <label style="
@@ -54,7 +54,6 @@ export async function render(container) {
                             font-family: var(--font-mono);
                             font-size: 14px;
                             outline: none;
-                            transition: border-color var(--transition);
                             box-sizing: border-box;
                         "
                     >
@@ -67,12 +66,12 @@ export async function render(container) {
                         font-size: 11px;
                         margin-bottom: 6px;
                         letter-spacing: 0.1em;
-                    ">CONTRASEÑA</label>
+                    ">CONTRASEÑA (mín. 8 caracteres)</label>
                     <input
                         type="password"
                         id="password-input"
                         placeholder="········"
-                        autocomplete="current-password"
+                        autocomplete="new-password"
                         style="
                             width: 100%;
                             background: var(--color-bg);
@@ -83,34 +82,48 @@ export async function render(container) {
                             font-family: var(--font-mono);
                             font-size: 14px;
                             outline: none;
-                            transition: border-color var(--transition);
                             box-sizing: border-box;
                         "
                     >
                 </div>
 
-                <div id="login-error" style="
+                <div style="margin-bottom: 1rem;">
+                    <label style="
+                        display: block;
+                        color: var(--color-muted);
+                        font-size: 11px;
+                        margin-bottom: 6px;
+                        letter-spacing: 0.1em;
+                    ">REPITE LA CONTRASEÑA</label>
+                    <input
+                        type="password"
+                        id="password2-input"
+                        placeholder="········"
+                        autocomplete="new-password"
+                        style="
+                            width: 100%;
+                            background: var(--color-bg);
+                            border: 1px solid var(--color-border);
+                            border-radius: var(--radius);
+                            padding: 10px 12px;
+                            color: var(--color-text);
+                            font-family: var(--font-mono);
+                            font-size: 14px;
+                            outline: none;
+                            box-sizing: border-box;
+                        "
+                    >
+                </div>
+
+                <div id="register-error" style="
                     color: var(--color-danger);
                     font-size: 12px;
                     margin-bottom: 1rem;
                     min-height: 16px;
                 "></div>
 
-                <label style="
-                    display: flex;
-                    align-items: center;
-                    gap: 6px;
-                    color: var(--color-muted);
-                    font-size: 12px;
-                    margin-bottom: 1rem;
-                    cursor: pointer;
-                ">
-                    <input type="checkbox" id="remember-input">
-                    Mantener sesión en este dispositivo
-                </label>
-
                 <button
-                    id="login-btn"
+                    id="register-btn"
                     style="
                         width: 100%;
                         background: var(--color-accent);
@@ -122,9 +135,8 @@ export async function render(container) {
                         font-size: 13px;
                         letter-spacing: 0.1em;
                         cursor: pointer;
-                        transition: opacity var(--transition);
                     "
-                >ENTRAR</button>
+                >CREAR CUENTA</button>
 
                 <div style="
                     text-align: center;
@@ -132,63 +144,58 @@ export async function render(container) {
                     font-size: 12px;
                     color: var(--color-muted);
                 ">
-                    ¿No tienes cuenta?
-                    <a id="go-register" href="/register" style="color: var(--color-accent); text-decoration: none; margin-left: 4px;">Regístrate</a>
-                </div>
-
-                <div style="
-                    text-align: center;
-                    margin-top: 0.5rem;
-                    font-size: 11px;
-                    color: var(--color-muted);
-                ">
-                    ¿Contraseña olvidada? Escribe a Marc para resetearla.
+                    ¿Ya tienes cuenta?
+                    <a id="go-login" href="/login" style="color: var(--color-accent); text-decoration: none; margin-left: 4px;">Inicia sesión</a>
                 </div>
             </div>
         </div>
     `;
 
-    const emailInput    = container.querySelector('#email-input');
-    const passInput     = container.querySelector('#password-input');
-    const rememberInput = container.querySelector('#remember-input');
-    const btn           = container.querySelector('#login-btn');
-    const error         = container.querySelector('#login-error');
-    const goRegister    = container.querySelector('#go-register');
+    const emailInput = container.querySelector('#email-input');
+    const passInput  = container.querySelector('#password-input');
+    const pass2Input = container.querySelector('#password2-input');
+    const btn        = container.querySelector('#register-btn');
+    const error      = container.querySelector('#register-error');
+    const goLogin    = container.querySelector('#go-login');
 
     emailInput.focus();
 
-    async function doLogin() {
-        const email    = emailInput.value.trim();
-        const password = passInput.value;
-        if (!email || !password) return;
+    async function doRegister() {
+        const email     = emailInput.value.trim();
+        const password  = passInput.value;
+        const password2 = pass2Input.value;
 
-        btn.textContent = 'VERIFICANDO...';
+        if (!email || !password || !password2) return;
+        if (password !== password2) {
+            error.textContent = '✗ Las contraseñas no coinciden';
+            return;
+        }
+
+        btn.textContent = 'CREANDO...';
         btn.style.opacity = '0.7';
         error.textContent = '';
 
         try {
-            const data = await api.post('/auth/login', { email, password });
+            const data = await api.post('/auth/register', { email, password });
             if (data?.access_token) {
-                setSession(data.access_token, data.tier, data.email, rememberInput.checked);
+                setSession(data.access_token, data.tier, data.email);
                 window.__navigate('/');
             }
         } catch (err) {
-            error.textContent = '✗ ' + (err.message || 'Email o contraseña incorrectos');
-            passInput.value = '';
-            passInput.focus();
+            error.textContent = '✗ ' + (err.message || 'No se ha podido crear la cuenta');
         } finally {
-            btn.textContent = 'ENTRAR';
+            btn.textContent = 'CREAR CUENTA';
             btn.style.opacity = '1';
         }
     }
 
-    btn.addEventListener('click', doLogin);
-    [emailInput, passInput].forEach(el => el.addEventListener('keydown', e => {
-        if (e.key === 'Enter') doLogin();
+    btn.addEventListener('click', doRegister);
+    [emailInput, passInput, pass2Input].forEach(el => el.addEventListener('keydown', e => {
+        if (e.key === 'Enter') doRegister();
     }));
 
-    goRegister.addEventListener('click', (e) => {
+    goLogin.addEventListener('click', (e) => {
         e.preventDefault();
-        window.__navigate('/register');
+        window.__navigate('/login');
     });
 }

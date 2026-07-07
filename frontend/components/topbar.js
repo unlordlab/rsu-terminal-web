@@ -1,5 +1,9 @@
 import { cycleTheme, getCurrentTheme } from '/core/theme.js';
 import { initWebSocket, onMarketUpdate } from '/core/websocket.js';
+import { clearToken, getTier } from '/core/api.js';
+
+const TIER_LABELS = { free: 'FREE', tier1: 'TIER 1', tiers: 'TIER S' };
+const TIER_COLORS = { free: 'var(--color-muted)', tier1: 'var(--color-accent)', tiers: '#ffd700' };
 
 export function renderTopbar(container, navigate) {
     container.innerHTML = `
@@ -19,6 +23,11 @@ export function renderTopbar(container, navigate) {
         </div>
 
         <div style="display:flex;align-items:center;gap:0.75rem;flex-shrink:0;margin-left:1rem;">
+            <span id="tier-badge" style="
+                font-size:10px;letter-spacing:0.08em;flex-shrink:0;
+                padding:2px 8px;border-radius:var(--radius);
+                border:1px solid var(--color-border);
+            "></span>
             <span id="ws-indicator" style="
                 width:6px;height:6px;border-radius:50%;
                 background:#555;transition:background 0.3s;
@@ -67,9 +76,15 @@ export function renderTopbar(container, navigate) {
         updateThemeLabel(container);
     });
 
+    // Tier badge
+    const tier = getTier();
+    const badge = container.querySelector('#tier-badge');
+    badge.textContent = TIER_LABELS[tier] || 'FREE';
+    badge.style.color = TIER_COLORS[tier] || 'var(--color-muted)';
+
     // Logout
     container.querySelector('#logout-btn').addEventListener('click', () => {
-        sessionStorage.removeItem('rsu_token');
+        clearToken();
         navigate('/login');
     });
 

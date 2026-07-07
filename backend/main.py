@@ -5,7 +5,7 @@ from fastapi.responses import FileResponse
 from contextlib import asynccontextmanager
 import asyncio
 from config import settings
-from auth import verify_token
+from auth import verify_token, require_tier
 from middleware.rate_limit import rate_limit
 from routers import auth, market, cartera, canslim, rsu_algoritmo, research, newsfeed, tesis, spxl, rsrw, ws, options, btc_stratum, insider, scanner
 @asynccontextmanager
@@ -33,14 +33,18 @@ app.add_middleware(
 )
 
 rl = [Depends(rate_limit)]
+# Cartera y Tesis son las secciones "core": requieren tier1 o superior
+# (bloqueadas para usuarios 'free'). El resto de secciones siguen abiertas
+# a cualquier usuario registrado, solo con el rate limit general.
+paid = [Depends(rate_limit), Depends(require_tier("tier1"))]
 app.include_router(auth.router)
 app.include_router(market.router,       dependencies=rl)
-app.include_router(cartera.router,      dependencies=rl)
+app.include_router(cartera.router,      dependencies=paid)
 app.include_router(canslim.router,      dependencies=rl)
 app.include_router(rsu_algoritmo.router,dependencies=rl)
 app.include_router(research.router,     dependencies=rl)
 app.include_router(newsfeed.router,     dependencies=rl)
-app.include_router(tesis.router,        dependencies=rl)
+app.include_router(tesis.router,        dependencies=paid)
 app.include_router(spxl.router,         dependencies=rl)
 app.include_router(rsrw.router,         dependencies=rl)
 app.include_router(ws.router)

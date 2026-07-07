@@ -40,3 +40,38 @@ def verify_token(
             detail="Token inválido"
         )
     return payload
+
+# ── Tiers ──────────────────────────────────────────────────────────────────
+# Jerarquía de planes: free < tier1 < tiers ("tier S"). El JWT lleva el tier
+# del usuario en el momento del login/registro (payload["tier"]); si por lo
+# que sea no está presente se trata como "free" (el más restrictivo).
+TIER_ORDER = {"free": 0, "tier1": 1, "tiers": 2}
+
+def require_tier(min_tier: str):
+    """Dependency factory: exige que el usuario tenga como mínimo `min_tier`.
+
+    Uso: dependencies=[Depends(require_tier("tier1"))] a nivel de router,
+    para bloquear secciones enteras (p.ej. Cartera, Tesis) a usuarios free.
+
+    Importante: el tier se relee de la base de datos en cada request (no del
+    JWT), para que si el admin sube el tier de alguien vía /admin/set-tier,
+    el cambio surta efecto de inmediato y no haga falta esperar a que
+    expire el token viejo (hasta 8h) ni pedirle a la persona que reinicie
+    sesión.
+    """
+    min_level = TIER_ORDER.get(min_tier, 0)
+
+    def dependency(payload: dict = Depends(verify_token)) -> dict:
+        from services import users_service  # import diferido: evita ciclo de imports
+        email     = payload.get("sub")
+        user      = users_service.get_user_by_email(email) if email else None
+        user_tier = user["tier"] if user else payload.get("tier", "free")
+        user_level = TIER_ORDER.get(user_tier, 0)
+        if user_level < min_level:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=f"Esta sección requiere el plan '{min_tier}' o superior. Tu plan actual: '{user_tier}'."
+            )
+        return {**payload, "tier": user_tier}
+
+    return dependency

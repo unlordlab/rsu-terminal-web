@@ -1,12 +1,14 @@
+import { hasTier } from '/core/api.js';
+
 const NAV_ITEMS = [
     { path: '/',          label: 'Dashboard',    icon: 'D' },
     { path: '/manifiesto', label: 'Manifiesto',  icon: '📜' },
     { path: '/market',    label: 'Market',       icon: 'M' },
-    { path: '/cartera',   label: 'Cartera',      icon: 'C' },
+    { path: '/cartera',   label: 'Cartera',      icon: 'C', minTier: 'tier1' },
     { path: '/rsrw',      label: 'RS/RW',        icon: 'R' },
     { path: '/scanner',   label: 'Scanner',      icon: '⚡' },
     { path: '/newsfeed',  label: 'News Feed',    icon: 'N' },
-    { path: '/tesis',     label: 'Tesis', icon: 'T' },
+    { path: '/tesis',     label: 'Tesis', icon: 'T', minTier: 'tier1' },
     { path: '/spxl',      label: 'SPXL',         icon: 'S' },
     { path: '/btc-stratum', label: 'BTC Stratum', icon: '₿' },
     { path: '/options', label: 'Options Flow', icon: 'O' },
@@ -20,14 +22,21 @@ const NAV_ITEMS = [
 ];
 
 export function renderSidebar(container, navigate) {
-    const style = document.createElement('style');
-    style.textContent = '.nav-item { display:flex; align-items:center; gap:10px; padding:0.6rem 1rem; color:var(--color-muted); text-decoration:none; border-left:2px solid transparent; font-size:13px; cursor:pointer; } .nav-item:hover { color:var(--color-text); background:var(--color-surface2); } .nav-item.active { color:var(--color-accent); border-left-color:var(--color-accent); background:var(--color-surface2); }';
-    document.head.appendChild(style);
+    container.innerHTML = '';
+
+    if (!document.getElementById('sidebar-nav-style')) {
+        const style = document.createElement('style');
+        style.id = 'sidebar-nav-style';
+        style.textContent = '.nav-item { display:flex; align-items:center; gap:10px; padding:0.6rem 1rem; color:var(--color-muted); text-decoration:none; border-left:2px solid transparent; font-size:13px; cursor:pointer; } .nav-item:hover { color:var(--color-text); background:var(--color-surface2); } .nav-item.active { color:var(--color-accent); border-left-color:var(--color-accent); background:var(--color-surface2); }';
+        document.head.appendChild(style);
+    }
 
     const header = document.createElement('div');
     header.style.cssText = 'padding:1.25rem 1rem 1rem; border-bottom:1px solid var(--color-border); margin-bottom:0.5rem;';
-    const logoStyle = document.createElement('style');
-    logoStyle.textContent = `
+    if (!document.getElementById('sidebar-logo-style')) {
+        const logoStyle = document.createElement('style');
+        logoStyle.id = 'sidebar-logo-style';
+        logoStyle.textContent = `
         @keyframes logo-pulse {
             0%, 100% { box-shadow: 0 0 8px rgba(0,255,173,0.4), 0 0 16px rgba(0,255,173,0.2); }
             50%       { box-shadow: 0 0 14px rgba(0,255,173,0.7), 0 0 28px rgba(0,255,173,0.3), 0 0 40px rgba(0,217,255,0.1); }
@@ -40,7 +49,8 @@ export function renderSidebar(container, navigate) {
             transform: scale(1.08) rotate(3deg);
         }
     `;
-    document.head.appendChild(logoStyle);
+        document.head.appendChild(logoStyle);
+    }
 
     header.innerHTML = '<div style="display:flex;align-items:center;gap:12px;margin-bottom:4px;">'
         + '<img src="/assets/logo.png" class="rsu-logo" style="width:52px;height:52px;border-radius:50%;object-fit:cover;border:2px solid var(--color-accent);" onerror="this.style.display=\'none\'">'
@@ -68,6 +78,14 @@ export function renderSidebar(container, navigate) {
 
         a.appendChild(icon);
         a.appendChild(label);
+
+        if (item.minTier && !hasTier(item.minTier)) {
+            const lock = document.createElement('span');
+            lock.textContent = '🔒';
+            lock.style.cssText = 'margin-left:auto;font-size:10px;opacity:0.6;';
+            a.appendChild(lock);
+            a.title = 'Requiere plan Tier 1 o superior';
+        }
 
         a.addEventListener('click', function(e) {
             e.preventDefault();

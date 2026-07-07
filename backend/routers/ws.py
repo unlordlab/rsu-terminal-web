@@ -28,11 +28,28 @@ PRICE_TICKERS = {
 # rechaza la conexión con el código de cierre 4401 (rango reservado para uso
 # de la aplicación) y no se acepta el socket.
 
-async def _authenticate(websocket: WebSocket) -> bool:
+async def _authenticate(websocket: WebSocket, min_tier: str | None = None) -> bool:
     token = websocket.query_params.get("token")
-    if not token or decode_token(token) is None:
+    if not token:
         await websocket.close(code=4401)
         return False
+    payload = decode_token(token)
+    if payload is None:
+        await websocket.close(code=4401)
+        return False
+    if min_tier:
+        # Igual que en require_tier (auth.py): se consulta el tier ACTUAL en
+        # base de datos, no el que quedó grabado en el JWT al hacer login,
+        # para que una subida de tier por parte del admin surta efecto sin
+        # esperar a que expire el token viejo.
+        from auth import TIER_ORDER
+        from services import users_service
+        email      = payload.get("sub")
+        user       = users_service.get_user_by_email(email) if email else None
+        user_tier  = user["tier"] if user else payload.get("tier", "free")
+        if TIER_ORDER.get(user_tier, 0) < TIER_ORDER.get(min_tier, 0):
+            await websocket.close(code=4403)
+            return False
     return True
 
 # ── HELPERS ───────────────────────────────────────────────────────────────────
@@ -172,7 +189,7 @@ async def websocket_endpoint(websocket: WebSocket):
 
 @router.websocket("/ws/cartera")
 async def websocket_cartera(websocket: WebSocket):
-    if not await _authenticate(websocket):
+    if not await _authenticate(websocket, min_tier="tier1"):
         return
     await cartera_manager.connect(websocket)
     try:

@@ -7,7 +7,11 @@ class Settings(BaseSettings):
     secret_key: str = "dev_secret"
     algorithm: str = "HS256"
     token_expire_minutes: int = 480
-    community_password: str = "rsu2024"
+    # Clave para los endpoints de administración de usuarios (/api/v1/auth/admin/*),
+    # usada por Marc para subir el tier de un usuario tras un pago manual,
+    # mientras no haya una pasarela de pago automatizada. Se envía en el
+    # header X-Admin-Key. No confundir con el login normal de usuarios.
+    admin_key: str = "changeme_admin_key"
     cors_origins: List[str] = [
         "http://localhost:8000",
         "http://localhost:5500",
@@ -48,11 +52,11 @@ class Settings(BaseSettings):
                     "con ENVIRONMENT=production. Define un SECRET_KEY propio "
                     "en el .env antes de desplegar."
                 )
-            if self.community_password == "rsu2024":
+            if self.admin_key == "changeme_admin_key":
                 raise ValueError(
-                    "COMMUNITY_PASSWORD sigue en su valor por defecto "
-                    "('rsu2024') con ENVIRONMENT=production. Define una "
-                    "contraseña propia en el .env antes de desplegar."
+                    "ADMIN_KEY sigue en su valor por defecto "
+                    "('changeme_admin_key') con ENVIRONMENT=production. Define una "
+                    "clave de administrador propia en el .env antes de desplegar."
                 )
         return self
 
