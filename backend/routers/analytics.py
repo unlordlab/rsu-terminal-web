@@ -1,0 +1,47 @@
+from fastapi import APIRouter, HTTPException, Header, Request
+from pydantic import BaseModel
+from config import settings
+from auth import decode_token
+from services import analytics_service
+
+router = APIRouter(prefix="/api/v1/analytics", tags=["analytics"])
+
+
+class TrackRequest(BaseModel):
+    section: str
+
+
+def _email_from_request(request: Request) -> str | None:
+    authz = request.headers.get("authorization")
+    if not authz or not authz.lower().startswith("bearer "):
+        return None
+    payload = decode_token(authz.split(" ", 1)[1])
+    return payload.get("sub") if payload else None
+
+
+@router.post("/track")
+async def track(req: TrackRequest, request: Request):
+    """Registra que un usuario ha entrado en una sección. Lo llama router.js
+    en cada navegación.
+
+    Deliberadamente NO exige token válido: si ha expirado o no hay, se
+    guarda el evento como anónimo (email=None) en vez de fallar. Este
+    endpoint es "fire and forget" desde el frontend — nunca debe poder
+    romper ni ralentizar la navegación real del usuario.
+    """
+    email = _email_from_request(request)
+    analytics_service.log_page_view(section=req.section, email=email)
+    return {"ok": True}
+
+
+@router.get("/summary")
+async def summary(days: int = 30, x_admin_key: str = Header(None)):
+    """Resumen agregado para el panel de administración: secciones más
+    visitadas, tickers y tesis más consultados, actividad diaria.
+
+    Protegido con la misma X-Admin-Key que el resto de endpoints /admin/*
+    de auth.py (no con el login de usuario normal).
+    """
+    if not settings.admin_key or x_admin_key != settings.admin_key:
+        raise HTTPException(status_code=401, detail="Clave de administrador inválida")
+    return analytics_service.get_summary(days=days)

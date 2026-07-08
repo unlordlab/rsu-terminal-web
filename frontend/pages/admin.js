@@ -1,8 +1,8 @@
 const ADMIN_KEY_STORAGE = 'rsu_admin_key';
 
-async function adminFetch(path, options = {}) {
+async function keyFetch(fullPath, options = {}) {
     const key = sessionStorage.getItem(ADMIN_KEY_STORAGE);
-    const res = await fetch('/api/v1/auth' + path, {
+    const res = await fetch(fullPath, {
         ...options,
         headers: {
             'Content-Type': 'application/json',
@@ -22,27 +22,95 @@ async function adminFetch(path, options = {}) {
     return res.json();
 }
 
+const adminFetch     = (path, options) => keyFetch('/api/v1/auth' + path, options);
+const analyticsFetch = (path, options) => keyFetch('/api/v1/analytics' + path, options);
+
 const TIER_LABELS = { free: 'FREE', tier1: 'TIER 1', tiers: 'TIER S' };
+
+// Etiquetas legibles para las secciones, mismas que en components/sidebar.js.
+const SECTION_LABELS = {
+    '/':             'Dashboard',
+    '/manifiesto':   'Manifiesto',
+    '/market':       'Market',
+    '/cartera':      'Cartera',
+    '/rsrw':         'RS/RW',
+    '/scanner':      'Scanner',
+    '/newsfeed':     'News Feed',
+    '/tesis':        'Tesis',
+    '/spxl':         'SPXL',
+    '/btc-stratum':  'BTC Stratum',
+    '/options':      'Options Flow',
+    '/research':     'Research',
+    '/insider':      'Insider Flow',
+    '/academy':      'Academy',
+    '/roadmap':      'Roadmap 2026',
+    '/canslim':      'CANSLIM',
+    '/algoritmo':    'RSU Algoritmo',
+    '/disclaimer':   'Disclaimer',
+};
+
+let activeTab = 'usuarios';
 
 export async function render(container) {
     container.innerHTML = `
-        <div style="max-width: 900px; margin: 0 auto; padding: 1.5rem 1rem;">
-            <div style="color:var(--color-accent);font-size:18px;letter-spacing:0.1em;margin-bottom:1.5rem;">
-                ADMIN · USUARIOS
+        <div style="max-width: 1000px; margin: 0 auto; padding: 1.5rem 1rem;">
+            <div style="color:var(--color-accent);font-size:18px;letter-spacing:0.1em;margin-bottom:1rem;">
+                ADMIN
+            </div>
+            <div id="admin-tabs" style="display:flex;gap:4px;margin-bottom:1.25rem;border-bottom:1px solid var(--color-border);">
+                <button data-tab="usuarios" class="admin-tab-btn">USUARIOS</button>
+                <button data-tab="metricas" class="admin-tab-btn">MÉTRICAS</button>
             </div>
             <div id="admin-content"></div>
         </div>
     `;
-    const content = container.querySelector('#admin-content');
 
-    if (sessionStorage.getItem(ADMIN_KEY_STORAGE)) {
-        await renderPanel(content);
-    } else {
-        renderKeyPrompt(content);
+    if (!document.getElementById('admin-tab-style')) {
+        const style = document.createElement('style');
+        style.id = 'admin-tab-style';
+        style.textContent = `
+            .admin-tab-btn {
+                background: none; border: none; border-bottom: 2px solid transparent;
+                color: var(--color-muted); padding: 8px 14px; font-family: var(--font-mono);
+                font-size: 12px; letter-spacing: 0.08em; cursor: pointer;
+            }
+            .admin-tab-btn:hover { color: var(--color-text); }
+            .admin-tab-btn.active { color: var(--color-accent); border-bottom-color: var(--color-accent); }
+        `;
+        document.head.appendChild(style);
     }
+
+    const content = container.querySelector('#admin-content');
+    const tabs = container.querySelectorAll('.admin-tab-btn');
+
+    function setActiveTabUI() {
+        tabs.forEach(b => b.classList.toggle('active', b.dataset.tab === activeTab));
+    }
+
+    async function renderActiveTab() {
+        setActiveTabUI();
+        if (!sessionStorage.getItem(ADMIN_KEY_STORAGE)) {
+            renderKeyPrompt(content, renderActiveTab);
+            return;
+        }
+        if (activeTab === 'usuarios') {
+            await renderUsersPanel(content);
+        } else {
+            await renderMetricsPanel(content);
+        }
+    }
+
+    tabs.forEach(btn => {
+        btn.addEventListener('click', () => {
+            activeTab = btn.dataset.tab;
+            renderActiveTab();
+        });
+    });
+
+    await renderActiveTab();
 }
 
-function renderKeyPrompt(content) {
+function renderKeyPrompt(content, onSuccess) {
     content.innerHTML = `
         <div style="
             background: var(--color-surface);
@@ -104,7 +172,7 @@ function renderKeyPrompt(content) {
         error.textContent = '';
         btn.textContent = 'VERIFICANDO...';
         try {
-            await renderPanel(content);
+            await onSuccess();
         } catch (err) {
             sessionStorage.removeItem(ADMIN_KEY_STORAGE);
             error.textContent = '✗ ' + (err.message || 'Clave inválida');
@@ -116,7 +184,9 @@ function renderKeyPrompt(content) {
     input.addEventListener('keydown', e => { if (e.key === 'Enter') tryKey(); });
 }
 
-async function renderPanel(content) {
+// ─── USUARIOS ───────────────────────────────────────────────────────────
+
+async function renderUsersPanel(content) {
     let data;
     try {
         data = await adminFetch('/admin/users');
@@ -124,7 +194,7 @@ async function renderPanel(content) {
         if (err.isAuthError) {
             sessionStorage.removeItem(ADMIN_KEY_STORAGE);
         }
-        renderKeyPrompt(content);
+        renderKeyPrompt(content, () => renderUsersPanel(content));
         if (err.isAuthError) {
             content.querySelector('#admin-key-error').textContent = '✗ Clave de administrador inválida';
         }
@@ -229,9 +299,111 @@ async function renderPanel(content) {
         tbody.appendChild(tr);
     });
 
-    content.querySelector('#admin-refresh').addEventListener('click', () => renderPanel(content));
+    content.querySelector('#admin-refresh').addEventListener('click', () => renderUsersPanel(content));
     content.querySelector('#admin-logout').addEventListener('click', () => {
         sessionStorage.removeItem(ADMIN_KEY_STORAGE);
-        renderKeyPrompt(content);
+        renderKeyPrompt(content, () => renderUsersPanel(content));
     });
+}
+
+// ─── MÉTRICAS ───────────────────────────────────────────────────────────
+
+let metricsDays = 30;
+
+async function renderMetricsPanel(content) {
+    let data;
+    try {
+        data = await analyticsFetch(`/summary?days=${metricsDays}`);
+    } catch (err) {
+        if (err.isAuthError) {
+            sessionStorage.removeItem(ADMIN_KEY_STORAGE);
+        }
+        renderKeyPrompt(content, () => renderMetricsPanel(content));
+        if (err.isAuthError) {
+            content.querySelector('#admin-key-error').textContent = '✗ Clave de administrador inválida';
+        }
+        return;
+    }
+
+    const maxSectionVisits = Math.max(1, ...data.sections.map(s => s.visits));
+    const maxTickerViews   = Math.max(1, ...data.tickers.map(t => t.views));
+    const maxTesisViews    = Math.max(1, ...data.tesis.map(t => t.views));
+
+    function barRow(label, sub, value, max) {
+        const pct = Math.round((value / max) * 100);
+        return `
+            <div style="margin-bottom:8px;">
+                <div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:3px;">
+                    <span style="color:var(--color-text);">${label}</span>
+                    <span style="color:var(--color-muted);">${value}${sub ? ` · ${sub}` : ''}</span>
+                </div>
+                <div style="background:var(--color-surface2);border-radius:3px;height:6px;overflow:hidden;">
+                    <div style="width:${pct}%;height:100%;background:var(--color-accent);"></div>
+                </div>
+            </div>
+        `;
+    }
+
+    const sectionsHtml = data.sections.length
+        ? data.sections.map(s => barRow(SECTION_LABELS[s.section] || s.section, `${s.unique_users} usuario${s.unique_users === 1 ? '' : 's'}`, s.visits, maxSectionVisits)).join('')
+        : '<p style="color:var(--color-muted);font-size:12px;">Sin datos todavía.</p>';
+
+    const tickersHtml = data.tickers.length
+        ? data.tickers.map(t => barRow(t.ticker, `${t.unique_users} usuario${t.unique_users === 1 ? '' : 's'}`, t.views, maxTickerViews)).join('')
+        : '<p style="color:var(--color-muted);font-size:12px;">Sin datos todavía.</p>';
+
+    const tesisHtml = data.tesis.length
+        ? data.tesis.map(t => barRow(t.ticker, `${t.unique_users} usuario${t.unique_users === 1 ? '' : 's'}`, t.views, maxTesisViews)).join('')
+        : '<p style="color:var(--color-muted);font-size:12px;">Sin datos todavía.</p>';
+
+    content.innerHTML = `
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem;flex-wrap:wrap;gap:8px;">
+            <div style="display:flex;gap:6px;align-items:center;">
+                <span style="color:var(--color-muted);font-size:11px;">VENTANA:</span>
+                <select id="metrics-days" style="background:var(--color-bg);color:var(--color-text);border:1px solid var(--color-border);border-radius:var(--radius);padding:4px 8px;font-family:var(--font-mono);font-size:12px;">
+                    <option value="7"${metricsDays === 7 ? ' selected' : ''}>7 días</option>
+                    <option value="30"${metricsDays === 30 ? ' selected' : ''}>30 días</option>
+                    <option value="90"${metricsDays === 90 ? ' selected' : ''}>90 días</option>
+                    <option value="365"${metricsDays === 365 ? ' selected' : ''}>1 año</option>
+                </select>
+            </div>
+            <button id="metrics-refresh" style="background:none;border:1px solid var(--color-border);color:var(--color-muted);padding:4px 10px;border-radius:var(--radius);cursor:pointer;font-family:var(--font-mono);font-size:11px;">REFRESCAR</button>
+        </div>
+
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px;margin-bottom:1.5rem;">
+            ${statCard('Visitas de sección', data.total_page_views)}
+            ${statCard('Consultas de ticker', data.total_ticker_views)}
+            ${statCard('Usuarios activos', data.unique_users)}
+        </div>
+
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:1.25rem;">
+            <div style="background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius-lg);padding:1rem;">
+                <div style="color:var(--color-accent);font-size:12px;letter-spacing:0.08em;margin-bottom:0.75rem;">SECCIONES MÁS VISITADAS</div>
+                ${sectionsHtml}
+            </div>
+            <div style="background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius-lg);padding:1rem;">
+                <div style="color:var(--color-accent);font-size:12px;letter-spacing:0.08em;margin-bottom:0.75rem;">TICKERS MÁS CONSULTADOS</div>
+                ${tickersHtml}
+            </div>
+            <div style="background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius-lg);padding:1rem;">
+                <div style="color:var(--color-accent);font-size:12px;letter-spacing:0.08em;margin-bottom:0.75rem;">TESIS MÁS CONSULTADAS</div>
+                ${tesisHtml}
+            </div>
+        </div>
+    `;
+
+    content.querySelector('#metrics-refresh').addEventListener('click', () => renderMetricsPanel(content));
+    content.querySelector('#metrics-days').addEventListener('change', (e) => {
+        metricsDays = parseInt(e.target.value, 10) || 30;
+        renderMetricsPanel(content);
+    });
+}
+
+function statCard(label, value) {
+    return `
+        <div style="background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius-lg);padding:0.9rem 1rem;">
+            <div style="color:var(--color-muted);font-size:10px;letter-spacing:0.08em;margin-bottom:4px;">${label.toUpperCase()}</div>
+            <div style="color:var(--color-text);font-size:22px;">${value}</div>
+        </div>
+    `;
 }

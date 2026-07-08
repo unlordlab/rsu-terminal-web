@@ -7,7 +7,8 @@ import asyncio
 from config import settings
 from auth import verify_token, require_tier
 from middleware.rate_limit import rate_limit
-from routers import auth, market, cartera, canslim, rsu_algoritmo, research, newsfeed, tesis, spxl, rsrw, ws, options, btc_stratum, insider, scanner
+from middleware.analytics import AnalyticsMiddleware
+from routers import auth, market, cartera, canslim, rsu_algoritmo, research, newsfeed, tesis, spxl, rsrw, ws, options, btc_stratum, insider, scanner, analytics
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     task1 = asyncio.create_task(ws.broadcast_loop())
@@ -31,6 +32,10 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+# Detecta automáticamente peticiones API con ticker en la URL (research,
+# rsrw, canslim, options, insider, tesis, earnings) y las registra para el
+# panel de métricas de /admin. Ver middleware/analytics.py.
+app.add_middleware(AnalyticsMiddleware)
 
 rl = [Depends(rate_limit)]
 # Cartera y Tesis son las secciones "core": requieren tier1 o superior
@@ -52,6 +57,10 @@ app.include_router(options.router,      dependencies=rl)
 app.include_router(btc_stratum.router,  dependencies=rl)
 app.include_router(insider.router,      dependencies=rl)
 app.include_router(scanner.router,      dependencies=rl)
+# /track es "fire and forget" desde el frontend (rate limit general para
+# evitar abuso); /summary va protegido con X-Admin-Key dentro del propio
+# router, igual que los endpoints /admin/* de auth.py.
+app.include_router(analytics.router,    dependencies=rl)
 
 app.mount("/static",     StaticFiles(directory="../static"),          name="static")
 app.mount("/assets",     StaticFiles(directory="../frontend/assets"), name="assets")

@@ -184,11 +184,33 @@ function goBack() {
     if (navDepth > 0) history.back();
 }
 
+// Notifica al backend qué sección se ha visitado, para el panel de
+// métricas de /admin ("qué sección entra más gente"). Fire-and-forget:
+// nunca debe bloquear ni romper la navegación real, así que cualquier
+// fallo (red caída, etc.) se ignora en silencio. Se excluyen /login,
+// /register y /admin porque no son "contenido" de la terminal, solo ruido.
+const ANALYTICS_EXCLUDED = new Set(['/login', '/register', '/admin']);
+
+function trackPageView(cleanPath) {
+    if (ANALYTICS_EXCLUDED.has(cleanPath)) return;
+    const token = getToken();
+    fetch('/api/v1/analytics/track', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify({ section: cleanPath }),
+    }).catch(() => { /* no pasa nada si falla */ });
+}
+
 export function navigate(path, options = {}) {
     const isPopState = !!options.isPopState;
     const cleanPath = path.split('?')[0];
     const protectedRoutes = ['/', '/manifiesto', '/market', '/cartera', '/rsrw', '/scanner', '/newsfeed', '/spxl', '/btc-stratum', '/roadmap', '/academy', '/tesis', '/options', '/research', '/disclaimer', '/canslim', '/algoritmo', '/insider', '/admin'];
     const needsAuth = protectedRoutes.includes(cleanPath);
+
+    if (needsAuth && isAuthenticated()) trackPageView(cleanPath);
 
     if (needsAuth && !isAuthenticated()) {
         loadView('/login');
