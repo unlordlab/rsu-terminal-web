@@ -7,6 +7,7 @@ const NAV_ITEMS = [
     { path: '/cartera',   label: 'Cartera',      icon: 'C', minTier: 'tier1' },
     { path: '/rsrw',      label: 'RS/RW',        icon: 'R' },
     { path: '/scanner',   label: 'Scanner',      icon: '⚡' },
+    { path: '/watchlist', label: 'Watchlist',    icon: '★' },
     { path: '/newsfeed',  label: 'News Feed',    icon: 'N' },
     { path: '/tesis',     label: 'Tesis', icon: 'T', minTier: 'tier1' },
     { path: '/spxl',      label: 'SPXL',         icon: 'S' },
@@ -79,6 +80,13 @@ export function renderSidebar(container, navigate) {
         a.appendChild(icon);
         a.appendChild(label);
 
+        if (item.path === '/watchlist') {
+            const badge = document.createElement('span');
+            badge.id = 'watchlist-alert-badge';
+            badge.style.cssText = 'margin-left:auto;background:#f23645;color:#fff;font-size:9px;font-weight:600;border-radius:8px;padding:1px 6px;display:none;';
+            a.appendChild(badge);
+        }
+
         if (item.minTier && !hasTier(item.minTier)) {
             const lock = document.createElement('span');
             lock.textContent = '🔒';
@@ -99,7 +107,40 @@ export function renderSidebar(container, navigate) {
     container.appendChild(header);
     container.appendChild(nav);
     setActive(location.pathname);
+    startAlertBadgePolling();
 }
+
+// Campanita de alertas disparadas: consulta el contador de "no vistas" y lo
+// pinta como badge junto a Watchlist en el sidebar. Poll cada 60s (misma
+// cadencia que el resto de refrescos en vivo de la terminal) — no hay push
+// en tiempo real todavía, ver nota en routers/ws.py (alerts_check_loop).
+let _alertBadgeInterval = null;
+
+function startAlertBadgePolling() {
+    refreshAlertBadge();
+    if (_alertBadgeInterval) clearInterval(_alertBadgeInterval);
+    _alertBadgeInterval = setInterval(refreshAlertBadge, 60000);
+}
+
+function refreshAlertBadge() {
+    const token = localStorage.getItem('rsu_token') || sessionStorage.getItem('rsu_token');
+    if (!token) return;
+    fetch('/api/v1/watchlist/alerts/unseen-count', { headers: { 'Authorization': 'Bearer ' + token } })
+        .then(function(res) { return res.ok ? res.json() : null; })
+        .then(function(data) {
+            const badge = document.getElementById('watchlist-alert-badge');
+            if (!badge || !data) return;
+            if (data.count > 0) {
+                badge.textContent = data.count;
+                badge.style.display = 'inline-block';
+            } else {
+                badge.style.display = 'none';
+            }
+        })
+        .catch(function() { /* silencioso: no interrumpe la navegación por un fallo de red puntual */ });
+}
+
+window.__refreshAlertBadge = refreshAlertBadge;
 
 export function setActiveNavItem(path) {
     setActive(path);

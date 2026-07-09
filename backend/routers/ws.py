@@ -16,6 +16,16 @@ PRICE_TICKERS = {
     "GOLD": "GC=F",
     "OIL":  "CL=F",
     "DXY":  "DX-Y.NYB",
+    "AAPL": "AAPL",
+    "MSFT": "MSFT",
+    "GOOGL":"GOOGL",
+    "AMZN": "AMZN",
+    "NVDA": "NVDA",
+    "META": "META",
+    "TSLA": "TSLA",
+    "MEME": "MEME",
+    "VUG":  "VUG",
+    "SMH":  "SMH",
 }
 
 # ── AUTENTICACIÓN ─────────────────────────────────────────────────────────────
@@ -229,3 +239,42 @@ async def broadcast_cartera_loop():
                 await cartera_manager.broadcast({"type": "cartera_update", "prices": prices})
             except Exception:
                 pass
+
+
+# Comprobación de alertas de precio (Watchlist). Cada 90s revisa TODAS las
+# alertas activas de TODOS los usuarios de una vez (agrupadas por ticker, un
+# solo fetch de precio por ticker aunque varios usuarios compartan alerta en
+# el mismo nombre). No hay push en tiempo real por WebSocket todavía — las
+# alertas disparadas quedan marcadas en BD (status='triggered', seen=0) y el
+# frontend las descubre haciendo poll a /api/v1/watchlist/alerts/unseen-count
+# (misma cadencia, ~60-90s) para la campanita del topbar. Si en el futuro se
+# monta un canal de notificación por usuario (Discord/Telegram/email), este
+# es el punto donde engancharlo: la lista `triggered` ya trae, por cada
+# alerta, user_id/ticker/condition/target_price/triggered_price.
+async def alerts_check_loop():
+    while True:
+        await asyncio.sleep(90)
+        try:
+            from services.watchlist_service import check_all_active_alerts
+            loop = asyncio.get_event_loop()
+            await loop.run_in_executor(None, check_all_active_alerts)
+        except Exception:
+            pass
+
+
+# Ingesta de Insider Flow (SEC EDGAR Form 4). El feed "getcurrent" de EDGAR es
+# una foto de lo que se está presentando en TODO el mercado en ese instante,
+# no un histórico — así que en vez de pedirlo una vez y tirarlo cada 30 min,
+# se acumula en SQLite en cada pasada (ver insider_service._ingest_cycle) y el
+# feed que ve el usuario lee de ese histórico acumulado de los últimos días.
+# Cada 20 min para no perder cobertura del día mientras el mercado está
+# abierto sin machacar el servicio de EDGAR con demasiada frecuencia.
+async def insider_ingest_loop():
+    while True:
+        try:
+            from services.insider_service import _ingest_cycle
+            loop = asyncio.get_event_loop()
+            await loop.run_in_executor(None, _ingest_cycle)
+        except Exception:
+            pass
+        await asyncio.sleep(1200)

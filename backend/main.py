@@ -8,14 +8,18 @@ from config import settings
 from auth import verify_token, require_tier
 from middleware.rate_limit import rate_limit
 from middleware.analytics import AnalyticsMiddleware
-from routers import auth, market, cartera, canslim, rsu_algoritmo, research, newsfeed, tesis, spxl, rsrw, ws, options, btc_stratum, insider, scanner, analytics
+from routers import auth, market, cartera, canslim, rsu_algoritmo, research, newsfeed, tesis, spxl, rsrw, ws, options, btc_stratum, insider, scanner, analytics, watchlist
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     task1 = asyncio.create_task(ws.broadcast_loop())
     task2 = asyncio.create_task(ws.broadcast_cartera_loop())
+    task3 = asyncio.create_task(ws.alerts_check_loop())
+    task4 = asyncio.create_task(ws.insider_ingest_loop())
     yield
     task1.cancel()
     task2.cancel()
+    task3.cancel()
+    task4.cancel()
 
 app = FastAPI(
     title=settings.app_name,
@@ -57,6 +61,10 @@ app.include_router(options.router,      dependencies=rl)
 app.include_router(btc_stratum.router,  dependencies=rl)
 app.include_router(insider.router,      dependencies=rl)
 app.include_router(scanner.router,      dependencies=rl)
+# Watchlist + Alertas: abierto a cualquier usuario registrado (tier free
+# incluido) por ahora. El día que se quiera pasar a tiers de pago, cambiar
+# `dependencies=rl` por `dependencies=paid` aquí es el único cambio necesario.
+app.include_router(watchlist.router,    dependencies=rl)
 # /track es "fire and forget" desde el frontend (rate limit general para
 # evitar abuso); /summary va protegido con X-Admin-Key dentro del propio
 # router, igual que los endpoints /admin/* de auth.py.

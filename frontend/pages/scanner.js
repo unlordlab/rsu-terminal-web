@@ -202,8 +202,8 @@ function renderResults(el, data) {
         + '<div style="color:var(--color-muted);font-size:11px;">' + criteriaLine + '</div>'
         + '</div>';
 
-    const tableHeader = '<div style="display:grid;grid-template-columns:70px 90px 60px 60px 70px 1fr 1fr;gap:6px;padding:7px 12px;border-bottom:1px solid var(--color-border);font-size:10px;color:var(--color-muted);letter-spacing:0.05em;">'
-        + '<div>TICKER</div><div>PRECIO</div><div>RVOL</div><div>RS%</div><div>SCORE</div><div>FASE</div><div>SECTOR</div>'
+    const tableHeader = '<div style="display:grid;grid-template-columns:70px 90px 60px 60px 70px 1fr 1fr 34px;gap:6px;padding:7px 12px;border-bottom:1px solid var(--color-border);font-size:10px;color:var(--color-muted);letter-spacing:0.05em;">'
+        + '<div>TICKER</div><div>PRECIO</div><div>RVOL</div><div>RS%</div><div>SCORE</div><div>FASE</div><div>SECTOR</div><div></div>'
         + '</div>';
 
     const rows = (data.results || []).map(r => {
@@ -212,7 +212,7 @@ function renderResults(el, data) {
         const scoreClr = (r.score_tecnico || 0) >= 70 ? 'var(--color-accent)' : (r.score_tecnico || 0) >= 40 ? '#ffb800' : '#f23645';
         const phaseClr = r.phase === 2 ? 'var(--color-accent)' : r.phase === 4 ? '#f23645' : '#ffb800';
 
-        return '<div style="display:grid;grid-template-columns:70px 90px 60px 60px 70px 1fr 1fr;gap:6px;padding:8px 12px;border-bottom:1px solid var(--color-border);font-size:11px;align-items:center;">'
+        return '<div style="display:grid;grid-template-columns:70px 90px 60px 60px 70px 1fr 1fr 34px;gap:6px;padding:8px 12px;border-bottom:1px solid var(--color-border);font-size:11px;align-items:center;">'
             + '<div onclick="goToResearch(\'' + (r.ticker || '') + '\')" class="ticker-link" style="color:var(--color-accent);font-weight:500;cursor:pointer;">' + (r.ticker || '') + '</div>'
             + '<div style="color:var(--color-muted);">' + (r.precio != null ? '$' + r.precio.toFixed(2) : '—') + '</div>'
             + '<div style="color:' + rvolClr + ';">' + (r.rvol != null ? r.rvol.toFixed(2) + 'x' : '—') + '</div>'
@@ -220,6 +220,7 @@ function renderResults(el, data) {
             + '<div style="color:' + scoreClr + ';font-weight:500;">' + (r.score_tecnico != null ? r.score_tecnico.toFixed(0) : '—') + '</div>'
             + '<div style="color:' + phaseClr + ';font-size:10px;">' + (r.phase_label || '—') + '</div>'
             + '<div style="color:var(--color-muted);font-size:10px;">' + (r.sector || '—') + '</div>'
+            + '<div style="text-align:center;"><button onclick="window.__quickAddWatchlist(\'' + (r.ticker || '') + '\', this)" title="Añadir a watchlist" style="background:transparent;border:1px solid var(--color-border);color:var(--color-muted);border-radius:3px;padding:2px 6px;font-size:11px;cursor:pointer;">＋</button></div>'
             + '</div>';
     }).join('');
 

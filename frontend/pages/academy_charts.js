@@ -11132,6 +11132,177 @@ function earnings_catalysts_timeline() {
     </svg>`;
 }
 
+function triangle_three_pillars() {
+    const W=680, H=270;
+    const top={x:340,y:38}, bl={x:110,y:230}, br={x:570,y:230};
+    const nodes=[
+        {p:top,  label:'TÉCNICA',        sub:'Breakout · Trendline',      color:C.yellow, ly:top.y-24},
+        {p:bl,   label:'ORDER FLOW',     sub:'Options Flow',              color:C.accent, ly:bl.y+34},
+        {p:br,   label:'POSICIONAMIENTO',sub:'Insiders · Institucional',  color:C.cyan,   ly:br.y+34},
+    ];
+    let lines=`<line x1="${top.x}" y1="${top.y}" x2="${bl.x}" y2="${bl.y}" stroke="${C.border}" stroke-width="1.5"/>
+    <line x1="${top.x}" y1="${top.y}" x2="${br.x}" y2="${br.y}" stroke="${C.border}" stroke-width="1.5"/>
+    <line x1="${bl.x}" y1="${bl.y}" x2="${br.x}" y2="${br.y}" stroke="${C.border}" stroke-width="1.5"/>`;
+    let nodesSvg='';
+    nodes.forEach(({p,label,sub,color,ly})=>{
+        nodesSvg+=`<circle cx="${p.x}" cy="${p.y}" r="22" fill="${color}" opacity="0.15" stroke="${color}" stroke-width="2"/>
+        <text x="${p.x}" y="${ly}" fill="${color}" font-size="12" font-family="monospace" text-anchor="middle" font-weight="bold">${label}</text>
+        <text x="${p.x}" y="${ly+16}" fill="${C.textDim}" font-size="9" font-family="monospace" text-anchor="middle">${sub}</text>`;
+    });
+    return `<svg viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg">
+        <rect width="${W}" height="${H}" fill="${C.bg}" rx="6"/>
+        ${lines}
+        <text x="${(top.x+bl.x+br.x)/3}" y="${(top.y+bl.y+br.y)/3+4}" fill="${C.text}" font-size="11" font-family="monospace" text-anchor="middle" font-weight="bold">TRIÁNGULO</text>
+        <text x="${(top.x+bl.x+br.x)/3}" y="${(top.y+bl.y+br.y)/3+18}" fill="${C.text}" font-size="11" font-family="monospace" text-anchor="middle" font-weight="bold">RSU</text>
+        ${nodesSvg}
+        <text x="${W/2}" y="${H-8}" fill="${C.textDim}" font-size="10" font-family="monospace" text-anchor="middle">Tres fuentes independientes. Cuando coinciden, la coincidencia es información.</text>
+    </svg>`;
+}
+
+function triangle_confidence_scale() {
+    const W=680, H=190;
+    const rows=[
+        {n:'1 de 3', label:'Puede ser ruido', action:'No operar', color:C.red, w:180},
+        {n:'2 de 3', label:'Sesgo razonable', action:'Tamaño reducido', color:C.orange, w:400},
+        {n:'3 de 3', label:'Confluencia real', action:'Tamaño completo', color:C.accent, w:620},
+    ];
+    let content='';
+    let y=20;
+    rows.forEach(({n,label,action,color,w})=>{
+        content+=`<rect x="20" y="${y}" width="${w}" height="38" fill="${color}" opacity="0.12" rx="4" stroke="${color}" stroke-width="1.5"/>
+        <text x="34" y="${y+16}" fill="${color}" font-size="11" font-family="monospace" font-weight="bold">${n}</text>
+        <text x="34" y="${y+30}" fill="${C.textDim}" font-size="9" font-family="monospace">${label}</text>
+        <text x="${20+w-10}" y="${y+23}" fill="${color}" font-size="10" font-family="monospace" text-anchor="end" font-weight="bold">${action}</text>`;
+        y+=52;
+    });
+    return `<svg viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg">
+        <rect width="${W}" height="${H}" fill="${C.bg}" rx="6"/>
+        ${content}
+        <text x="${W/2}" y="${H-6}" fill="${C.textDim}" font-size="10" font-family="monospace" text-anchor="middle">El tamaño de la posición sigue al número de señales confirmadas — nunca a la intuición</text>
+    </svg>`;
+}
+
+function order_flow_signal_reading() {
+    const W=680, H=180;
+    const cols=[
+        {label:'TICKER', x:20, w:70},
+        {label:'PRIMA', x:95, w:110},
+        {label:'VOL/OI', x:210, w:90},
+        {label:'TIPO', x:305, w:100},
+        {label:'SCORE', x:410, w:90},
+        {label:'SEÑAL', x:505, w:150},
+    ];
+    const row=['XYZ','$742,000','8.4x','SWEEP','92','BULLISH FUERTE'];
+    let header='', cell='';
+    cols.forEach((c,i)=>{
+        header+=`<text x="${c.x}" y="42" fill="${C.textDim}" font-size="9" font-family="monospace" font-weight="bold">${c.label}</text>`;
+        cell+=`<text x="${c.x}" y="70" fill="${i===5?C.accent:C.text}" font-size="10" font-family="monospace" font-weight="${i===5?'bold':'normal'}">${row[i]}</text>`;
+    });
+    return `<svg viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg">
+        <rect width="${W}" height="${H}" fill="${C.bg}" rx="6"/>
+        <text x="20" y="20" fill="${C.text}" font-size="11" font-family="monospace" font-weight="bold">EJEMPLO — LECTURA DE UNA FILA EN OPTIONS FLOW</text>
+        <line x1="10" y1="30" x2="${W-10}" y2="30" stroke="${C.border}" stroke-width="1"/>
+        ${header}
+        <line x1="10" y1="50" x2="${W-10}" y2="50" stroke="${C.border}" stroke-width="1"/>
+        <rect x="10" y="55" width="${W-20}" height="30" fill="${C.accent}" opacity="0.05" rx="4"/>
+        ${cell}
+        <text x="20" y="115" fill="${C.textDim}" font-size="9" font-family="monospace">Prima alta + Vol/OI alto (posición nueva) + ejecución sweep (urgencia) → score alto</text>
+        <text x="20" y="132" fill="${C.textDim}" font-size="9" font-family="monospace">Cualquiera de estos factores por separado dice poco. Juntos, describen convicción real.</text>
+    </svg>`;
+}
+
+function order_flow_consistency_days() {
+    const W=680, H=190;
+    const daysWeak=[0,0,1,0,0];
+    const daysStrong=[1,2,2,3,4];
+    function row(label,days,y,color){
+        let bars='';
+        days.forEach((v,i)=>{
+            const h=v*14;
+            bars+=`<rect x="${140+i*90}" y="${y+40-h}" width="50" height="${h}" fill="${color}" opacity="${0.25+v*0.15}" rx="3"/>`;
+        });
+        return `<text x="20" y="${y+24}" fill="${C.textDim}" font-size="10" font-family="monospace">${label}</text>${bars}`;
+    }
+    return `<svg viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg">
+        <rect width="${W}" height="${H}" fill="${C.bg}" rx="6"/>
+        <text x="20" y="20" fill="${C.text}" font-size="11" font-family="monospace" font-weight="bold">SEÑAL AISLADA vs SEÑAL CONSISTENTE</text>
+        ${row('Operación única', daysWeak, 40, C.red)}
+        ${row('Flujo de varios días', daysStrong, 100, C.accent)}
+        <text x="${W/2}" y="${H-8}" fill="${C.textDim}" font-size="10" font-family="monospace" text-anchor="middle">La repetición en la misma dirección descarta la casualidad</text>
+    </svg>`;
+}
+
+function positioning_three_signals() {
+    const W=680, H=210;
+    const boxes=[
+        {label:'INSTITUCIONAL',desc:'% del float · 13F trimestral',color:C.cyan},
+        {label:'INSIDERS',desc:'Form 4 · códigos P / S',color:C.accent},
+        {label:'CORTO INTERÉS',desc:'Squeeze gauge',color:C.yellow},
+    ];
+    const bw=190, gap=25, startX=25;
+    let content='';
+    boxes.forEach(({label,desc,color},i)=>{
+        const x=startX+i*(bw+gap);
+        content+=`<rect x="${x}" y="20" width="${bw}" height="90" fill="${color}" opacity="0.08" rx="6" stroke="${color}" stroke-width="1.5"/>
+        <text x="${x+bw/2}" y="55" fill="${color}" font-size="11" font-family="monospace" text-anchor="middle" font-weight="bold">${label}</text>
+        <text x="${x+bw/2}" y="72" fill="${C.textDim}" font-size="9" font-family="monospace" text-anchor="middle">${desc}</text>
+        <line x1="${x+bw/2}" y1="110" x2="340" y2="150" stroke="${color}" stroke-width="1.5" opacity="0.5"/>`;
+    });
+    return `<svg viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg">
+        <rect width="${W}" height="${H}" fill="${C.bg}" rx="6"/>
+        ${content}
+        <rect x="250" y="150" width="180" height="40" fill="${C.text}" opacity="0.06" rx="6" stroke="${C.text}" stroke-width="1"/>
+        <text x="340" y="174" fill="${C.text}" font-size="11" font-family="monospace" text-anchor="middle" font-weight="bold">POSICIONAMIENTO</text>
+        <text x="${W/2}" y="${H-6}" fill="${C.textDim}" font-size="10" font-family="monospace" text-anchor="middle">Ninguna fuente sola confirma el pilar — se lee el conjunto</text>
+    </svg>`;
+}
+
+function positioning_dynamic_warning() {
+    const W=680, H=170;
+    return `<svg viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg">
+        <rect width="${W}" height="${H}" fill="${C.bg}" rx="6"/>
+        <text x="170" y="18" fill="${C.accent}" font-size="10" font-family="monospace" text-anchor="middle">HACE 3 SEMANAS</text>
+        <rect x="30" y="28" width="280" height="90" fill="${C.accent}" opacity="0.07" rx="6" stroke="${C.accent}" stroke-width="1"/>
+        <text x="170" y="55" fill="${C.accent}" font-size="10" font-family="monospace" text-anchor="middle">Insiders comprando</text>
+        <text x="170" y="72" fill="${C.accent}" font-size="10" font-family="monospace" text-anchor="middle">Institucional al alza</text>
+        <text x="170" y="89" fill="${C.accent}" font-size="10" font-family="monospace" text-anchor="middle">→ Posicionamiento alcista</text>
+        <text x="${W/2}" y="80" fill="${C.textDim}" font-size="16" text-anchor="middle">→</text>
+        <text x="510" y="18" fill="${C.red}" font-size="10" font-family="monospace" text-anchor="middle">HOY (tras rebaja de guidance)</text>
+        <rect x="370" y="28" width="280" height="90" fill="${C.red}" opacity="0.07" rx="6" stroke="${C.red}" stroke-width="1"/>
+        <text x="510" y="55" fill="${C.red}" font-size="10" font-family="monospace" text-anchor="middle">Sin nueva compra insider</text>
+        <text x="510" y="72" fill="${C.red}" font-size="10" font-family="monospace" text-anchor="middle">Guidance a la baja</text>
+        <text x="510" y="89" fill="${C.red}" font-size="10" font-family="monospace" text-anchor="middle">→ Lectura ya no es fiable</text>
+        <text x="${W/2}" y="${H-8}" fill="${C.textDim}" font-size="10" font-family="monospace" text-anchor="middle">El posicionamiento es una fotografía — vuelve a comprobarlo antes de entrar</text>
+    </svg>`;
+}
+
+function triangle_workflow_order() {
+    const W=680, H=200;
+    const steps=[
+        {n:'1',label:'Escanear',sub:'Options Flow'},
+        {n:'2',label:'Revisar',sub:'Técnica'},
+        {n:'3',label:'Confirmar',sub:'Posicionamiento'},
+        {n:'4',label:'Esperar',sub:'Ruptura confirmada'},
+        {n:'5',label:'Entrar',sub:'Con plan y R:R'},
+    ];
+    const bw=110, gap=22, startX=15;
+    let content='';
+    steps.forEach(({n,label,sub},i)=>{
+        const x=startX+i*(bw+gap);
+        content+=`<rect x="${x}" y="70" width="${bw}" height="70" fill="${C.accent}" opacity="${0.06+i*0.03}" rx="6" stroke="${C.accent}" stroke-width="1.5"/>
+        <text x="${x+bw/2}" y="92" fill="${C.accent}" font-size="13" font-family="monospace" text-anchor="middle" font-weight="bold">${n}</text>
+        <text x="${x+bw/2}" y="110" fill="${C.text}" font-size="10" font-family="monospace" text-anchor="middle">${label}</text>
+        <text x="${x+bw/2}" y="124" fill="${C.textDim}" font-size="8" font-family="monospace" text-anchor="middle">${sub}</text>`;
+        if(i<steps.length-1) content+=`<text x="${x+bw+gap/2}" y="112" fill="${C.accent}" font-size="14" text-anchor="middle">→</text>`;
+    });
+    return `<svg viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg">
+        <rect width="${W}" height="${H}" fill="${C.bg}" rx="6"/>
+        ${content}
+        <text x="${W/2}" y="18" fill="${C.textDim}" font-size="10" font-family="monospace" text-anchor="middle">EL PILAR MÁS ESCASO PRIMERO — ORDER FLOW COMO FILTRO INICIAL</text>
+        <text x="${W/2}" y="${H-8}" fill="${C.textDim}" font-size="10" font-family="monospace" text-anchor="middle">No hace falta revisar toda la técnica del mercado — empieza por donde ya hay dinero grande</text>
+    </svg>`;
+}
+
 export const CHARTS = {
     // Módulo 0
     rsu_philosophy, rsu_community, rsu_for_who,
@@ -11243,4 +11414,8 @@ export const CHARTS = {
     climax_stacking,
     // Módulo 1 (ampliación — Lección 5, EMAs)
     ema_vs_sma_reaction, ema_entry_volume, ema_exit_signal, golden_death_cross,
+    // Módulo 22
+    triangle_three_pillars, triangle_confidence_scale, order_flow_signal_reading,
+    order_flow_consistency_days, positioning_three_signals, positioning_dynamic_warning,
+    triangle_workflow_order,
 };

@@ -299,4 +299,17 @@ export const QUIZZES = {
         ]
     },
 
+    22: {
+        title: 'Quiz — El Triángulo RSU',
+        questions: [
+            { q: '¿Cuáles son los tres pilares del Triángulo RSU?', options: ['RSI, MACD y Bollinger', 'Order flow, posicionamiento y técnica', 'Ingresos, márgenes y beneficio', 'Mercado, sector y activo'], correct: 1, explanation: 'El Triángulo RSU combina tres fuentes independientes: flujo de opciones (Options Flow), posicionamiento (institucionales/insiders/corto interés) y técnica.' },
+            { q: '¿Por qué importa que los tres pilares vengan de fuentes independientes entre sí?', options: ['No importa, es un detalle sin relevancia', 'Porque si tres fuentes no relacionadas coinciden, la probabilidad de que sea ruido baja considerablemente', 'Porque así se calculan más rápido', 'Porque una fuente sustituye a las otras dos'], correct: 1, explanation: 'La independencia es lo que da valor a la confluencia: si derivaran unas de otras, coincidir no aportaría información nueva.' },
+            { q: 'Según la escala de confianza del Triángulo, ¿qué acción corresponde a 2 de 3 señales alineadas?', options: ['Tamaño completo, sin dudarlo', 'No operar en ningún caso', 'Tamaño reducido y stop ajustado', 'Ignorar la técnica por completo'], correct: 2, explanation: 'Con 2 de 3 señales hay sesgo razonable pero falta confirmación — se opera con tamaño reducido, no con tamaño completo.' },
+            { q: 'En Options Flow, ¿qué indica específicamente un ratio Vol/OI alto en una operación?', options: ['Que la operación es simplemente un roll de una posición ya existente', 'Que se está abriendo una posición nueva, no ajustando una previa', 'Que el ticker no tiene liquidez', 'No tiene ninguna utilidad práctica'], correct: 1, explanation: 'Un Vol/OI alto respecto al interés abierto previo indica que el volumen del día corresponde mayormente a posición nueva.' },
+            { q: '¿Qué hace más fiable al order flow alcista según la lección de Order Flow?', options: ['Que sea una única operación aislada, cuanto más grande mejor', 'Que se repita en la misma dirección durante varios días seguidos', 'Que se ejecute siempre como bloque y nunca como sweep', 'La fiabilidad no depende de la repetición'], correct: 1, explanation: 'La repetición durante varios días en la misma dirección descarta la casualidad y es más fiable que una operación aislada.' },
+            { q: 'Para el pilar de posicionamiento, ¿qué combinación se describe como la lectura más sólida?', options: ['Solo corto interés elevado, sin ningún otro dato', 'Insiders comprando + % institucional al alza', 'Institucional a la baja sin actividad de insiders', 'Cualquier dato aislado sirve igual'], correct: 1, explanation: 'La combinación de compras insider recientes junto con titularidad institucional estable o creciente da la lectura de posicionamiento más sólida.' },
+            { q: 'Según el checklist de confluencia, ¿cuál es el punto de partida recomendado para buscar setups del Triángulo?', options: ['Revisar la técnica de todos los tickers del mercado uno a uno', 'Escanear Options Flow, porque el order flow notable es la señal más escasa', 'Empezar siempre por el corto interés', 'No hay un orden recomendado'], correct: 1, explanation: 'El order flow notable es el pilar más escaso, por lo que escanearlo primero permite crear una lista corta de candidatos antes de revisar técnica y posicionamiento.' },
+        ]
+    },
+
 };

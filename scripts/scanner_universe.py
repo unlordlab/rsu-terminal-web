@@ -332,6 +332,16 @@ def run_scan() -> dict:
             price      = float(prices.iloc[-1])
             sector_raw = SP500_SECTOR_MAP.get(ticker, "")
 
+            sma50_val   = float(prices.rolling(50).mean().iloc[-1]) if len(prices) >= 50 else float('nan')
+            above_sma50 = bool(price > sma50_val) if sma50_val == sma50_val else None  # NaN check
+
+            # Nuevo máximo/mínimo sobre la ventana de histórico disponible (hasta 260
+            # sesiones ≈ 52 semanas, que es lo que se descarga en _fetch_batch). Con
+            # menos histórico disponible sigue siendo una comparación válida, solo que
+            # sobre una ventana más corta para los tickers con menos días.
+            new_high = bool(price >= float(prices.max()))
+            new_low  = bool(price <= float(prices.min()))
+
             rows.append({
                 "ticker":      ticker,
                 "sector":      sector_raw,
@@ -341,6 +351,9 @@ def run_scan() -> dict:
                 "phase":       phase_info["phase"],
                 "phase_label": phase_info["phase_label"],
                 "trend":       phase_info["trend"],
+                "above_sma50": above_sma50,
+                "new_high":    new_high,
+                "new_low":     new_low,
             })
         except Exception:
             continue
@@ -366,6 +379,9 @@ def run_scan() -> dict:
             "phase_label":   r["phase_label"],
             "trend":         r["trend"],
             "score_tecnico": r["score_tecnico"],
+            "above_sma50":   None if pd.isna(r["above_sma50"]) else bool(r["above_sma50"]),
+            "new_high":      bool(r["new_high"]),
+            "new_low":       bool(r["new_low"]),
         }
 
     return {

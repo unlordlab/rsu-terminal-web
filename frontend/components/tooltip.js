@@ -28,6 +28,53 @@ CÓMO USARLO:
 Warren Buffett: "Sé temeroso cuando otros son codiciosos, y codicioso cuando otros son temerosos."`
     },
 
+    "fear-greed-components": {
+        title: "Los 7 Componentes",
+        short: "Cada uno de los 7 indicadores que CNN combina para formar el score compuesto, con su propia lectura 0-100.",
+        long: `El score compuesto del Fear & Greed Index es la media de estos 7 indicadores independientes, cada uno con su propia escala 0 (miedo extremo) a 100 (codicia extrema):
+
+▸ Momentum del Mercado: compara el S&P 500 con su media móvil de 125 sesiones.
+▸ Fortaleza del Precio: número de acciones en nuevos máximos de 52 semanas en la NYSE frente a nuevos mínimos.
+▸ Amplitud del Precio: volumen negociado en acciones que suben frente al volumen en acciones que bajan (McClellan Volume Summation Index).
+▸ Ratio Put/Call: volumen de opciones put frente a calls — más puts relativos indica más cobertura/miedo.
+▸ Demanda de Bonos Basura: diferencial de rendimiento entre bonos high yield e investment grade — un spread que se estrecha indica apetito por riesgo.
+▸ Volatilidad (VIX): el VIX comparado con su media móvil de 50 sesiones.
+▸ Demanda de Refugio: rendimiento de las acciones frente a los bonos del Tesoro en las últimas 20 sesiones.
+
+POR QUÉ MIRARLOS POR SEPARADO:
+El score compuesto puede estar en "Neutral" mientras algún componente individual ya está en zona extrema — por ejemplo, la volatilidad puede estar tranquila mientras la amplitud del precio ya muestra señales de codicia extrema. Los componentes por separado dan una lectura más rica que el número único.`
+    },
+
+    "watchlist": {
+        title: "Watchlist",
+        short: "Tus tickers seguidos con precio en vivo, y punto de partida para crear alertas de precio.",
+        long: `La Watchlist guarda los tickers que quieres tener siempre a mano, con precio y variación diaria en vivo (mismo caché de 60s que usa Cartera).
+
+QUÉ PUEDES HACER:
+▸ Añadir cualquier ticker escribiéndolo arriba.
+▸ Clic en el nombre del ticker para ir directo a su ficha en Research.
+▸ Botón "＋ alerta" en cada fila para crear una alerta de precio sobre ese ticker sin tener que volver a escribirlo.
+▸ Quitar un ticker con la ✕.
+
+LÍMITE: hasta 50 tickers por usuario. Es una lista personal — no se comparte con el resto de la comunidad.`
+    },
+
+    "price-alerts": {
+        title: "Alertas",
+        short: "Avisa cuando un ticker cruza un umbral de precio o de RVOL (por encima o por debajo). Se comprueban cada ~90 segundos.",
+        long: `Cada alerta compara un valor en vivo del ticker contra el objetivo que fijaste, con la condición "por encima de" o "por debajo de". Dos métricas disponibles:
+
+▸ PRECIO: compara el precio actual contra un precio objetivo en $.
+▸ RVOL: compara el volumen relativo actual (volumen de hoy / media de 20 sesiones) contra un múltiplo objetivo — p.ej. "RVOL por encima de 2.5" avisa cuando el ticker negocia 2,5 veces su volumen medio, señal típica de entrada de dinero grande.
+
+CÓMO SE COMPRUEBAN:
+Un proceso en segundo plano revisa todas las alertas activas de todos los usuarios cada ~90 segundos (agrupando por ticker, así que no importa cuánta gente tenga una alerta en el mismo nombre — el dato se pide una sola vez por ticker y métrica). En cuanto se cumple la condición, la alerta pasa a "DISPARADA" y aparece un aviso (número rojo) junto a Watchlist en el menú lateral.
+
+IMPORTANTE — SOLO DENTRO DE LA TERMINAL:
+Por ahora el aviso es únicamente dentro de la app (campanita + listado en Watchlist). Todavía no hay notificación por email, Discord o Telegram — si cierras la pestaña, la alerta se sigue comprobando en el servidor y la verás marcada como disparada la próxima vez que entres, pero no recibirás ningún aviso fuera de la terminal.
+
+LÍMITE: hasta 30 alertas activas por usuario. Una alerta disparada no vuelve a comprobarse ni se repite — si quieres seguir vigilando el mismo nivel, crea una nueva. Puedes limpiar en bloque las ya disparadas con el botón "Limpiar disparadas".`
+    },
     "vix-term-structure": {
         title: "VIX Term Structure",
         short: "Curva de futuros del VIX. Contango = normal. Backwardation = estrés/oportunidad.",
@@ -63,6 +110,20 @@ Esta es la métrica que muchos consideran más relevante que el balance bruto, p
 
 POR QUÉ IMPORTA PARA LOS MERCADOS:
 La liquidez neta tiende a correlacionar con el apetito de riesgo en activos como acciones y cripto — más liquidez neta circulando suele coincidir con entornos más favorables para activos de riesgo, y viceversa durante fases de contracción.`
+    },
+
+    "fed-macro-chart": {
+        title: "Gráfico Histórico TradingView",
+        short: "Evolución histórica de cada serie FRED (Fed Funds, IPC, Desempleo, PCE) vía TradingView, con pestañas para cambiar de serie.",
+        long: `Las tarjetas de arriba muestran el último valor publicado de cada indicador. Este gráfico añade el contexto histórico — cómo ha evolucionado esa serie a lo largo del tiempo — usando el mismo motor de gráficos de TradingView que ya ves en Credit Spreads y en el Calendario Económico.
+
+SERIES DISPONIBLES:
+▸ FED FUNDS (FRED:FEDFUNDS): tipo de interés efectivo de la Reserva Federal.
+▸ IPC (FRED:CPIAUCSL): Índice de Precios al Consumo, nivel general.
+▸ DESEMPLEO (FRED:UNRATE): tasa de paro de EE.UU.
+▸ PCE (FRED:PCEPI): Índice de Precios de Gasto en Consumo Personal — la medida de inflación que más sigue la Fed.
+
+Cambia de pestaña para ver la serie que te interese; el gráfico usa velas mensuales, coherente con la frecuencia de publicación de estos datos.`
     },
 
     "fed-balance-total": {
@@ -432,33 +493,70 @@ Comparar el comportamiento relativo entre ellos da contexto adicional — por ej
     },
 
     "market-breadth": {
-        title: "Market Breadth",
-        short: "Salud interna del mercado: SMA50/200, Golden/Death Cross, RSI, McClellan y % de sectores en tendencia alcista.",
-        long: `Market Breadth combina varios indicadores técnicos del SPY para dar una lectura compuesta de la salud interna del mercado, más allá del precio del índice en sí.
+        title: "Amplitud de Mercado",
+        short: "Salud interna del mercado: SMA50/200, Golden/Death Cross, RSI, McClellan real, % real del S&P 500 y Línea A/D.",
+        long: `Amplitud de Mercado combina varios indicadores de amplitud y técnica del SPY para dar una lectura compuesta de la salud interna del mercado, más allá del precio del índice en sí.
 
 COMPONENTES:
 ▸ SMA50/SMA200: medias móviles de referencia. Precio sobre ambas = tendencia alcista de fondo.
 ▸ Golden Cross / Death Cross: SMA50 cruzando por encima (Golden) o por debajo (Death) de la SMA200. Señal de cambio de régimen de medio-largo plazo.
 ▸ RSI(14): momentum de corto plazo. &gt;70 sobrecompra, &lt;30 sobreventa.
-▸ Oscilador McClellan: mide la aceleración/desaceleración de la amplitud (EMA19-EMA39). Valores extremos anticipan giros.
-▸ % Sectores sobre SMA50: cuántos de los 11 sectores GICS (XLK, XLF, XLE...) cotizan sobre su media de 50 sesiones — mide si el rally es amplio o concentrado en pocos sectores.
+▸ Oscilador McClellan: calculado con datos reales de avance/declive del NYSE (^ADV/^DEC), no un proxy del propio índice.
+▸ % del S&amp;P 500 sobre SMA50: calculado sobre las ~500 acciones del índice (scan nocturno), no una muestra de 11 ETFs sectoriales.
+▸ Línea A/D: avance/declive acumulado del NYSE, con su gráfico histórico frente al SPY.
 
 CÓMO LEERLO:
-Si el SPY sube pero el % de sectores sobre SMA50 cae, el rally se está estrechando — señal de alerta similar a una divergencia de AD Line. Cuantos más componentes confirmen la misma dirección, más sólida es la tendencia.`
+Si el SPY sube pero el % del S&P 500 sobre SMA50 cae o la Línea A/D diverge a la baja, el rally se está estrechando — señal de alerta. Cuantos más componentes confirmen la misma dirección, más sólida es la tendencia.`
     },
+
+    "breadth-pct-sma50": {
+        title: "% S&P 500 sobre SMA50",
+        short: "Porcentaje de las ~500 acciones del S&P 500 que cotizan por encima de su media móvil de 50 sesiones. Amplitud real, no una muestra de ETFs.",
+        long: `Este dato se calcula sobre el universo completo del scan nocturno de RSU Terminal (~500 tickers del S&P 500), comprobando para cada uno si el precio actual está por encima o por debajo de su propia SMA de 50 sesiones.
+
+POR QUÉ IMPORTA:
+Es la definición estándar de amplitud "% por encima de la media" — mide si la subida del índice está siendo respaldada por la mayoría de acciones o solo por un puñado de grandes valores.
+
+LECTURA:
+▸ &gt; 60%: participación amplia, tendencia alcista sana.
+▸ 40-60%: zona mixta, sin sesgo claro.
+▸ &lt; 40%: participación débil — el índice puede estar sostenido por pocos valores.
+
+FUENTE Y FALLBACK:
+El dato marcado [S&amp;P 500 REAL] viene del scan nocturno completo. Si ese scan aún no ha corrido (por ejemplo, justo tras un despliegue nuevo) o el Gist no está disponible, el widget cae automáticamente a un proxy basado en 11 ETFs sectoriales, marcado como [PROXY 11 ETFs] — una aproximación razonable pero con mucha menos resolución que el dato real.`
+    },
+
+
+    "nh-nl": {
+        title: "New Highs − New Lows (NH-NL)",
+        short: "Nuevos máximos de 52 semanas menos nuevos mínimos, sobre el S&P 500 real. Mide la calidad del liderazgo del mercado.",
+        long: `NH-NL cuenta, sobre las ~500 acciones del S&P 500 (scan nocturno), cuántas están marcando un nuevo máximo de las últimas ~52 semanas frente a cuántas marcan un nuevo mínimo, y resta ambas cifras.
+
+POR QUÉ IMPORTA:
+A diferencia de la Línea A/D (que solo mira si sube o baja cada día) o el McClellan (que mira la aceleración), NH-NL mide la CALIDAD del liderazgo: cuántas acciones están realmente marcando terreno nuevo, no solo participando en el movimiento del día.
+
+LA DIVERGENCIA CLÁSICA:
+Si el índice sigue haciendo máximos pero NH-NL empieza a caer (cada vez menos acciones hacen nuevo máximo), es una señal de agotamiento del rally — el liderazgo se está estrechando aunque el precio del índice todavía no lo refleje. Es una de las divergencias de amplitud más citadas antes de techos de mercado importantes.
+
+LECTURA:
+▸ NH-NL muy positivo y creciente: liderazgo amplio y sano.
+▸ NH-NL cayendo con el índice en máximos: divergencia de alerta.
+▸ NH-NL muy negativo: presión bajista amplia, muchas acciones en mínimos de 52 semanas a la vez.`
+    },
+
 
     "mcclellan-oscillator": {
         title: "Oscilador McClellan",
-        short: "Mide la aceleración de la amplitud del mercado mediante EMA19-EMA39. Extremos anticipan giros de corto plazo.",
-        long: `El Oscilador McClellan es un indicador de amplitud que mide la diferencia entre dos medias exponenciales de la línea Avance/Declive (o, como proxy, del propio índice).
+        short: "Mide la aceleración de la amplitud real del mercado (EMA19-EMA39 sobre avance/declive neto del NYSE). Extremos anticipan giros de corto plazo.",
+        long: `El Oscilador McClellan es un indicador de amplitud que mide la diferencia entre dos medias exponenciales del avance/declive neto diario del NYSE — cuántas acciones suben menos cuántas bajan cada día, no el precio de un índice.
 
 CÁLCULO:
-EMA(19) − EMA(39) de los datos de amplitud, normalizado para que sea comparable entre periodos.
+EMA(19) − EMA(39) del avance/declive neto diario real (^ADV − ^DEC del NYSE). Si no hay suficiente histórico de amplitud real disponible, el dato se muestra como N/D en vez de sustituirlo por una aproximación.
 
 INTERPRETACIÓN:
-▸ &gt; +50: sobrecompra de amplitud — el mercado puede estar extendido a corto plazo.
-▸ Entre -20 y +20: zona neutra, sin señal direccional clara.
-▸ &lt; -50: sobreventa de amplitud — posible zona de rebote técnico.
+▸ &gt; +70: sobrecompra de amplitud — el mercado puede estar extendido a corto plazo.
+▸ Entre -70 y +70: zona neutra, sin señal direccional clara.
+▸ &lt; -70: sobreventa de amplitud — posible zona de rebote técnico.
 
 DIFERENCIA CON EL RSI:
 El RSI mide momentum de PRECIO de un solo activo. El McClellan mide momentum de PARTICIPACIÓN — cuántas acciones están detrás del movimiento. Un McClellan muy negativo con precio estable puede anticipar un rebote técnico de corto plazo aunque el contexto de fondo siga siendo bajista.`

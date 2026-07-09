@@ -53,6 +53,8 @@ const MODULES = [
       videos:[{title:'Qué Mide el RSU Score',duration:'12:00'},{title:'Piotroski F-Score — Salud Financiera',duration:'13:00'},{title:'Comparativa Sectorial — Valorar en Contexto',duration:'12:00'},{title:'Cómo Leer Todo Junto',duration:'13:00'}]},
     { id:21, title:'Análisis Fundamental',       icon:'📐', description:'La base fundamental detrás de CAN SLIM: cómo leer estados financieros, rentabilidad, valoración con múltiplos y los catalizadores que mueven el precio.', duration:'55 min',
       videos:[{title:'Ingresos, Márgenes y Beneficio',duration:'14:00'},{title:'Rentabilidad y Eficiencia — ROE, ROA',duration:'13:00'},{title:'Valoración — P/E, PEG, EV/EBITDA, P/S, P/B',duration:'14:00'},{title:'Catalizadores — Earnings, Insiders, Institucionales',duration:'14:00'}]},
+    { id:22, title:'El Triángulo RSU',           icon:'🔺', description:'Cuando el flujo de opciones, el posicionamiento institucional y la técnica se alinean, la probabilidad de una operación ganadora se dispara. La metodología de confluencia de tres señales.', duration:'50 min',
+      videos:[{title:'Los Tres Pilares del Triángulo',duration:'12:00'},{title:'Order Flow — La Huella del Dinero Grande',duration:'13:00'},{title:'Posicionamiento — Qué Apuesta el Mercado',duration:'13:00'},{title:'El Checklist de Confluencia',duration:'12:00'}]},
 ];
 
 const PHASES = [
@@ -62,7 +64,7 @@ const PHASES = [
     { label:'🎯 FASE 3 // ESTRATEGIA Y PLANIFICACIÓN',   modules:[9,10,11,18,19] },
     { label:'🚀 FASE 4 // EJECUCIÓN Y MENTALIDAD',       modules:[12,13,14,15] },
     { label:'🔄 FASE 5 // CICLO DE VIDA DEL PRECIO',     modules:[16] },
-    { label:'🧮 FASE 6 // HERRAMIENTAS PROPIETARIAS RSU', modules:[20,21] },
+    { label:'🧮 FASE 6 // HERRAMIENTAS PROPIETARIAS RSU', modules:[20,21,22] },
 ];
 
 // ── ESTILOS ───────────────────────────────────────────────────────────────────

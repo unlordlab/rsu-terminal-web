@@ -5245,4 +5245,201 @@ export const LESSONS = {
             },
         ]
     },
+
+    // ── MÓDULO 22, LECCIÓN 1 ───────────────────────────────────────────────
+    '22-1': {
+        moduleId: 22,
+        lessonIndex: 0,
+        title: 'Los Tres Pilares del Triángulo',
+        duration: '12 min',
+        intro: 'Un setup técnico perfecto, por sí solo, no es una razón suficiente para entrar. Tampoco lo es un flujo de opciones agresivo, ni un posicionamiento institucional favorable. El Triángulo RSU es el marco que exige que las tres señales — flujo de opciones, posicionamiento y técnica — apunten en la misma dirección antes de tratar una operación como de alta convicción.',
+        sections: [
+            {
+                heading: 'Tres señales, tres orígenes distintos',
+                blocks: [
+                    { type: 'text', content: 'Cada pilar del Triángulo viene de una fuente de información completamente independiente de las otras dos. El <strong>flujo de opciones</strong> (Options Flow) muestra dónde está entrando dinero grande ahora mismo. El <strong>posicionamiento</strong> (Research: institucionales, insiders, corto interés) muestra quién ya tiene la posición construida. La <strong>técnica</strong> muestra si el precio está realmente en condiciones de moverse. Ninguna de las tres deriva de las otras — por eso, cuando coinciden, la coincidencia en sí misma es información.' },
+                    { type: 'chart', id: 'triangle_three_pillars' },
+                    { type: 'concept', title: 'Por qué la independencia importa', content: 'Si tres fuentes de datos que no se calculan entre sí llegan a la misma conclusión de forma independiente, la probabilidad de que sea ruido baja considerablemente. Es el mismo principio que usar tres testigos distintos en lugar de uno solo.' },
+                ]
+            },
+            {
+                heading: 'La escala de confianza: 1, 2 o 3 señales',
+                blocks: [
+                    { type: 'text', content: 'El Triángulo no es binario. No hace falta esperar a que las tres señales estén siempre presentes para hacer algo — pero el número de señales alineadas debe determinar directamente el tamaño de la posición.' },
+                    { type: 'chart', id: 'triangle_confidence_scale' },
+                    { type: 'table',
+                        headers: ['Señales alineadas', 'Interpretación', 'Acción'],
+                        rows: [
+                            ['1 de 3', 'Puede ser ruido o casualidad', 'No operar — o, como mucho, vigilar en watchlist'],
+                            ['2 de 3', 'Sesgo razonable, falta confirmación', 'Tamaño reducido, stop ajustado'],
+                            ['3 de 3', 'Confluencia real — el Triángulo se ha formado', 'Tamaño completo dentro de tu plan de riesgo'],
+                        ]
+                    },
+                ]
+            },
+            {
+                heading: 'Por qué cada pilar, en solitario, puede fallar',
+                blocks: [
+                    { type: 'concept', title: 'El flujo de opciones puede equivocarse', content: 'Una operación institucional grande no es infalible — puede ser una cobertura, no una apuesta direccional, o simplemente una gestora equivocándose. El tamaño de la operación no garantiza que tenga razón.' },
+                    { type: 'concept', title: 'El posicionamiento cambia rápido', content: 'Un insider que compró hace un mes o una institución que reportó hace un trimestre no dicen nada sobre lo que piensan hoy. El posicionamiento es una fotografía, no un vídeo en directo.' },
+                    { type: 'concept', title: 'La técnica sin apoyo de flujo o posicionamiento es solo probabilidad', content: 'Un breakout puede ser real o puede ser una trampa de liquidez. Sin nada más que lo respalde, estás apostando a que el patrón se cumpla — sin saber si hay dinero grande detrás empujando en la misma dirección.' },
+                ]
+            },
+            {
+                heading: 'El Triángulo no es una garantía',
+                blocks: [
+                    { type: 'text', content: 'Ninguna combinación de señales es inmune a un evento de mercado inesperado: una decisión de la Fed, un titular geopolítico, una rebaja de guidance. El Triángulo RSU mejora la probabilidad, no la garantiza.' },
+                    { type: 'warning', content: 'Un Triángulo RSU perfecto, con las tres señales alineadas, puede fallar igual si sobreviene una noticia que cambia el contexto de golpe. Por eso el tamaño de posición y el stop loss siguen siendo obligatorios incluso en el setup de mayor convicción.' },
+                    { type: 'tip', label: 'REGLA DEL TRIÁNGULO', content: 'Cuenta cuántos de los tres pilares están realmente presentes antes de entrar — no los que crees que "probablemente" están. Si solo tienes uno, es una apuesta. Con dos, es una posición pequeña. Con tres, es donde el Triángulo RSU realmente actúa.' },
+                ]
+            },
+        ]
+    },
+
+    // ── MÓDULO 22, LECCIÓN 2 ───────────────────────────────────────────────
+    '22-2': {
+        moduleId: 22,
+        lessonIndex: 1,
+        title: 'Order Flow — La Huella del Dinero Grande',
+        duration: '13 min',
+        intro: 'No podemos ver quién está detrás de una operación de opciones de gran tamaño — si es un insider, una gestora institucional o simplemente una cuenta con mucho capital. Pero sí podemos ver qué apuesta se está haciendo, con cuánto dinero, y si se repite. Esta lección explica cómo leer esa huella en Options Flow.',
+        sections: [
+            {
+                heading: 'Qué es el order flow y qué NO es',
+                blocks: [
+                    { type: 'text', content: 'El order flow institucional es el rastro que dejan las operaciones de gran tamaño en el mercado de opciones: bloques (block trades) y barridos (sweeps) que superan claramente el volumen habitual de ese contrato. No es una señal de compra automática — es información sobre dónde se está posicionando dinero grande, que tú interpretas dentro del resto del Triángulo.' },
+                    { type: 'concept', title: 'No sabemos quién es, sabemos qué apuesta', content: 'Puede ser un insider con información, una gestora con research propio, o simplemente un trader con mucho capital y suerte. Da igual: si la operación es lo bastante grande y se repite en el tiempo, merece tu atención como una de las tres señales del Triángulo.' },
+                ]
+            },
+            {
+                heading: 'Cómo leerlo en RSU Options Flow',
+                blocks: [
+                    { type: 'chart', id: 'order_flow_signal_reading' },
+                    { type: 'table',
+                        headers: ['Campo', 'Qué mide', 'Por qué importa'],
+                        rows: [
+                            ['Prima total', 'Dinero real puesto en juego en la operación', 'Una prima de $500K pesa más que una de $8K'],
+                            ['Vol/OI', 'Volumen del día frente al interés abierto previo', 'Un ratio alto indica posición nueva, no roll de una existente'],
+                            ['Bloque / Sweep', 'Cómo se ejecutó la orden', 'El sweep (barrido de varios exchanges a la vez) sugiere urgencia por entrar'],
+                            ['Score / Señal', 'Puntuación agregada que calcula RSU Terminal', 'Resume automáticamente el conjunto de factores anteriores'],
+                        ]
+                    },
+                ]
+            },
+            {
+                heading: 'Tamaño y consistencia: los dos filtros de calidad',
+                blocks: [
+                    { type: 'text', content: 'Dos operaciones grandes distintas no valen lo mismo. Una prima de $2M en un ticker de mega-capitalización con opciones muy líquidas es normal; la misma prima en un ticker pequeño y poco operado es una señal mucho más fuerte, porque representa un porcentaje mayor del volumen habitual de ese nombre.' },
+                    { type: 'chart', id: 'order_flow_consistency_days' },
+                    { type: 'tip', label: 'LA MEJOR SEÑAL', content: 'Order flow alcista que se repite durante varios días seguidos, en el mismo ticker y en la misma dirección, es mucho más fiable que una operación aislada por grande que sea. La repetición descarta la casualidad.' },
+                ]
+            },
+            {
+                heading: 'Las trampas del order flow',
+                blocks: [
+                    { type: 'text', content: 'No toda operación grande es direccional. Una parte del order flow institucional es cobertura (hedging) de una posición ya existente en acciones, no una apuesta nueva. Y una sola operación, sin repetición ni respaldo técnico, puede ser simplemente ruido.' },
+                    { type: 'warning', content: 'No entres solo porque veas una operación grande en Options Flow. Es un pilar del Triángulo, no el Triángulo completo. Sin técnica que lo respalde y sin señal de posicionamiento adicional, sigue siendo una apuesta de un solo factor.' },
+                ]
+            },
+        ]
+    },
+
+    // ── MÓDULO 22, LECCIÓN 3 ───────────────────────────────────────────────
+    '22-3': {
+        moduleId: 22,
+        lessonIndex: 2,
+        title: 'Posicionamiento — Qué Apuesta el Mercado',
+        duration: '13 min',
+        intro: 'Si el order flow es la señal de "quién está entrando ahora", el posicionamiento es la señal de "quién ya está dentro". RSU construye esta lectura combinando tres fuentes de Research que ya conoces del Módulo 21: institucionales, insiders y corto interés — leídas aquí en conjunto, como un solo pilar del Triángulo.',
+        sections: [
+            {
+                heading: 'Tres ventanas al posicionamiento',
+                blocks: [
+                    { type: 'chart', id: 'positioning_three_signals' },
+                    { type: 'concept', title: 'Titularidad institucional', content: 'El % del float en manos institucionales y su evolución trimestral (13F) indican si las gestoras están construyendo o reduciendo posición. Recuerda la limitación: todos los 13F comparten el mismo cierre de trimestre, así que es una fotografía trimestral, no en tiempo real.' },
+                    { type: 'concept', title: 'Transacciones de insiders', content: 'Los códigos P (compra) y S (venta) del Formulario 4, especialmente en clusters de varios insiders comprando en un periodo corto, son la señal de convicción más directa: alguien con información interna arriesga su propio dinero.' },
+                    { type: 'concept', title: 'Corto interés y squeeze gauge', content: 'Un corto interés elevado no es, por sí solo, ni alcista ni bajista — pero combinado con una ruptura técnica real, añade combustible potencial vía cobertura forzada de posiciones cortas.' },
+                ]
+            },
+            {
+                heading: 'Leer el conjunto, no una sola pieza',
+                blocks: [
+                    { type: 'text', content: 'El pilar de posicionamiento no se confirma con una sola de las tres fuentes — se confirma cuando varias apuntan en la misma dirección. Un cluster de compras insider, junto con un % institucional estable o en aumento, y un corto interés que añade presión potencial de cobertura, forman una lectura de posicionamiento mucho más sólida que cualquiera de los tres factores por separado.' },
+                    { type: 'table',
+                        headers: ['Combinación', 'Lectura'],
+                        rows: [
+                            ['Insiders comprando + institucional al alza', 'Posicionamiento alcista fuerte'],
+                            ['Insiders comprando + institucional plano', 'Posicionamiento alcista moderado'],
+                            ['Sin actividad insider + institucional a la baja', 'Posicionamiento débil — no cuenta como pilar confirmado'],
+                            ['Corto interés alto + resto neutro', 'Solo combustible potencial, no es señal de posicionamiento en sí misma'],
+                        ]
+                    },
+                ]
+            },
+            {
+                heading: 'El posicionamiento es dinámico',
+                blocks: [
+                    { type: 'text', content: 'Una lectura de posicionamiento bullish puede deteriorarse con rapidez: una rebaja de guidance, el rechazo de un nivel técnico clave, o simplemente una corrección del mercado general pueden cambiar el apetito institucional en cuestión de días.' },
+                    { type: 'chart', id: 'positioning_dynamic_warning' },
+                    { type: 'warning', content: 'No confíes en una lectura de posicionamiento de hace semanas. Antes de entrar, vuelve a comprobar los tres componentes — insiders, institucionales y corto interés — para confirmar que la fotografía sigue siendo la misma que cuando la detectaste.' },
+                ]
+            },
+            {
+                heading: 'Checklist rápido de posicionamiento',
+                blocks: [
+                    { type: 'steps', items: [
+                        '¿Hay cluster de compras insider código P en las últimas semanas?',
+                        '¿El % institucional se mantiene estable o sube en el último trimestre reportado?',
+                        '¿El corto interés es elevado en relación al volumen medio (combustible potencial)?',
+                        '¿Volviste a comprobar estos tres puntos justo antes de entrar, no hace días?',
+                    ]},
+                ]
+            },
+        ]
+    },
+
+    // ── MÓDULO 22, LECCIÓN 4 ───────────────────────────────────────────────
+    '22-4': {
+        moduleId: 22,
+        lessonIndex: 3,
+        title: 'El Checklist de Confluencia',
+        duration: '12 min',
+        intro: 'Ya conoces los tres pilares por separado. Esta lección los une en un proceso repetible: en qué orden buscarlos, cómo confirmar que realmente están alineados, y cómo conectar el Triángulo RSU con el resto de tu proceso de trading — planificación, R:R y confirmación de entrada.',
+        sections: [
+            {
+                heading: 'El orden de búsqueda recomendado',
+                blocks: [
+                    { type: 'text', content: 'De los tres pilares, el order flow notable es el más escaso — no aparece todos los días en todos los tickers. Por eso es el punto de partida más eficiente: en lugar de revisar la técnica de cientos de tickers uno a uno, empiezas por donde ya hay dinero grande moviéndose.' },
+                    { type: 'chart', id: 'triangle_workflow_order' },
+                    { type: 'steps', items: [
+                        '<strong>1. Escanea Options Flow</strong> en busca de operaciones grandes y consistentes → crea una lista corta de candidatos',
+                        '<strong>2. Revisa la técnica</strong> de cada candidato — no hace falta que ya haya roto, basta con que se esté formando un setup claro',
+                        '<strong>3. Comprueba el posicionamiento</strong> en Research — insiders, institucionales, corto interés',
+                        '<strong>4. Espera la confirmación técnica</strong> — el cierre de vela que valida la ruptura, no la mecha',
+                        '<strong>5. Entra con tu plan</strong> — R:R definido, stop calculado, tamaño según cuántos pilares están realmente alineados',
+                    ]},
+                ]
+            },
+            {
+                heading: 'Ejemplo ilustrativo',
+                blocks: [
+                    { type: 'text', content: 'Imagina un ticker que llevas semanas vigilando por una resistencia horizontal clara, testeada varias veces sin romperse. Un día detectas en Options Flow una compra de calls fuera de dinero por varios cientos de miles de dólares, ejecutada como sweep — señal de urgencia. Revisas Research: hay una compra insider código P reciente y el % institucional ha subido en el último trimestre. Tienes order flow y posicionamiento alineados; solo falta la técnica.' },
+                    { type: 'text', content: 'Unos días después, el precio cierra por encima de la resistencia con volumen por encima de la media. Ahí se completa el Triángulo: las tres señales, de fuentes independientes, apuntan en la misma dirección. Ese es el momento de ejecutar el plan — no antes, con la técnica aún sin confirmar.' },
+                ]
+            },
+            {
+                heading: 'Conecta con el resto de tu proceso',
+                blocks: [
+                    { type: 'text', content: 'El Triángulo RSU no sustituye el resto de la metodología — la precede. Una vez confirmado, sigues necesitando todo lo que ya viste en módulos anteriores: un ratio riesgo/recompensa mínimo de 1:2 (Módulo 18), un método de confirmación de entrada válido (Módulo 19), y un plan de trade con entrada, stop y tamaño definidos antes de pulsar el botón (Módulo 11).' },
+                    { type: 'concept', title: 'El Triángulo filtra el "qué"; tu proceso decide el "cómo"', content: 'El Triángulo te dice si un ticker merece tu atención de alta convicción. El resto de tu proceso — gestión del riesgo, R:R, plan de trade — sigue decidiendo cómo ejecutas esa idea. Uno no sustituye al otro.' },
+                ]
+            },
+            {
+                heading: 'Regla final',
+                blocks: [
+                    { type: 'tip', label: 'RESUMEN DEL TRIÁNGULO RSU', content: 'Sin las tres señales alineadas — order flow, posicionamiento y técnica confirmada — no hay Triángulo RSU. Con dos, tamaño reducido. Con una sola, ni se considera. Y ni siquiera con las tres presentes dejes de aplicar tu gestión del riesgo: el Triángulo mejora la probabilidad, nunca la garantiza.' },
+                ]
+            },
+        ]
+    },
 };

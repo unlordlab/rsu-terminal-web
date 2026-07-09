@@ -16,6 +16,7 @@ function pageShell() {
         + '<button id="insider-search-btn" style="background:var(--color-accent);color:#000;border:none;border-radius:var(--radius);padding:8px 20px;font-family:var(--font-mono);font-size:12px;cursor:pointer;font-weight:500;">BUSCAR</button>'
         + '</div>'
         + '<div id="insider-ticker-result"></div>'
+        + '<div id="insider-diag" style="margin-bottom:0.75rem;"></div>'
         + '<div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem;margin-bottom:1rem;">'
         + '<div id="insider-clusters"></div>'
         + '<div id="insider-sells"></div>'
@@ -61,9 +62,13 @@ async function loadAll(container) {
 
         if (!feed.ok) throw new Error(feed.error || 'Sin datos');
 
-        buyEl.innerHTML     = renderBuys(feed.buys || []);
-        sellEl.innerHTML    = renderSells(feed.sells || []);
+        const coverage = 'Últimos ' + (feed.window_days || 10) + ' días · ' + (feed.total || 0) + ' transacciones acumuladas';
+        buyEl.innerHTML     = renderBuys(feed.buys || [], coverage);
+        sellEl.innerHTML    = renderSells(feed.sells || [], coverage);
         clusterEl.innerHTML = renderClusters(clusters.clusters || []);
+
+        const diagEl = container.querySelector('#insider-diag');
+        if (diagEl) diagEl.innerHTML = renderDiagnostic(feed.last_ingest_log);
 
     } catch(e) {
         buyEl.innerHTML  = shell('COMPRAS RECIENTES', error(e.message));
@@ -89,8 +94,8 @@ async function loadTicker(ticker, el) {
 
 // ── RENDERS ───────────────────────────────────────────────────────────────────
 
-function renderBuys(buys) {
-    if (!buys.length) return shell('COMPRAS RECIENTES · TOP DIRECTIVOS', '<div style="padding:1rem;color:var(--color-muted);font-size:12px;">Sin compras significativas recientes</div>');
+function renderBuys(buys, coverage) {
+    if (!buys.length) return shell('COMPRAS RECIENTES · TOP DIRECTIVOS', '<div style="padding:1rem;color:var(--color-muted);font-size:12px;">Sin compras significativas registradas todavía — el histórico se va acumulando cada 20 min</div>', coverage);
 
     const header = '<div style="display:grid;grid-template-columns:80px 70px 1fr 120px 90px 80px;gap:8px;padding:6px 14px;border-bottom:1px solid var(--color-border);font-size:10px;color:var(--color-muted);">'
         + '<div>FECHA</div><div>TICKER</div><div>INSIDER</div><div>CARGO</div><div>ACCIONES</div><div>VALOR</div>'
@@ -106,11 +111,11 @@ function renderBuys(buys) {
         + '</div>'
     ).join('');
 
-    return shell('COMPRAS RECIENTES · TOP DIRECTIVOS', header + '<div style="overflow-y:auto;max-height:400px;">' + rows + '</div>', 'SEC EDGAR Form 4');
+    return shell('COMPRAS RECIENTES · TOP DIRECTIVOS', header + '<div style="overflow-y:auto;max-height:400px;">' + rows + '</div>', coverage);
 }
 
-function renderSells(sells) {
-    if (!sells.length) return shell('VENTAS RECIENTES', '<div style="padding:1rem;color:var(--color-muted);font-size:12px;">Sin ventas significativas recientes</div>');
+function renderSells(sells, coverage) {
+    if (!sells.length) return shell('VENTAS RECIENTES', '<div style="padding:1rem;color:var(--color-muted);font-size:12px;">Sin ventas significativas registradas todavía — el histórico se va acumulando cada 20 min</div>', coverage);
 
     const header = '<div style="display:grid;grid-template-columns:80px 70px 1fr 90px 80px;gap:8px;padding:6px 14px;border-bottom:1px solid var(--color-border);font-size:10px;color:var(--color-muted);">'
         + '<div>FECHA</div><div>TICKER</div><div>INSIDER</div><div>ACCIONES</div><div>VALOR</div>'
@@ -125,7 +130,7 @@ function renderSells(sells) {
         + '</div>'
     ).join('');
 
-    return shell('VENTAS RECIENTES', header + '<div style="overflow-y:auto;max-height:300px;">' + rows + '</div>', 'SEC EDGAR Form 4');
+    return shell('VENTAS RECIENTES', header + '<div style="overflow-y:auto;max-height:300px;">' + rows + '</div>', coverage);
 }
 
 function renderClusters(clusters) {
@@ -180,6 +185,21 @@ function renderTickerResult(ticker, data) {
     }).join('');
 
     return shell('INSIDER TRANSACTIONS · ' + ticker, summary + header + '<div style="overflow-y:auto;max-height:400px;">' + rows + '</div>', 'SEC EDGAR Form 4 · Últimos 6 meses');
+}
+
+function renderDiagnostic(log) {
+    if (!log) return '';
+    const ok = !!log.ok;
+    const color = ok ? 'var(--color-muted)' : '#f23645';
+    const icon  = ok ? '✓' : '✗';
+    const when  = (log.ran_at || '').replace('T', ' ').substring(0, 19);
+    let text;
+    if (ok) {
+        text = 'Última ingesta ' + when + ' — ' + log.scanned + ' filings escaneados, ' + log.found + ' transacciones válidas, ' + log.new_rows + ' nuevas guardadas';
+    } else {
+        text = 'La última ingesta (' + when + ') falló: ' + (log.error || 'error desconocido');
+    }
+    return '<div style="font-size:10px;color:' + color + ';padding:4px 2px;">' + icon + ' ' + text + '</div>';
 }
 
 // ── HELPERS ───────────────────────────────────────────────────────────────────

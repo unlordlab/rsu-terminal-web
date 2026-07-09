@@ -1,0 +1,265 @@
+import { tt } from '/components/tooltip.js';
+import { errorMessage } from '/core/ui.js';
+
+function authHeader() {
+    const token = sessionStorage.getItem('rsu_token') || localStorage.getItem('rsu_token');
+    return token ? { 'Authorization': 'Bearer ' + token, 'Content-Type': 'application/json' } : { 'Content-Type': 'application/json' };
+}
+
+export async function render(container) {
+    container.innerHTML = pageShell();
+    wireForm(container);
+    loadWatchlist(container);
+    loadAlerts(container);
+}
+
+function pageShell() {
+    return '<div style="margin-bottom:1.5rem;">'
+        + '<div style="color:var(--color-accent);font-size:18px;letter-spacing:0.1em;text-shadow:var(--glow-text);margin-bottom:4px;">★ WATCHLIST ' + tt('watchlist') + '</div>'
+        + '<div style="color:var(--color-muted);font-size:12px;">Tus tickers seguidos + alertas de precio</div>'
+        + '</div>'
+
+        // Añadir ticker
+        + '<div style="display:flex;gap:8px;margin-bottom:1.5rem;">'
+        + '<input id="wl-add-input" type="text" placeholder="Añadir ticker (NVDA, AAPL...)" style="flex:1;background:var(--color-bg,#0a0a0a);border:1px solid var(--color-border);border-radius:var(--radius);padding:8px 14px;color:var(--color-text);font-family:var(--font-mono);font-size:13px;outline:none;text-transform:uppercase;">'
+        + '<button id="wl-add-btn" style="background:var(--color-accent);color:#000;border:none;border-radius:var(--radius);padding:8px 20px;font-family:var(--font-mono);font-size:12px;cursor:pointer;font-weight:500;">＋ AÑADIR</button>'
+        + '</div>'
+
+        + '<div id="wl-table"></div>'
+
+        // Crear alerta
+        + '<div style="margin-top:1.5rem;margin-bottom:0.75rem;color:var(--color-accent);font-size:14px;letter-spacing:0.08em;">⏰ NUEVA ALERTA ' + tt('price-alerts') + '</div>'
+        + '<div style="display:flex;gap:8px;margin-bottom:1.5rem;flex-wrap:wrap;align-items:center;background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius);padding:12px 14px;">'
+        + '<input id="alert-ticker" type="text" placeholder="Ticker" style="width:100px;background:var(--color-bg,#0a0a0a);border:1px solid var(--color-border);border-radius:var(--radius);padding:8px 10px;color:var(--color-text);font-family:var(--font-mono);font-size:13px;outline:none;text-transform:uppercase;">'
+        + '<select id="alert-metric" style="background:var(--color-bg,#0a0a0a);border:1px solid var(--color-border);border-radius:var(--radius);padding:8px 10px;color:var(--color-text);font-family:var(--font-mono);font-size:12px;outline:none;">'
+        + '<option value="price">Precio</option>'
+        + '<option value="rvol">RVOL</option>'
+        + '</select>'
+        + '<select id="alert-condition" style="background:var(--color-bg,#0a0a0a);border:1px solid var(--color-border);border-radius:var(--radius);padding:8px 10px;color:var(--color-text);font-family:var(--font-mono);font-size:12px;outline:none;">'
+        + '<option value="above">Por encima de</option>'
+        + '<option value="below">Por debajo de</option>'
+        + '</select>'
+        + '<input id="alert-price" type="number" step="0.01" placeholder="Precio objetivo ($)" style="width:160px;background:var(--color-bg,#0a0a0a);border:1px solid var(--color-border);border-radius:var(--radius);padding:8px 10px;color:var(--color-text);font-family:var(--font-mono);font-size:13px;outline:none;">'
+        + '<button id="alert-create-btn" style="background:var(--color-accent);color:#000;border:none;border-radius:var(--radius);padding:8px 20px;font-family:var(--font-mono);font-size:12px;cursor:pointer;font-weight:500;">CREAR ALERTA</button>'
+        + '<span id="alert-form-msg" style="font-size:11px;color:var(--color-muted);"></span>'
+        + '</div>'
+
+        + '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.5rem;">'
+        + '<span></span>'
+        + '<button id="alert-clear-triggered-btn" style="background:transparent;border:1px solid var(--color-border);color:var(--color-muted);border-radius:var(--radius);padding:5px 12px;font-size:10px;cursor:pointer;">🗑 LIMPIAR DISPARADAS</button>'
+        + '</div>'
+        + '<div id="alerts-table"></div>';
+}
+
+function shell(title, content, subtitle) {
+    return '<div style="background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius);overflow:hidden;margin-bottom:1rem;">'
+        + '<div style="display:flex;justify-content:space-between;align-items:center;padding:10px 14px;border-bottom:1px solid var(--color-border);">'
+        + '<div style="color:var(--color-accent);font-size:12px;letter-spacing:0.08em;text-shadow:var(--glow-text);">' + title + '</div>'
+        + (subtitle ? '<div style="color:var(--color-muted);font-size:10px;">' + subtitle + '</div>' : '')
+        + '</div>'
+        + content
+        + '</div>';
+}
+
+function loading() { return '<div style="padding:1rem;color:var(--color-muted);font-size:12px;">Cargando...</div>'; }
+function error(msg) { return errorMessage(msg); }
+
+// ── WATCHLIST ────────────────────────────────────────────────────────────────
+
+async function loadWatchlist(container) {
+    const el = container.querySelector('#wl-table');
+    el.innerHTML = shell('TICKERS SEGUIDOS', loading());
+    try {
+        const res  = await fetch('/api/v1/watchlist', { headers: authHeader() });
+        const data = await res.json();
+        if (!data.ok) throw new Error(data.error || 'Sin datos');
+        if (!data.data.length) {
+            el.innerHTML = shell('TICKERS SEGUIDOS', '<div style="padding:1.5rem;text-align:center;color:var(--color-muted);font-size:12px;">Todavía no sigues ningún ticker. Añade uno arriba ↑</div>');
+            return;
+        }
+        const header = '<div style="display:grid;grid-template-columns:1fr 100px 90px 90px 40px;gap:8px;padding:7px 14px;border-bottom:1px solid var(--color-border);font-size:10px;color:var(--color-muted);">'
+            + '<div>TICKER</div><div style="text-align:right;">PRECIO</div><div style="text-align:right;">VAR%</div><div style="text-align:center;">ALERTA</div><div></div></div>';
+        const rows = data.data.map(w => {
+            const up    = (w.chg || 0) >= 0;
+            const color = w.ok ? (up ? 'var(--color-accent)' : '#f23645') : 'var(--color-muted)';
+            const arrow = up ? '▲' : '▼';
+            return '<div style="display:grid;grid-template-columns:1fr 100px 90px 90px 40px;gap:8px;padding:8px 14px;border-bottom:1px solid var(--color-border);font-size:12px;align-items:center;">'
+                + '<div class="ticker-link" style="color:var(--color-accent);cursor:pointer;font-weight:500;" onclick="goToResearch(\'' + w.ticker + '\')">' + w.ticker + '</div>'
+                + '<div style="text-align:right;color:var(--color-text);">' + (w.ok ? '$' + w.price.toFixed(2) : '—') + '</div>'
+                + '<div style="text-align:right;color:' + color + ';">' + (w.ok ? arrow + ' ' + Math.abs(w.chg).toFixed(2) + '%' : '—') + '</div>'
+                + '<div style="text-align:center;"><button class="wl-alert-btn" data-ticker="' + w.ticker + '" style="background:transparent;border:1px solid var(--color-border);color:var(--color-muted);border-radius:3px;padding:3px 8px;font-size:10px;cursor:pointer;">＋ alerta</button></div>'
+                + '<div style="text-align:center;"><button class="wl-remove-btn" data-ticker="' + w.ticker + '" style="background:transparent;border:none;color:var(--color-muted);cursor:pointer;font-size:14px;" title="Quitar de watchlist">✕</button></div>'
+                + '</div>';
+        }).join('');
+        el.innerHTML = shell('TICKERS SEGUIDOS', header + rows);
+
+        el.querySelectorAll('.wl-remove-btn').forEach(btn => {
+            btn.addEventListener('click', async () => {
+                const ticker = btn.getAttribute('data-ticker');
+                btn.disabled = true;
+                await fetch('/api/v1/watchlist/' + encodeURIComponent(ticker), { method: 'DELETE', headers: authHeader() });
+                loadWatchlist(container);
+            });
+        });
+        el.querySelectorAll('.wl-alert-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                const ticker = btn.getAttribute('data-ticker');
+                const input  = container.querySelector('#alert-ticker');
+                input.value  = ticker;
+                input.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                input.focus();
+            });
+        });
+    } catch(e) {
+        el.innerHTML = shell('TICKERS SEGUIDOS', error(e.message));
+    }
+}
+
+function wireAddTicker(container) {
+    const input = container.querySelector('#wl-add-input');
+    const btn   = container.querySelector('#wl-add-btn');
+    const submit = async () => {
+        const ticker = input.value.trim().toUpperCase();
+        if (!ticker) return;
+        btn.disabled = true;
+        try {
+            const res  = await fetch('/api/v1/watchlist', { method: 'POST', headers: authHeader(), body: JSON.stringify({ ticker }) });
+            const data = await res.json();
+            if (data.ok) {
+                input.value = '';
+                loadWatchlist(container);
+            } else {
+                alert(data.error || 'No se pudo añadir el ticker');
+            }
+        } catch(e) {
+            alert('Error de red: ' + e.message);
+        } finally {
+            btn.disabled = false;
+        }
+    };
+    btn.addEventListener('click', submit);
+    input.addEventListener('keydown', e => { if (e.key === 'Enter') submit(); });
+}
+
+// ── ALERTAS ──────────────────────────────────────────────────────────────────
+
+const IMPACT_LABEL = { active: 'ACTIVA', triggered: 'DISPARADA', cancelled: 'CANCELADA' };
+const IMPACT_COLOR = { active: '#3b82f6', triggered: '#00ffad', cancelled: 'var(--color-muted)' };
+
+async function loadAlerts(container) {
+    const el = container.querySelector('#alerts-table');
+    el.innerHTML = shell('MIS ALERTAS', loading());
+    try {
+        const res  = await fetch('/api/v1/watchlist/alerts', { headers: authHeader() });
+        const data = await res.json();
+        if (!data.ok) throw new Error(data.error || 'Sin datos');
+        if (!data.data.length) {
+            el.innerHTML = shell('MIS ALERTAS', '<div style="padding:1.5rem;text-align:center;color:var(--color-muted);font-size:12px;">Todavía no has creado ninguna alerta.</div>');
+        } else {
+            const header = '<div style="display:grid;grid-template-columns:90px 130px 110px 100px 1fr 40px;gap:8px;padding:7px 14px;border-bottom:1px solid var(--color-border);font-size:10px;color:var(--color-muted);">'
+                + '<div>TICKER</div><div>CONDICIÓN</div><div style="text-align:right;">OBJETIVO</div><div>ESTADO</div><div>DETALLE</div><div></div></div>';
+            const rows = data.data.map(a => {
+                const isRvol    = a.metric === 'rvol';
+                const condLabel = (a.condition === 'above' ? 'Por encima de ' : 'Por debajo de ') + (isRvol ? 'RVOL' : 'precio');
+                const targetFmt = isRvol ? Number(a.target_price).toFixed(2) + 'x' : '$' + Number(a.target_price).toFixed(2);
+                const stColor   = IMPACT_COLOR[a.status] || 'var(--color-muted)';
+                const bg        = a.status === 'triggered' && !a.seen ? 'rgba(0,255,173,0.05)' : 'transparent';
+                const detail    = a.status === 'triggered'
+                    ? ('Disparada a ' + (a.triggered_price != null ? (isRvol ? a.triggered_price.toFixed(2) + 'x' : '$' + a.triggered_price.toFixed(2)) : '?') + ' el ' + (a.triggered_at || '').substring(0, 10))
+                    : ('Creada el ' + (a.created_at || '').substring(0, 10));
+                return '<div style="display:grid;grid-template-columns:90px 130px 110px 100px 1fr 40px;gap:8px;padding:8px 14px;border-bottom:1px solid var(--color-border);font-size:12px;align-items:center;background:' + bg + ';">'
+                    + '<div class="ticker-link" style="color:var(--color-accent);cursor:pointer;font-weight:500;" onclick="goToResearch(\'' + a.ticker + '\')">' + a.ticker + '</div>'
+                    + '<div style="color:var(--color-muted);">' + condLabel + '</div>'
+                    + '<div style="text-align:right;color:var(--color-text);">' + targetFmt + '</div>'
+                    + '<div style="color:' + stColor + ';font-size:10px;font-weight:600;">' + (IMPACT_LABEL[a.status] || a.status) + '</div>'
+                    + '<div style="color:var(--color-muted);font-size:10px;">' + detail + '</div>'
+                    + '<div style="text-align:center;"><button class="alert-remove-btn" data-id="' + a.id + '" style="background:transparent;border:none;color:var(--color-muted);cursor:pointer;font-size:14px;" title="Eliminar alerta">✕</button></div>'
+                    + '</div>';
+            }).join('');
+            el.innerHTML = shell('MIS ALERTAS', header + rows);
+
+            el.querySelectorAll('.alert-remove-btn').forEach(btn => {
+                btn.addEventListener('click', async () => {
+                    const id = btn.getAttribute('data-id');
+                    btn.disabled = true;
+                    await fetch('/api/v1/watchlist/alerts/' + id, { method: 'DELETE', headers: authHeader() });
+                    loadAlerts(container);
+                });
+            });
+        }
+        // Al visitar esta página se dan por vistas las alertas disparadas (apaga la campanita)
+        fetch('/api/v1/watchlist/alerts/mark-seen', { method: 'POST', headers: authHeader() })
+            .then(() => { if (window.__refreshAlertBadge) window.__refreshAlertBadge(); })
+            .catch(() => {});
+    } catch(e) {
+        el.innerHTML = shell('MIS ALERTAS', error(e.message));
+    }
+}
+
+function wireCreateAlert(container) {
+    const btn    = container.querySelector('#alert-create-btn');
+    const msg    = container.querySelector('#alert-form-msg');
+    const metric = container.querySelector('#alert-metric');
+    const price  = container.querySelector('#alert-price');
+
+    metric.addEventListener('change', () => {
+        price.placeholder = metric.value === 'rvol' ? 'RVOL objetivo (ej. 2.5)' : 'Precio objetivo ($)';
+    });
+
+    btn.addEventListener('click', async () => {
+        const ticker      = container.querySelector('#alert-ticker').value.trim().toUpperCase();
+        const condition   = container.querySelector('#alert-condition').value;
+        const metricValue = metric.value;
+        const target      = parseFloat(price.value);
+        if (!ticker || !target || target <= 0) {
+            msg.style.color = '#f23645';
+            msg.textContent = metricValue === 'rvol' ? 'Rellena ticker y RVOL objetivo (p.ej. 2.5)' : 'Rellena ticker y precio objetivo';
+            return;
+        }
+        btn.disabled = true;
+        msg.style.color = 'var(--color-muted)';
+        msg.textContent = 'Creando...';
+        try {
+            const res  = await fetch('/api/v1/watchlist/alerts', {
+                method: 'POST', headers: authHeader(),
+                body: JSON.stringify({ ticker, condition, target_price: target, metric: metricValue }),
+            });
+            const data = await res.json();
+            if (data.ok) {
+                msg.style.color = '#00ffad';
+                msg.textContent = 'Alerta creada ✓';
+                container.querySelector('#alert-ticker').value = '';
+                price.value = '';
+                loadAlerts(container);
+            } else {
+                msg.style.color = '#f23645';
+                msg.textContent = data.error || 'No se pudo crear la alerta';
+            }
+        } catch(e) {
+            msg.style.color = '#f23645';
+            msg.textContent = 'Error de red: ' + e.message;
+        } finally {
+            btn.disabled = false;
+        }
+    });
+}
+
+function wireClearTriggered(container) {
+    const btn = container.querySelector('#alert-clear-triggered-btn');
+    btn.addEventListener('click', async () => {
+        if (!confirm('¿Eliminar todas las alertas ya disparadas? Esta acción no se puede deshacer.')) return;
+        btn.disabled = true;
+        try {
+            await fetch('/api/v1/watchlist/alerts/triggered', { method: 'DELETE', headers: authHeader() });
+            loadAlerts(container);
+        } finally {
+            btn.disabled = false;
+        }
+    });
+}
+
+function wireForm(container) {
+    wireAddTicker(container);
+    wireCreateAlert(container);
+    wireClearTriggered(container);
+}

@@ -28,3 +28,28 @@ export function errorMessage(msg, opts = {}) {
     }
     return '<div style="padding:' + padding + ';color:#f23645;font-size:' + fontSize + ';' + extraStyle + '">✗ ' + msg + '</div>';
 }
+
+/**
+ * Añade un ticker a la Watchlist del usuario. Compartido entre Research y
+ * Scanner (y cualquier otra página que quiera un botón "＋ Watchlist" rápido)
+ * para no duplicar la llamada al endpoint en cada sitio.
+ * Devuelve { ok, error? } — quien llama decide cómo dar feedback visual
+ * (cambiar texto de un botón, mostrar un toast, etc.).
+ */
+export async function addToWatchlist(ticker) {
+    const token = sessionStorage.getItem('rsu_token') || localStorage.getItem('rsu_token');
+    try {
+        const res = await fetch('/api/v1/watchlist', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                ...(token ? { 'Authorization': 'Bearer ' + token } : {}),
+            },
+            body: JSON.stringify({ ticker: (ticker || '').toUpperCase() }),
+        });
+        const data = await res.json();
+        return data;
+    } catch (e) {
+        return { ok: false, error: 'Error de red: ' + e.message };
+    }
+}

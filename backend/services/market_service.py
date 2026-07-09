@@ -1,5 +1,6 @@
 from datetime import datetime, timedelta, timezone
 import yfinance as yf
+import pandas as pd
 from concurrent.futures import ThreadPoolExecutor
 
 def get_timestamp():
@@ -53,6 +54,16 @@ def get_indices():
 
 # ── FEAR & GREED ──────────────────────────────────────────────────────────────
 
+FEAR_GREED_COMPONENTS = [
+    {"key": "market_momentum_sp500", "label": "Momentum del Mercado",        "desc": "S&P 500 vs media de 125 sesiones"},
+    {"key": "stock_price_strength",  "label": "Fortaleza del Precio",        "desc": "Nuevos máximos vs mínimos (52 sem.)"},
+    {"key": "stock_price_breadth",   "label": "Amplitud del Precio",         "desc": "Volumen alcista vs bajista (McClellan Vol.)"},
+    {"key": "put_call_options",      "label": "Ratio Put/Call",              "desc": "Opciones de venta vs de compra"},
+    {"key": "junk_bond_demand",      "label": "Demanda de Bonos Basura",     "desc": "Spread High Yield vs Investment Grade"},
+    {"key": "market_volatility_vix", "label": "Volatilidad (VIX)",           "desc": "VIX vs su media de 50 sesiones"},
+    {"key": "safe_haven_demand",     "label": "Demanda de Refugio",          "desc": "Rendimiento acciones vs bonos (20 días)"},
+]
+
 def get_fear_greed():
     import requests
     try:
@@ -73,7 +84,29 @@ def get_fear_greed():
             rating = str(fg["rating"]).replace("_", " ").title()
             prev   = int(fg.get("previous_close", score))
             week   = int(fg.get("previous_1_week", score))
-            return {"score": score, "rating": rating, "prev": prev, "week_ago": week, "timestamp": get_timestamp(), "ok": True}
+            month  = fg.get("previous_1_month")
+            year   = fg.get("previous_1_year")
+
+            components = []
+            for c in FEAR_GREED_COMPONENTS:
+                node = data.get(c["key"])
+                if node and node.get("score") is not None:
+                    components.append({
+                        "key": c["key"],
+                        "label": c["label"],
+                        "desc": c["desc"],
+                        "score": round(float(node["score"]), 1),
+                        "rating": str(node.get("rating", "")).replace("_", " ").title(),
+                    })
+
+            return {
+                "score": score, "rating": rating,
+                "prev": prev, "week_ago": week,
+                "month_ago": int(month) if month is not None else None,
+                "year_ago": int(year) if year is not None else None,
+                "components": components,
+                "timestamp": get_timestamp(), "ok": True,
+            }
     except Exception:
         pass
     try:
@@ -86,7 +119,11 @@ def get_fear_greed():
         elif score >= 45: rating = "Neutral"
         elif score >= 25: rating = "Fear"
         else:             rating = "Extreme Fear"
-        return {"score": score, "rating": rating + " (est.)", "prev": score, "week_ago": score, "timestamp": get_timestamp(), "ok": True}
+        return {
+            "score": score, "rating": rating + " (est.)",
+            "prev": score, "week_ago": score, "month_ago": None, "year_ago": None,
+            "components": [], "timestamp": get_timestamp(), "ok": True,
+        }
     except Exception as e:
         return {"ok": False, "error": str(e), "timestamp": get_timestamp()}
 
@@ -315,69 +352,118 @@ def translate_event(name):
             return es
     return name
 
+_HIGH_IMPACT_KW = [
+    'non farm payrolls', 'nonfarm payrolls', 'interest rate decision', 'rate decision',
+    'cpi', 'gdp', 'unemployment rate', 'fomc statement', 'employment change',
+    'ism manufacturing', 'ism services', 'core pce',
+]
+_MEDIUM_IMPACT_KW = [
+    'pmi', 'retail sales', 'ppi', 'consumer confidence', 'durable goods',
+    'trade balance', 'housing starts', 'building permits', 'jobless claims', 'consumer sentiment',
+]
+
+def _guess_impact(event_name):
+    name = (event_name or '').lower()
+    for kw in _HIGH_IMPACT_KW:
+        if kw in name:
+            return 'High'
+    for kw in _MEDIUM_IMPACT_KW:
+        if kw in name:
+            return 'Medium'
+    return 'Low'
+
+def _fmt_econ_value(v, unit=None):
+    if v is None or v == "":
+        return "-"
+    try:
+        v = float(v)
+        s = f"{int(v):,}" if v == int(v) else f"{v:,.2f}"
+    except Exception:
+        s = str(v)
+    if unit == '%':
+        return s + '%'
+    if unit:
+        return s + ' ' + str(unit)
+    return s
+
 def get_economic_calendar():
     from services.cache import cache, TTL
     cached = cache.get("market:calendar")
     if cached: return cached
-    import requests
+    from config import settings
+    import requests, pytz
+    api_key = getattr(settings, "finnhub_api_key", "")
+    if not api_key:
+        return {"data": [], "timestamp": get_timestamp(), "ok": False, "error": "Falta FINNHUB_API_KEY en el .env"}
     events = []
     try:
-        now = datetime.now(timezone(timedelta(hours=1))).replace(tzinfo=None)
+        now       = datetime.now(timezone(timedelta(hours=1))).replace(tzinfo=None)
+        date_from = now.strftime('%Y-%m-%d')
+        date_to   = (now + timedelta(days=7)).strftime('%Y-%m-%d')
         r = requests.get(
-            "https://nfs.faireconomy.media/ff_calendar_thisweek.json",
-            headers={"User-Agent": "Mozilla/5.0"},
-            timeout=10,
+            "https://finnhub.io/api/v1/calendar/economic",
+            params={"from": date_from, "to": date_to, "token": api_key},
+            timeout=15,
         )
-        if r.status_code == 200:
-            data = r.json()
-            for item in data:
-                try:
-                    date_str = item.get('date', '')
-                    event_dt = datetime.strptime(date_str[:19], '%Y-%m-%dT%H:%M:%S') if date_str else now
-                    if event_dt.date() < now.date():
-                        continue
-                    if event_dt.weekday() >= 5:
-                        continue
-                    impact = item.get('impact', 'Low')
-                    if impact not in ['High', 'Medium', 'Low']:
-                        impact = 'Low'
-                    try:
-                        import pytz
-                        et     = pytz.timezone('America/New_York')
-                        madrid = pytz.timezone('Europe/Madrid')
-                        et_dt  = et.localize(event_dt)
-                        mad_dt = et_dt.astimezone(madrid)
-                        hour   = mad_dt.hour
-                        minute = mad_dt.minute
-                        event_dt = mad_dt.replace(tzinfo=None)
-                    except Exception:
-                        hour   = (event_dt.hour + 6) % 24
-                        minute = event_dt.minute
-                    if event_dt.date() == now.date():
-                        date_display = "HOY"
-                        date_color   = "#00ffad"
-                    elif event_dt.date() == (now + timedelta(days=1)).date():
-                        date_display = "MAÑANA"
-                        date_color   = "#3b82f6"
-                    else:
-                        date_display = event_dt.strftime('%d %b').upper()
-                        date_color   = "#888"
-                    events.append({
-                        "date":       date_display,
-                        "date_color": date_color,
-                        "time":       f"{hour:02d}:{minute:02d}",
-                        "event":      translate_event(item.get('title', 'Evento')),
-                        "impact":     impact,
-                        "country":    item.get('country', 'US').upper()[:2],
-                        "actual":     item.get('actual', '-') or '-',
-                        "forecast":   item.get('forecast', '-') or '-',
-                        "previous":   item.get('previous', '-') or '-',
-                    })
-                except Exception:
+        if r.status_code != 200:
+            return {"data": [], "timestamp": get_timestamp(), "ok": False,
+                    "error": f"Finnhub {r.status_code}: {r.text[:200]}"}
+        payload = r.json()
+        data = payload.get("economicCalendar") if isinstance(payload, dict) else payload
+        if data is None:
+            msg = payload.get("error") if isinstance(payload, dict) else None
+            return {"data": [], "timestamp": get_timestamp(), "ok": False,
+                    "error": msg or "Respuesta inesperada de Finnhub (sin 'economicCalendar')"}
+        if not isinstance(data, list):
+            return {"data": [], "timestamp": get_timestamp(), "ok": False,
+                    "error": "Respuesta inesperada de Finnhub (no es una lista)"}
+        utc    = pytz.UTC
+        madrid = pytz.timezone('Europe/Madrid')
+        skipped_errors = 0
+        for item in data:
+            try:
+                date_str = item.get('time', '')
+                event_dt = datetime.strptime(date_str[:19], '%Y-%m-%d %H:%M:%S') if date_str else now
+                utc_dt   = utc.localize(event_dt)
+                mad_dt   = utc_dt.astimezone(madrid)
+                local_dt = mad_dt.replace(tzinfo=None)
+                if local_dt.date() < now.date():
                     continue
+                if local_dt.weekday() >= 5:
+                    continue
+                impact = item.get('impact') or _guess_impact(item.get('event', ''))
+                if impact not in ['High', 'Medium', 'Low']:
+                    impact = 'Low'
+                if local_dt.date() == now.date():
+                    date_display = "HOY"
+                    date_color   = "#00ffad"
+                elif local_dt.date() == (now + timedelta(days=1)).date():
+                    date_display = "MAÑANA"
+                    date_color   = "#3b82f6"
+                else:
+                    date_display = local_dt.strftime('%d %b').upper()
+                    date_color   = "#888"
+                unit = item.get('unit') or ''
+                events.append({
+                    "date":       date_display,
+                    "date_color": date_color,
+                    "time":       local_dt.strftime('%H:%M'),
+                    "event":      translate_event(item.get('event', 'Evento')),
+                    "impact":     impact,
+                    "country":    (item.get('country') or 'US').upper()[:2],
+                    "actual":     _fmt_econ_value(item.get('actual'), unit),
+                    "forecast":   _fmt_econ_value(item.get('estimate'), unit),
+                    "previous":   _fmt_econ_value(item.get('prev'), unit),
+                })
+            except Exception:
+                skipped_errors += 1
+                continue
+        if not events and skipped_errors > 0:
+            return {"data": [], "timestamp": get_timestamp(), "ok": False,
+                    "error": f"Finnhub devolvió {len(data)} eventos pero {skipped_errors} fallaron al procesar (revisa formato de 'time')"}
     except Exception as e:
         return {"data": [], "timestamp": get_timestamp(), "ok": False, "error": str(e)}
-    result = {"data": events[:20], "timestamp": get_timestamp(), "ok": True}
+    result = {"data": events[:40], "timestamp": get_timestamp(), "ok": True}
     cache.set("market:calendar", result, TTL["calendar"])
     return result
 
@@ -641,7 +727,7 @@ FRED_SERIES = [
     {"id": "BAMLC0A0CM",   "name": "IG OAS",  "label": "Investment Grade"},
 ]
 
-def _fetch_fred_series(series_id, api_key, limit=130):
+def _fetch_fred_series(series_id, api_key, limit=5):
     import requests as _req
     try:
         if api_key:
@@ -698,7 +784,7 @@ def get_credit_spreads():
                 "id": series["id"], "name": series["name"], "label": series["label"],
                 "current": current, "prev": prev, "change": change,
                 "date": history[-1]["date"], "level": level, "level_color": level_color,
-                "history": history[-130:], "ok": True,
+                "ok": True,
             })
         else:
             results.append({"id": series["id"], "name": series["name"], "label": series["label"], "current": None, "ok": False})
@@ -1092,8 +1178,13 @@ def _check_sector_above_sma50(etf_sym: str):
 
 def get_market_breadth():
     """
-    Market Breadth: SMA50/200, Golden/Death Cross, RSI(14), Oscilador McClellan
-    (proxy EMA19-EMA39), % sectores S&P sobre SMA50.
+    Amplitud de Mercado (unificado): SMA50/200, Golden/Death Cross, RSI(14) del
+    SPY + Oscilador McClellan REAL (EMA19-EMA39 sobre avance/declive neto real
+    del NYSE, no un proxy del propio índice) + % REAL del S&P 500 sobre su
+    SMA50 (desde el scan nocturno de 500 tickers, no una muestra de 11 ETFs) +
+    los datos de la Línea A/D (fusionados aquí — antes vivían en un widget
+    aparte, /market/ad-line, que se mantiene por compatibilidad pero ya no se
+    usa desde el frontend).
     """
     from services.cache import cache, TTL
     cached = cache.get("market:breadth")
@@ -1128,21 +1219,54 @@ def get_market_breadth():
         rs_last = gains.iloc[-1] / losses.iloc[-1] if losses.iloc[-1] not in (0, None) else None
         rsi = float(100 - (100 / (1 + rs_last))) if rs_last is not None and rs_last == rs_last else 50.0
 
-        close = spy_hist['Close']
-        ema19 = float(close.ewm(span=19, adjust=False).mean().iloc[-1])
-        ema39 = float(close.ewm(span=39, adjust=False).mean().iloc[-1])
-        mcclellan = round((ema19 - ema39) / current * 1000, 2)
+        # ── McClellan REAL — reutiliza los datos de avance/declive de get_advance_decline() ──
+        ad_data = get_advance_decline()
+        mcclellan, mcclellan_state = None, "N/D"
+        if ad_data.get("ok") and len(ad_data.get("history", [])) >= 39:
+            net_series = pd.Series([h["net"] for h in ad_data["history"]])
+            ema19 = float(net_series.ewm(span=19, adjust=False).mean().iloc[-1])
+            ema39 = float(net_series.ewm(span=39, adjust=False).mean().iloc[-1])
+            mcclellan = round(ema19 - ema39, 1)
+            mcclellan_state = "ALCISTA" if mcclellan > 70 else ("BAJISTA" if mcclellan < -70 else "NEUTRO")
 
-        # % sectores sobre SMA50 — en paralelo
-        above_count, total_checked = 0, 0
-        with ThreadPoolExecutor(max_workers=6) as ex:
-            results = list(ex.map(_check_sector_above_sma50, SECTOR_ETFS_BREADTH))
-        for r in results:
-            if r is not None:
-                total_checked += 1
-                if r:
-                    above_count += 1
-        pct_above_sma50 = round((above_count / total_checked * 100) if total_checked > 0 else 50.0, 1)
+        # ── % REAL del S&P 500 sobre SMA50 + New Highs/New Lows — mismo scan nocturno ──
+        pct_above_sma50, sectors_checked, breadth_source = None, 0, "n/d"
+        new_highs, new_lows, nh_nl = None, None, None
+        try:
+            from services.scanner_service import get_universe_stocks
+            universe = get_universe_stocks()
+            flagged = [v for v in universe.values() if v.get("above_sma50") is not None]
+            if flagged:
+                above = sum(1 for v in flagged if v["above_sma50"])
+                pct_above_sma50 = round(above / len(flagged) * 100, 1)
+                sectors_checked = len(flagged)
+                breadth_source = "sp500"
+            if universe:
+                new_highs = sum(1 for v in universe.values() if v.get("new_high"))
+                new_lows  = sum(1 for v in universe.values() if v.get("new_low"))
+                nh_nl = new_highs - new_lows
+        except Exception as e:
+            print(f"[MarketBreadth] Scanner no disponible para % S&P500/NH-NL: {e}")
+
+        # Fallback: si el Scanner todavía no ha corrido con el campo above_sma50
+        # (primera vez tras el despliegue, antes del próximo scan nocturno de las
+        # 22:15 UTC) o el Gist no está disponible, cae al proxy de 11 ETFs sectoriales
+        # para no dejar el widget vacío — pero se marca claramente como proxy.
+        # NH-NL no tiene un proxy razonable con solo 11 ETFs (la muestra es demasiado
+        # pequeña para "nuevos máximos/mínimos"), así que ahí simplemente se deja en
+        # null y el frontend lo muestra como N/D en vez de inventar un número.
+        if pct_above_sma50 is None:
+            above_count, total_checked = 0, 0
+            with ThreadPoolExecutor(max_workers=6) as ex:
+                results = list(ex.map(_check_sector_above_sma50, SECTOR_ETFS_BREADTH))
+            for r in results:
+                if r is not None:
+                    total_checked += 1
+                    if r:
+                        above_count += 1
+            pct_above_sma50 = round((above_count / total_checked * 100) if total_checked > 0 else 50.0, 1)
+            sectors_checked = total_checked
+            breadth_source = "etf_proxy"
 
         golden_cross = (sma200 is not None) and (sma50 > sma200)
         above_sma200 = (sma200 is not None) and (current > sma200)
@@ -1160,9 +1284,20 @@ def get_market_breadth():
             "trend": "ALCISTA" if (sma200 is not None and sma50 > sma200) else ("BAJISTA" if sma200 is not None else "N/D"),
             "strength": "FUERTE" if (sma200 is not None and current > sma50 and current > sma200) else "DÉBIL",
             "mcclellan": mcclellan,
-            "mcclellan_state": "ALCISTA" if mcclellan > 20 else ("BAJISTA" if mcclellan < -20 else "NEUTRO"),
+            "mcclellan_state": mcclellan_state,
             "pct_above_sma50": pct_above_sma50,
-            "sectors_checked": total_checked,
+            "sectors_checked": sectors_checked,
+            "breadth_source": breadth_source,  # "sp500" (real, 500 tickers) | "etf_proxy" (fallback, 11 ETFs)
+            "new_highs": new_highs,
+            "new_lows": new_lows,
+            "nh_nl": nh_nl,
+            # Datos de Línea A/D fusionados (antes en el widget separado /market/ad-line)
+            "ad_ok": ad_data.get("ok", False),
+            "ad_real_data": ad_data.get("real_data", False),
+            "ad_history": ad_data.get("history", []),
+            "current_adv": ad_data.get("current_adv", 0),
+            "current_dec": ad_data.get("current_dec", 0),
+            "current_net": ad_data.get("current_net", 0),
             "timestamp": get_timestamp(),
         }
         result = _sanitize_breadth(result)
@@ -1176,8 +1311,12 @@ def get_market_breadth():
             "price": None, "sma50": None, "sma200": None,
             "above_sma50": False, "above_sma200": False, "golden_cross": False,
             "rsi": 50.0, "rsi_state": "N/D", "trend": "N/D", "strength": "N/D",
-            "mcclellan": 0.0, "mcclellan_state": "N/D", "pct_above_sma50": 50.0,
-            "sectors_checked": 0, "timestamp": get_timestamp(),
+            "mcclellan": None, "mcclellan_state": "N/D", "pct_above_sma50": None,
+            "sectors_checked": 0, "breadth_source": "n/d",
+            "new_highs": None, "new_lows": None, "nh_nl": None,
+            "ad_ok": False, "ad_real_data": False, "ad_history": [],
+            "current_adv": 0, "current_dec": 0, "current_net": 0,
+            "timestamp": get_timestamp(),
         }
 
 

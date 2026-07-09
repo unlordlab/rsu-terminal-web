@@ -41,10 +41,9 @@ export async function render(container) {
         + '<div id="widget-sector-composition" style="display:flex;flex-direction:column;"></div>'
         + '</div>'
 
-        // Fila 2b — Market Breadth + AD Line
-        + '<div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem;margin-bottom:1rem;">'
-        + '<div id="widget-breadth" style="display:flex;flex-direction:column;height:440px;"></div>'
-        + '<div id="widget-adline"  style="display:flex;flex-direction:column;height:440px;"></div>'
+        // Fila 2b — Amplitud de Mercado (Market Breadth + AD Line fusionados)
+        + '<div style="margin-bottom:1rem;">'
+        + '<div id="widget-breadth" style="display:flex;flex-direction:column;"></div>'
         + '</div>'
 
         // Fila 2c — VIX Niveles + Cripto
@@ -84,7 +83,6 @@ export async function render(container) {
     loadSectorComposition(container.querySelector('#widget-sector-composition'));
     loadVix(container.querySelector('#widget-vix'));
     loadBreadth(container.querySelector('#widget-breadth'));
-    loadAdLine(container.querySelector('#widget-adline'));
     loadVixLevels(container.querySelector('#widget-vix-levels'));
     loadCrypto(container.querySelector('#widget-crypto'));
     loadSpreads(container.querySelector('#widget-spreads'));
@@ -183,14 +181,41 @@ async function loadFearGreed(el) {
         const data = await res.json();
         if (!data.ok) throw new Error(data.error || 'Sin datos');
         const color   = fgColor(data.score);
+        const periodRow = (label, val) =>
+            '<div style="text-align:center;"><div>' + label + '</div><div style="color:var(--color-text);margin-top:2px;font-size:13px;">' + (val != null ? val : '—') + '</div></div>';
+
+        const components = data.components || [];
+        const compRows = components.map(c => {
+            const cColor = fgColor(c.score);
+            return '<div style="margin-bottom:8px;">'
+                + '<div style="display:flex;justify-content:space-between;margin-bottom:3px;">'
+                + '<span style="color:var(--color-muted);font-size:10px;">' + c.label + '</span>'
+                + '<span style="color:' + cColor + ';font-size:10px;font-weight:600;">' + c.score.toFixed(0) + ' · ' + c.rating + '</span>'
+                + '</div>'
+                + '<div style="width:100%;height:6px;background:var(--color-border);border-radius:3px;overflow:hidden;">'
+                + '<div style="height:100%;width:' + Math.min(Math.max(c.score, 0), 100) + '%;background:' + cColor + ';"></div>'
+                + '</div>'
+                + '<div style="font-size:9px;color:var(--color-muted);margin-top:2px;">' + c.desc + '</div>'
+                + '</div>';
+        }).join('');
+
         const content = '<div style="display:flex;flex-direction:column;align-items:center;padding:1rem;">'
             + buildGauge(data.score)
             + '<div style="color:' + color + ';font-size:22px;font-weight:500;letter-spacing:0.1em;margin-top:8px;">' + data.score + '</div>'
             + '<div style="color:' + color + ';font-size:12px;margin-top:2px;letter-spacing:0.05em;">' + data.rating + '</div>'
-            + '<div style="display:flex;gap:3rem;margin-top:1rem;font-size:11px;color:var(--color-muted);">'
-            + '<div style="text-align:center;"><div>AYER</div><div style="color:var(--color-text);margin-top:2px;font-size:13px;">' + data.prev + '</div></div>'
-            + '<div style="text-align:center;"><div>HACE 1 SEM</div><div style="color:var(--color-text);margin-top:2px;font-size:13px;">' + data.week_ago + '</div></div>'
-            + '</div></div>';
+            + '<div style="display:flex;gap:2rem;margin-top:1rem;font-size:11px;color:var(--color-muted);flex-wrap:wrap;justify-content:center;">'
+            + periodRow('AYER', data.prev)
+            + periodRow('HACE 1 SEM', data.week_ago)
+            + periodRow('HACE 1 MES', data.month_ago)
+            + periodRow('HACE 1 AÑO', data.year_ago)
+            + '</div>'
+            + (components.length ? (
+                '<div style="width:100%;margin-top:1.25rem;padding-top:1rem;border-top:1px solid var(--color-border);">'
+                + '<div style="color:var(--color-muted);font-size:10px;letter-spacing:0.05em;margin-bottom:10px;text-align:left;">LOS 7 COMPONENTES DEL ÍNDICE ' + tt('fear-greed-components') + '</div>'
+                + compRows
+                + '</div>'
+            ) : '')
+            + '</div>';
         el.innerHTML = widgetShell('FEAR & GREED ' + tt('fear-greed'), 'CNN Index', content, data.timestamp);
     } catch(e) {
         el.innerHTML = widgetShell('FEAR & GREED', 'CNN Index', widgetError(e.message));
@@ -618,7 +643,7 @@ async function loadVix(el) {
 }
 
 async function loadBreadth(el) {
-    el.innerHTML = widgetShell('MARKET BREADTH ' + tt('market-breadth'), 'SMA50/200 · RSI · McClellan · % sectores', loading());
+    el.innerHTML = widgetShell('AMPLITUD DE MERCADO ' + tt('market-breadth'), 'SMA50/200 · RSI · McClellan · % S&amp;P500 · NH-NL · A/D NYSE', loading());
     try {
         const res  = await fetch('/api/v1/market/breadth', { headers: authHeader() });
         const data = await res.json();
@@ -628,8 +653,9 @@ async function loadBreadth(el) {
         // incluso cuando ok=True (p.ej. si rolling(50).mean() produce NaN por huecos en
         // el histórico de yfinance), así que cualquiera de estos campos puede llegar null
         // sin que la guarda anterior lo capture. Sin esto, .toFixed() sobre null rompe el widget.
-        if (data.price == null || data.sma50 == null || data.rsi == null
-            || data.mcclellan == null || data.pct_above_sma50 == null) {
+        // Nota: mcclellan puede ser null legítimamente (histórico A/D insuficiente para
+        // EMA39) sin que eso invalide el resto del widget — se muestra "N/D" en ese caso.
+        if (data.price == null || data.sma50 == null || data.rsi == null || data.pct_above_sma50 == null) {
             throw new Error('Datos incompletos de mercado (posible hueco en histórico). Reintentando en el próximo ciclo.');
         }
 
@@ -641,10 +667,22 @@ async function loadBreadth(el) {
         const goldenText    = data.golden_cross ? 'GOLDEN CROSS ✓' : 'DEATH CROSS ✗';
         const rsi           = data.rsi;
         const rsiColor      = rsi > 70 ? '#f23645' : (rsi < 30 ? '#00ffad' : '#ff9800');
-        const mcColor       = data.mcclellan > 0 ? '#00ffad' : '#f23645';
+        const mcAvailable   = data.mcclellan != null;
+        const mcColor       = mcAvailable ? (data.mcclellan > 0 ? '#00ffad' : '#f23645') : 'var(--color-muted)';
+        const mcRealData    = data.ad_real_data === true;
+        const mcBadge       = !mcAvailable ? ''
+            : (mcRealData
+                ? '<span style="color:#00ffad;font-size:9px;">[REAL]</span>'
+                : '<span style="color:#ff9800;font-size:9px;">[PROXY SPY]</span>');
         const pctColor      = data.pct_above_sma50 >= 60 ? '#00ffad' : (data.pct_above_sma50 <= 40 ? '#f23645' : '#ff9800');
         const sma200Str     = data.sma200 == null ? 'N/D (insuf. datos)' : '$' + data.sma200.toFixed(2);
         const sma200ColorUse= data.sma200 == null ? 'var(--color-muted)' : sma200Color;
+        const isRealBreadth = data.breadth_source === 'sp500';
+        const breadthBadge  = isRealBreadth
+            ? '<span style="color:#00ffad;font-size:9px;">[S&amp;P 500 REAL]</span>'
+            : '<span style="color:#ff9800;font-size:9px;">[PROXY 11 ETFs]</span>';
+        const nhNlAvailable = data.nh_nl != null;
+        const nhNlColor     = nhNlAvailable ? (data.nh_nl >= 0 ? '#00ffad' : '#f23645') : 'var(--color-muted)';
 
         const metricBox = (label, valueHtml) =>
             '<div style="background:var(--color-bg);border:1px solid var(--color-border);border-radius:6px;padding:8px 12px;margin-bottom:6px;display:flex;justify-content:space-between;align-items:center;">'
@@ -661,32 +699,41 @@ async function loadBreadth(el) {
             + '<span style="color:' + goldenColor + ';font-size:12px;font-weight:600;">' + goldenText + '</span>'
             + '</div>'
 
-            // McClellan
+            // McClellan (real cuando A/D es real — EMA19/EMA39 sobre avance/declive neto NYSE)
             + '<div style="background:var(--color-bg);border:1px solid var(--color-border);border-radius:6px;padding:8px 12px;margin-bottom:6px;">'
             + '<div style="display:flex;justify-content:space-between;margin-bottom:4px;">'
             + '<span style="color:var(--color-muted);font-size:11px;">Oscilador McClellan ' + tt('mcclellan-oscillator') + '</span>'
-            + '<span style="color:' + mcColor + ';font-size:11px;font-weight:600;">' + (data.mcclellan >= 0 ? '+' : '') + data.mcclellan.toFixed(1) + ' · ' + data.mcclellan_state + '</span>'
+            + '<span style="color:' + mcColor + ';font-size:11px;font-weight:600;">' + (mcAvailable ? ((data.mcclellan >= 0 ? '+' : '') + data.mcclellan.toFixed(1) + ' · ' + data.mcclellan_state) : 'N/D') + '</span>'
             + '</div>'
             + '<div style="width:100%;height:8px;background:var(--color-border);border-radius:4px;overflow:hidden;">'
-            + '<div style="height:100%;width:' + Math.min(Math.abs(data.mcclellan)/50*100, 100) + '%;background:' + mcColor + ';"></div>'
+            + '<div style="height:100%;width:' + (mcAvailable ? Math.min(Math.abs(data.mcclellan)/100*100, 100) : 0) + '%;background:' + mcColor + ';"></div>'
             + '</div>'
-            + '<div style="font-size:9px;color:var(--color-muted);margin-top:3px;">Señal: &gt;+50 sobrecompra · &lt;-50 sobreventa</div>'
+            + '<div style="font-size:9px;color:var(--color-muted);margin-top:3px;">&gt;+70 sobrecompra de amplitud · &lt;-70 sobreventa de amplitud ' + mcBadge + '</div>'
             + '</div>'
 
-            // % sectores sobre SMA50
-            + '<div style="background:var(--color-bg);border:1px solid var(--color-border);border-radius:6px;padding:8px 12px;margin-bottom:10px;">'
+            // % S&P 500 sobre SMA50 (real, desde el scan nocturno de 500 tickers)
+            + '<div style="background:var(--color-bg);border:1px solid var(--color-border);border-radius:6px;padding:8px 12px;margin-bottom:6px;">'
             + '<div style="display:flex;justify-content:space-between;margin-bottom:4px;">'
-            + '<span style="color:var(--color-muted);font-size:11px;">% Sectores S&P sobre SMA50</span>'
+            + '<span style="color:var(--color-muted);font-size:11px;">% S&amp;P 500 sobre SMA50 ' + tt('breadth-pct-sma50') + '</span>'
             + '<span style="color:' + pctColor + ';font-size:12px;font-weight:600;">' + data.pct_above_sma50.toFixed(0) + '%</span>'
             + '</div>'
             + '<div style="width:100%;height:8px;background:var(--color-border);border-radius:4px;overflow:hidden;">'
             + '<div style="height:100%;width:' + data.pct_above_sma50 + '%;background:' + pctColor + ';"></div>'
             + '</div>'
-            + '<div style="font-size:9px;color:var(--color-muted);margin-top:3px;">' + data.sectors_checked + ' sectores XL evaluados · clic en RS/RW para detalle sectorial</div>'
+            + '<div style="font-size:9px;color:var(--color-muted);margin-top:3px;">' + data.sectors_checked + ' tickers evaluados ' + breadthBadge + '</div>'
+            + '</div>'
+
+            // New Highs - New Lows (52 semanas, desde el scan nocturno de 500 tickers)
+            + '<div style="background:var(--color-bg);border:1px solid var(--color-border);border-radius:6px;padding:8px 12px;margin-bottom:10px;">'
+            + '<div style="display:flex;justify-content:space-between;margin-bottom:4px;">'
+            + '<span style="color:var(--color-muted);font-size:11px;">New Highs − New Lows ' + tt('nh-nl') + '</span>'
+            + '<span style="color:' + nhNlColor + ';font-size:12px;font-weight:600;">' + (nhNlAvailable ? ((data.nh_nl >= 0 ? '+' : '') + data.nh_nl) : 'N/D') + '</span>'
+            + '</div>'
+            + '<div style="font-size:9px;color:var(--color-muted);margin-top:3px;">' + (nhNlAvailable ? (data.new_highs + ' nuevos máximos · ' + data.new_lows + ' nuevos mínimos (52 semanas) <span style="color:#00ffad;">[S&amp;P 500 REAL]</span>') : 'Requiere el scan nocturno del Scanner — no disponible todavía') + '</div>'
             + '</div>'
 
             // RSI gauge
-            + '<div style="margin-bottom:4px;">'
+            + '<div style="margin-bottom:14px;">'
             + '<div style="display:flex;justify-content:space-between;margin-bottom:4px;">'
             + '<span style="color:var(--color-muted);font-size:11px;">RSI (14)</span>'
             + '<span style="color:' + rsiColor + ';font-size:11px;font-weight:600;">' + rsi.toFixed(1) + ' — ' + data.rsi_state + '</span>'
@@ -697,7 +744,7 @@ async function loadBreadth(el) {
             + '<div style="display:flex;justify-content:space-between;font-size:8px;color:var(--color-muted);margin-top:2px;"><span>0</span><span>30</span><span>50</span><span>70</span><span>100</span></div>'
             + '</div>'
 
-            + '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:10px;">'
+            + '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:14px;">'
             + '<div style="background:var(--color-bg);border:1px solid var(--color-border);border-radius:6px;padding:8px;text-align:center;">'
             + '<div style="color:var(--color-muted);font-size:10px;">Tendencia</div>'
             + '<div style="color:' + trendColor + ';font-size:12px;font-weight:600;">' + data.trend + '</div>'
@@ -706,104 +753,84 @@ async function loadBreadth(el) {
             + '<div style="color:var(--color-muted);font-size:10px;">Fuerza</div>'
             + '<div style="color:' + strengthColor + ';font-size:12px;font-weight:600;">' + data.strength + '</div>'
             + '</div>'
-            + '</div>'
             + '</div>';
 
-        el.innerHTML = widgetShell('MARKET BREADTH ' + tt('market-breadth'), 'SMA50/200 · RSI · McClellan · % sectores', content, data.timestamp);
-    } catch(e) {
-        el.innerHTML = widgetShell('MARKET BREADTH', 'SMA50/200 · RSI · McClellan · % sectores', widgetError(e.message));
-    }
-}
+        // ── Línea A/D (fusionada aquí — antes era un widget separado) ──────────
+        let adSectionHtml = '';
+        let chartId = null;
+        if (data.ad_ok) {
+            const isReal   = data.ad_real_data;
+            const badgeText  = isReal ? '[NYSE REAL]' : '[PROXY SPY]';
+            const badgeColor = isReal ? '#00ffad' : '#ff9800';
+            const netColor   = data.current_net >= 0 ? '#00ffad' : '#f23645';
+            const netArrow   = data.current_net >= 0 ? '▲' : '▼';
+            chartId = 'ad-chart-' + Date.now();
 
-async function loadAdLine(el) {
-    el.innerHTML = widgetShell('AMPLITUD: LÍNEA A/D ' + tt('ad-line'), 'Advance/Decline NYSE', loading());
-    try {
-        const res  = await fetch('/api/v1/market/ad-line', { headers: authHeader() });
-        const data = await res.json();
-        if (!data.ok) throw new Error('Sin datos');
+            const pill = (label, valueHtml) =>
+                '<span style="display:inline-flex;align-items:center;gap:4px;background:var(--color-bg);border:1px solid var(--color-border);border-radius:4px;padding:3px 8px;font-size:10px;font-family:var(--font-mono);margin-right:6px;margin-bottom:6px;">'
+                + label + ' ' + valueHtml + '</span>';
 
-        const isReal      = data.real_data;
-        const badgeText    = isReal ? '[NYSE REAL]' : '[PROXY SPY]';
-        const badgeColor   = isReal ? '#00ffad' : '#ff9800';
-        const spyColor     = data.spy_change >= 0 ? '#00ffad' : '#f23645';
-        const netColor     = data.current_net >= 0 ? '#00ffad' : '#f23645';
-        const netArrow     = data.current_net >= 0 ? '▲' : '▼';
-        const history      = data.history || [];
+            adSectionHtml = '<div style="padding:0 14px 14px;border-top:1px solid var(--color-border);padding-top:12px;">'
+                + '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">'
+                + '<span style="color:var(--color-muted);font-size:11px;">Línea A/D ' + tt('ad-line') + '</span>'
+                + '<span style="font-size:10px;color:' + badgeColor + ';font-family:var(--font-mono);">' + badgeText + '</span>'
+                + '</div>'
+                + '<div style="margin-bottom:10px;">'
+                + pill('AVANZAN', '<span style="color:#00ffad;font-weight:600;">▲' + data.current_adv.toLocaleString('en-US') + '</span>')
+                + pill('DECLINAN', '<span style="color:#f23645;font-weight:600;">▼' + data.current_dec.toLocaleString('en-US') + '</span>')
+                + pill('NETO', '<span style="color:' + netColor + ';font-weight:600;">' + netArrow + (data.current_net >= 0 ? '+' : '') + data.current_net.toLocaleString('en-US') + '</span>')
+                + '</div>'
+                + '<div style="position:relative;height:200px;"><canvas id="' + chartId + '"></canvas></div>'
+                + '</div>';
+        }
 
-        const pill = (label, valueHtml) =>
-            '<span style="display:inline-flex;align-items:center;gap:4px;background:var(--color-bg);border:1px solid var(--color-border);border-radius:4px;padding:3px 8px;font-size:10px;font-family:var(--font-mono);margin-right:6px;">'
-            + label + ' ' + valueHtml + '</span>';
+        el.innerHTML = widgetShell('AMPLITUD DE MERCADO ' + tt('market-breadth'), 'SMA50/200 · RSI · McClellan · % S&amp;P500 · NH-NL · A/D NYSE', content + adSectionHtml, data.timestamp);
 
-        const chartId = 'ad-chart-' + Date.now();
-
-        const content = '<div style="padding:12px 14px;">'
-            + '<div style="display:flex;align-items:center;gap:6px;margin-bottom:10px;">'
-            + '<span style="font-size:10px;color:' + badgeColor + ';font-family:var(--font-mono);">' + badgeText + '</span>'
-            + '</div>'
-            + '<div style="margin-bottom:10px;">'
-            + pill('S&amp;P', '<span style="color:' + spyColor + ';font-weight:600;cursor:pointer;" onmouseover="this.style.textDecoration=\'underline\'" onmouseout="this.style.textDecoration=\'none\'" onclick="window.__navigate(\'/research?ticker=SPY\')">' + data.spy_current.toLocaleString('en-US') + ' (' + (data.spy_change >= 0 ? '+' : '') + data.spy_change.toFixed(2) + ')</span>')
-            + pill('AVANZAN', '<span style="color:#00ffad;font-weight:600;">▲' + data.current_adv.toLocaleString('en-US') + '</span>')
-            + pill('DECLINAN', '<span style="color:#f23645;font-weight:600;">▼' + data.current_dec.toLocaleString('en-US') + '</span>')
-            + pill('NETO', '<span style="color:' + netColor + ';font-weight:600;">' + netArrow + (data.current_net >= 0 ? '+' : '') + data.current_net.toLocaleString('en-US') + '</span>')
-            + '</div>'
-            + '<div style="position:relative;height:240px;"><canvas id="' + chartId + '"></canvas></div>'
-            + '<div style="font-size:9px;color:var(--color-muted);margin-top:6px;text-align:center;">'
-            + (isReal ? 'NYSE Advancing/Declining Issues · Yahoo Finance ^ADV ^DEC' : 'Proxy sintético basado en SPY — ^ADV/^DEC no disponibles')
-            + '</div>'
-            + '</div>';
-
-        el.innerHTML = widgetShell('AMPLITUD: LÍNEA A/D ' + tt('ad-line'), 'Advance/Decline NYSE', content, data.timestamp);
-
-        function buildChart() {
-            const ctx = document.getElementById(chartId);
-            if (!ctx || !window.Chart) return;
-            const labels  = history.map(h => h.date.slice(5));
-            const adVals  = history.map(h => h.ad);
-            const spyVals = history.map(h => h.spy);
-            new Chart(ctx, {
-                type: 'line',
-                data: {
-                    labels,
-                    datasets: [
-                        {
-                            label: 'S&P 500', data: spyVals, yAxisID: 'y1',
-                            borderColor: '#3b82f6', backgroundColor: 'transparent',
-                            borderWidth: 1.5, pointRadius: 0, tension: 0.3,
-                        },
-                        {
-                            label: 'Línea A/D (K)', data: adVals, yAxisID: 'y2',
-                            borderColor: '#f23645', backgroundColor: 'transparent',
-                            borderWidth: 1.5, pointRadius: 0, tension: 0.3,
-                        },
-                    ]
-                },
-                options: {
-                    responsive: true, maintainAspectRatio: false,
-                    plugins: {
-                        legend: { display: true, labels: { color: '#888', font: { size: 9 }, boxWidth: 14 } },
-                        tooltip: { backgroundColor: '#0d0d0d', borderWidth: 1 },
+        if (chartId) {
+            const history = data.ad_history || [];
+            const buildAdChart = function() {
+                const ctx = document.getElementById(chartId);
+                if (!ctx || !window.Chart) return;
+                const labels  = history.map(h => h.date.slice(5));
+                const adVals  = history.map(h => h.ad);
+                const spyVals = history.map(h => h.spy);
+                new Chart(ctx, {
+                    type: 'line',
+                    data: {
+                        labels,
+                        datasets: [
+                            { label: 'S&P 500', data: spyVals, yAxisID: 'y1', borderColor: '#3b82f6', backgroundColor: 'transparent', borderWidth: 1.5, pointRadius: 0, tension: 0.3 },
+                            { label: 'Línea A/D (K)', data: adVals, yAxisID: 'y2', borderColor: '#f23645', backgroundColor: 'transparent', borderWidth: 1.5, pointRadius: 0, tension: 0.3 },
+                        ]
                     },
-                    scales: {
-                        x:  { ticks: { color: '#666', font: { size: 8 }, maxTicksLimit: 6 }, grid: { color: 'rgba(255,255,255,0.04)' } },
-                        y1: { position: 'left',  ticks: { color: '#3b82f6', font: { size: 8 } }, grid: { display: false } },
-                        y2: { position: 'right', ticks: { color: '#f23645', font: { size: 8 } }, grid: { display: false } },
+                    options: {
+                        responsive: true, maintainAspectRatio: false,
+                        plugins: {
+                            legend: { display: true, labels: { color: '#888', font: { size: 9 }, boxWidth: 14 } },
+                            tooltip: { backgroundColor: '#0d0d0d', borderWidth: 1 },
+                        },
+                        scales: {
+                            x:  { ticks: { color: '#666', font: { size: 8 }, maxTicksLimit: 6 }, grid: { color: 'rgba(255,255,255,0.04)' } },
+                            y1: { position: 'left',  ticks: { color: '#3b82f6', font: { size: 8 } }, grid: { display: false } },
+                            y2: { position: 'right', ticks: { color: '#f23645', font: { size: 8 } }, grid: { display: false } },
+                        }
                     }
-                }
-            });
-        }
-
-        if (window.Chart) {
-            buildChart();
-        } else {
-            const script  = document.createElement('script');
-            script.src    = 'https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js';
-            script.onload = buildChart;
-            document.head.appendChild(script);
+                });
+            };
+            if (window.Chart) {
+                buildAdChart();
+            } else {
+                const script  = document.createElement('script');
+                script.src    = 'https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js';
+                script.onload = buildAdChart;
+                document.head.appendChild(script);
+            }
         }
     } catch(e) {
-        el.innerHTML = widgetShell('AMPLITUD: LÍNEA A/D', 'Advance/Decline NYSE', widgetError(e.message));
+        el.innerHTML = widgetShell('AMPLITUD DE MERCADO', 'SMA50/200 · RSI · McClellan · % S&amp;P500 · NH-NL · A/D NYSE', widgetError(e.message));
     }
 }
+
 
 async function loadVixLevels(el) {
     el.innerHTML = widgetShell('VIX NIVELES ' + tt('vix-levels'), 'Gauge de zonas · Histórico 6 meses', loading());
@@ -991,8 +1018,7 @@ async function loadSpreads(el) {
         const data = await res.json();
         if (!data.ok) throw new Error('Sin datos FRED');
 
-        const chartId = 'spreads-chart-' + Date.now();
-        const cards   = data.data.map(s => {
+        const cards = data.data.map(s => {
             if (!s.ok) return '<div style="padding:1rem;color:var(--color-muted);font-size:12px;">' + s.label + ': Sin datos</div>';
             const up    = s.change >= 0;
             const color = up ? '#f23645' : '#00ffad';
@@ -1005,41 +1031,68 @@ async function loadSpreads(el) {
                 + '</div>';
         }).join('');
 
-        const summary   = '<div style="display:flex;border-bottom:1px solid var(--color-border);">' + cards + '</div>';
-        const chartHtml = '<div style="padding:12px;"><canvas id="' + chartId + '" height="100"></canvas></div>';
+        const summary = '<div style="display:flex;border-bottom:1px solid var(--color-border);">' + cards + '</div>';
 
-        el.innerHTML = widgetShell('CREDIT SPREADS ' + tt('credit-spreads'), 'OAS · FRED · ICE BofA', summary + chartHtml, data.timestamp);
-
-        const script  = document.createElement('script');
-        script.src    = 'https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js';
-        script.onload = function() {
-            const ctx = document.getElementById(chartId);
-            if (!ctx) return;
-            const datasets = data.data.filter(s => s.ok && s.history && s.history.length > 0).map((s, i) => {
-                const c = ['#f23645','#00d9ff'][i] || '#888';
-                return { label: s.name, data: s.history.map(h => ({ x: h.date, y: h.value })), borderColor: c, backgroundColor: c + '18', borderWidth: 1.5, pointRadius: 0, fill: false, tension: 0.3 };
-            });
-            new Chart(ctx, {
-                type: 'line', data: { datasets },
-                options: {
-                    responsive: true, maintainAspectRatio: false,
-                    interaction: { mode: 'index', intersect: false },
-                    plugins: {
-                        legend: { display: true, position: 'top', labels: { color: '#666', boxWidth: 12, font: { size: 10 } } },
-                        tooltip: { backgroundColor: '#111', borderColor: '#333', borderWidth: 1, titleColor: '#aaa', bodyColor: '#ccc' }
-                    },
-                    scales: {
-                        x: { type: 'category', ticks: { color: '#555', font: { size: 9 }, maxTicksLimit: 6, maxRotation: 0 }, grid: { color: 'rgba(255,255,255,0.04)' } },
-                        y: { ticks: { color: '#555', font: { size: 10 } }, grid: { color: 'rgba(255,255,255,0.04)' } }
-                    }
-                }
-            });
+        const frameId  = 'spreads-tv-' + Date.now();
+        const tvUrl    = function(symbol) {
+            return 'https://s.tradingview.com/widgetembed/?frameElementId=' + frameId
+                + '&symbol=' + symbol
+                + '&interval=D&hidesidetoolbar=1&hidetoptoolbar=1&symboledit=0&saveimage=0&toolbarbg=1a1a1a&theme=dark&style=1&timezone=Europe%2FMadrid&studies=[]&locale=es';
         };
-        document.head.appendChild(script);
+
+        const tabs = '<div style="display:flex;gap:6px;padding:8px 12px;border-bottom:1px solid var(--color-border);">'
+            + '<button class="spreads-tab" data-symbol="FRED:BAMLH0A0HYM2" onclick="window.__spreadsSwitch(this,\'' + frameId + '\')" style="background:var(--color-accent);color:#000;border:none;border-radius:3px;padding:3px 10px;font-size:10px;cursor:pointer;">HIGH YIELD</button>'
+            + '<button class="spreads-tab" data-symbol="FRED:BAMLC0A0CM" onclick="window.__spreadsSwitch(this,\'' + frameId + '\')" style="background:transparent;color:var(--color-muted);border:1px solid var(--color-border);border-radius:3px;padding:3px 10px;font-size:10px;cursor:pointer;">INVESTMENT GRADE</button>'
+            + '</div>';
+
+        const chartHtml = '<div style="height:260px;">'
+            + '<iframe id="' + frameId + '" src="' + tvUrl('FRED:BAMLH0A0HYM2') + '"'
+            + ' style="width:100%;height:100%;border:none;" allowtransparency="true" frameborder="0" scrolling="no"></iframe>'
+            + '</div>';
+
+        el.innerHTML = widgetShell('CREDIT SPREADS ' + tt('credit-spreads'), 'OAS · FRED · ICE BofA', summary + tabs + chartHtml, data.timestamp);
     } catch(e) {
         el.innerHTML = widgetShell('CREDIT SPREADS', 'OAS · FRED · ICE BofA', widgetError(e.message));
     }
 }
+
+window.__spreadsSwitch = function(btn, frameId) {
+    const symbol = btn.getAttribute('data-symbol');
+    const iframe = document.getElementById(frameId);
+    if (iframe) {
+        iframe.src = 'https://s.tradingview.com/widgetembed/?frameElementId=' + frameId
+            + '&symbol=' + symbol
+            + '&interval=D&hidesidetoolbar=1&hidetoptoolbar=1&symboledit=0&saveimage=0&toolbarbg=1a1a1a&theme=dark&style=1&timezone=Europe%2FMadrid&studies=[]&locale=es';
+    }
+    const siblings = btn.parentElement.querySelectorAll('.spreads-tab');
+    siblings.forEach(function(b) {
+        b.style.background = 'transparent';
+        b.style.color = 'var(--color-muted)';
+        b.style.border = '1px solid var(--color-border)';
+    });
+    btn.style.background = 'var(--color-accent)';
+    btn.style.color = '#000';
+    btn.style.border = 'none';
+};
+
+window.__fedMacroTvSwitch = function(btn, frameId) {
+    const symbol = btn.getAttribute('data-symbol');
+    const iframe = document.getElementById(frameId);
+    if (iframe) {
+        iframe.src = 'https://s.tradingview.com/widgetembed/?frameElementId=' + frameId
+            + '&symbol=' + symbol
+            + '&interval=M&hidesidetoolbar=1&hidetoptoolbar=1&symboledit=0&saveimage=0&toolbarbg=1a1a1a&theme=dark&style=1&timezone=Europe%2FMadrid&studies=[]&locale=es';
+    }
+    const siblings = btn.parentElement.querySelectorAll('.fedmacro-tv-tab');
+    siblings.forEach(function(b) {
+        b.style.background = 'transparent';
+        b.style.color = 'var(--color-muted)';
+        b.style.border = '1px solid var(--color-border)';
+    });
+    btn.style.background = 'var(--color-accent)';
+    btn.style.color = '#000';
+    btn.style.border = 'none';
+};
 
 async function loadReddit(el) {
     el.innerHTML = widgetShell('REDDIT PULSE ' + tt('reddit-pulse'), 'Social buzz · Reddit + StockTwits', loading());
@@ -1451,7 +1504,31 @@ async function loadFedMacro(el) {
             + '</div>'
             + '</div>';
 
-        const content = balSection + sparkHtml + yieldsSection + indicatorsSection;
+        // ── GRÁFICO TRADINGVIEW — series FRED con pestañas ──────────────────────
+        const tvFrameId = 'fedmacro-tv-' + Date.now();
+        const tvSeries = [
+            { symbol: 'FRED:FEDFUNDS',  label: 'FED FUNDS' },
+            { symbol: 'FRED:CPIAUCSL',  label: 'IPC' },
+            { symbol: 'FRED:UNRATE',    label: 'DESEMPLEO' },
+            { symbol: 'FRED:PCEPI',     label: 'PCE' },
+        ];
+        const tvUrl = (symbol) => 'https://s.tradingview.com/widgetembed/?frameElementId=' + tvFrameId
+            + '&symbol=' + symbol
+            + '&interval=M&hidesidetoolbar=1&hidetoptoolbar=1&symboledit=0&saveimage=0&toolbarbg=1a1a1a&theme=dark&style=1&timezone=Europe%2FMadrid&studies=[]&locale=es';
+        const tvTabs = tvSeries.map((s, i) =>
+            '<button class="fedmacro-tv-tab" data-symbol="' + s.symbol + '" onclick="window.__fedMacroTvSwitch(this,\'' + tvFrameId + '\')" style="background:' + (i === 0 ? 'var(--color-accent)' : 'transparent') + ';color:' + (i === 0 ? '#000' : 'var(--color-muted)') + ';border:' + (i === 0 ? 'none' : '1px solid var(--color-border)') + ';border-radius:3px;padding:3px 10px;font-size:10px;cursor:pointer;margin-right:6px;">' + s.label + '</button>'
+        ).join('');
+        const tvSection = '<div style="padding:0 1rem 1rem;border-top:1px solid var(--color-border);padding-top:1rem;">'
+            + '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">'
+            + '<span style="color:var(--color-muted);font-size:10px;letter-spacing:0.05em;">GRÁFICO HISTÓRICO · TRADINGVIEW ' + tt('fed-macro-chart') + '</span>'
+            + '</div>'
+            + '<div style="margin-bottom:8px;">' + tvTabs + '</div>'
+            + '<div style="height:280px;">'
+            + '<iframe id="' + tvFrameId + '" src="' + tvUrl(tvSeries[0].symbol) + '" style="width:100%;height:100%;border:none;" allowtransparency="true" frameborder="0" scrolling="no"></iframe>'
+            + '</div>'
+            + '</div>';
+
+        const content = balSection + sparkHtml + yieldsSection + indicatorsSection + tvSection;
         el.innerHTML  = widgetShell('FED & MACRO', 'Balance Fed · Curva de Tipos · Indicadores FRED', content, data.timestamp);
 
         // Cargar Chart.js si no está y renderizar sparkline
@@ -1465,34 +1542,43 @@ async function loadFedMacro(el) {
         el.innerHTML = widgetShell('FED & MACRO', 'Balance Fed · Curva de Tipos · FRED', widgetError(e.message));
     }
 }
-async function loadCalendar(el) {
-    el.innerHTML = widgetShell('CALENDARIO ECONÓMICO ' + tt('economic-calendar'), 'Esta semana · Hora Madrid', loading());
-    try {
-        const res  = await fetch('/api/v1/market/calendar', { headers: authHeader() });
-        const data = await res.json();
-        if (!data.ok || !data.data.length) throw new Error(data.error || 'Sin eventos');
-        const impColor = { High: '#f23645', Medium: '#ffb800', Low: '#555' };
-        const impLabel = { High: '●●●', Medium: '●●○', Low: '●○○' };
-        const header = '<div style="display:grid;grid-template-columns:60px 55px 1fr 50px 80px 80px 80px;gap:8px;padding:7px 14px;border-bottom:1px solid var(--color-border);font-size:10px;color:var(--color-muted);">'
-            + '<div>FECHA</div><div>HORA</div><div>EVENTO</div><div>IMP ' + tt('event-impact') + '</div><div>ACTUAL</div><div>PREV.</div><div>ESTIMADO</div></div>';
-        const rows = data.data.map(ev => {
-            const ic = impColor[ev.impact] || '#555';
-            const il = impLabel[ev.impact] || '●○○';
-            const bg = ev.date === 'HOY' ? 'rgba(0,255,173,0.03)' : 'transparent';
-            return '<div style="display:grid;grid-template-columns:60px 55px 1fr 50px 80px 80px 80px;gap:8px;padding:8px 14px;border-bottom:1px solid var(--color-border);font-size:11px;background:' + bg + ';align-items:center;">'
-                + '<div style="color:' + ev.date_color + ';font-size:10px;font-weight:500;">' + ev.date + '</div>'
-                + '<div style="color:var(--color-muted);">' + ev.time + '</div>'
-                + '<div style="color:var(--color-text);">' + ev.event + '</div>'
-                + '<div style="color:' + ic + ';font-size:10px;">' + il + '</div>'
-                + '<div style="color:var(--color-accent);text-align:right;">' + ev.actual + '</div>'
-                + '<div style="color:var(--color-muted);text-align:right;">' + ev.previous + '</div>'
-                + '<div style="color:var(--color-muted);text-align:right;">' + ev.forecast + '</div>'
-                + '</div>';
-        }).join('');
-        el.innerHTML = widgetShell('CALENDARIO ECONÓMICO ' + tt('economic-calendar'), 'Esta semana · Hora Madrid', header + rows, data.timestamp);
-    } catch(e) {
-        el.innerHTML = widgetShell('CALENDARIO ECONÓMICO ' + tt('economic-calendar'), 'Esta semana · Hora Madrid', widgetError(e.message));
-    }
+function flagEmoji(countryCode) {
+    if (!countryCode || countryCode.length !== 2) return '';
+    const cc = countryCode.toUpperCase();
+    if (!/^[A-Z]{2}$/.test(cc)) return '';
+    const points = [...cc].map(c => 127397 + c.charCodeAt(0));
+    return String.fromCodePoint(...points);
+}
+
+function loadCalendar(el) {
+    el.innerHTML = widgetShell('CALENDARIO ECONÓMICO ' + tt('economic-calendar'), 'TradingView · Hora local', '<div id="tv-events-container" style="height:600px;"></div>');
+    const container = el.querySelector('#tv-events-container');
+    if (!container) return;
+
+    const widgetWrap = document.createElement('div');
+    widgetWrap.className = 'tradingview-widget-container';
+    widgetWrap.style.height = '100%';
+
+    const widgetInner = document.createElement('div');
+    widgetInner.className = 'tradingview-widget-container__widget';
+    widgetWrap.appendChild(widgetInner);
+
+    const script = document.createElement('script');
+    script.type  = 'text/javascript';
+    script.src   = 'https://s3.tradingview.com/external-embedding/embed-widget-events.js';
+    script.async = true;
+    script.text  = JSON.stringify({
+        colorTheme: 'dark',
+        isTransparent: true,
+        width: '100%',
+        height: '100%',
+        locale: 'es',
+        importanceFilter: '-1,0,1',
+        countryFilter: 'us,eu,gb,jp,cn,de,fr,ca,au,ch,es'
+    });
+    widgetWrap.appendChild(script);
+
+    container.appendChild(widgetWrap);
 }
 
 // ── HELPERS ───────────────────────────────────────────────────────────────────

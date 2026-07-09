@@ -135,13 +135,36 @@ function renderPagination(container, data) {
     });
 }
 
+function autoHeaderHtml(ticker, color, rating, sector) {
+    color = color || 'var(--color-accent)';
+    const sectorUp = (sector || '').toUpperCase();
+    return '<div style="height:140px;position:relative;overflow:hidden;background:linear-gradient(135deg,#151a23,#0a0c10);display:flex;align-items:center;justify-content:center;">'
+        + '<div style="position:absolute;inset:0;background-image:repeating-linear-gradient(115deg, transparent, transparent 18px, ' + color + '14 18px, ' + color + '14 19px);"></div>'
+        + '<div style="position:absolute;width:200px;height:200px;border-radius:50%;background:radial-gradient(circle, ' + color + '33 0%, transparent 70%);"></div>'
+        + '<span style="position:relative;color:' + color + ';font-size:2.3rem;font-weight:600;letter-spacing:4px;text-shadow:0 0 24px ' + color + '99;">' + ticker + '</span>'
+        + (rating ? '<span style="position:absolute;top:8px;right:10px;font-size:9px;color:' + color + ';border:1px solid ' + color + '55;border-radius:3px;padding:1px 6px;background:#00000055;letter-spacing:0.05em;">' + rating + '</span>' : '')
+        + (sectorUp ? '<span style="position:absolute;bottom:8px;left:10px;font-size:9px;color:var(--color-muted);letter-spacing:0.05em;">' + sectorUp + '</span>' : '')
+        + '</div>';
+}
+
+// Usado desde el atributo onerror de <img> cuando una URL de imagen manual
+// (columna "imagenencabezado" del Sheet) se rompe — antes llamaba a una
+// función tickerFallback() que no existía en ningún sitio del código, así
+// que una imagen rota se quedaba así, sin fallback real.
+window.__tesisImgError = function(img) {
+    img.outerHTML = autoHeaderHtml(img.dataset.ticker || '', img.dataset.color || '', img.dataset.rating || '', img.dataset.sector || '');
+};
+
 function tesisCard(item) {
     const color   = item.rating_color || 'var(--color-muted)';
+    // Si hay una imagen puesta a mano en el Sheet, se respeta (por compatibilidad
+    // con las tesis que ya la tienen). Si no hay ninguna, se genera sola una
+    // cabecera de marca a partir de ticker/rating/sector — cero pasos manuales.
     const imgHtml = item.imagen && item.imagen.startsWith('http')
-        ? '<img src="' + item.imagen + '" style="width:100%;height:140px;object-fit:cover;" onerror="this.parentNode.innerHTML=tickerFallback(\'' + item.ticker + '\')">'
-        : '<div style="height:140px;background:linear-gradient(135deg,#1a1e26,#0c0e12);display:flex;align-items:center;justify-content:center;">'
-          + '<span style="color:var(--color-accent);font-size:2.5rem;letter-spacing:4px;text-shadow:0 0 20px rgba(0,255,173,0.4);">' + item.ticker + '</span>'
-          + '</div>';
+        ? '<img src="' + item.imagen + '" style="width:100%;height:140px;object-fit:cover;" '
+          + 'data-ticker="' + item.ticker + '" data-color="' + color + '" data-rating="' + item.rating + '" data-sector="' + (item.sector || '') + '" '
+          + 'onerror="window.__tesisImgError(this)">'
+        : autoHeaderHtml(item.ticker, color, item.rating, item.sector);
 
     return '<div style="background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius);overflow:hidden;display:flex;flex-direction:column;">'
         + imgHtml

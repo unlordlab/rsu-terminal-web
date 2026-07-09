@@ -12,6 +12,7 @@ const ROUTES = {
     '/cartera':    () => import('/pages/cartera.js'),
     '/rsrw':       () => import('/pages/rsrw.js'),
     '/scanner':    () => import('/pages/scanner.js'),
+    '/watchlist':  () => import('/pages/watchlist.js'),
     '/spxl':       () => import('/pages/spxl.js'),
     '/btc-stratum': () => import('/pages/btc_stratum.js'),
     '/research':   () => import('/pages/research.js'),
@@ -207,7 +208,7 @@ function trackPageView(cleanPath) {
 export function navigate(path, options = {}) {
     const isPopState = !!options.isPopState;
     const cleanPath = path.split('?')[0];
-    const protectedRoutes = ['/', '/manifiesto', '/market', '/cartera', '/rsrw', '/scanner', '/newsfeed', '/spxl', '/btc-stratum', '/roadmap', '/academy', '/tesis', '/options', '/research', '/disclaimer', '/canslim', '/algoritmo', '/insider', '/admin'];
+    const protectedRoutes = ['/', '/manifiesto', '/market', '/cartera', '/rsrw', '/scanner', '/watchlist', '/newsfeed', '/spxl', '/btc-stratum', '/roadmap', '/academy', '/tesis', '/options', '/research', '/disclaimer', '/canslim', '/algoritmo', '/insider', '/admin'];
     const needsAuth = protectedRoutes.includes(cleanPath);
 
     if (needsAuth && isAuthenticated()) trackPageView(cleanPath);
@@ -271,4 +272,27 @@ Tooltip.init();
 window.goToResearch = function(ticker) {
     if (!ticker) return;
     navigate('/research?ticker=' + ticker.toUpperCase());
+};
+
+window.__quickAddWatchlist = async function(ticker, btnEl) {
+    if (!ticker || !btnEl) return;
+    const original = btnEl.textContent;
+    btnEl.disabled = true;
+    btnEl.textContent = '...';
+    try {
+        const { addToWatchlist } = await import('/core/ui.js');
+        const data = await addToWatchlist(ticker);
+        if (data.ok) {
+            btnEl.textContent = '✓ En watchlist';
+            btnEl.style.color = 'var(--color-accent)';
+            btnEl.style.borderColor = 'var(--color-accent)';
+        } else {
+            btnEl.textContent = original;
+            btnEl.disabled = false;
+            alert(data.error || 'No se pudo añadir a la watchlist');
+        }
+    } catch (e) {
+        btnEl.textContent = original;
+        btnEl.disabled = false;
+    }
 };

@@ -91,6 +91,22 @@ def _passes_filters(row: dict, criteria: dict) -> bool:
     return True
 
 
+def get_universe_stocks() -> dict:
+    """Devuelve el dict completo {ticker: {...}} del último scan nocturno,
+    reutilizando el mismo caché que get_scanner_data(). Pensado para consumo
+    interno de otros servicios (p.ej. Market Breadth necesita el flag
+    above_sma50 de las ~500 acciones para calcular el % real sobre SMA50)."""
+    cached = cache.get(CACHE_KEY)
+    if cached:
+        data = cached
+    else:
+        data = _load_gist()
+        if not data:
+            return {}
+        cache.set(CACHE_KEY, data, CACHE_TTL)
+    return data.get("stocks", {})
+
+
 def get_scanner_data() -> dict:
     """Devuelve el universo completo sin filtrar (para poblar selectores de
     sector, mostrar totales, etc.)."""
