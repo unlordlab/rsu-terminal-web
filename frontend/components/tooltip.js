@@ -527,6 +527,18 @@ El dato marcado [S&amp;P 500 REAL] viene del scan nocturno completo. Si ese scan
     },
 
 
+    "new-high-52w": {
+        title: "Máximos de 52 Semanas",
+        short: "Tickers cuyo precio actual es el más alto de los últimos ~12 meses. Aproximación a ATH, no el máximo histórico real de toda la vida del activo.",
+        long: `Este filtro marca los tickers cuyo precio de hoy es el máximo de toda la ventana de histórico que el Scanner tiene cargada (hasta 260 sesiones ≈ 52 semanas).
+
+POR QUÉ NO ES UN ATH REAL:
+Un ATH (All-Time High) real requeriría el histórico completo desde que cada empresa cotiza — algunas llevan más de 50 años en bolsa. El Scanner solo descarga 260 sesiones por ticker cada noche (necesario para RS/RVOL/Fase), así que "máximo de 52 semanas" es lo más parecido que se puede calcular sin añadir una descarga de histórico mucho más larga para las 500 acciones cada noche.
+
+EN LA PRÁCTICA:
+Para la inmensa mayoría de setups de ruptura que te interesan como trader (una acción rompiendo su rango del último año), esta aproximación es exactamente la señal que buscas — muy pocas veces el máximo real de 52 semanas y el máximo histórico real difieren en el momento de una ruptura genuina. La diferencia solo importa para valores muy antiguos que llevan años en tendencia bajista de muy largo plazo.`
+    },
+
     "nh-nl": {
         title: "New Highs − New Lows (NH-NL)",
         short: "Nuevos máximos de 52 semanas menos nuevos mínimos, sobre el S&P 500 real. Mide la calidad del liderazgo del mercado.",

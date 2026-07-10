@@ -16,10 +16,11 @@ async def scanner_filter(
     score_min: Optional[float] = Query(None, ge=0, le=100),
     phase: Optional[int] = Query(None, ge=1, le=4),
     sector: Optional[str] = Query(None),
+    new_high_only: Optional[bool] = Query(None),
     limit: int = Query(100, ge=1, le=500),
     user=Depends(verify_token),
 ):
     return run_filter(
         rvol_min=rvol_min, rs_min=rs_min, score_min=score_min,
-        phase=phase, sector=sector, limit=limit,
+        phase=phase, sector=sector, new_high_only=new_high_only, limit=limit,
     )

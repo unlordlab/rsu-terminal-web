@@ -9,6 +9,38 @@ const PHASE_OPTIONS = [
     { value: '4', label: 'Fase 4 · Declive' },
 ];
 
+let _scannerData = null;
+let _scannerSort = { key: 'score_tecnico', dir: -1 };
+
+function sortRows(rows, sortState) {
+    const { key, dir } = sortState;
+    return [...rows].sort((a, b) => {
+        let av = a[key], bv = b[key];
+        if (typeof av === 'string') {
+            av = (av || '').toLowerCase();
+            bv = (bv || '').toLowerCase();
+        } else {
+            av = av == null ? -Infinity : av;
+            bv = bv == null ? -Infinity : bv;
+        }
+        if (av < bv) return -1 * dir;
+        if (av > bv) return  1 * dir;
+        return 0;
+    });
+}
+
+function sortArrow(key) {
+    if (_scannerSort.key !== key) return '';
+    return _scannerSort.dir === 1 ? ' ▲' : ' ▼';
+}
+
+window.__scannerSort = function(key) {
+    if (_scannerSort.key === key) _scannerSort.dir *= -1;
+    else { _scannerSort.key = key; _scannerSort.dir = -1; }
+    const el = document.getElementById('scanner-result');
+    if (el && _scannerData) renderResults(el, _scannerData);
+};
+
 export async function render(container) {
     container.innerHTML = pageHeader()
         + criteriaPanel()
@@ -38,6 +70,7 @@ function criteriaPanel() {
 
         + selectCriterionBlock('phase', 'FASE WEINSTEIN ' + tt('market-phase'), PHASE_OPTIONS.map(o => '<option value="' + o.value + '">' + o.label + '</option>').join(''))
         + selectCriterionBlock('sector', 'SECTOR', '<option value="">Cargando sectores...</option>')
+        + toggleCriterionBlock('newhigh', '🔥 MÁXIMOS 52 SEMANAS ' + tt('new-high-52w'), 'Aprox. a ATH')
 
         + '</div>'
         + '<div style="display:flex;justify-content:space-between;align-items:center;">'
@@ -72,6 +105,20 @@ function selectCriterionBlock(id, label, optionsHtml) {
         + 'style="width:100%;background:var(--color-bg,#0a0a0a);border:1px solid var(--color-border);border-radius:var(--radius);padding:6px 8px;color:var(--color-text);font-family:var(--font-mono);font-size:12px;box-sizing:border-box;cursor:not-allowed;">'
         + optionsHtml
         + '</select>'
+        + '</div>';
+}
+
+function toggleCriterionBlock(id, label, sublabel) {
+    // Variante sin campo de valor — el propio criterio es un sí/no (p.ej.
+    // "solo tickers en máximos de 52 semanas"), así que activarlo ya basta.
+    return '<div id="scanner-' + id + '-card" class="scanner-crit-card" data-active="false" '
+        + 'style="border:1px solid var(--color-border);border-radius:var(--radius);padding:10px;cursor:pointer;transition:border-color .15s,background .15s;display:flex;flex-direction:column;justify-content:center;">'
+        + '<div style="display:flex;align-items:center;gap:8px;">'
+        + '<span id="scanner-' + id + '-dot" style="width:9px;height:9px;border-radius:50%;border:1px solid var(--color-muted);flex-shrink:0;"></span>'
+        + '<span style="color:var(--color-text);font-size:12px;letter-spacing:0.03em;">' + label + '</span>'
+        + '<input type="checkbox" id="scanner-' + id + '-toggle" style="display:none;">'
+        + '</div>'
+        + (sublabel ? '<div style="color:var(--color-muted);font-size:9px;margin-top:4px;margin-left:17px;">' + sublabel + '</div>' : '')
         + '</div>';
 }
 
@@ -111,6 +158,24 @@ function setupPanel(container) {
         // Si el criterio está activo, escribir dentro del campo no debe desactivarlo.
         value.addEventListener('click', (e) => e.stopPropagation());
     });
+
+    // Criterio booleano (máximos 52 semanas) — no tiene campo de valor, así
+    // que el propio click en la card ya alterna el estado directamente.
+    const newHighCard = container.querySelector('#scanner-newhigh-card');
+    if (newHighCard) {
+        newHighCard.addEventListener('click', (e) => {
+            if (e.target.closest('.tt-trigger')) return;
+            const isActive = newHighCard.dataset.active === 'true';
+            const toggle = container.querySelector('#scanner-newhigh-toggle');
+            const dot    = container.querySelector('#scanner-newhigh-dot');
+            toggle.checked = !isActive;
+            newHighCard.dataset.active = String(!isActive);
+            newHighCard.style.borderColor = !isActive ? 'var(--color-accent)' : 'var(--color-border)';
+            newHighCard.style.background  = !isActive ? 'var(--color-accent)11' : 'transparent';
+            dot.style.background  = !isActive ? 'var(--color-accent)' : 'transparent';
+            dot.style.borderColor = !isActive ? 'var(--color-accent)' : 'var(--color-muted)';
+        });
+    }
 
     const btn = container.querySelector('#scanner-run-btn');
     btn.addEventListener('click', () => runFilter(container));
@@ -166,6 +231,10 @@ function buildQuery(container) {
         const v = container.querySelector('#scanner-sector-value').value;
         if (v !== '') params.set('sector', v);
     }
+    const newHighOn = container.querySelector('#scanner-newhigh-toggle').checked;
+    if (newHighOn) {
+        params.set('new_high_only', 'true');
+    }
     params.set('limit', '200');
     return params.toString();
 }
@@ -192,6 +261,7 @@ async function runFilter(container) {
 }
 
 function renderResults(el, data) {
+    _scannerData = data;
     const activeLabels = Object.entries(data.active_criteria || {}).map(([k, v]) => k + '=' + v);
     const criteriaLine = activeLabels.length
         ? activeLabels.join(' · ')
@@ -202,18 +272,34 @@ function renderResults(el, data) {
         + '<div style="color:var(--color-muted);font-size:11px;">' + criteriaLine + '</div>'
         + '</div>';
 
+    const cols = [
+        { label: 'TICKER', key: 'ticker' },
+        { label: 'PRECIO',  key: 'precio' },
+        { label: 'RVOL',    key: 'rvol' },
+        { label: 'RS%',     key: 'rs_pct' },
+        { label: 'SCORE',   key: 'score_tecnico' },
+        { label: 'FASE',    key: 'phase' },
+        { label: 'SECTOR',  key: 'sector' },
+        { label: '',        key: null },
+    ];
     const tableHeader = '<div style="display:grid;grid-template-columns:70px 90px 60px 60px 70px 1fr 1fr 34px;gap:6px;padding:7px 12px;border-bottom:1px solid var(--color-border);font-size:10px;color:var(--color-muted);letter-spacing:0.05em;">'
-        + '<div>TICKER</div><div>PRECIO</div><div>RVOL</div><div>RS%</div><div>SCORE</div><div>FASE</div><div>SECTOR</div><div></div>'
+        + cols.map(c => c.key
+            ? '<div onclick="window.__scannerSort(\'' + c.key + '\')" style="cursor:pointer;user-select:none;">' + c.label + sortArrow(c.key) + '</div>'
+            : '<div></div>'
+        ).join('')
         + '</div>';
 
-    const rows = (data.results || []).map(r => {
+    const sortedResults = sortRows(data.results || [], _scannerSort);
+
+    const rows = sortedResults.map(r => {
         const rvolClr  = (r.rvol || 0) >= 1.5 ? 'var(--color-accent)' : 'var(--color-muted)';
         const rsClr    = (r.rs_pct || 0) >= 70 ? 'var(--color-accent)' : (r.rs_pct || 0) <= 30 ? '#f23645' : '#ffb800';
         const scoreClr = (r.score_tecnico || 0) >= 70 ? 'var(--color-accent)' : (r.score_tecnico || 0) >= 40 ? '#ffb800' : '#f23645';
         const phaseClr = r.phase === 2 ? 'var(--color-accent)' : r.phase === 4 ? '#f23645' : '#ffb800';
+        const athTag   = r.new_high ? ' <span title="Máximo de 52 semanas" style="font-size:9px;">🔥</span>' : '';
 
-        return '<div style="display:grid;grid-template-columns:70px 90px 60px 60px 70px 1fr 1fr 34px;gap:6px;padding:8px 12px;border-bottom:1px solid var(--color-border);font-size:11px;align-items:center;">'
-            + '<div onclick="goToResearch(\'' + (r.ticker || '') + '\')" class="ticker-link" style="color:var(--color-accent);font-weight:500;cursor:pointer;">' + (r.ticker || '') + '</div>'
+        return '<div style="display:grid;grid-template-columns:70px 90px 60px 60px 70px 1fr 1fr 34px;gap:6px;padding:8px 12px;border-bottom:1px solid var(--color-border);font-size:11px;align-items:center;' + (r.new_high ? 'background:rgba(255,152,0,0.04);' : '') + '">'
+            + '<div onclick="goToResearch(\'' + (r.ticker || '') + '\')" class="ticker-link" style="color:var(--color-accent);font-weight:500;cursor:pointer;">' + (r.ticker || '') + athTag + '</div>'
             + '<div style="color:var(--color-muted);">' + (r.precio != null ? '$' + r.precio.toFixed(2) : '—') + '</div>'
             + '<div style="color:' + rvolClr + ';">' + (r.rvol != null ? r.rvol.toFixed(2) + 'x' : '—') + '</div>'
             + '<div style="color:' + rsClr + ';font-weight:500;">' + (r.rs_pct != null ? r.rs_pct.toFixed(0) : '—') + '</div>'

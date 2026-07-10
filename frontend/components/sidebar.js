@@ -54,10 +54,10 @@ export function renderSidebar(container, navigate) {
     }
 
     header.innerHTML = '<div style="display:flex;align-items:center;gap:12px;margin-bottom:4px;">'
-        + '<img src="/assets/logo.png" class="rsu-logo" style="width:52px;height:52px;border-radius:50%;object-fit:cover;border:2px solid var(--color-accent);" onerror="this.style.display=\'none\'">'
+        + '<img src="/assets/logo.png" class="rsu-logo" style="width:68px;height:68px;border-radius:50%;object-fit:cover;border:2px solid var(--color-accent);" onerror="this.style.display=\'none\'">'
         + '<div>'
         + '<div style="color:var(--color-accent);font-size:15px;letter-spacing:0.12em;text-shadow:var(--glow-text);">RSU TERMINAL</div>'
-        + '<div style="color:var(--color-muted);font-size:10px;letter-spacing:0.05em;">v2.0 FastAPI</div>'
+        + '<div style="color:var(--color-muted);font-size:10px;letter-spacing:0.05em;">v2.0</div>'
         + '</div>'
         + '</div>';
 

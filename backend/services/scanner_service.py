@@ -88,6 +88,9 @@ def _passes_filters(row: dict, criteria: dict) -> bool:
     if criteria.get("sector"):
         if (row.get("sector") or "").lower() != criteria["sector"].lower():
             return False
+    if criteria.get("new_high_only"):
+        if not row.get("new_high"):
+            return False
     return True
 
 
@@ -159,6 +162,7 @@ def run_filter(
     score_min: float = None,
     phase: int = None,
     sector: str = None,
+    new_high_only: bool = None,
     limit: int = 100,
 ) -> dict:
     cached = cache.get(CACHE_KEY)
@@ -173,11 +177,12 @@ def run_filter(
         }
 
     criteria = {
-        "rvol_min":  rvol_min,
-        "rs_min":    rs_min,
-        "score_min": score_min,
-        "phase":     phase,
-        "sector":    sector,
+        "rvol_min":      rvol_min,
+        "rs_min":        rs_min,
+        "score_min":     score_min,
+        "phase":         phase,
+        "sector":        sector,
+        "new_high_only": new_high_only,
     }
     active_criteria = {k: v for k, v in criteria.items() if v is not None}
 
@@ -195,6 +200,8 @@ def run_filter(
                 "phase_label":   row.get("phase_label"),
                 "trend":         row.get("trend"),
                 "score_tecnico": row.get("score_tecnico"),
+                "new_high":      bool(row.get("new_high")),
+                "above_sma50":   row.get("above_sma50"),
             })
 
     matches.sort(key=lambda r: r.get("score_tecnico") or 0, reverse=True)

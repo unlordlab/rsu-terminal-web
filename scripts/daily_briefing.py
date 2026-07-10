@@ -16,6 +16,36 @@ GIST_TOKEN     = os.environ.get("GIST_TOKEN", "")
 GIST_ID        = os.environ.get("GIST_ID", "715ee0c4e571517c11fa65c5c2376c34")
 MODEL          = "qwen/qwen3-235b-a22b"
 
+# Mismo Gist que ya publica scanner_universe.py — lectura pública, sin token,
+# para traer al briefing las señales de amplitud REALES de RSU (McClellan,
+# % S&P sobre SMA50, NH-NL) en vez de que el briefing viva aislado del resto
+# de la terminal.
+SCANNER_GIST_ID = "cb9d69cbf6ca741b4fd86765a41813a7"
+SCANNER_GIST_FILE = "scanner_scan.json"
+
+FINNHUB_KEY = os.environ.get("FINNHUB_API_KEY", "")
+
+# Insider Flow vive en SQLite dentro del backend (insider_history.db), no en
+# un Gist — así que solo es alcanzable desde este script si el backend está
+# desplegado y accesible por red pública. RSU_BACKEND_URL se deja vacío por
+# defecto (el Action de GitHub no tiene forma de llegar a un backend que
+# todavía no está en producción); el día que despliegues en Hetzner, basta
+# con rellenar este secret en el repo para que el briefing empiece a incluir
+# también los clusters de insiders — no hace falta tocar código de nuevo.
+RSU_BACKEND_URL = os.environ.get("RSU_BACKEND_URL", "").rstrip("/")
+
+# Tickers de mega/large-cap conocidos — para filtrar el calendario de earnings
+# a solo nombres con peso real de mercado, en vez de listar cientos de small
+# caps irrelevantes para un briefing macro.
+NOTABLE_TICKERS = {
+    "AAPL","MSFT","GOOGL","GOOG","AMZN","NVDA","META","TSLA","AVGO","BRK.B",
+    "JPM","V","MA","UNH","XOM","LLY","JNJ","PG","HD","COST","ABBV","MRK",
+    "CVX","BAC","WMT","KO","PEP","ADBE","CRM","AMD","NFLX","TMO","ORCL",
+    "MCD","CSCO","ABT","INTC","QCOM","TXN","DIS","IBM","GE","CAT","BA",
+    "MU","AMAT","LRCX","PANW","NOW","UBER","GS","MS","C","WFC","AXP",
+    "SPGI","BLK","PLTR","SMCI","ARM","COIN","SNOW","SHOP",
+}
+
 # ── RECOPILAR DATOS DE MERCADO ────────────────────────────────────────────────
 
 def _safe(val):
@@ -216,9 +246,199 @@ def get_market_data() -> dict:
 
     return data
 
+
+# ── NOTICIAS REALES DEL DÍA (Finnhub) ─────────────────────────────────────────
+
+def get_market_news(max_items: int = 8) -> list:
+    """Titulares reales de mercado — sin esto el LLM no tiene ninguna forma de
+    saber qué está pasando hoy en el mundo (cambios de personal en la Fed,
+    geopolítica, etc.), por mucho que los números de mercado sean correctos."""
+    if not FINNHUB_KEY:
+        return []
+    try:
+        r = requests.get(
+            "https://finnhub.io/api/v1/news",
+            params={"category": "general", "token": FINNHUB_KEY},
+            timeout=10,
+        )
+        if r.status_code != 200:
+            return []
+        items = r.json()
+        if not isinstance(items, list):
+            return []
+        cutoff = datetime.now() - timedelta(hours=30)
+        out = []
+        for it in items:
+            ts = it.get("datetime")
+            if not ts:
+                continue
+            dt = datetime.utcfromtimestamp(ts)
+            if dt < cutoff:
+                continue
+            headline = (it.get("headline") or "").strip()
+            summary  = (it.get("summary") or "").strip()
+            if not headline:
+                continue
+            out.append({
+                "headline": headline[:180],
+                "summary":  summary[:220],
+                "source":   it.get("source", ""),
+                "time":     dt.strftime("%H:%M UTC"),
+            })
+            if len(out) >= max_items:
+                break
+        return out
+    except Exception as e:
+        print(f"⚠️  No se pudieron obtener noticias: {e}")
+        return []
+
+
+# ── EARNINGS NOTABLES PRÓXIMOS 2 DÍAS (Finnhub) ───────────────────────────────
+
+def get_notable_earnings() -> list:
+    """Solo large/mega-cap — un calendario de earnings sin filtrar es una lista
+    de cientos de small caps irrelevantes para un briefing macro."""
+    if not FINNHUB_KEY:
+        return []
+    try:
+        today = datetime.now().strftime("%Y-%m-%d")
+        end   = (datetime.now() + timedelta(days=2)).strftime("%Y-%m-%d")
+        r = requests.get(
+            "https://finnhub.io/api/v1/calendar/earnings",
+            params={"from": today, "to": end, "token": FINNHUB_KEY},
+            timeout=10,
+        )
+        if r.status_code != 200:
+            return []
+        rows = r.json().get("earningsCalendar", [])
+        out = []
+        for row in rows:
+            ticker = row.get("symbol", "")
+            if ticker not in NOTABLE_TICKERS:
+                continue
+            out.append({
+                "ticker": ticker,
+                "date":   row.get("date", ""),
+                "hour":   row.get("hour", ""),  # bmo=antes de apertura, amc=tras cierre
+                "eps_est": row.get("epsEstimate"),
+            })
+        return out[:6]
+    except Exception as e:
+        print(f"⚠️  No se pudieron obtener earnings: {e}")
+        return []
+
+
+# ── SEÑALES DE AMPLITUD REALES DE RSU (mismo Gist que el Scanner) ────────────
+
+def get_rsu_breadth_signals() -> dict:
+    """Lee directamente el Gist que publica scripts/scanner_universe.py cada
+    noche — el mismo dato que alimenta Market Breadth en la terminal — para
+    que el briefing hable con las señales propias de RSU (McClellan real,
+    % del S&P sobre SMA50, NH-NL) en vez de vivir aislado del resto de la
+    herramienta. Lectura pública, sin necesidad de token."""
+    try:
+        r = requests.get(
+            f"https://api.github.com/gists/{SCANNER_GIST_ID}",
+            timeout=10,
+            headers={"Accept": "application/vnd.github.v3+json"},
+        )
+        if r.status_code != 200:
+            return {}
+        content = r.json()["files"][SCANNER_GIST_FILE]["content"]
+        gist = json.loads(content)
+        stocks = gist.get("stocks", {})
+        if not stocks:
+            return {}
+
+        flagged = [v for v in stocks.values() if v.get("above_sma50") is not None]
+        pct_above_sma50 = round(sum(1 for v in flagged if v["above_sma50"]) / len(flagged) * 100, 1) if flagged else None
+        new_highs = sum(1 for v in stocks.values() if v.get("new_high"))
+        new_lows  = sum(1 for v in stocks.values() if v.get("new_low"))
+
+        mcclellan = None
+        breadth_hist = gist.get("breadth_history", [])
+        if len(breadth_hist) >= 40:
+            net = [h["advances"] - h["declines"] for h in breadth_hist]
+            # EMA simple sin pandas — el script no depende de pandas para esto
+            def ema(vals, span):
+                k = 2 / (span + 1)
+                e = vals[0]
+                for v in vals[1:]:
+                    e = v * k + e * (1 - k)
+                return e
+            mcclellan = round(ema(net, 19) - ema(net, 39), 1)
+
+        return {
+            "pct_above_sma50": pct_above_sma50,
+            "new_highs": new_highs,
+            "new_lows": new_lows,
+            "nh_nl": new_highs - new_lows,
+            "mcclellan": mcclellan,
+            "universe_size": gist.get("universe_size"),
+        }
+    except Exception as e:
+        print(f"⚠️  No se pudieron leer las señales de amplitud de RSU: {e}")
+        return {}
+
+
+# ── CLUSTERS DE INSIDERS (solo si el backend ya está desplegado) ─────────────
+
+def get_insider_clusters() -> list:
+    """Insider Flow vive en SQLite dentro del backend, no en un Gist — así que
+    esto solo funciona si RSU_BACKEND_URL apunta a un backend desplegado y
+    accesible por red pública. Mientras la terminal no esté en el servidor,
+    devuelve vacío sin romper el resto del briefing."""
+    if not RSU_BACKEND_URL:
+        return []
+    try:
+        r = requests.get(f"{RSU_BACKEND_URL}/api/v1/insider/clusters", timeout=10)
+        if r.status_code != 200:
+            return []
+        return r.json().get("clusters", [])[:5]
+    except Exception as e:
+        print(f"⚠️  No se pudo leer Insider Flow del backend: {e}")
+        return []
+
+
+# ── POSTURA DE AYER (memoria entre días, no un caché de rendimiento) ─────────
+
+def get_yesterday_stance() -> str:
+    """Lee el propio Gist de salida ANTES de sobrescribirlo con el briefing de
+    hoy. Esto es lo que da continuidad narrativa real ("ayer cerramos las
+    coberturas...") — no un caché que acelera respuestas, sino memoria de la
+    postura del día anterior para que el briefing de hoy pueda construir
+    sobre ella en vez de escribirse en el vacío cada mañana."""
+    if not GIST_TOKEN:
+        return ""
+    try:
+        r = requests.get(
+            f"https://api.github.com/gists/{GIST_ID}",
+            headers={"Authorization": f"token {GIST_TOKEN}", "Accept": "application/vnd.github+json"},
+            timeout=10,
+        )
+        if r.status_code != 200:
+            return ""
+        content = r.json()["files"].get("briefing.json", {}).get("content", "")
+        if not content:
+            return ""
+        payload = json.loads(content)
+        prev_date = payload.get("date", "")
+        today     = datetime.now().strftime("%Y-%m-%d")
+        if prev_date == today:
+            return ""  # ya se generó hoy, no hay "ayer" que aportar
+        text = payload.get("text", "")
+        # Nos quedamos con un extracto corto (no todo el briefing de ayer) —
+        # solo lo suficiente para que el modelo sepa cuál fue su postura.
+        return text[:1200]
+    except Exception as e:
+        print(f"⚠️  No se pudo leer la postura de ayer: {e}")
+        return ""
+
+
 # ── CONSTRUIR PROMPT ──────────────────────────────────────────────────────────
 
-def build_prompt(market_data: dict) -> str:
+def build_prompt(market_data: dict, news: list, earnings: list, breadth: dict,
+                  insider_clusters: list, yesterday_stance: str) -> str:
     d = market_data
 
     # Formatear índices
@@ -307,14 +527,66 @@ def build_prompt(market_data: dict) -> str:
     hy = d.get("hy_spread")
     hy_str = f"{hy:.2f}%" if hy else "Dato no disponible"
 
-    prompt = f"""Eres el Jefe de Estrategia Macro de un hedge fund quant-macro con $2B bajo gestión. 
-Tu trabajo es publicar cada mañana (pre-market) un informe de mercado que determine el sesgo direccional del día, 
-la asignación sectorial táctica y los niveles de riesgo a vigilar. 
-El público objetivo son Portfolio Managers y traders de prop que toman decisiones en los primeros 30 minutos de sesión.
+    # Noticias reales del día — sin esto el modelo no tiene ni idea de qué
+    # está pasando en el mundo, por muy correctos que sean los números
+    news_lines = ""
+    for n in news:
+        news_lines += f"- [{n['time']}, {n['source']}] {n['headline']}"
+        if n.get("summary"):
+            news_lines += f" — {n['summary']}"
+        news_lines += "\n"
+    if not news_lines:
+        news_lines = "Sin titulares disponibles hoy — no menciones catalizadores de noticias que no estén aquí.\n"
 
-IDIOMA: Español castellano. Traduce los conceptos anglosajones cuando sea posible. Mantén términos técnicos financieros en inglés cuando no tengan traducción natural.
+    # Earnings notables próximos 1-2 días
+    earnings_lines = ""
+    hour_label = {"bmo": "antes de apertura", "amc": "tras cierre", "": "hora no especificada"}
+    for e in earnings:
+        earnings_lines += f"- {e['ticker']}: {e['date']} ({hour_label.get(e['hour'], e['hour'])})"
+        if e.get("eps_est") is not None:
+            earnings_lines += f" — EPS estimado: {e['eps_est']}"
+        earnings_lines += "\n"
+    if not earnings_lines:
+        earnings_lines = "Sin earnings de peso en las próximas 48h.\n"
 
-NORMA ANTI-ALUCINACIÓN: No inventes datos. Si no tienes acceso a un dato concreto, indícalo explícitamente como "Dato no disponible o pendiente de verificación". Para cada precio o dato macro, indica la fuente.
+    # Señales de amplitud propias de RSU (McClellan real, % sobre SMA50, NH-NL)
+    # — calculadas sobre el propio universo de 500 tickers del Scanner, no
+    # sobre una fuente externa genérica
+    if breadth:
+        pct_s = f"{breadth['pct_above_sma50']}%" if breadth.get('pct_above_sma50') is not None else "N/D"
+        mc_s  = f"{breadth['mcclellan']:+.1f}" if breadth.get('mcclellan') is not None else "N/D (histórico insuficiente todavía)"
+        rsu_breadth_str = (
+            f"% S&P 500 sobre SMA50: {pct_s} | Oscilador McClellan RSU (real, sobre vuestro propio universo): {mc_s} | "
+            f"New Highs−New Lows: {breadth.get('nh_nl', 'N/D')} "
+            f"({breadth.get('new_highs', '?')} nuevos máximos de 52 sem. vs {breadth.get('new_lows', '?')} nuevos mínimos)"
+        )
+    else:
+        rsu_breadth_str = "Dato no disponible (Scanner sin datos frescos)"
+
+    # Clusters de insiders (solo si el backend está desplegado — ver nota en get_insider_clusters)
+    insider_lines = ""
+    for c in insider_clusters:
+        insider_lines += f"- {c.get('ticker','?')}: {c.get('n_insiders','?')} insiders comprando, ${c.get('total_value',0):,.0f} total, señal {c.get('signal','')}\n"
+    if not insider_lines:
+        insider_lines = "Sin datos de Insider Flow disponibles en este ciclo.\n"
+
+    # Postura de ayer — memoria entre días para dar continuidad narrativa real
+    yesterday_block = (
+        f"TU PROPIO BRIEFING DE AYER (para dar continuidad — di explícitamente si mantienes, "
+        f"reduces o cambias esta postura, y por qué):\n{yesterday_stance}\n"
+        if yesterday_stance else
+        "No hay briefing de ayer disponible (primera ejecución, o el de ayer no se generó) — escribe sin referencias al día anterior.\n"
+    )
+
+    prompt = f"""Eres un trader macro-discrecional escribiendo tu propia nota de mercado de cada mañana, para tu comunidad de trading. No es un informe institucional de un banco — es tu lectura personal, en primera persona, con tu propio posicionamiento incluido ("mi cartera", "he cerrado las coberturas", "mantengo el objetivo de..."). El tono es directo, seguro, con opiniones claras — no un informe neutro que evita mojarse.
+
+IDIOMA: Español castellano, natural. Nada de emojis. Nada de listas interminables — prosa conectada, con algún bullet solo donde de verdad ayude a la lectura rápida.
+
+NORMA ANTI-ALUCINACIÓN: No inventes datos, precios, ni titulares que no estén en los bloques de abajo. Si falta un dato, dilo o simplemente no lo menciones — no rellenes el hueco con algo inventado. No inventes noticias que no estén en la lista de titulares proporcionada.
+
+LONGITUD: 500-700 palabras. Esto no es un informe de 2000 palabras con 11 secciones — es una nota que se lee en 3-4 minutos.
+
+{yesterday_block}
 
 DATOS REALES DE MERCADO HOY ({d['date']} — {d['time']}):
 
@@ -352,74 +624,36 @@ SENTIMIENTO:
 - VIX Term Structure: {vix_str}
 - High Yield Spread (OAS): {hy_str}
 
+SEÑALES PROPIAS DE RSU (amplitud calculada sobre vuestro propio universo de 500 tickers — dales protagonismo, es lo que os diferencia de cualquier newsletter macro genérica):
+{rsu_breadth_str}
+
+INSIDER FLOW — CLUSTERS DE COMPRA RECIENTES:
+{insider_lines}
+
 CALENDARIO ECONÓMICO HOY:
 | Hora | Evento | Consenso | Previo | Impacto |
 |------|--------|----------|--------|---------|
 {calendar_lines}
 
+EARNINGS NOTABLES PRÓXIMAS 48H:
+{earnings_lines}
+
+TITULARES REALES DE MERCADO (últimas ~24-30h — usa 2-3 de los más relevantes para el mercado, no los enumeres todos, teje solo los que de verdad importan para el sesgo de hoy):
+{news_lines}
+
 ---
 
-Genera el informe completo siguiendo esta estructura:
+Escribe la nota de hoy. Estructura sugerida (adapta libremente, esto no es una plantilla rígida de secciones obligatorias):
 
-1. RESUMEN EJECUTIVO (60 SEGUNDOS)
-   - 3-4 bullets: sesgo direccional, catalizador principal, riesgo número 1, recomendación de acción
-   - Analogía memorable del setup actual
+- Un título con la fecha.
+- Cómo está el mercado ahora mismo y cuál es tu lectura de la situación — en primera persona, con tu propio posicionamiento si aplica (¿mantienes, reduces o cambias la postura de ayer?).
+- Los 1-2 catalizadores reales del día (de los titulares y earnings proporcionados) que de verdad mueven la aguja hoy — no un resumen de todos los titulares, solo los que importan.
+- Objetivo técnico y zona de seguridad — usa los niveles técnicos reales proporcionados (SMA20/50/200, rango 20d), no inventes soportes/resistencias adicionales.
+- Un repaso corto del panorama macro (tipos, VIX, amplitud propia de RSU, spreads) — solo lo que aporte a la tesis del día, no una lista exhaustiva de todos los datos.
+- Qué vigilar — riesgos concretos, no genéricos ("cuidado con la volatilidad" no vale; di qué exactamente y por qué).
+- Cierra con tu recomendación clara para hoy.
 
-2. ESTADO DE LOS MERCADOS
-   - Análisis de los datos proporcionados arriba
-   - Gap pre-market real usando los datos de FUTUROS PRE-MARKET proporcionados (no inventes el gap)
-   - Divergencias SPX/NDX/RUT
-   - VIX confirmando o contradiciendo
-
-3. NARRATIVA DOMINANTE DEL MERCADO
-   - ¿Qué historia cuenta el mercado hoy?
-   - ¿Nueva narrativa o continuación?
-
-4. POLÍTICA MONETARIA Y LIQUIDEZ
-   - Usa el "Proxy de expectativas Fed Funds" proporcionado arriba. Deja explícito que es una aproximación
-     basada en yields (3M vs Fed Funds actual), NO la probabilidad exacta de CME FedWatch
-   - Usa EUR/USD y USD/JPY proporcionados como lectura indirecta de divergencia de bancos centrales —
-     no inventes decisiones o probabilidades específicas de BCE/BoJ que no se te han dado
-   - Si quieres comentar el balance de la Fed, indica que ese detalle está disponible en el módulo
-     FED & MACRO de la terminal, no lo inventes aquí
-
-5. CALENDARIO ECONÓMICO
-   - Análisis de los eventos del día
-   - Qué escenario (beat/miss) es bullish/bearish
-
-6. ROTACIÓN SECTORIAL
-   - Basado en los datos de sectores proporcionados
-   - Líderes y rezagados
-   - Factor performance (Growth vs Value, Large vs Small)
-
-7. SENTIMIENTO Y POSICIONAMIENTO
-   - Fear & Greed análisis
-   - VIX term structure interpretación
-   - Credit spreads señal
-
-8. NIVELES TÁCTICOS
-   - Usa EXCLUSIVAMENTE los "NIVELES TÉCNICOS CALCULADOS" proporcionados arriba (SMA20/50/200, rango 20d)
-   - S&P 500 y Nasdaq 100: interpreta esos niveles reales, no inventes soportes/resistencias adicionales
-   - Qué nivel de los proporcionados (SMA20, SMA50, SMA200, máximo o mínimo de 20d) invalidaría la tesis del día
-
-9. TESIS DEL DÍA
-   Bull Case (3 puntos)
-   Bear Case (3 puntos)
-   Escenario más probable con probabilidad asignada
-
-10. SECTORES Y ACTIVOS A VIGILAR
-    Tabla con sector, sesgo, catalizador, nivel de entrada/salida
-
-11. CONCLUSIÓN TÁCTICA
-    - Sesgo direccional: Alcista / Bajista / Neutral
-    - Tamaño de posición recomendado
-    - Hedge recomendado
-    - Horas clave a vigilar
-    - Qué confirmaría / invalidaría la tesis
-
-Termina con: "¿Por qué hoy puede ser un día de movimiento importante?" (3-5 puntos)
-
-FORMATO: Usa tablas Markdown para comparativas. Veredicto en negrita al inicio de cada sección. Tono frío, cuantitativo, sin hype. Límite 2000 palabras."""
+FORMATO: Prosa en primera persona, con algún encabezado en negrita para las 2-3 secciones principales si ayuda a la lectura, no una tabla por sección. Sin emojis. Tono de trader real hablando a su comunidad, no de banco de inversión."""
 
     return prompt
 
@@ -440,8 +674,8 @@ def generate_briefing(prompt: str) -> str:
         json={
             "model":       MODEL,
             "messages":    [{"role": "user", "content": prompt}],
-            "max_tokens":  6000,
-            "temperature": 0.2,
+            "max_tokens":  2500,
+            "temperature": 0.45,
         },
         timeout=120,
     )
@@ -491,11 +725,26 @@ def save_to_gist(content: str, market_data: dict):
 def main():
     print(f"🕐 Generando briefing — {datetime.now().strftime('%Y-%m-%d %H:%M UTC')}")
 
+    print("📰 Leyendo tu postura de ayer (para continuidad narrativa)...")
+    yesterday_stance = get_yesterday_stance()
+
     print("📊 Recopilando datos de mercado...")
     market_data = get_market_data()
 
+    print("📰 Recopilando titulares reales del día...")
+    news = get_market_news()
+
+    print("📅 Recopilando earnings notables (próximas 48h)...")
+    earnings = get_notable_earnings()
+
+    print("📈 Leyendo señales de amplitud propias de RSU (Scanner Gist)...")
+    breadth = get_rsu_breadth_signals()
+
+    print("🔍 Leyendo clusters de Insider Flow (si el backend está desplegado)...")
+    insider_clusters = get_insider_clusters()
+
     print("🤖 Construyendo prompt...")
-    prompt = build_prompt(market_data)
+    prompt = build_prompt(market_data, news, earnings, breadth, insider_clusters, yesterday_stance)
 
     print(f"🧠 Llamando a {MODEL} via OpenRouter...")
     briefing = generate_briefing(prompt)
