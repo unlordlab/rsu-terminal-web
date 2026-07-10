@@ -547,11 +547,14 @@ LECTURA:
 
     "mcclellan-oscillator": {
         title: "Oscilador McClellan",
-        short: "Mide la aceleración de la amplitud real del mercado (EMA19-EMA39 sobre avance/declive neto del NYSE). Extremos anticipan giros de corto plazo.",
-        long: `El Oscilador McClellan es un indicador de amplitud que mide la diferencia entre dos medias exponenciales del avance/declive neto diario del NYSE — cuántas acciones suben menos cuántas bajan cada día, no el precio de un índice.
+        short: "Mide la aceleración de la amplitud real del mercado (EMA19-EMA39 sobre avance/declive neto del propio S&P 500). Extremos anticipan giros de corto plazo.",
+        long: `El Oscilador McClellan es un indicador de amplitud que mide la diferencia entre dos medias exponenciales del avance/declive neto diario — cuántas acciones del S&P 500 suben menos cuántas bajan cada día, no el precio de un índice.
 
-CÁLCULO:
-EMA(19) − EMA(39) del avance/declive neto diario real (^ADV − ^DEC del NYSE). Si no hay suficiente histórico de amplitud real disponible, el dato se muestra como N/D en vez de sustituirlo por una aproximación.
+CÁLCULO Y FUENTE:
+EMA(19) − EMA(39) del avance/declive neto diario, calculado directamente sobre el histórico de precios de las ~500 acciones del S&P 500 que ya descarga el Scanner cada noche — no depende de tickers compuestos externos (como ^ADV/^DEC de Yahoo, que llevan tiempo dando datos poco fiables). Si el Scanner todavía no tiene suficiente histórico acumulado (hacen falta 40+ sesiones), se muestra como [PROXY SPY] usando una fuente de respaldo en vez de un dato a medias.
+
+VARIACIÓN SEMANAL:
+Junto al valor actual se muestra la variación frente a hace ~5 sesiones (una semana de mercado) — útil para ver si la amplitud se está acelerando o frenando, no solo su nivel absoluto en este momento.
 
 INTERPRETACIÓN:
 ▸ &gt; +70: sobrecompra de amplitud — el mercado puede estar extendido a corto plazo.

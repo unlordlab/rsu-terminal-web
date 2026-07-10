@@ -684,6 +684,16 @@ async function loadBreadth(el) {
         const nhNlAvailable = data.nh_nl != null;
         const nhNlColor     = nhNlAvailable ? (data.nh_nl >= 0 ? '#00ffad' : '#f23645') : 'var(--color-muted)';
 
+        // Variación semanal — helper genérico para los tres indicadores con
+        // histórico suficiente (McClellan, % sobre SMA50, NH-NL)
+        const wowBadge = (value, suffix) => {
+            if (value == null) return '';
+            const up    = value >= 0;
+            const color = up ? '#00ffad' : '#f23645';
+            const arrow = up ? '▲' : '▼';
+            return '<span style="color:' + color + ';font-size:9px;margin-left:6px;">' + arrow + ' ' + (up ? '+' : '') + value + (suffix || '') + ' sem.</span>';
+        };
+
         const metricBox = (label, valueHtml) =>
             '<div style="background:var(--color-bg);border:1px solid var(--color-border);border-radius:6px;padding:8px 12px;margin-bottom:6px;display:flex;justify-content:space-between;align-items:center;">'
             + '<span style="color:var(--color-muted);font-size:11px;">' + label + '</span>'
@@ -703,7 +713,7 @@ async function loadBreadth(el) {
             + '<div style="background:var(--color-bg);border:1px solid var(--color-border);border-radius:6px;padding:8px 12px;margin-bottom:6px;">'
             + '<div style="display:flex;justify-content:space-between;margin-bottom:4px;">'
             + '<span style="color:var(--color-muted);font-size:11px;">Oscilador McClellan ' + tt('mcclellan-oscillator') + '</span>'
-            + '<span style="color:' + mcColor + ';font-size:11px;font-weight:600;">' + (mcAvailable ? ((data.mcclellan >= 0 ? '+' : '') + data.mcclellan.toFixed(1) + ' · ' + data.mcclellan_state) : 'N/D') + '</span>'
+            + '<span style="color:' + mcColor + ';font-size:11px;font-weight:600;">' + (mcAvailable ? ((data.mcclellan >= 0 ? '+' : '') + data.mcclellan.toFixed(1) + ' · ' + data.mcclellan_state) : 'N/D') + wowBadge(data.mcclellan_wow, '') + '</span>'
             + '</div>'
             + '<div style="width:100%;height:8px;background:var(--color-border);border-radius:4px;overflow:hidden;">'
             + '<div style="height:100%;width:' + (mcAvailable ? Math.min(Math.abs(data.mcclellan)/100*100, 100) : 0) + '%;background:' + mcColor + ';"></div>'
@@ -715,7 +725,7 @@ async function loadBreadth(el) {
             + '<div style="background:var(--color-bg);border:1px solid var(--color-border);border-radius:6px;padding:8px 12px;margin-bottom:6px;">'
             + '<div style="display:flex;justify-content:space-between;margin-bottom:4px;">'
             + '<span style="color:var(--color-muted);font-size:11px;">% S&amp;P 500 sobre SMA50 ' + tt('breadth-pct-sma50') + '</span>'
-            + '<span style="color:' + pctColor + ';font-size:12px;font-weight:600;">' + data.pct_above_sma50.toFixed(0) + '%</span>'
+            + '<span style="color:' + pctColor + ';font-size:12px;font-weight:600;">' + data.pct_above_sma50.toFixed(0) + '%' + wowBadge(data.pct_above_sma50_wow, 'pp') + '</span>'
             + '</div>'
             + '<div style="width:100%;height:8px;background:var(--color-border);border-radius:4px;overflow:hidden;">'
             + '<div style="height:100%;width:' + data.pct_above_sma50 + '%;background:' + pctColor + ';"></div>'
@@ -727,7 +737,7 @@ async function loadBreadth(el) {
             + '<div style="background:var(--color-bg);border:1px solid var(--color-border);border-radius:6px;padding:8px 12px;margin-bottom:10px;">'
             + '<div style="display:flex;justify-content:space-between;margin-bottom:4px;">'
             + '<span style="color:var(--color-muted);font-size:11px;">New Highs − New Lows ' + tt('nh-nl') + '</span>'
-            + '<span style="color:' + nhNlColor + ';font-size:12px;font-weight:600;">' + (nhNlAvailable ? ((data.nh_nl >= 0 ? '+' : '') + data.nh_nl) : 'N/D') + '</span>'
+            + '<span style="color:' + nhNlColor + ';font-size:12px;font-weight:600;">' + (nhNlAvailable ? ((data.nh_nl >= 0 ? '+' : '') + data.nh_nl) : 'N/D') + wowBadge(data.nh_nl_wow, '') + '</span>'
             + '</div>'
             + '<div style="font-size:9px;color:var(--color-muted);margin-top:3px;">' + (nhNlAvailable ? (data.new_highs + ' nuevos máximos · ' + data.new_lows + ' nuevos mínimos (52 semanas) <span style="color:#00ffad;">[S&amp;P 500 REAL]</span>') : 'Requiere el scan nocturno del Scanner — no disponible todavía') + '</div>'
             + '</div>'

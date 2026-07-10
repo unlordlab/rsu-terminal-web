@@ -26,6 +26,7 @@ export async function render(container) {
             renderEarningsChart(data);
             renderIncomeStatementChart(data);
             renderInsiderVolumeChart(data);
+            renderCryptoChart(data);
         } catch(e) {
             result.innerHTML = errorMessage(e.message);
         } finally {
@@ -59,7 +60,155 @@ function pageHeader() {
         + '<div id="research-result"></div>';
 }
 
+// ── FICHA CRIPTO ─────────────────────────────────────────────────────────────
+// Nada de fundamentales de empresa aquí (no aplican) — en su lugar, perfil
+// temático vía CoinGecko: categoría, descripción, suministro, ATH/ATL, enlaces.
+
+function cryptoHeaderSection(data, chgColor, chgStr) {
+    return '<div style="background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius);padding:1.25rem;margin-bottom:1rem;">'
+        + '<div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:1rem;">'
+        + '<div>'
+        + '<div style="display:flex;align-items:baseline;gap:12px;margin-bottom:4px;">'
+        + '<span class="ticker-link" style="color:var(--color-accent);font-size:24px;letter-spacing:0.1em;">' + data.ticker + '</span>'
+        + '<span style="color:var(--color-muted);font-size:14px;">' + data.name + '</span>'
+        + '<span style="background:#a855f722;color:#a855f7;border:1px solid #a855f755;border-radius:3px;padding:1px 8px;font-size:9px;letter-spacing:0.05em;">CRIPTO</span>'
+        + '</div>'
+        + '</div>'
+        + '<div style="text-align:right;">'
+        + '<div style="color:var(--color-text);font-size:28px;font-weight:500;">$' + data.price.toLocaleString('en-US') + '</div>'
+        + '<div style="color:' + chgColor + ';font-size:13px;">' + chgStr + ' hoy</div>'
+        + '<div style="color:var(--color-muted);font-size:11px;margin-top:2px;">' + data.mktcap_fmt + ' market cap</div>'
+        + '<button onclick="window.__quickAddWatchlist(\'' + data.ticker + '\', this)" style="margin-top:8px;background:transparent;border:1px solid var(--color-border);color:var(--color-muted);border-radius:var(--radius);padding:5px 12px;font-size:11px;cursor:pointer;">＋ Watchlist</button>'
+        + '</div>'
+        + '</div>'
+        + '<div style="display:flex;gap:2rem;margin-top:1rem;padding-top:1rem;border-top:1px solid var(--color-border);font-size:11px;flex-wrap:wrap;">'
+        + (data.week52_low  ? '<span style="color:var(--color-muted);">52w Low: <b style="color:var(--color-text);">$' + data.week52_low.toLocaleString('en-US') + '</b></span>' : '')
+        + (data.week52_high ? '<span style="color:var(--color-muted);">52w High: <b style="color:var(--color-text);">$' + data.week52_high.toLocaleString('en-US') + '</b></span>' : '')
+        + '</div>'
+        + '</div>';
+}
+
+function cryptoChartSection(data) {
+    const hasChart = data.crypto_chart && data.crypto_chart.length > 1;
+    return '<div style="background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius);overflow:hidden;margin-bottom:1rem;">'
+        + '<div style="display:flex;justify-content:space-between;align-items:center;padding:10px 14px;border-bottom:1px solid var(--color-border);">'
+        + '<div style="color:var(--color-accent);font-size:12px;letter-spacing:0.08em;">GRÁFICO · COINGECKO</div>'
+        + '<div style="color:var(--color-muted);font-size:11px;">Diario · 1 año</div>'
+        + '</div>'
+        + '<div style="height:340px;padding:12px;">'
+        + (hasChart
+            ? '<canvas id="crypto-chart"></canvas>'
+            : '<div style="display:flex;align-items:center;justify-content:center;height:100%;color:var(--color-muted);font-size:12px;">Sin histórico de precio disponible para este activo</div>')
+        + '</div>'
+        + '</div>';
+}
+
+function renderCryptoChart(data) {
+    if (!data.crypto_chart || data.crypto_chart.length < 2) return;
+    const up    = data.chg_pct >= 0;
+    const color = up ? '#00ffad' : '#f23645';
+    loadChartJs(() => {
+        const ctx = document.getElementById('crypto-chart');
+        if (!ctx) return;
+        const points = data.crypto_chart;
+        new Chart(ctx, {
+            type: 'line',
+            data: {
+                labels: points.map(p => p.date.substring(5)),
+                datasets: [{
+                    data: points.map(p => p.price),
+                    borderColor: color, backgroundColor: color + '18',
+                    borderWidth: 1.5, pointRadius: 0, fill: true, tension: 0.25,
+                }]
+            },
+            options: {
+                responsive: true, maintainAspectRatio: false,
+                plugins: {
+                    legend: { display: false },
+                    tooltip: { callbacks: { label: c => ' $' + c.raw.toLocaleString('en-US', { maximumFractionDigits: 6 }) } },
+                },
+                scales: {
+                    x: { ticks: { color: '#555', font: { size: 9 }, maxTicksLimit: 10 }, grid: { color: 'rgba(255,255,255,0.03)' } },
+                    y: { ticks: { color: '#555', font: { size: 9 }, callback: v => '$' + v.toLocaleString('en-US') }, grid: { color: 'rgba(255,255,255,0.04)' } },
+                }
+            }
+        });
+    });
+}
+
+function cryptoProfileSection(data) {
+    const p = data.crypto_profile;
+    if (!p || !p.ok) {
+        return '<div style="background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius);padding:1.25rem;margin-bottom:1rem;">'
+            + '<div style="color:var(--color-muted);font-size:12px;">No se encontró perfil temático para este activo en CoinGecko' + (p && p.error ? ' (' + p.error + ')' : '') + '.</div>'
+            + '</div>';
+    }
+
+    const catBadges = (p.categories || []).map(c =>
+        '<span style="background:#a855f722;color:#a855f7;border:1px solid #a855f755;border-radius:3px;padding:2px 9px;font-size:10px;margin-right:6px;margin-bottom:6px;display:inline-block;">' + c + '</span>'
+    ).join('');
+
+    const supplyBox = (label, value) => value == null ? '' :
+        '<div style="background:var(--color-bg,#0a0a0a);border:1px solid var(--color-border);border-radius:6px;padding:8px 12px;text-align:center;">'
+        + '<div style="color:var(--color-muted);font-size:9px;letter-spacing:0.05em;">' + label + '</div>'
+        + '<div style="color:var(--color-text);font-size:13px;font-weight:600;margin-top:2px;">' + Number(value).toLocaleString('en-US') + '</div>'
+        + '</div>';
+
+    const pctCirculating = (p.circulating_supply && p.max_supply)
+        ? Math.round((p.circulating_supply / p.max_supply) * 100) : null;
+
+    const athColor = (p.ath_change_pct != null && p.ath_change_pct >= 0) ? 'var(--color-accent)' : '#f23645';
+
+    const links = p.links || {};
+    const linkBtn = (label, url) => !url ? '' :
+        '<a href="' + url + '" target="_blank" style="color:var(--color-secondary);font-size:11px;border:1px solid var(--color-border);border-radius:4px;padding:4px 10px;text-decoration:none;">' + label + ' ↗</a>';
+
+    return '<div style="background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius);padding:1.25rem;margin-bottom:1rem;">'
+        + '<div style="color:var(--color-accent);font-size:12px;letter-spacing:0.08em;margin-bottom:0.75rem;">PERFIL TEMÁTICO · COINGECKO</div>'
+        + (catBadges ? '<div style="margin-bottom:1rem;">' + catBadges + '</div>' : '')
+
+        + '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:8px;margin-bottom:1rem;">'
+        + (p.market_cap_rank ? supplyBox('RANKING MKT CAP', '#' + p.market_cap_rank) : '')
+        + supplyBox('SUMINISTRO CIRCULANTE', p.circulating_supply)
+        + supplyBox('SUMINISTRO MÁXIMO', p.max_supply)
+        + (pctCirculating != null ? supplyBox('% EN CIRCULACIÓN', pctCirculating + '%') : '')
+        + '</div>'
+
+        + (p.ath != null ? (
+            '<div style="background:var(--color-bg,#0a0a0a);border:1px solid var(--color-border);border-radius:6px;padding:10px 12px;margin-bottom:1rem;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;">'
+            + '<div><span style="color:var(--color-muted);font-size:10px;">MÁXIMO HISTÓRICO (ATH)</span><br>'
+            + '<span style="color:var(--color-text);font-size:15px;font-weight:600;">$' + Number(p.ath).toLocaleString('en-US') + '</span>'
+            + (p.ath_date ? ' <span style="color:var(--color-muted);font-size:10px;">(' + p.ath_date + ')</span>' : '')
+            + '</div>'
+            + (p.ath_change_pct != null ? '<div style="color:' + athColor + ';font-size:13px;font-weight:600;">' + (p.ath_change_pct >= 0 ? '+' : '') + p.ath_change_pct.toFixed(1) + '% desde ATH</div>' : '')
+            + '</div>'
+        ) : '')
+
+        + (links.homepage || links.whitepaper || links.github || links.subreddit || links.twitter ? (
+            '<div style="display:flex;gap:8px;flex-wrap:wrap;padding-top:0.75rem;border-top:1px solid var(--color-border);">'
+            + linkBtn('Web oficial', links.homepage)
+            + linkBtn('Whitepaper', links.whitepaper)
+            + linkBtn('GitHub', links.github)
+            + linkBtn('Reddit', links.subreddit)
+            + linkBtn('Twitter/X', links.twitter)
+            + '</div>'
+        ) : '')
+        + '</div>';
+}
+
+function renderCryptoResearch(data) {
+    const chgColor = data.chg_pct >= 0 ? 'var(--color-accent)' : '#f23645';
+    const chgStr   = (data.chg_pct >= 0 ? '+' : '') + data.chg_pct.toFixed(2) + '%';
+
+    return cryptoHeaderSection(data, chgColor, chgStr)
+        + descriptionSection(data)
+        + cryptoChartSection(data)
+        + cryptoProfileSection(data);
+}
+
 function renderResearch(data) {
+    if (data.is_crypto) return renderCryptoResearch(data);
+
     const chgColor   = data.chg_pct >= 0 ? 'var(--color-accent)' : '#f23645';
     const chgStr     = (data.chg_pct >= 0 ? '+' : '') + data.chg_pct.toFixed(2) + '%';
     const score      = data.rsu_score;

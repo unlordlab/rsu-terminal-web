@@ -298,6 +298,60 @@ def _technical_score(rs_pct: float, phase: int, rvol: float) -> float:
     return round(rs_pts + phase_pts + rvol_pts, 1)
 
 
+def _compute_breadth_history(close_d: dict, tickers: list, lookback_days: int = 65) -> list:
+    """Amplitud de mercado REAL derivada del propio universo S&P 500 que este
+    script ya descarga cada noche (500 tickers x 260 sesiones) — en vez de
+    depender de fuentes externas de avance/declive (^ADV/^DEC de Yahoo, que
+    llevan tiempo dando datos poco fiables/planos) o de un proxy calculado
+    sobre el precio de un solo índice.
+
+    Para cada uno de los últimos `lookback_days` días de mercado calcula:
+    - avance/declive neto (para el Oscilador McClellan real: EMA19-EMA39)
+    - % de tickers del universo por encima de su propia SMA50
+    - nuevos máximos / nuevos mínimos de 52 semanas (para NH-NL)
+
+    Todo vectorizado con pandas sobre datos que ya están en memoria — cero
+    llamadas de red adicionales.
+    """
+    cols = {t: close_d[t] for t in tickers if t in close_d}
+    if len(cols) < 50:
+        return []
+
+    df = pd.DataFrame(cols).sort_index()
+    if len(df) < 60:
+        return []
+    lookback_days = min(lookback_days, len(df) - 1)
+    if lookback_days < 2:
+        return []
+
+    diff      = df.diff()
+    advances  = (diff > 0).sum(axis=1)
+    declines  = (diff < 0).sum(axis=1)
+
+    sma50     = df.rolling(50, min_periods=50).mean()
+    above     = df > sma50
+    valid_cnt = df.notna().sum(axis=1)
+    pct_above = (above.sum(axis=1) / valid_cnt.replace(0, np.nan) * 100)
+
+    roll_max  = df.rolling(252, min_periods=20).max()
+    roll_min  = df.rolling(252, min_periods=20).min()
+    new_highs = (df >= roll_max).sum(axis=1)
+    new_lows  = (df <= roll_min).sum(axis=1)
+
+    history = []
+    for d in df.index[-lookback_days:]:
+        pa = pct_above.loc[d]
+        history.append({
+            "date":            d.strftime("%Y-%m-%d"),
+            "advances":        int(advances.loc[d]),
+            "declines":        int(declines.loc[d]),
+            "pct_above_sma50": round(float(pa), 1) if pd.notna(pa) else None,
+            "new_highs":       int(new_highs.loc[d]),
+            "new_lows":        int(new_lows.loc[d]),
+        })
+    return history
+
+
 def run_scan() -> dict:
     tickers  = list(SP500_SECTOR_MAP.keys())
     all_syms = list(dict.fromkeys([BENCHMARK] + tickers))
@@ -362,6 +416,9 @@ def run_scan() -> dict:
     if not rows:
         raise ValueError("Sin filas calculadas")
 
+    breadth_history = _compute_breadth_history(close_d, tickers)
+    print(f"📊 Amplitud histórica calculada: {len(breadth_history)} sesiones")
+
     df = pd.DataFrame(rows).set_index("ticker")
     df["rs_pct"] = df["rs_score"].rank(pct=True).mul(100).round(1)
     df["score_tecnico"] = df.apply(
@@ -385,10 +442,11 @@ def run_scan() -> dict:
         }
 
     return {
-        "ok":           True,
-        "stocks":       stocks,
+        "ok":            True,
+        "stocks":        stocks,
+        "breadth_history": breadth_history,
         "universe_size": len(df),
-        "generated_at": datetime.now(timezone.utc).isoformat(),
+        "generated_at":  datetime.now(timezone.utc).isoformat(),
         "meta": {
             "rvol_window": RVOL_WINDOW,
             "score_note":  "score_tecnico = RS_pct(50%) + Fase(30%) + RVOL(20%), sin componente fundamental — ver docstring",

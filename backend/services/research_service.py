@@ -1538,11 +1538,175 @@ def _get_relative_strength(ticker: str, sector: str, industry: str = None) -> di
     except Exception:
         return {}
 
+# ── CRIPTO — perfil temático vía CoinGecko (misma API que ya usa BTC Stratum) ──
+#
+# CoinGecko requiere su propio "id" interno (p.ej. "bitcoin"), no el símbolo
+# del ticker — y varias criptos distintas pueden compartir símbolo (hay
+# decenas de tokens "ETH" o "SOL" de proyectos menores). Para los ~20 nombres
+# más habituales se usa un mapeo fijo (cero ambigüedad, cero llamada extra);
+# para el resto se resuelve con /search, que ordena resultados por relevancia
+# de capitalización — el primer resultado exacto de símbolo es, en la
+# práctica, casi siempre el proyecto "real" y no un token menor homónimo.
+_CRYPTO_ID_OVERRIDES = {
+    "BTC": "bitcoin", "ETH": "ethereum", "SOL": "solana", "XRP": "ripple",
+    "ADA": "cardano", "DOGE": "dogecoin", "AVAX": "avalanche-2", "DOT": "polkadot",
+    "MATIC": "matic-network", "LINK": "chainlink", "LTC": "litecoin",
+    "BNB": "binancecoin", "SHIB": "shiba-inu", "TRX": "tron", "UNI": "uniswap",
+    "ATOM": "cosmos", "XLM": "stellar", "BCH": "bitcoin-cash", "NEAR": "near",
+    "APT": "aptos", "ARB": "arbitrum", "OP": "optimism", "SUI": "sui",
+    "ICP": "internet-computer", "FIL": "filecoin", "ETC": "ethereum-classic",
+}
+
+def _resolve_coingecko_id(symbol: str):
+    symbol = symbol.upper()
+    if symbol in _CRYPTO_ID_OVERRIDES:
+        return _CRYPTO_ID_OVERRIDES[symbol]
+    try:
+        r = requests.get(
+            "https://api.coingecko.com/api/v3/search",
+            params={"query": symbol},
+            timeout=8,
+        )
+        if r.status_code == 200:
+            coins = r.json().get("coins", [])
+            for c in coins:
+                if (c.get("symbol") or "").upper() == symbol:
+                    return c.get("id")
+            if coins:
+                return coins[0].get("id")
+    except Exception:
+        pass
+    return None
+
+
+def _get_crypto_profile(coin_id: str) -> dict:
+    try:
+        r = requests.get(
+            f"https://api.coingecko.com/api/v3/coins/{coin_id}",
+            params={
+                "localization": "false", "tickers": "false", "market_data": "true",
+                "community_data": "false", "developer_data": "false", "sparkline": "false",
+            },
+            timeout=10,
+        )
+        if r.status_code != 200:
+            return {"ok": False, "error": f"CoinGecko error {r.status_code}"}
+        data = r.json()
+        md = data.get("market_data") or {}
+
+        # La descripción de CoinGecko puede ser larga (varios párrafos) — nos
+        # quedamos con el primero, que suele ser el resumen del proyecto, y
+        # se traduce con el mismo motor que ya usáis para descripciones de
+        # empresas (_translate_description, Groq) en vez de dejarla en inglés.
+        desc_en   = (data.get("description") or {}).get("en", "") or ""
+        desc_short = desc_en.split("\n\n")[0][:900].strip()
+        desc_es   = _translate_description(desc_short) if desc_short else ""
+
+        links     = data.get("links") or {}
+        homepage  = next((h for h in (links.get("homepage") or []) if h), None)
+        github_ls = (links.get("repos_url") or {}).get("github") or []
+
+        return {
+            "ok":                 True,
+            "name":               data.get("name"),
+            "symbol":             (data.get("symbol") or "").upper(),
+            "categories":         [c for c in (data.get("categories") or []) if c],
+            "description":        desc_es,
+            "market_cap_rank":    data.get("market_cap_rank"),
+            "circulating_supply": md.get("circulating_supply"),
+            "total_supply":       md.get("total_supply"),
+            "max_supply":         md.get("max_supply"),
+            "ath":                (md.get("ath") or {}).get("usd"),
+            "ath_change_pct":     (md.get("ath_change_percentage") or {}).get("usd"),
+            "ath_date":           ((md.get("ath_date") or {}).get("usd") or "")[:10],
+            "atl":                (md.get("atl") or {}).get("usd"),
+            "atl_change_pct":     (md.get("atl_change_percentage") or {}).get("usd"),
+            "links": {
+                "homepage":  homepage,
+                "whitepaper": links.get("whitepaper") or None,
+                "github":    github_ls[0] if github_ls else None,
+                "subreddit": links.get("subreddit_url") or None,
+                "twitter":   ("https://twitter.com/" + links["twitter_screen_name"]) if links.get("twitter_screen_name") else None,
+            },
+        }
+    except Exception as e:
+        return {"ok": False, "error": str(e)}
+
+
+def _get_crypto_chart(coin_id: str, days: int = 365) -> list:
+    """Histórico de precio diario vía CoinGecko (/coins/{id}/market_chart) —
+    se usa para el gráfico en vez de TradingView porque TradingView solo
+    tiene datos de las criptos listadas en el exchange concreto que le
+    pidamos (Coinbase, Binance...), y muchas monedas más pequeñas no están en
+    ninguno de ellos aunque sí tengan ficha en CoinGecko. Con esto el gráfico
+    funciona para cualquier moneda que ya aparezca en el perfil temático,
+    sin depender de en qué exchange cotice."""
+    try:
+        r = requests.get(
+            f"https://api.coingecko.com/api/v3/coins/{coin_id}/market_chart",
+            params={"vs_currency": "usd", "days": str(days), "interval": "daily"},
+            timeout=12,
+        )
+        if r.status_code != 200:
+            return []
+        prices = r.json().get("prices", [])
+        out = []
+        for ts_ms, price in prices:
+            out.append({
+                "date":  datetime.utcfromtimestamp(ts_ms / 1000).strftime('%Y-%m-%d'),
+                "price": round(float(price), 6),
+            })
+        return out
+    except Exception:
+        return []
+
+
+def _get_research_crypto(ticker: str) -> dict:
+    from services.cache import cache, TTL
+    yf_data = _get_yfinance(ticker)
+    if not yf_data.get('ok'):
+        return {"ok": False, "error": yf_data.get('error', 'Sin datos')}
+
+    symbol  = ticker.replace("-USD", "").upper()
+    coin_id = _resolve_coingecko_id(symbol)
+
+    crypto_profile = _get_crypto_profile(coin_id) if coin_id else {"ok": False, "error": f"No se encontró {symbol} en CoinGecko"}
+    crypto_chart   = _get_crypto_chart(coin_id) if coin_id else []
+
+    result = {
+        "ok":             True,
+        "is_crypto":      True,
+        "ticker":         yf_data['ticker'],
+        "name":           (crypto_profile.get('name') if crypto_profile.get('ok') else None) or yf_data['name'] or ticker,
+        "price":          yf_data['price'],
+        "chg_pct":        yf_data['chg_pct'],
+        "mktcap_fmt":     yf_data['mktcap_fmt'],
+        "week52_high":    yf_data['week52_high'],
+        "week52_low":     yf_data['week52_low'],
+        "sparkline":      yf_data['sparkline'],
+        "description":    crypto_profile.get('description', '') if crypto_profile.get('ok') else '',
+        "crypto_profile": crypto_profile,
+        "crypto_chart":   crypto_chart,
+        "timestamp":      datetime.now().strftime('%H:%M:%S'),
+    }
+    cache.set(f"research:{ticker}", result, TTL["research"])
+    return result
+
+
 def get_research(ticker: str) -> dict:
     ticker = ticker.upper().strip()
     from services.cache import cache, TTL
     cached = cache.get(f"research:{ticker}")
     if cached: return cached
+
+    # Cripto (convención de yfinance: sufijo -USD, p.ej. BTC-USD, ETH-USD) usa
+    # una ruta completamente distinta — nada de lo fundamental de una acción
+    # (Piotroski, insider trading, titularidad institucional, estado de
+    # resultados, rating de analistas...) tiene sentido para una cripto, así
+    # que ni se piden esos 10 fetches (antes se hacían igual y volvían vacíos).
+    # En su lugar se trae un perfil temático de CoinGecko.
+    if ticker.endswith('-USD'):
+        return _get_research_crypto(ticker)
 
     with ThreadPoolExecutor(max_workers=10) as ex:
         f_yf      = ex.submit(_get_yfinance, ticker)

@@ -91,6 +91,24 @@ def _passes_filters(row: dict, criteria: dict) -> bool:
     return True
 
 
+def get_breadth_history() -> list:
+    """Devuelve el array 'breadth_history' del último scan nocturno (avance/
+    declive, % sobre SMA50 y NH-NL por sesión, derivados del propio universo
+    de 500 tickers — ver scripts/scanner_universe.py:_compute_breadth_history).
+    Consumido por Market Breadth para el Oscilador McClellan real y las
+    variaciones semanales, en vez de depender de fuentes externas de amplitud
+    poco fiables (^ADV/^DEC de Yahoo)."""
+    cached = cache.get(CACHE_KEY)
+    if cached:
+        data = cached
+    else:
+        data = _load_gist()
+        if not data:
+            return []
+        cache.set(CACHE_KEY, data, CACHE_TTL)
+    return data.get("breadth_history", [])
+
+
 def get_universe_stocks() -> dict:
     """Devuelve el dict completo {ticker: {...}} del último scan nocturno,
     reutilizando el mismo caché que get_scanner_data(). Pensado para consumo

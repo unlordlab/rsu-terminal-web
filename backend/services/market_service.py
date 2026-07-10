@@ -1219,15 +1219,89 @@ def get_market_breadth():
         rs_last = gains.iloc[-1] / losses.iloc[-1] if losses.iloc[-1] not in (0, None) else None
         rsi = float(100 - (100 / (1 + rs_last))) if rs_last is not None and rs_last == rs_last else 50.0
 
-        # ── McClellan REAL — reutiliza los datos de avance/declive de get_advance_decline() ──
-        ad_data = get_advance_decline()
+        # ── AMPLITUD REAL — derivada del propio universo S&P 500 (scan nocturno) ──
+        # Antes el McClellan y la Línea A/D dependían de ^ADV/^DEC de Yahoo, una
+        # fuente que lleva tiempo devolviendo datos poco fiables (por eso salía
+        # marcado [PROXY SPY] casi siempre). Ahora se calculan, cuando hay datos
+        # suficientes, directamente sobre el histórico de precios de los 500
+        # tickers que el Scanner ya descarga cada noche — es una fuente propia
+        # y verificable, no depende de que un ticker compuesto externo funcione.
+        breadth_hist = []
+        try:
+            from services.scanner_service import get_breadth_history
+            breadth_hist = get_breadth_history()
+        except Exception as e:
+            print(f"[MarketBreadth] Scanner breadth_history no disponible: {e}")
+
         mcclellan, mcclellan_state = None, "N/D"
-        if ad_data.get("ok") and len(ad_data.get("history", [])) >= 39:
-            net_series = pd.Series([h["net"] for h in ad_data["history"]])
-            ema19 = float(net_series.ewm(span=19, adjust=False).mean().iloc[-1])
-            ema39 = float(net_series.ewm(span=39, adjust=False).mean().iloc[-1])
-            mcclellan = round(ema19 - ema39, 1)
+        mcclellan_week_ago = None
+        pct_sma50_week_ago = None
+        nh_nl_week_ago = None
+        ad_history_out, current_adv, current_dec, current_net = [], 0, 0, 0
+        ad_ok, ad_real_data = False, False
+
+        WEEK_LOOKBACK = 5  # sesiones de mercado ≈ 1 semana natural
+
+        if len(breadth_hist) >= 40:
+            net_series = pd.Series([h["advances"] - h["declines"] for h in breadth_hist])
+            ema19_full = net_series.ewm(span=19, adjust=False).mean()
+            ema39_full = net_series.ewm(span=39, adjust=False).mean()
+            mc_series  = ema19_full - ema39_full
+
+            mcclellan = round(float(mc_series.iloc[-1]), 1)
             mcclellan_state = "ALCISTA" if mcclellan > 70 else ("BAJISTA" if mcclellan < -70 else "NEUTRO")
+            if len(mc_series) > WEEK_LOOKBACK:
+                mcclellan_week_ago = round(float(mc_series.iloc[-1 - WEEK_LOOKBACK]), 1)
+
+            pct_series = [h.get("pct_above_sma50") for h in breadth_hist]
+            if len(pct_series) > WEEK_LOOKBACK and pct_series[-1 - WEEK_LOOKBACK] is not None:
+                pct_sma50_week_ago = pct_series[-1 - WEEK_LOOKBACK]
+
+            nh_nl_series = [h.get("new_highs", 0) - h.get("new_lows", 0) for h in breadth_hist]
+            if len(nh_nl_series) > WEEK_LOOKBACK:
+                nh_nl_week_ago = nh_nl_series[-1 - WEEK_LOOKBACK]
+
+            # Línea A/D acumulada para el gráfico — alinea cada sesión del
+            # breadth_history con el cierre de SPY de ese mismo día
+            spy_by_date = {idx.strftime("%Y-%m-%d"): float(row) for idx, row in spy_hist['Close'].items()}
+            cum = 0.0
+            for h in breadth_hist:
+                net = h["advances"] - h["declines"]
+                cum += net
+                ad_history_out.append({
+                    "date": h["date"],
+                    "ad":   round(cum / 1000, 2),
+                    "spy":  spy_by_date.get(h["date"]),
+                    "adv":  h["advances"],
+                    "dec":  h["declines"],
+                    "net":  net,
+                })
+            last = breadth_hist[-1]
+            current_adv = last["advances"]
+            current_dec = last["declines"]
+            current_net = current_adv - current_dec
+            ad_ok = True
+            ad_real_data = True  # real de verdad: nuestro propio universo, no un proxy
+
+        else:
+            # Fallback: Scanner sin histórico suficiente todavía (recién
+            # desplegado — breadth_history tarda unos ~40 días de scans
+            # nocturnos en acumularse) → cae al ^ADV/^DEC de Yahoo de siempre.
+            print(f"[MarketBreadth] breadth_history insuficiente ({len(breadth_hist)} sesiones, "
+                  f"hacen falta 40+) — usando fallback ^ADV/^DEC de Yahoo")
+            ad_data = get_advance_decline()
+            ad_ok = ad_data.get("ok", False)
+            ad_real_data = ad_data.get("real_data", False)
+            ad_history_out = ad_data.get("history", [])
+            current_adv = ad_data.get("current_adv", 0)
+            current_dec = ad_data.get("current_dec", 0)
+            current_net = ad_data.get("current_net", 0)
+            if ad_data.get("ok") and len(ad_data.get("history", [])) >= 39:
+                net_series = pd.Series([h["net"] for h in ad_data["history"]])
+                ema19 = float(net_series.ewm(span=19, adjust=False).mean().iloc[-1])
+                ema39 = float(net_series.ewm(span=39, adjust=False).mean().iloc[-1])
+                mcclellan = round(ema19 - ema39, 1)
+                mcclellan_state = "ALCISTA" if mcclellan > 70 else ("BAJISTA" if mcclellan < -70 else "NEUTRO")
 
         # ── % REAL del S&P 500 sobre SMA50 + New Highs/New Lows — mismo scan nocturno ──
         pct_above_sma50, sectors_checked, breadth_source = None, 0, "n/d"
@@ -1268,6 +1342,11 @@ def get_market_breadth():
             sectors_checked = total_checked
             breadth_source = "etf_proxy"
 
+        # ── Variaciones semanales (delta vs ~5 sesiones atrás) ──────────────────
+        pct_sma50_wow = round(pct_above_sma50 - pct_sma50_week_ago, 1) if (pct_above_sma50 is not None and pct_sma50_week_ago is not None) else None
+        nh_nl_wow     = (nh_nl - nh_nl_week_ago) if (nh_nl is not None and nh_nl_week_ago is not None) else None
+        mcclellan_wow = round(mcclellan - mcclellan_week_ago, 1) if (mcclellan is not None and mcclellan_week_ago is not None) else None
+
         golden_cross = (sma200 is not None) and (sma50 > sma200)
         above_sma200 = (sma200 is not None) and (current > sma200)
 
@@ -1285,19 +1364,22 @@ def get_market_breadth():
             "strength": "FUERTE" if (sma200 is not None and current > sma50 and current > sma200) else "DÉBIL",
             "mcclellan": mcclellan,
             "mcclellan_state": mcclellan_state,
+            "mcclellan_wow": mcclellan_wow,
             "pct_above_sma50": pct_above_sma50,
+            "pct_above_sma50_wow": pct_sma50_wow,
             "sectors_checked": sectors_checked,
             "breadth_source": breadth_source,  # "sp500" (real, 500 tickers) | "etf_proxy" (fallback, 11 ETFs)
             "new_highs": new_highs,
             "new_lows": new_lows,
             "nh_nl": nh_nl,
+            "nh_nl_wow": nh_nl_wow,
             # Datos de Línea A/D fusionados (antes en el widget separado /market/ad-line)
-            "ad_ok": ad_data.get("ok", False),
-            "ad_real_data": ad_data.get("real_data", False),
-            "ad_history": ad_data.get("history", []),
-            "current_adv": ad_data.get("current_adv", 0),
-            "current_dec": ad_data.get("current_dec", 0),
-            "current_net": ad_data.get("current_net", 0),
+            "ad_ok": ad_ok,
+            "ad_real_data": ad_real_data,
+            "ad_history": ad_history_out,
+            "current_adv": current_adv,
+            "current_dec": current_dec,
+            "current_net": current_net,
             "timestamp": get_timestamp(),
         }
         result = _sanitize_breadth(result)
@@ -1311,9 +1393,10 @@ def get_market_breadth():
             "price": None, "sma50": None, "sma200": None,
             "above_sma50": False, "above_sma200": False, "golden_cross": False,
             "rsi": 50.0, "rsi_state": "N/D", "trend": "N/D", "strength": "N/D",
-            "mcclellan": None, "mcclellan_state": "N/D", "pct_above_sma50": None,
+            "mcclellan": None, "mcclellan_state": "N/D", "mcclellan_wow": None, "pct_above_sma50": None,
+            "pct_above_sma50_wow": None,
             "sectors_checked": 0, "breadth_source": "n/d",
-            "new_highs": None, "new_lows": None, "nh_nl": None,
+            "new_highs": None, "new_lows": None, "nh_nl": None, "nh_nl_wow": None,
             "ad_ok": False, "ad_real_data": False, "ad_history": [],
             "current_adv": 0, "current_dec": 0, "current_net": 0,
             "timestamp": get_timestamp(),
