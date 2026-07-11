@@ -11,10 +11,19 @@ from datetime import datetime, timedelta
 import yfinance as yf
 import numpy as np
 
-OPENROUTER_KEY = os.environ.get("OPENROUTER_API_KEY", "")
-GIST_TOKEN     = os.environ.get("GIST_TOKEN", "")
-GIST_ID        = os.environ.get("GIST_ID", "715ee0c4e571517c11fa65c5c2376c34")
-MODEL          = "qwen/qwen3-235b-a22b"
+GROQ_KEY   = os.environ.get("GROQ_API_KEY", "")
+GIST_TOKEN = os.environ.get("GIST_TOKEN", "")
+GIST_ID    = os.environ.get("GIST_ID", "715ee0c4e571517c11fa65c5c2376c34")
+MODEL      = "moonshotai/kimi-k2-instruct-0905"
+
+# Fichero adicional dentro del MISMO Gist (GIST_ID) — no hace falta un Gist
+# nuevo, GitHub permite varios ficheros por Gist. Guarda solo un registro
+# compacto por día (fecha + sesgo + objetivo), no el texto completo — eso da
+# continuidad de varios días sin cargar el prompt con párrafos de días
+# pasados. Se poda a los últimos BIAS_HISTORY_DAYS automáticamente, así que
+# el tamaño nunca crece sin límite.
+BIAS_HISTORY_FILE = "bias_history.json"
+BIAS_HISTORY_DAYS = 14
 
 # Mismo Gist que ya publica scanner_universe.py — lectura pública, sin token,
 # para traer al briefing las señales de amplitud REALES de RSU (McClellan,
@@ -438,7 +447,7 @@ def get_yesterday_stance() -> str:
 # ── CONSTRUIR PROMPT ──────────────────────────────────────────────────────────
 
 def build_prompt(market_data: dict, news: list, earnings: list, breadth: dict,
-                  insider_clusters: list, yesterday_stance: str) -> str:
+                  insider_clusters: list, yesterday_stance: str, bias_history: list) -> str:
     d = market_data
 
     # Formatear índices
@@ -573,20 +582,39 @@ def build_prompt(market_data: dict, news: list, earnings: list, breadth: dict,
     # Postura de ayer — memoria entre días para dar continuidad narrativa real
     yesterday_block = (
         f"TU PROPIO BRIEFING DE AYER (para dar continuidad — di explícitamente si mantienes, "
-        f"reduces o cambias esta postura, y por qué):\n{yesterday_stance}\n"
+        f"reduces o cambias esta postura, y por qué. Si el mercado te dio la razón o te la quitó, dilo con "
+        f"naturalidad — \"ayer funcionó\" o \"me equivoqué con el timing, esto es lo que cambio\" son frases "
+        f"legítimas, no debilidad):\n{yesterday_stance}\n"
         if yesterday_stance else
         "No hay briefing de ayer disponible (primera ejecución, o el de ayer no se generó) — escribe sin referencias al día anterior.\n"
     )
+
+    bias_history_str = format_bias_history(bias_history)
 
     prompt = f"""Eres un trader macro-discrecional escribiendo tu propia nota de mercado de cada mañana, para tu comunidad de trading. No es un informe institucional de un banco — es tu lectura personal, en primera persona, con tu propio posicionamiento incluido ("mi cartera", "he cerrado las coberturas", "mantengo el objetivo de..."). El tono es directo, seguro, con opiniones claras — no un informe neutro que evita mojarse.
 
 IDIOMA: Español castellano, natural. Nada de emojis. Nada de listas interminables — prosa conectada, con algún bullet solo donde de verdad ayude a la lectura rápida.
 
-NORMA ANTI-ALUCINACIÓN: No inventes datos, precios, ni titulares que no estén en los bloques de abajo. Si falta un dato, dilo o simplemente no lo menciones — no rellenes el hueco con algo inventado. No inventes noticias que no estén en la lista de titulares proporcionada.
+VARIEDAD: Esto se publica todos los días. No repitas la misma fórmula de apertura ni las mismas frases hechas cada vez — varía cómo empiezas y cómo conectas las ideas, como lo haría una persona real escribiendo día tras día, no una plantilla rellenada.
+
+PROHIBIDO SONAR A TEXTO GENERADO: Nunca uses coletillas típicas de IA como "es importante destacar que", "cabe mencionar que", "en resumen", "cabe señalar", "es fundamental tener en cuenta", "no debemos olvidar que". Ningún trader real las usa escribiendo rápido por la mañana — si se cuela alguna de estas, reescribe la frase.
+
+CUANTIFICA, NO GENERALICES: Cada afirmación cualitativa debe ir atada a un número concreto de los datos proporcionados abajo. No "el VIX está tranquilo" — "el VIX cotiza en 14,2, por debajo del rango reciente". No "el mercado ha recuperado terreno" — el nivel exacto de dónde a dónde. Tienes los datos, úsalos en vez de quedarte en adjetivos vagos.
+
+NIVEL DE INVALIDACIÓN CONCRETO: La conclusión debe incluir un precio exacto que invalidaría la tesis del día — usa uno de los niveles técnicos reales ya proporcionados (SMA20, SMA50, SMA200 o el rango de 20 días), nunca un nivel inventado. Un análisis serio siempre dice qué número exacto le haría cambiar de opinión, no solo "si el mercado se pone feo".
+
+SIN CIERRE DE ASISTENTE: No termines con nada tipo "espero que esta información te sea útil", "cualquier duda me dices" o similar. El briefing termina con tu conclusión y la etiqueta SESGO, nada más — no es una respuesta de chatbot despidiéndose.
+
+CONVICCIÓN CALIBRADA: Evita tanto las afirmaciones categóricas ("esto va a pasar") como la vaguedad que no compromete a nada ("podría pasar cualquier cosa"). El registro correcto es: "lo más probable es X, y esto se invalida si pasa Y" — una lectura de probabilidades con un punto de invalidación claro, no una predicción ni un texto que no dice nada.
+
+NORMA ANTI-ALUCINACIÓN: No inventes datos, precios, ni titulares que no estén en los bloques de abajo. Si falta un dato, dilo o simplemente no lo menciones — no rellenes el hueco con algo inventado. No inventes noticias que no estén en la lista de titulares proporcionada. De los titulares recibidos, ignora cualquiera que no tenga impacto financiero/económico/geopolítico real — un feed de noticias generalista trae de todo, tu criterio es filtrar lo irrelevante, no mencionarlo por completar espacio.
 
 LONGITUD: 500-700 palabras. Esto no es un informe de 2000 palabras con 11 secciones — es una nota que se lee en 3-4 minutos.
 
 {yesterday_block}
+
+TU SESGO DE LOS ÚLTIMOS DÍAS (para dar contexto de tendencia, p.ej. "llevamos N sesiones en el mismo sesgo" si aplica — no lo fuerces si no aporta nada hoy):
+{bias_history_str}
 
 DATOS REALES DE MERCADO HOY ({d['date']} — {d['time']}):
 
@@ -653,23 +681,25 @@ Escribe la nota de hoy. Estructura sugerida (adapta libremente, esto no es una p
 - Qué vigilar — riesgos concretos, no genéricos ("cuidado con la volatilidad" no vale; di qué exactamente y por qué).
 - Cierra con tu recomendación clara para hoy.
 
-FORMATO: Prosa en primera persona, con algún encabezado en negrita para las 2-3 secciones principales si ayuda a la lectura, no una tabla por sección. Sin emojis. Tono de trader real hablando a su comunidad, no de banco de inversión."""
+FORMATO: Prosa en primera persona, con algún encabezado en negrita para las 2-3 secciones principales si ayuda a la lectura, no una tabla por sección. Sin emojis. Tono de trader real hablando a su comunidad, no de banco de inversión.
+
+ÚLTIMA LÍNEA OBLIGATORIA: Termina el briefing con una línea aparte, exactamente en este formato (sin nada más en esa línea, sin negrita, sin explicación adicional):
+SESGO: ALCISTA
+(o BAJISTA, o NEUTRAL — el que corresponda a tu conclusión de hoy). Esta línea se procesa automáticamente, tiene que estar en ese formato exacto o se pierde el registro de sesgo del día."""
 
     return prompt
 
-# ── LLAMAR A OPENROUTER ───────────────────────────────────────────────────────
+# ── LLAMAR A GROQ ─────────────────────────────────────────────────────────────
 
 def generate_briefing(prompt: str) -> str:
-    if not OPENROUTER_KEY:
-        raise ValueError("OPENROUTER_API_KEY no configurada")
+    if not GROQ_KEY:
+        raise ValueError("GROQ_API_KEY no configurada")
 
     r = requests.post(
-        "https://openrouter.ai/api/v1/chat/completions",
+        "https://api.groq.com/openai/v1/chat/completions",
         headers={
-            "Authorization":  f"Bearer {OPENROUTER_KEY}",
-            "Content-Type":   "application/json",
-            "HTTP-Referer":   "https://rsu-terminal.com",
-            "X-Title":        "RSU Terminal Daily Briefing",
+            "Authorization": f"Bearer {GROQ_KEY}",
+            "Content-Type":  "application/json",
         },
         json={
             "model":       MODEL,
@@ -681,13 +711,66 @@ def generate_briefing(prompt: str) -> str:
     )
 
     if r.status_code != 200:
-        raise ValueError(f"OpenRouter error {r.status_code}: {r.text[:200]}")
+        raise ValueError(f"Groq error {r.status_code}: {r.text[:200]}")
 
     return r.json()["choices"][0]["message"]["content"]
 
+
+def extract_bias_tag(text: str) -> tuple:
+    """Separa la etiqueta final 'SESGO: ALCISTA/BAJISTA/NEUTRAL' del cuerpo
+    del briefing. Devuelve (texto_sin_etiqueta, sesgo). Se pide al modelo en
+    un formato fijo en vez de intentar adivinar el sesgo con regex sobre
+    texto libre — mucho más fiable para alimentar el registro de sesgo."""
+    import re
+    match = re.search(r'\n*SESGO:\s*(ALCISTA|BAJISTA|NEUTRAL)\s*$', text.strip(), re.IGNORECASE)
+    if not match:
+        return text.strip(), None
+    bias = match.group(1).upper()
+    clean_text = text[:match.start()].strip()
+    return clean_text, bias
+
+# ── REGISTRO DE SESGO (memoria ligera de varios días) ─────────────────────────
+
+def get_bias_history() -> list:
+    """Lee el registro compacto de sesgo de los últimos días — fecha + sesgo,
+    nada de texto completo. Vive en un fichero aparte dentro del mismo Gist."""
+    if not GIST_TOKEN:
+        return []
+    try:
+        r = requests.get(
+            f"https://api.github.com/gists/{GIST_ID}",
+            headers={"Authorization": f"token {GIST_TOKEN}", "Accept": "application/vnd.github+json"},
+            timeout=10,
+        )
+        if r.status_code != 200:
+            return []
+        content = r.json()["files"].get(BIAS_HISTORY_FILE, {}).get("content", "")
+        if not content:
+            return []
+        history = json.loads(content)
+        return history if isinstance(history, list) else []
+    except Exception as e:
+        print(f"⚠️  No se pudo leer el registro de sesgo: {e}")
+        return []
+
+
+def _append_bias(history: list, date: str, bias: str) -> list:
+    """Añade la entrada de hoy y poda a los últimos BIAS_HISTORY_DAYS — así
+    el fichero nunca crece sin límite, siempre son como mucho ~14 líneas."""
+    history = [h for h in history if h.get("date") != date]  # evita duplicado si se re-ejecuta el mismo día
+    history.append({"date": date, "bias": bias})
+    history.sort(key=lambda h: h["date"])
+    return history[-BIAS_HISTORY_DAYS:]
+
+
+def format_bias_history(history: list) -> str:
+    if not history:
+        return "Sin registro de días anteriores todavía (primera ejecución de esta función)."
+    return " | ".join(f"{h['date']}: {h['bias']}" for h in history)
+
 # ── GUARDAR EN GIST ───────────────────────────────────────────────────────────
 
-def save_to_gist(content: str, market_data: dict):
+def save_to_gist(content: str, market_data: dict, bias: str, bias_history: list):
     if not GIST_TOKEN:
         raise ValueError("GIST_TOKEN no configurado")
 
@@ -696,8 +779,11 @@ def save_to_gist(content: str, market_data: dict):
         "date":   market_data["date"],
         "time":   market_data["time"],
         "model":  MODEL,
-        "source": "OpenRouter + Qwen3 235B",
+        "source": "Groq + Kimi K2 0905",
+        "bias":   bias,
     }
+
+    updated_history = _append_bias(bias_history, market_data["date"], bias or "N/D")
 
     r = requests.patch(
         f"https://api.github.com/gists/{GIST_ID}",
@@ -709,6 +795,9 @@ def save_to_gist(content: str, market_data: dict):
             "files": {
                 "briefing.json": {
                     "content": json.dumps(payload, ensure_ascii=False, indent=2)
+                },
+                BIAS_HISTORY_FILE: {
+                    "content": json.dumps(updated_history, ensure_ascii=False, indent=2)
                 }
             }
         },
@@ -728,6 +817,9 @@ def main():
     print("📰 Leyendo tu postura de ayer (para continuidad narrativa)...")
     yesterday_stance = get_yesterday_stance()
 
+    print("📊 Leyendo registro de sesgo de los últimos días...")
+    bias_history = get_bias_history()
+
     print("📊 Recopilando datos de mercado...")
     market_data = get_market_data()
 
@@ -744,13 +836,15 @@ def main():
     insider_clusters = get_insider_clusters()
 
     print("🤖 Construyendo prompt...")
-    prompt = build_prompt(market_data, news, earnings, breadth, insider_clusters, yesterday_stance)
+    prompt = build_prompt(market_data, news, earnings, breadth, insider_clusters, yesterday_stance, bias_history)
 
-    print(f"🧠 Llamando a {MODEL} via OpenRouter...")
-    briefing = generate_briefing(prompt)
+    print(f"🧠 Llamando a {MODEL} via Groq...")
+    raw_briefing = generate_briefing(prompt)
+    briefing, bias = extract_bias_tag(raw_briefing)
+    print(f"📌 Sesgo detectado hoy: {bias or 'N/D (el modelo no incluyó la etiqueta)'}")
 
     print("💾 Guardando en GitHub Gist...")
-    save_to_gist(briefing, market_data)
+    save_to_gist(briefing, market_data, bias, bias_history)
 
     print("✅ Briefing completado")
     print(f"📝 Palabras generadas: {len(briefing.split())}")
