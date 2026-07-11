@@ -71,6 +71,11 @@ export async function render(container) {
         + '<div id="widget-fed-macro" style="display:flex;flex-direction:column;"></div>'
         + '</div>'
 
+        // Fila 4b — CAPE de Shiller (valoración de largo plazo)
+        + '<div style="margin-bottom:1rem;">'
+        + '<div id="widget-shiller-cape" style="display:flex;flex-direction:column;"></div>'
+        + '</div>'
+
         // Fila 5 — full width
         + '<div style="margin-bottom:1rem;">'
         + '<div id="widget-calendar" style="display:flex;flex-direction:column;"></div>'
@@ -92,6 +97,7 @@ export async function render(container) {
     loadReddit(container.querySelector('#widget-reddit'));
     loadLiquidity(container.querySelector('#widget-liquidity'));
     loadFedMacro(container.querySelector('#widget-fed-macro'));
+    loadShillerCape(container.querySelector('#widget-shiller-cape'));
     loadCalendar(container.querySelector('#widget-calendar'));
 
     onMarketUpdate('market-page', (data) => {
@@ -1127,6 +1133,86 @@ window.__spreadsSwitch = function(btn) {
     btn.style.color = '#000';
     btn.style.border = 'none';
 };
+
+// ── CAPE DE SHILLER ───────────────────────────────────────────────────────────
+
+let _shillerData = null;
+let _shillerChart = null;
+
+async function loadShillerCape(el) {
+    if (!el) return;
+    el.innerHTML = widgetShell('CAPE DE SHILLER', 'Valoración de largo plazo · Yale', loading());
+    try {
+        const res  = await fetch('/api/v1/market/shiller-cape', { headers: authHeader() });
+        const data = await res.json();
+        if (!data.ok) throw new Error(data.error || 'Sin datos');
+        _shillerData = data;
+
+        const summary = '<div style="display:flex;border-bottom:1px solid var(--color-border);">'
+            + '<div style="flex:1;padding:0.75rem 1rem;border-right:1px solid var(--color-border);">'
+            + '<div style="color:var(--color-muted);font-size:10px;margin-bottom:4px;">CAPE ACTUAL</div>'
+            + '<div style="color:var(--color-text);font-size:20px;">' + data.current.toFixed(2) + '</div>'
+            + '<div style="margin-top:6px;display:inline-block;padding:1px 6px;border-radius:3px;background:' + data.level_color + '22;color:' + data.level_color + ';font-size:10px;">' + data.level + '</div>'
+            + '</div>'
+            + '<div style="flex:1;padding:0.75rem 1rem;border-right:1px solid var(--color-border);">'
+            + '<div style="color:var(--color-muted);font-size:10px;margin-bottom:4px;">MEDIA HISTÓRICA (1881-hoy)</div>'
+            + '<div style="color:var(--color-text);font-size:20px;">' + data.mean.toFixed(2) + '</div>'
+            + '</div>'
+            + '<div style="flex:1;padding:0.75rem 1rem;">'
+            + '<div style="color:var(--color-muted);font-size:10px;margin-bottom:4px;">DESVIACIÓN vs MEDIA</div>'
+            + '<div style="color:' + (data.deviation_pct >= 0 ? '#f23645' : 'var(--color-accent)') + ';font-size:20px;">' + (data.deviation_pct >= 0 ? '+' : '') + data.deviation_pct.toFixed(1) + '%</div>'
+            + '</div>'
+            + '</div>';
+
+        const chartHtml = '<div style="height:260px;padding:10px;"><canvas id="shiller-chart"></canvas></div>';
+
+        el.innerHTML = widgetShell('CAPE DE SHILLER ' + tt('shiller-cape'), 'Valoración de largo plazo · Yale · dato de ' + data.date + ' · niveles críticos marcados', summary + chartHtml, data.timestamp);
+
+        _loadChartJsThen(() => renderShillerChart());
+    } catch(e) {
+        el.innerHTML = widgetShell('CAPE DE SHILLER', 'Valoración de largo plazo · Yale', widgetError(e.message));
+    }
+}
+
+function renderShillerChart() {
+    const ctx = document.getElementById('shiller-chart');
+    if (!ctx || !_shillerData || !_shillerData.history) return;
+
+    const th = _shillerData.thresholds || {};
+    const hist = _shillerData.history;
+    const labels = hist.map(h => h.date.slice(0, 4));
+    const values = hist.map(h => h.cape);
+    const flat = (v) => labels.map(() => v);
+
+    if (_shillerChart) { _shillerChart.destroy(); _shillerChart = null; }
+
+    _shillerChart = new Chart(ctx, {
+        type: 'line',
+        data: {
+            labels,
+            datasets: [
+                { label: 'CAPE', data: values, borderColor: '#00d9ff', backgroundColor: '#00d9ff12', borderWidth: 1, pointRadius: 0, fill: true, tension: 0.1 },
+                { label: 'Elevado (' + th.normal + ')', data: flat(th.normal), borderColor: '#ffb800', borderWidth: 1, pointRadius: 0, borderDash: [5,4], fill: false },
+                { label: 'Muy alto (' + th.elevado + ')', data: flat(th.elevado), borderColor: '#f23645', borderWidth: 1, pointRadius: 0, borderDash: [5,4], fill: false },
+            ]
+        },
+        options: {
+            responsive: true, maintainAspectRatio: false,
+            interaction: { mode: 'index', intersect: false },
+            plugins: {
+                legend: { display: true, position: 'top', labels: { color: '#888', boxWidth: 12, font: { size: 9 } } },
+                tooltip: {
+                    backgroundColor: '#111', borderColor: '#333', borderWidth: 1, titleColor: '#aaa', bodyColor: '#ccc',
+                    callbacks: { label: item => item.dataset.label + ': ' + item.parsed.y.toFixed(2) }
+                },
+            },
+            scales: {
+                x: { ticks: { color: '#555', font: { size: 9 }, maxTicksLimit: 10, maxRotation: 0 }, grid: { color: 'rgba(255,255,255,0.03)' } },
+                y: { ticks: { color: '#555', font: { size: 9 } }, grid: { color: 'rgba(255,255,255,0.04)' } }
+            }
+        }
+    });
+}
 
 window.__fedMacroTvSwitch = function(btn, frameId) {
     const symbol = btn.getAttribute('data-symbol');

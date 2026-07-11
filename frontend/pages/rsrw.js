@@ -53,8 +53,8 @@ async function loadGist(container) {
         }
 
         renderSectors(sectorsEl, data.sectors);
-        renderTable(leadersEl, 'LÍDERES RS', data.leaders, true, data.freshness, data.total);
-        renderTable(laggardsEl, 'REZAGADOS RW', data.laggards, false, data.freshness, data.total);
+        renderTable(leadersEl, 'LÍDERES RS', data.leaders, true, data.freshness, data.total, 'leaders');
+        renderTable(laggardsEl, 'REZAGADOS RW', data.laggards, false, data.freshness, data.total, 'laggards');
 
     } catch(e) {
         if (leadersEl)  leadersEl.innerHTML  = errorCard('LÍDERES RS', e.message);
@@ -68,8 +68,14 @@ function renderSectors(el, sectors) {
     const maxAbs = Math.max(...sorted.map(s => Math.abs(s.rs || 0)));
 
     el.innerHTML = '<div style="background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius);padding:1rem;">'
-        + '<div style="color:var(--color-accent);font-size:12px;letter-spacing:0.08em;margin-bottom:0.75rem;">ROTACIÓN SECTORIAL · RS vs SPY <span style="color:var(--color-muted);font-weight:normal;letter-spacing:0;">(63 sesiones · ~3 meses)</span></div>'
+        + '<div style="color:var(--color-accent);font-size:12px;letter-spacing:0.08em;margin-bottom:0.75rem;">ROTACIÓN SECTORIAL · RS vs SPY ' + tt('rsrw-sector-rotation') + ' <span style="color:var(--color-muted);font-weight:normal;letter-spacing:0;">(blend 21/63/126d, igual que las acciones)</span></div>'
         + '<div style="display:flex;flex-direction:column;gap:6px;">'
+        + '<div style="display:grid;grid-template-columns:140px 1fr 50px 20px 60px;gap:8px;padding-bottom:2px;">'
+        + '<div></div><div></div>'
+        + '<div style="color:var(--color-muted);font-size:9px;text-align:right;">RS</div>'
+        + '<div></div>'
+        + '<div style="color:var(--color-muted);font-size:9px;text-align:right;">RET. 3M</div>'
+        + '</div>'
         + sorted.map(s => {
             const rs     = s.rs || 0;
             const name   = s.ticker || s.sector || s.index || 'N/A';
@@ -90,18 +96,70 @@ function renderSectors(el, sectors) {
                 + '</div>';
         }).join('')
         + '</div>'
+        + '<div style="margin-top:0.75rem;padding-top:0.6rem;border-top:1px solid var(--color-border);color:var(--color-muted);font-size:9.5px;line-height:1.5;">'
+        + 'La barra/número es el <b style="color:var(--color-text);">nivel</b> (RS combinada 1/3/6 meses vs SPY) — la flecha es la <b style="color:var(--color-text);">tendencia reciente</b> de la componente de 3 meses en las últimas ~4 semanas, son cosas distintas. RET. 3M es el retorno propio del sector en 3 meses, sin comparar con nada. '
+        + 'Un sector en rojo con ▲ sigue por debajo de SPY en el combinado, pero está mejorando últimamente — posible rotación temprana.'
+        + '</div>'
         + '</div>';
 }
 
-function renderTable(el, title, rows, isLeaders, freshness, total) {
+let _rsrwTables = { leaders: { el: null, rows: [], title: '', color: '', freshness: null, total: 0 },
+                     laggards: { el: null, rows: [], title: '', color: '', freshness: null, total: 0 } };
+let _rsrwSort = { leaders: { key: 'rs_pct', dir: -1 }, laggards: { key: 'rs_pct', dir: 1 } };
+
+function sortRsrwRows(rows, sortState) {
+    const { key, dir } = sortState;
+    return [...rows].sort((a, b) => {
+        let av = a[key], bv = b[key];
+        if (typeof av === 'string') { av = (av || '').toLowerCase(); bv = (bv || '').toLowerCase(); }
+        else { av = av == null ? -Infinity : av; bv = bv == null ? -Infinity : bv; }
+        if (av < bv) return -1 * dir;
+        if (av > bv) return  1 * dir;
+        return 0;
+    });
+}
+
+function rsrwSortArrow(tableId, key) {
+    const s = _rsrwSort[tableId];
+    if (!s || s.key !== key) return '';
+    return s.dir === 1 ? ' ▲' : ' ▼';
+}
+
+window.__rsrwSort = function(tableId, key) {
+    const s = _rsrwSort[tableId];
+    if (!s) return;
+    if (s.key === key) s.dir *= -1;
+    else { s.key = key; s.dir = -1; }
+    const t = _rsrwTables[tableId];
+    if (t && t.el) renderTable(t.el, t.title, t.rows, t.color === 'var(--color-accent)', t.freshness, t.total, tableId);
+};
+
+function renderTable(el, title, rows, isLeaders, freshness, total, tableId) {
     if (!el) return;
     const color = isLeaders ? 'var(--color-accent)' : '#f23645';
 
+    // Guardar estado para poder reordenar sin volver a pedir datos
+    _rsrwTables[tableId] = { el, rows: rows || [], title, color, freshness, total };
+    const sortState = _rsrwSort[tableId];
+    const sortedRows = sortRsrwRows(rows || [], sortState);
+
+    const cols = [
+        { label: 'TICKER', key: 'ticker' },
+        { label: 'RS%', key: 'rs_pct', tt: 'rs-rating' },
+        { label: '21d', key: 'rs_21d' },
+        { label: '63d', key: 'rs_63d' },
+        { label: '126d', key: 'rs_126d' },
+        { label: 'TREND', key: 'rs_trend', tt: 'rsrw-trend' },
+        { label: 'RVOL', key: 'rvol', tt: 'rvol' },
+        { label: 'SECTOR', key: 'sector' },
+    ];
     const header = '<div style="display:grid;grid-template-columns:70px 60px 60px 60px 60px 60px 60px 1fr;gap:6px;padding:7px 12px;border-bottom:1px solid var(--color-border);font-size:10px;color:var(--color-muted);letter-spacing:0.05em;">'
-        + '<div>TICKER</div><div>RS%</div><div>21d</div><div>63d</div><div>126d</div><div>TREND</div><div>RVOL</div><div>SECTOR</div>'
+        + cols.map(c =>
+            '<div onclick="window.__rsrwSort(\'' + tableId + '\',\'' + c.key + '\')" style="cursor:pointer;user-select:none;">' + c.label + rsrwSortArrow(tableId, c.key) + (c.tt ? tt(c.tt) : '') + '</div>'
+        ).join('')
         + '</div>';
 
-    const tableRows = (rows || []).map(r => {
+    const tableRows = sortedRows.map(r => {
         const pct       = r.rs_pct || 0;
         const pctColor  = pct >= 80 ? 'var(--color-accent)' : pct <= 20 ? '#f23645' : '#ffb800';
         const trendVal  = r.rs_trend || 0;
@@ -110,7 +168,8 @@ function renderTable(el, title, rows, isLeaders, freshness, total) {
         const rvolClr   = (r.rvol || 0) >= 1.5 ? 'var(--color-accent)' : 'var(--color-muted)';
 
         return '<div style="display:grid;grid-template-columns:70px 60px 60px 60px 60px 60px 60px 1fr;gap:6px;padding:8px 12px;border-bottom:1px solid var(--color-border);font-size:11px;align-items:center;">'
-            + '<div onclick="goToResearch(\'' + (r.ticker || '') + '\')" class="ticker-link" style="color:var(--color-accent);font-weight:500;">' + (r.ticker || '') + '</div>'            + '<div style="color:' + pctColor + ';font-weight:500;">' + pct.toFixed(0) + '</div>'
+            + '<div onclick="goToResearch(\'' + (r.ticker || '') + '\')" class="ticker-link" style="color:var(--color-accent);font-weight:500;">' + (r.ticker || '') + '</div>'
+            + '<div style="color:' + pctColor + ';font-weight:500;">' + pct.toFixed(0) + '</div>'
             + '<div style="color:var(--color-muted);">' + (r.rs_21d || 0).toFixed(1) + '</div>'
             + '<div style="color:var(--color-muted);">' + (r.rs_63d || 0).toFixed(1) + '</div>'
             + '<div style="color:var(--color-muted);">' + (r.rs_126d || 0).toFixed(1) + '</div>'
@@ -176,13 +235,13 @@ function renderTickerResult(data) {
         + '<div style="color:var(--color-muted);font-size:11px;">Actualizado: ' + data.timestamp + '</div>'
         + '</div>'
         + '<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:1rem;margin-bottom:1rem;">'
-        + kpiCard('RS SCORE', score.toFixed(1), 'vs SPY', color)
+        + kpiCard('RS SCORE ' + tt('rsrw'), score.toFixed(1), 'vs SPY', color)
         + kpiCard('RS 21D', (data.rs_21d || 0).toFixed(2), '1 mes', 'var(--color-muted)')
         + kpiCard('RS 63D', (data.rs_63d || 0).toFixed(2), '3 meses', 'var(--color-muted)')
         + kpiCard('RS 126D', (data.rs_126d || 0).toFixed(2), '6 meses', 'var(--color-muted)')
         + '</div>'
         + '<div style="display:flex;align-items:center;gap:1rem;margin-bottom:1rem;">'
-        + '<span style="color:var(--color-muted);font-size:12px;">TENDENCIA RS:</span>'
+        + '<span style="color:var(--color-muted);font-size:12px;">TENDENCIA RS ' + tt('rsrw-trend') + ':</span>'
         + '<span style="color:' + tColor + ';font-size:13px;font-weight:500;">' + trend + '</span>'
         + '</div>'
         + '<div style="position:relative;height:100px;"><canvas id="' + chartId + '"></canvas></div>'

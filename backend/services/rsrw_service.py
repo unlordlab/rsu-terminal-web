@@ -276,7 +276,7 @@ def _run_scan_engine(max_tickers: int = 500) -> tuple:
         got_syms = set()
         for attempt in range(3):  # hasta 3 intentos si el lote vuelve incompleto
             try:
-                raw = yf.download(batch, period="200d", auto_adjust=True, progress=False, threads=True)
+                raw = yf.download(batch, period="260d", auto_adjust=True, progress=False, threads=True)
                 if isinstance(raw.columns, pd.MultiIndex):
                     closes = raw["Close"] if "Close" in raw.columns.get_level_values(0) else pd.DataFrame()
                     vols   = raw["Volume"] if "Volume" in raw.columns.get_level_values(0) else pd.DataFrame()
@@ -378,10 +378,20 @@ def _run_scan_engine(max_tickers: int = 500) -> tuple:
         if etf in close_d:
             p     = close_d[etf]
             sp    = spy.reindex(p.index).ffill()
-            sm63  = _rs_smooth(p, sp, 63)
-            rs_v  = float(sm63.iloc[-1]) * 100 if not sm63.empty else 0
+            # Blend de 3 ventanas (21/63/126, mismos pesos que las acciones
+            # individuales) en vez de una única ventana fija de 63 días —
+            # antes había una asimetría metodológica entre esta parte del
+            # módulo y el resto (acciones sí usaban blend, sectores no).
+            sec_rs_raw = {}
+            for pp in PERIODS:
+                sm = _rs_smooth(p, sp, pp)
+                sec_rs_raw[pp] = float(sm.iloc[-1]) if not sm.empty else 0.0
+            rs_v  = sum(sec_rs_raw[pp] * WEIGHTS[pp] for pp in PERIODS) * 100
             ret63 = float((p.iloc[-1] / p.iloc[-63] - 1) * 100) if len(p) >= 63 else 0
-            slope = _rs_trend_slope(sm63)
+            # La tendencia (flecha) se calcula sobre la componente de 63d
+            # específicamente — igual que se hace para acciones individuales,
+            # por coherencia entre ambas partes del módulo.
+            slope = _rs_trend_slope(_rs_smooth(p, sp, 63))
             sector_rows.append({"Sector": sec, "RS": round(rs_v, 2),
                                  "Return_63d": round(ret63, 2), "RS_trend": slope})
 
@@ -481,8 +491,8 @@ def get_rsrw_scan(max_tickers: int = 500) -> dict:
 
 def get_rsrw_ticker(ticker: str) -> dict:
     try:
-        spy    = yf.Ticker(BENCHMARK).history(period="200d")["Close"]
-        prices = yf.Ticker(ticker.upper()).history(period="200d")["Close"]
+        spy    = yf.Ticker(BENCHMARK).history(period="260d")["Close"]
+        prices = yf.Ticker(ticker.upper()).history(period="260d")["Close"]
         if len(prices) < 63:
             return {"ok": False, "error": "Histórico insuficiente"}
 

@@ -18,6 +18,7 @@ requests==2.32.3
 pandas==2.2.3
 numpy==1.26.4
 yfinance==0.2.54
+xlrd==2.0.2  # lectura de .xls antiguo (dataset CAPE de Shiller, Yale)
 
 # Timezone
 pytz==2024.1

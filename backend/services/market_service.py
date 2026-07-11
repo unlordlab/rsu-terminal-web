@@ -590,6 +590,102 @@ def _fetch_fred_series(series_id, api_key, limit=5):
         pass
     return []
 
+# ── CAPE DE SHILLER (Yale) ─────────────────────────────────────────────────────
+#
+# Umbrales calibrados con referencias históricas reales, no inventados:
+# mediana histórica del CAPE desde 1871 ≈ 17; el ratio superó 30 antes de los
+# picos de 1929 (~33) y de la burbuja punto-com de 1999-2000 (>40); se mantuvo
+# por debajo de 20 antes del crash de 1973-74 y por debajo de 30 antes de la
+# crisis de 2008. Fuente: Shiller/Campbell (Yale), literatura académica citada
+# en Wikipedia/CIBC/arXiv sobre el CAPE ratio.
+CAPE_THRESHOLDS = {"bajo": 15, "normal": 25, "elevado": 30}
+
+def get_shiller_cape() -> dict:
+    from services.cache import cache
+    cached = cache.get("market:shiller_cape")
+    if cached: return cached
+    try:
+        import pandas as pd
+        url = "http://www.econ.yale.edu/~shiller/data/ie_data.xls"
+
+        # Fichero .xls antiguo (no .xlsx) — necesita el motor xlrd. La hoja
+        # "Data" tiene varias filas de texto descriptivo antes de la cabecera
+        # real, así que se localiza buscando la fila que contiene "CAPE" en
+        # vez de asumir un número de fila fijo (más resistente a que Shiller
+        # cambie ligeramente el formato con el tiempo).
+        raw = pd.read_excel(url, sheet_name="Data", header=None, engine="xlrd", nrows=15)
+        header_row = None
+        for i in range(len(raw)):
+            # Coincidencia EXACTA de celda, no "contiene CAPE" — el título
+            # descriptivo del propio fichero también incluye la palabra
+            # "CAPE" dentro de una frase ("...and CAPE Ratio"), así que
+            # buscar solo "contiene" detectaba esa fila en vez de la cabecera
+            # real. Aquí se exige que una celda sea exactamente "CAPE".
+            row_vals = raw.iloc[i].astype(str).str.strip().str.upper()
+            if (row_vals == "CAPE").any():
+                header_row = i
+                break
+        if header_row is None:
+            raise ValueError("No se encontró la fila de cabecera con la celda exacta 'CAPE' en el fichero de Shiller")
+
+        df = pd.read_excel(url, sheet_name="Data", header=header_row, engine="xlrd")
+        df.columns = [str(c).strip() for c in df.columns]
+        cape_col = next((c for c in df.columns if c.upper() == "CAPE"), None)
+        if not cape_col:
+            raise ValueError("No se encontró la columna 'CAPE' con ese nombre exacto tras la cabecera")
+
+        cape_raw = pd.to_numeric(df[cape_col], errors="coerce").reset_index(drop=True)
+
+        # IMPORTANTE: no se parsea la columna "Date" del fichero de Shiller —
+        # su formato (AAAA.M) es ambiguo por cómo Excel recorta decimales
+        # (1871.1 puede leerse como enero o como octubre según la fuente que
+        # lo procese; hasta las herramientas de referencia en R tienen que
+        # parchear esto a mano). Los datos son mensuales y consecutivos desde
+        # enero de 1871 sin huecos (Shiller interpola específicamente para
+        # garantizar esto), así que las fechas se generan por posición
+        # secuencial — mucho más fiable que parsear una columna ambigua.
+        dates = pd.date_range(start="1871-01-01", periods=len(cape_raw), freq="MS")
+
+        history_full = list(zip(dates, cape_raw))
+        history = [
+            {"date": d.strftime("%Y-%m-%d"), "cape": round(float(v), 2)}
+            for d, v in history_full if pd.notna(v)
+        ]
+        if not history:
+            raise ValueError("Sin valores de CAPE válidos tras el parseo")
+
+        cape_values = [h["cape"] for h in history]
+        current   = history[-1]["cape"]
+        mean_all  = round(sum(cape_values) / len(cape_values), 2)
+        std_all   = round(float(pd.Series(cape_values).std()), 2)
+
+        if current > CAPE_THRESHOLDS["elevado"]: level, level_color = "MUY ALTO", "#f23645"
+        elif current > CAPE_THRESHOLDS["normal"]: level, level_color = "ELEVADO", "#ffb800"
+        elif current > CAPE_THRESHOLDS["bajo"]:   level, level_color = "NORMAL",  "#90ee90"
+        else:                                      level, level_color = "BAJO",    "#00ffad"
+
+        result = {
+            "ok":             True,
+            "current":        current,
+            "date":           history[-1]["date"],
+            "mean":           mean_all,
+            "std":            std_all,
+            "deviation_pct":  round((current - mean_all) / mean_all * 100, 1),
+            "level":          level,
+            "level_color":    level_color,
+            "thresholds":     CAPE_THRESHOLDS,
+            "history":        history,
+            "timestamp":      get_timestamp(),
+        }
+        # 24h — dato mensual, no hace falta refrescar más a menudo. El fichero
+        # completo (150+ años) tampoco es barato de descargar/parsear cada vez.
+        cache.set("market:shiller_cape", result, 86400)
+        return result
+    except Exception as e:
+        print(f"[ShillerCAPE] ERROR: {type(e).__name__}: {e}")
+        return {"ok": False, "error": str(e)}
+
+
 def get_credit_spreads():
     from services.cache import cache, TTL
     cached = cache.get("market:spreads")

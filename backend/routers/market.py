@@ -5,7 +5,7 @@ from services.market_service import (
     get_commodities, get_sectors,
     get_vix_term_structure,
     get_reddit_pulse, get_nightly_briefing,
-    get_credit_spreads, get_market_breadth,
+    get_credit_spreads, get_market_breadth, get_shiller_cape,
     get_fed_macro, get_vix_levels, get_crypto_prices, get_crypto_fear_greed,
     get_liquidity, get_sector_composition, get_crypto_relative_strength
 )
@@ -78,6 +78,10 @@ async def briefing(user=Depends(verify_token)):
 @router.get("/credit-spreads")
 async def credit_spreads(user=Depends(verify_token)):
     return get_credit_spreads()
+
+@router.get("/shiller-cape")
+async def shiller_cape(user=Depends(verify_token)):
+    return get_shiller_cape()
 
 @router.get("/fed-macro")
 async def fed_macro(user=Depends(verify_token)):

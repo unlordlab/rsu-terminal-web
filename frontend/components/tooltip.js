@@ -436,6 +436,27 @@ CÓMO USARLO PARA PLANIFICAR:
 Antes de eventos de impacto Alto, muchos traders reducen tamaño de posición, evitan abrir nuevas operaciones justo antes de la publicación, o amplían stops para evitar ser expulsados por el ruido de volatilidad puntual que suele acompañar a estos datos.`
     },
 
+    "shiller-cape": {
+        title: "CAPE de Shiller",
+        short: "P/E del S&P 500 ajustado por ciclo — precio dividido entre el beneficio medio real de los últimos 10 años. Mide si el mercado está caro o barato a largo plazo, no sirve para el corto plazo.",
+        long: `El CAPE (Cyclically Adjusted P/E, también llamado Shiller P/E) es un ratio de valoración creado por el economista Robert Shiller (Premio Nobel 2013) para medir si el mercado americano está caro o barato en términos históricos.
+
+LA DIFERENCIA CON UN P/E NORMAL:
+Un P/E normal divide el precio entre el beneficio del último año — un solo año puede estar artificialmente alto (boom) o bajo (recesión), distorsionando la foto. El CAPE divide el precio entre el beneficio medio REAL (ajustado por inflación) de los últimos 10 años, suavizando un ciclo económico completo. Es más lento de reaccionar, pero más difícil de engañar por un trimestre puntual.
+
+NIVELES CRÍTICOS (marcados en el gráfico):
+▸ Por debajo de 15 → Barato en términos históricos.
+▸ 15-25 → Rango normal (la mediana histórica desde 1871 está en torno a 17).
+▸ 25-30 → Elevado (línea amarilla) — el mercado empieza a cotizar con prima frente a su media histórica.
+▸ Por encima de 30 → Muy alto (línea roja) — nivel que ha coincidido con los picos previos a las caídas de 1929 (~33) y de la burbuja punto-com de 1999-2000 (superó 40).
+
+LO QUE NO ES — MUY IMPORTANTE:
+El CAPE NO es una señal de entrada o salida a corto plazo. Puede quedarse "caro" durante años sin que eso sirva para operar mañana — de hecho, en 2020-2025 el mercado estuvo casi todo el tiempo con el CAPE muy por encima de 30 y siguió subiendo. Es contexto de valoración a largo plazo (años, no días), útil para calibrar expectativas de rentabilidad futura, no para decidir el timing de una operación concreta.
+
+FUENTE:
+Fichero de datos público que el propio Robert Shiller publica y actualiza mensualmente (Yale University), con histórico mensual desde enero de 1871.`
+    },
+
     "credit-spreads": {
         title: "Credit Spreads (OAS)",
         short: "Diferencial de rentabilidad entre bonos corporativos y bonos del Tesoro. Mide el riesgo de crédito. Los niveles críticos se marcan como líneas discontinuas en el propio gráfico.",
@@ -1043,7 +1064,9 @@ La línea de RS (precio relativo vs SPX) es igual de importante que el RS Rating
 ▸ RS línea marcando nuevos máximos ANTES o CON la ruptura del precio → señal muy alcista.
 ▸ RS línea divergiendo negativamente mientras el precio sube → señal de debilidad.
 
-LAS MEJORES ACCIONES tienen RS > 90 y la línea de RS marcando máximos históricos justo antes de la gran ruptura.`
+LAS MEJORES ACCIONES tienen RS > 90 y la línea de RS marcando máximos históricos justo antes de la gran ruptura.
+
+NOTA: este concepto se usa en varios módulos de la terminal (CANSLIM, Scanner, RS/RW) — el percentil final es comparable, pero cada módulo calcula el rendimiento subyacente con su propia combinación de ventanas temporales. Para el detalle exacto de RS/RW, consulta su propio tooltip.`
     },
 
     // ── SPXL ──────────────────────────────────────────────────────────────────
@@ -1510,31 +1533,53 @@ Current Ratio, Free Cash Flow, Dividend Yield y número de analistas no tienen u
     // ── RS/RW ─────────────────────────────────────────────────────────────────
     "rsrw": {
         title: "RS/RW Scanner — Relative Strength/Weakness",
-        short: "Identifica las acciones con mayor fortaleza y debilidad relativa vs el mercado.",
+        short: "Identifica las acciones con mayor fortaleza y debilidad relativa vs el mercado, sobre el universo completo del S&P 500 (525 tickers), actualizado cada noche.",
         long: `El RS/RW Scanner identifica qué acciones están liderando (RS) y cuáles están rezagadas (RW) respecto al mercado en múltiples marcos temporales.
 
-METODOLOGÍA:
-Comparamos el rendimiento de cada acción vs el SPX en 3 períodos:
-- 21 días (~1 mes)
-- 63 días (~3 meses)
-- 126 días (~6 meses)
+UNIVERSO Y ACTUALIZACIÓN:
+Escanea el S&P 500 completo (525 tickers) una vez por noche vía GitHub Actions — no hay scan "on-demand" desde el navegador, así que no depende de que un usuario lo dispare ni arriesga rate limits de Yahoo en horario de mercado. Los datos que ves siempre vienen de ese scan nocturno.
 
-Cada período tiene un peso distinto. El resultado es un percentil del 1 al 99.
+METODOLOGÍA:
+Comparamos el rendimiento de cada acción vs el SPY en 3 períodos:
+- 21 días (~1 mes) — peso 20%
+- 63 días (~3 meses) — peso 35%
+- 126 días (~6 meses) — peso 45%
+
+La métrica base no es un ratio de precios, sino el DIFERENCIAL de rendimiento porcentual (rendimiento de la acción menos rendimiento del SPY en esa ventana), suavizado con una media móvil exponencial para reducir ruido. El resultado combinado se convierte en un percentil del 1 al 99 sobre todo el universo.
 
 POR QUÉ IMPORTA:
 Las acciones con RS más alto tienden a seguir superando al mercado en el corto-medio plazo. Es el momentum del mercado. Las acciones con RW más bajo tienden a seguir cayendo.
 
-RS LINE vs RS RATING:
-- RS Rating: número estático comparando vs universo
-- RS Line: línea dinámica que muestra la evolución relativa día a día
-
 SEÑALES CLAVE:
-▸ RS Line en nuevo máximo antes que el precio → acción líder, entrada de alta probabilidad
-▸ RS Line cayendo mientras precio sube → divergencia bajista, evitar
-▸ Clusters de RS alto en un sector → rotación sectorial en marcha
+▸ RS Percentile ≥ 80 con tendencia de RS al alza → acción líder, entrada de alta probabilidad
+▸ RS cayendo mientras el precio sube → divergencia bajista, evitar
+▸ Clusters de RS alto en un mismo sector → rotación sectorial en marcha (ver Rotación Sectorial)`
+    },
 
-EMA SMOOTHING:
-Aplicamos media móvil exponencial para eliminar el ruido de corto plazo y ver la tendencia real de la fortaleza relativa.`
+    "rsrw-sector-rotation": {
+        title: "Rotación Sectorial",
+        short: "RS de cada sector (ETF sectorial vs SPY), combinando 1/3/6 meses igual que las acciones — la barra es el nivel actual, la flecha es si esa RS mejora o empeora en las últimas ~4 semanas. Son dos cosas distintas.",
+        long: `Compara el ETF representativo de cada sector (XLK, XLF, XLE...) contra el SPY, con la misma fórmula que el resto del módulo: diferencial de rendimiento porcentual en 3 ventanas temporales, combinadas.
+
+DOS MÉTRICAS INDEPENDIENTES — NO CONFUNDIR:
+▸ La BARRA y el NÚMERO son el NIVEL: RS combinada de 21, 63 y 126 sesiones (20%/35%/45%) — igual ponderación que se usa para acciones individuales en este mismo módulo. Es una foto del presente a varios plazos a la vez.
+▸ La FLECHA es la TENDENCIA: si la componente de 63 sesiones (~3 meses) de esa RS ha estado subiendo (▲) o bajando (▼) en las últimas ~4 semanas — no dice nada sobre si el nivel combinado es positivo o negativo, solo hacia dónde se mueve.
+
+Por eso puedes ver un sector en ROJO con flecha ▲: el combinado sigue por debajo del SPY, pero la componente de 3 meses ha empezado a mejorar recientemente. Es la señal de "posible rotación temprana" — un sector que empieza a despertar antes de que el nivel combinado lo confirme. Al revés, un sector en VERDE con flecha ▼ está perdiendo fuelle aunque de momento siga ganando al mercado.
+
+METODOLOGÍA — POR QUÉ COMBINAR 3 VENTANAS EN VEZ DE UNA SOLA:
+Antes esta sección usaba solo una ventana fija de 63 sesiones, mientras que las acciones individuales del mismo módulo ya combinaban 21/63/126 — una asimetría metodológica sin motivo de diseño, solo porque se añadieron en momentos distintos. Ahora ambas partes hablan el mismo idioma.
+
+LA TEORÍA DETRÁS — JEGADEESH & TITMAN (1993):
+El paper seminal de momentum de Narasimhan Jegadeesh y Sheridan Titman, "Returns to Buying Winners and Selling Losers", encontró que las acciones (y por extensión, cestas como sectores) que superaron al mercado en los últimos 3 a 12 meses tienden a seguir superándolo en los meses siguientes — el efecto "momentum" clásico. Algunos matices relevantes de ese trabajo y de la literatura posterior:
+
+▸ Ventanas de formación muy cortas (menos de 1 mes) tienden a mostrar REVERSIÓN, no continuación — comprar lo que subió ayer no funciona igual que comprar lo que lleva subiendo 3-6 meses.
+▸ El rango de 3 a 12 meses es el que consistentemente muestra el efecto momentum más robusto en el estudio original y en réplicas posteriores.
+▸ El efecto tiende a revertirse en horizontes muy largos (2-5 años) — momentum de corto-medio plazo y reversión de largo plazo coexisten en el mismo activo, en ventanas distintas.
+
+Combinar 21/63/126 días en vez de usar una sola ventana es, en esencia, una forma simple de capturar el momentum de corto plazo sin depender de una única ventana arbitraria — con más peso en 126d (45%) precisamente porque esa es la ventana que la literatura señala como más robusta, y menos peso en 21d (20%) porque ahí el ruido y la reversión de corto plazo son más frecuentes.
+
+Esto NO es garantía de nada — es una tendencia estadística observada en datos históricos de mercados desarrollados, no una ley física. Trátalo como una probabilidad a favor, no como una certeza.`
     },
 
     "sector-composition": {
@@ -1575,6 +1620,18 @@ El módulo RS/RW se centra en fuerza/debilidad relativa pura, con líderes y rez
 
 LIMITACIÓN DE ALCANCE — v1:
 De momento el Scanner cubre RVOL, RS Percentile, Fase Weinstein y Score Técnico. VCP (contracción de volatilidad) e insider buying reciente están planeados para versiones posteriores (v1.1/v1.2) una vez se valide el motor base en producción — ver tooltips "rvol" y "score-tecnico" para el detalle de cada métrica individual.`
+    },
+
+    "rsrw-trend": {
+        title: "Flecha de Tendencia RS",
+        short: "▲/▼ indica si la RS de 3 meses ha subido o bajado en las últimas ~4 semanas — no es el nivel actual, es hacia dónde se mueve.",
+        long: `La flecha es la pendiente de la componente de RS a 63 sesiones (~3 meses) durante las últimas 21 sesiones (~4 semanas) — un indicador independiente del nivel actual.
+
+▲ = la RS ha estado mejorando recientemente (aunque el nivel siga siendo negativo).
+▼ = la RS ha estado empeorando recientemente (aunque el nivel siga siendo positivo).
+→ = sin cambio significativo en las últimas semanas.
+
+Combínalo con el nivel (RS%, o la barra de Rotación Sectorial): lo más interesante suele ser un nivel bajo con flecha ▲ (posible giro temprano) o un nivel alto con flecha ▼ (posible pérdida de fuelle antes de que se note en el precio).`
     },
 
     "rvol": {

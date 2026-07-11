@@ -334,17 +334,24 @@ def run_scan(max_tickers: int = 525) -> dict:
         s["rs_momentum"]   = 1 if s["rs_21d"] > s["rs_63d"] else 0
         s["rs_vs_sector"]  = round(pct_by_ticker[t] - sector_avg_pct.get(s["sector"], 50), 1)
 
-    # Rotación sectorial — RS a 63 sesiones (~3 meses) de cada ETF sectorial
-    # vs SPY. Fijo a 63d por diseño (ver docstring de sección en frontend).
+    # Rotación sectorial — blend de 3 ventanas (21/63/126, mismos pesos que
+    # las acciones individuales) de cada ETF sectorial vs SPY. Antes era una
+    # única ventana fija de 63d, distinta de cómo se calculan las acciones
+    # individuales en este mismo módulo — ahora coherente entre ambas partes.
     sectors = {}
     for sec, etf in SECTOR_ETFS.items():
         if etf in close_d:
             p     = close_d[etf]
             sp    = spy.reindex(p.index).ffill()
-            sm63  = _rs_smooth(p, sp, 63)
-            rs_v  = float(sm63.iloc[-1]) * 100 if not sm63.empty else 0
+            sec_rs_raw = {}
+            for pp in PERIODS:
+                sm = _rs_smooth(p, sp, pp)
+                sec_rs_raw[pp] = float(sm.iloc[-1]) if not sm.empty else 0.0
+            rs_v  = sum(sec_rs_raw[pp] * WEIGHTS[pp] for pp in PERIODS) * 100
             ret63 = float((p.iloc[-1] / p.iloc[-63] - 1) * 100) if len(p) >= 63 else 0
-            slope = _rs_trend_slope(sm63)
+            # La flecha de tendencia sigue basada en la componente de 63d,
+            # igual que para acciones individuales.
+            slope = _rs_trend_slope(_rs_smooth(p, sp, 63))
             sectors[sec] = {"RS": round(rs_v, 2), "Return_63d": round(ret63, 2), "RS_trend": slope}
 
     return {
@@ -357,7 +364,7 @@ def run_scan(max_tickers: int = 525) -> dict:
             "mode":         "nightly_scan",
             "n_stocks":     len(stocks),
             "n_requested":  len(tickers),
-            "sector_timeframe_days": 63,
+            "sector_timeframe": "blend 21/63/126d (20/35/45%) — igual que acciones individuales",
         },
     }
 
