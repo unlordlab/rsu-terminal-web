@@ -24,6 +24,7 @@ async function keyFetch(fullPath, options = {}) {
 
 const adminFetch     = (path, options) => keyFetch('/api/v1/auth' + path, options);
 const analyticsFetch = (path, options) => keyFetch('/api/v1/analytics' + path, options);
+const communityFetch = (path, options) => keyFetch('/api/v1/community' + path, options);
 
 const TIER_LABELS = { free: 'FREE', tier1: 'TIER 1', tiers: 'TIER S' };
 
@@ -60,6 +61,7 @@ export async function render(container) {
             <div id="admin-tabs" style="display:flex;gap:4px;margin-bottom:1.25rem;border-bottom:1px solid var(--color-border);">
                 <button data-tab="usuarios" class="admin-tab-btn">USUARIOS</button>
                 <button data-tab="metricas" class="admin-tab-btn">MÉTRICAS</button>
+                <button data-tab="feedback" class="admin-tab-btn">FEEDBACK</button>
             </div>
             <div id="admin-content"></div>
         </div>
@@ -95,6 +97,8 @@ export async function render(container) {
         }
         if (activeTab === 'usuarios') {
             await renderUsersPanel(content);
+        } else if (activeTab === 'feedback') {
+            await renderFeedbackPanel(content);
         } else {
             await renderMetricsPanel(content);
         }
@@ -406,4 +410,47 @@ function statCard(label, value) {
             <div style="color:var(--color-text);font-size:22px;">${value}</div>
         </div>
     `;
+}
+
+const FB_TYPE_LABEL = { bug: '🐞 Bug', sugerencia: '💡 Sugerencia', otro: '✉️ Otro' };
+
+async function renderFeedbackPanel(content) {
+    content.innerHTML = '<div style="color:var(--color-muted);font-size:12px;">Cargando...</div>';
+    try {
+        const data = await communityFetch('/feedback');
+        if (!data.data.length) {
+            content.innerHTML = '<div style="color:var(--color-muted);font-size:12px;padding:1rem;">Sin mensajes todavía.</div>';
+            return;
+        }
+        const rows = data.data.map(f => {
+            const bg = f.leido ? 'transparent' : 'rgba(0,255,173,0.04)';
+            const when = (f.created_at || '').replace('T', ' ').substring(0, 16);
+            return `
+                <div style="background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius);padding:0.9rem 1rem;margin-bottom:0.6rem;${bg !== 'transparent' ? 'border-left:2px solid var(--color-accent);' : ''}background:${bg};">
+                    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;flex-wrap:wrap;gap:6px;">
+                        <span style="font-size:11px;color:var(--color-accent);">${FB_TYPE_LABEL[f.tipo] || f.tipo}</span>
+                        <span style="font-size:10px;color:var(--color-muted);">${when} ${f.user_email ? '· ' + f.user_email : ''}</span>
+                    </div>
+                    <div style="color:var(--color-text);font-size:13px;line-height:1.5;white-space:pre-wrap;">${f.mensaje.replace(/</g, '&lt;')}</div>
+                    ${f.contacto ? `<div style="margin-top:6px;font-size:11px;color:var(--color-muted);">Responder a: <a href="mailto:${f.contacto}" style="color:var(--color-secondary);">${f.contacto}</a></div>` : ''}
+                    ${!f.leido ? `<button class="fb-mark-read" data-id="${f.id}" style="margin-top:8px;background:transparent;border:1px solid var(--color-border);color:var(--color-muted);border-radius:4px;padding:3px 10px;font-size:10px;cursor:pointer;">Marcar como leído</button>` : ''}
+                </div>
+            `;
+        }).join('');
+        content.innerHTML = `<div style="margin-bottom:0.75rem;color:var(--color-muted);font-size:11px;">${data.data.length} mensajes · ${data.data.filter(f => !f.leido).length} sin leer</div>` + rows;
+
+        content.querySelectorAll('.fb-mark-read').forEach(btn => {
+            btn.addEventListener('click', async () => {
+                await communityFetch(`/feedback/${btn.dataset.id}/read`, { method: 'POST' });
+                renderFeedbackPanel(content);
+            });
+        });
+    } catch (e) {
+        if (e.isAuthError) {
+            sessionStorage.removeItem(ADMIN_KEY_STORAGE);
+            renderKeyPrompt(content, () => renderFeedbackPanel(content));
+            return;
+        }
+        content.innerHTML = `<div style="color:#f23645;font-size:12px;">${e.message}</div>`;
+    }
 }

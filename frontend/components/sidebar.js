@@ -17,6 +17,7 @@ const NAV_ITEMS = [
     { path: '/insider',   label: 'Insider Flow',  icon: '🔍' },
     { path: '/academy', label: 'Academy', icon: 'Ac' },
     { path: '/roadmap', label: 'Roadmap 2026', icon: 'R' },
+    { path: '/community', label: 'Comunidad', icon: '👥' },
     { path: '/canslim',   label: 'CANSLIM',      icon: 'K' },
     { path: '/algoritmo', label: 'RSU Algoritmo',icon: 'A' },
     { path: '/disclaimer', label: 'Disclaimer', icon: '⚖' },

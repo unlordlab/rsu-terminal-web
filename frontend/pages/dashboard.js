@@ -3,21 +3,20 @@ import { errorMessage } from '/core/ui.js';
 
 export async function render(container) {
     container.innerHTML = `
-        <div style="margin-bottom:2rem;">
-            <div style="color:var(--color-accent);font-size:18px;letter-spacing:0.1em;text-shadow:var(--glow-text);margin-bottom:4px;">DASHBOARD</div>
-            <div style="color:var(--color-muted);font-size:12px;">Bienvenido a RSU Terminal v2.0</div>
+        <div style="margin-bottom:1.5rem;display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:8px;">
+            <div>
+                <div style="color:var(--color-accent);font-size:18px;letter-spacing:0.1em;text-shadow:var(--glow-text);margin-bottom:4px;">DASHBOARD</div>
+                <div style="color:var(--color-muted);font-size:12px;">Bienvenido a RSU Terminal v2.0</div>
+            </div>
+            <div id="health-badge" style="font-size:10px;color:var(--color-muted);padding:4px 10px;border:1px solid var(--color-border);border-radius:12px;">● comprobando...</div>
         </div>
         <div id="daily-quote" style="margin-bottom:1.5rem;"></div>
+        <div id="pulse-strip" style="margin-bottom:1.5rem;"></div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem;margin-bottom:1.5rem;">
+            <div id="briefing-preview"></div>
+            <div id="watchlist-summary"></div>
+        </div>
         <div id="algoritmo-widget" style="margin-bottom:1.5rem;"></div>
-        <div id="health-card" style="
-            background: var(--color-surface);
-            border: 1px solid var(--color-border);
-            border-radius: var(--radius);
-            padding: 1rem 1.25rem;
-            margin-bottom: 1rem;
-            font-size: 13px;
-            color: var(--color-muted);
-        ">Comprobando servidor...</div>
         <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:1rem;margin-top:1.5rem;">
             ${modules.map(m => `
                 <div class="module-card" data-path="${m.path}" style="
@@ -46,20 +45,165 @@ export async function render(container) {
 
     loadAlgoritmo(container.querySelector('#algoritmo-widget'));
     renderDailyQuote(container.querySelector('#daily-quote'));
+    loadPulseStrip(container.querySelector('#pulse-strip'));
+    loadBriefingPreview(container.querySelector('#briefing-preview'));
+    loadWatchlistSummary(container.querySelector('#watchlist-summary'));
 
     try {
         const health = await fetch('/health').then(r => r.json());
-        const card = container.querySelector('#health-card');
-        if (card) {
-            card.style.borderColor = 'var(--color-accent)';
-            card.innerHTML = '<span style="color:var(--color-accent);">● SERVIDOR ONLINE</span><span style="margin-left:1rem;">' + health.app + '</span>';
+        const badge = container.querySelector('#health-badge');
+        if (badge) {
+            badge.style.borderColor = 'var(--color-accent)';
+            badge.style.color = 'var(--color-accent)';
+            badge.innerHTML = '● online';
+            badge.title = health.app || '';
         }
     } catch {
-        const card = container.querySelector('#health-card');
-        if (card) {
-            card.style.borderColor = '#f23645';
-            card.innerHTML = '<span style="color:#f23645;">✗ SERVIDOR OFFLINE</span>';
+        const badge = container.querySelector('#health-badge');
+        if (badge) {
+            badge.style.borderColor = '#f23645';
+            badge.style.color = '#f23645';
+            badge.innerHTML = '✗ offline';
         }
+    }
+}
+
+function authHeaderDash() {
+    const token = sessionStorage.getItem('rsu_token') || localStorage.getItem('rsu_token');
+    return token ? { 'Authorization': 'Bearer ' + token } : {};
+}
+
+// ── PULSO DE MERCADO ─────────────────────────────────────────────────────────
+
+async function loadPulseStrip(el) {
+    if (!el) return;
+    el.innerHTML = '<div style="background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius);padding:0.8rem 1rem;color:var(--color-muted);font-size:11px;">Cargando pulso de mercado...</div>';
+    try {
+        const [idxRes, fgRes] = await Promise.all([
+            fetch('/api/v1/market/indices', { headers: authHeaderDash() }),
+            fetch('/api/v1/market/fear-greed', { headers: authHeaderDash() }),
+        ]);
+        const idx = await idxRes.json();
+        const fg  = await fgRes.json();
+
+        const spy = (idx.data || []).find(i => i.ticker === 'SPX') || (idx.data || [])[0];
+        const vix = (idx.data || []).find(i => i.ticker === 'VIX');
+
+        const pill = (label, valueHtml) =>
+            '<div style="flex:1;min-width:120px;text-align:center;padding:0.6rem;">'
+            + '<div style="color:var(--color-muted);font-size:9px;letter-spacing:0.05em;margin-bottom:3px;">' + label + '</div>'
+            + '<div style="font-size:15px;font-weight:500;">' + valueHtml + '</div>'
+            + '</div>';
+
+        let html = '<div style="background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius);display:flex;flex-wrap:wrap;divide-x:1px;">';
+        if (spy && spy.ok) {
+            const c = spy.pct >= 0 ? 'var(--color-accent)' : '#f23645';
+            html += pill('S&amp;P 500', '<span style="color:' + c + ';cursor:pointer;" onclick="window.__navigate(\'/market\')">' + spy.price.toLocaleString('en-US') + ' (' + (spy.pct >= 0 ? '+' : '') + spy.pct.toFixed(2) + '%)</span>');
+        }
+        if (vix && vix.ok) {
+            const c = vix.pct >= 0 ? '#f23645' : 'var(--color-accent)';
+            html += pill('VIX', '<span style="color:' + c + ';">' + vix.price.toFixed(2) + '</span>');
+        }
+        if (fg && fg.ok) {
+            const c = fg.score >= 55 ? 'var(--color-accent)' : fg.score <= 45 ? '#f23645' : '#ffb800';
+            html += pill('FEAR &amp; GREED', '<span style="color:' + c + ';cursor:pointer;" onclick="window.__navigate(\'/market\')">' + fg.score + ' · ' + fg.rating + '</span>');
+        }
+        html += '</div>';
+        el.innerHTML = html;
+    } catch (e) {
+        el.innerHTML = '';
+    }
+}
+
+// ── VISTA PREVIA DEL DAILY BRIEFING ──────────────────────────────────────────
+
+const BIAS_COLOR = { ALCISTA: 'var(--color-accent)', BAJISTA: '#f23645', NEUTRAL: '#ffb800' };
+
+function briefingShell(inner) {
+    return '<div style="background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius);overflow:hidden;height:100%;display:flex;flex-direction:column;">'
+        + '<div style="display:flex;justify-content:space-between;align-items:center;padding:10px 14px;border-bottom:1px solid var(--color-border);">'
+        + '<div style="color:var(--color-accent);font-size:12px;letter-spacing:0.08em;text-shadow:var(--glow-text);">DAILY BRIEFING</div>'
+        + '</div>' + inner + '</div>';
+}
+
+async function loadBriefingPreview(el) {
+    if (!el) return;
+    el.innerHTML = briefingShell('<div style="padding:1rem;color:var(--color-muted);font-size:12px;">Cargando...</div>');
+    try {
+        const res  = await fetch('/api/v1/market/briefing', { headers: authHeaderDash() });
+        const data = await res.json();
+        if (!data.ok || !data.content) throw new Error('Sin briefing disponible todavía');
+
+        const bias = (data.bias || '').toUpperCase();
+        const biasColor = BIAS_COLOR[bias] || 'var(--color-muted)';
+        const biasBadge = bias
+            ? '<span style="color:' + biasColor + ';border:1px solid ' + biasColor + '55;border-radius:3px;padding:1px 8px;font-size:10px;">' + bias + '</span>'
+            : '';
+
+        // Primeras ~280 caracteres de texto plano, saltando la línea de título en negrita
+        const plain  = data.content.replace(/\*\*/g, '').replace(/^#.*\n/, '').trim();
+        const preview = plain.length > 280 ? plain.substring(0, 280).trim() + '…' : plain;
+
+        el.innerHTML = briefingShell(
+            '<div style="padding:1rem;display:flex;flex-direction:column;flex:1;">'
+            + '<div style="margin-bottom:8px;">' + biasBadge + '</div>'
+            + '<div style="color:var(--color-text);font-size:12px;line-height:1.6;flex:1;">' + preview + '</div>'
+            + '<div style="display:flex;justify-content:space-between;align-items:center;margin-top:10px;padding-top:10px;border-top:1px solid var(--color-border);">'
+            + '<span style="color:var(--color-muted);font-size:10px;">' + (data.updated || '') + '</span>'
+            + '<span onclick="window.__navigate(\'/market\')" style="color:var(--color-secondary);font-size:11px;cursor:pointer;">Leer completo →</span>'
+            + '</div>'
+            + '</div>'
+        );
+    } catch (e) {
+        el.innerHTML = briefingShell('<div style="padding:1rem;color:var(--color-muted);font-size:12px;">' + e.message + '</div>');
+    }
+}
+
+// ── RESUMEN DE WATCHLIST + ALERTAS ───────────────────────────────────────────
+
+function watchlistShell(inner) {
+    return '<div style="background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius);overflow:hidden;height:100%;display:flex;flex-direction:column;">'
+        + '<div style="display:flex;justify-content:space-between;align-items:center;padding:10px 14px;border-bottom:1px solid var(--color-border);">'
+        + '<div style="color:var(--color-accent);font-size:12px;letter-spacing:0.08em;text-shadow:var(--glow-text);">WATCHLIST</div>'
+        + '<span onclick="window.__navigate(\'/watchlist\')" style="color:var(--color-secondary);font-size:11px;cursor:pointer;">Ver todo →</span>'
+        + '</div>' + inner + '</div>';
+}
+
+async function loadWatchlistSummary(el) {
+    if (!el) return;
+    el.innerHTML = watchlistShell('<div style="padding:1rem;color:var(--color-muted);font-size:12px;">Cargando...</div>');
+    try {
+        const [wlRes, countRes] = await Promise.all([
+            fetch('/api/v1/watchlist', { headers: authHeaderDash() }),
+            fetch('/api/v1/watchlist/alerts/unseen-count', { headers: authHeaderDash() }),
+        ]);
+        const wl    = await wlRes.json();
+        const count = await countRes.json();
+
+        const alertLine = count.count > 0
+            ? '<div style="background:rgba(242,54,69,0.08);border:1px solid #f2364544;border-radius:6px;padding:6px 10px;margin-bottom:10px;color:#f23645;font-size:11px;cursor:pointer;" onclick="window.__navigate(\'/watchlist\')">🔔 ' + count.count + ' alerta' + (count.count > 1 ? 's' : '') + ' disparada' + (count.count > 1 ? 's' : '') + ' sin ver</div>'
+            : '';
+
+        if (!wl.ok || !wl.data.length) {
+            el.innerHTML = watchlistShell(
+                '<div style="padding:1rem;flex:1;">' + alertLine
+                + '<div style="color:var(--color-muted);font-size:12px;text-align:center;padding:0.5rem 0;">Sin tickers en watchlist todavía</div></div>'
+            );
+            return;
+        }
+
+        const rows = wl.data.slice(0, 4).map(w => {
+            const up    = (w.chg || 0) >= 0;
+            const color = w.ok ? (up ? 'var(--color-accent)' : '#f23645') : 'var(--color-muted)';
+            return '<div style="display:flex;justify-content:space-between;padding:5px 0;font-size:12px;border-bottom:1px solid var(--color-border);">'
+                + '<span class="ticker-link" style="color:var(--color-accent);cursor:pointer;" onclick="window.__navigate(\'/research?ticker=' + w.ticker + '\')">' + w.ticker + '</span>'
+                + '<span style="color:' + color + ';">' + (w.ok ? (up ? '▲' : '▼') + ' ' + Math.abs(w.chg || 0).toFixed(2) + '%' : '—') + '</span>'
+                + '</div>';
+        }).join('');
+
+        el.innerHTML = watchlistShell('<div style="padding:1rem;flex:1;">' + alertLine + rows + '</div>');
+    } catch (e) {
+        el.innerHTML = watchlistShell('<div style="padding:1rem;color:var(--color-muted);font-size:12px;">' + e.message + '</div>');
     }
 }
 
@@ -272,11 +416,20 @@ function drawAlgoChart(chartId, chart, color) {
 }
 
 const modules = [
-    { path: '/market',    icon: '◈', label: 'MARKET',        desc: 'Dashboard de mercado' },
-    { path: '/cartera',   icon: '◎', label: 'CARTERA',       desc: 'Portfolio tracker' },
-    { path: '/rsrw',      icon: '◆', label: 'RS/RW',         desc: 'Scanner fuerza relativa' },
-    { path: '/spxl',      icon: '▲', label: 'SPXL',          desc: 'Estrategia DCA apalancada' },
-    { path: '/research',  icon: '◉', label: 'RESEARCH',      desc: 'Análisis con IA' },
-    { path: '/canslim',   icon: '◈', label: 'CANSLIM',       desc: 'Screener CAN SLIM' },
-    { path: '/algoritmo', icon: 'A', label: 'RSU ALGORITMO', desc: 'Detector de fondos' },
+    { path: '/market',     icon: '◈', label: 'MARKET',        desc: 'Dashboard de mercado' },
+    { path: '/cartera',    icon: '◎', label: 'CARTERA',       desc: 'Portfolio tracker' },
+    { path: '/scanner',    icon: '⚡', label: 'SCANNER',       desc: 'Filtro S&P 500' },
+    { path: '/watchlist',  icon: '★', label: 'WATCHLIST',     desc: 'Seguimiento + alertas' },
+    { path: '/rsrw',       icon: '◆', label: 'RS/RW',         desc: 'Scanner fuerza relativa' },
+    { path: '/research',   icon: '◉', label: 'RESEARCH',      desc: 'Análisis con IA' },
+    { path: '/insider',    icon: '🔍', label: 'INSIDER FLOW',  desc: 'Compras/ventas de directivos' },
+    { path: '/options',    icon: '◐', label: 'OPTIONS FLOW',  desc: 'Actividad institucional' },
+    { path: '/canslim',    icon: '◈', label: 'CANSLIM',       desc: 'Screener CAN SLIM' },
+    { path: '/algoritmo',  icon: 'A', label: 'RSU ALGORITMO', desc: 'Detector de fondos' },
+    { path: '/tesis',      icon: '📄', label: 'TESIS',         desc: 'Análisis de inversión RSU' },
+    { path: '/spxl',       icon: '▲', label: 'SPXL',          desc: 'Estrategia DCA apalancada' },
+    { path: '/btc-stratum', icon: '₿', label: 'BTC STRATUM',  desc: 'On-chain Bitcoin' },
+    { path: '/newsfeed',   icon: '📰', label: 'NEWS FEED',     desc: 'Noticias de mercado' },
+    { path: '/academy',    icon: '🎓', label: 'ACADEMIA',      desc: '22 módulos de metodología' },
+    { path: '/community',  icon: '👥', label: 'COMUNIDAD',     desc: 'Discord + soporte' },
 ];

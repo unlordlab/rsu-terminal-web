@@ -686,20 +686,24 @@ def get_nightly_briefing():
             raise ValueError(f"HTTP {r.status_code}")
         gist        = r.json()
         files       = gist.get("files", {})
-        raw_content = None
-        for fname, fdata in files.items():
-            raw_content = fdata.get("content", "")
-            break
+        # IMPORTANTE: coger explícitamente "briefing.json" por nombre, no "el
+        # primer fichero" — desde que daily_briefing.py también guarda
+        # bias_history.json en el MISMO Gist, coger el primero a ciegas podía
+        # devolver el fichero equivocado (alfabéticamente "bias_history.json"
+        # va antes que "briefing.json").
+        raw_content = files.get("briefing.json", {}).get("content", "")
         if not raw_content:
             raise ValueError("Briefing vacío")
         content   = raw_content
         date_str  = ""
         model_str = ""
+        bias_str  = ""
         try:
             parsed    = _json.loads(raw_content)
             content   = parsed.get("text", raw_content)
             date_str  = parsed.get("date", "")
             model_str = parsed.get("model", "")
+            bias_str  = parsed.get("bias", "")
             content   = content.replace("\\n", "\n").replace("\\*", "*")
         except Exception:
             pass
@@ -714,7 +718,7 @@ def get_nightly_briefing():
                 updated_str = mad_dt.strftime("%d %b %Y · %H:%M")
             except Exception:
                 updated_str = updated_at[:10]
-        result = {"content": content, "date": date_str, "model": model_str, "updated": updated_str, "timestamp": get_timestamp(), "ok": True}
+        result = {"content": content, "date": date_str, "model": model_str, "bias": bias_str, "updated": updated_str, "timestamp": get_timestamp(), "ok": True}
         cache.set("market:briefing", result, TTL["briefing"])
         return result
     except Exception as e:

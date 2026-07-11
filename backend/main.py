@@ -8,7 +8,7 @@ from config import settings
 from auth import verify_token, require_tier
 from middleware.rate_limit import rate_limit
 from middleware.analytics import AnalyticsMiddleware
-from routers import auth, market, cartera, canslim, rsu_algoritmo, research, newsfeed, tesis, spxl, rsrw, ws, options, btc_stratum, insider, scanner, analytics, watchlist
+from routers import auth, market, cartera, canslim, rsu_algoritmo, research, newsfeed, tesis, spxl, rsrw, ws, options, btc_stratum, insider, scanner, analytics, watchlist, community
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     task1 = asyncio.create_task(ws.broadcast_loop())
@@ -65,6 +65,9 @@ app.include_router(scanner.router,      dependencies=rl)
 # incluido) por ahora. El día que se quiera pasar a tiers de pago, cambiar
 # `dependencies=rl` por `dependencies=paid` aquí es el único cambio necesario.
 app.include_router(watchlist.router,    dependencies=rl)
+# Comunidad: abierta para todos los usuarios registrados, sin gate de tier —
+# es soporte/feedback/Discord, no una herramienta de análisis.
+app.include_router(community.router,    dependencies=rl)
 # /track es "fire and forget" desde el frontend (rate limit general para
 # evitar abuso); /summary va protegido con X-Admin-Key dentro del propio
 # router, igual que los endpoints /admin/* de auth.py.
