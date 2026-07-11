@@ -22,6 +22,10 @@ const FAQ_ITEMS = [
         q: '¿Dónde aprendo a usar bien la metodología de RSU?',
         a: 'En la sección Academia — más de 20 módulos que cubren desde análisis técnico básico hasta las herramientas propias de RSU (RSU Score, El Triángulo RSU, RS/RW). Es el mejor punto de partida antes de operar con convicción usando lo que ves en la terminal.',
     },
+    {
+        q: '¿Hay atajos de teclado para moverme más rápido?',
+        a: 'Sí — pulsa Ctrl+K (Cmd+K en Mac) en cualquier momento para abrir un buscador rápido a cualquier sección o acción. También puedes pulsar "g" seguido de una letra (d, m, c, s, w, r, i, o, a, u) para ir directo a Dashboard, Market, Cartera, Scanner, Watchlist, Research, Insider Flow, Options Flow, Academia o Comunidad. Pulsa "?" en cualquier momento para ver la lista completa.',
+    },
 ];
 
 function authHeader() {

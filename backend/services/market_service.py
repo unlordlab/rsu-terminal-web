@@ -11,6 +11,7 @@ def get_timestamp():
 
 INDICES = [
     {"ticker": "^GSPC", "name": "S&P 500",     "short": "SPX"},
+    {"ticker": "RSP",   "name": "S&P 500 Equal Weight", "short": "RSP"},
     {"ticker": "^NDX",  "name": "Nasdaq 100",  "short": "NDX"},
     {"ticker": "^DJI",  "name": "Dow Jones",   "short": "DJI"},
     {"ticker": "^RUT",  "name": "Russell 2000","short": "RUT"},
@@ -47,7 +48,7 @@ def get_indices():
         futures = {ex.submit(_fetch_ticker, item): item for item in INDICES}
         for future in futures:
             results.append(future.result())
-    results.sort(key=lambda x: ["SPX","NDX","DJI","RUT","VIX"].index(x["ticker"]))
+    results.sort(key=lambda x: ["SPX","RSP","NDX","DJI","RUT","VIX"].index(x["ticker"]))
     result = {"data": results, "timestamp": get_timestamp(), "ok": any(r["ok"] for r in results)}
     cache.set("market:indices", result, TTL["market"])
     return result
@@ -275,196 +276,6 @@ def get_sectors(period: str = "1d"):
     results.sort(key=lambda x: x["pct"], reverse=True)
     result = {"data": results, "timestamp": get_timestamp(), "ok": any(r["ok"] for r in results)}
     cache.set(f"market:sectors:{period}", result, TTL["sectors"])
-    return result
-
-# ── CALENDARIO
-
-EVENT_TRANSLATIONS = {
-    "Nonfarm Payrolls": "Nóminas No Agrícolas",
-    "Unemployment Rate": "Tasa de Desempleo",
-    "CPI": "IPC (Inflación)",
-    "Core CPI": "IPC Subyacente",
-    "PPI": "IPP (Precios Productor)",
-    "GDP": "PIB",
-    "GDP Growth Rate": "Crecimiento del PIB",
-    "Retail Sales": "Ventas al Por Menor",
-    "ISM Manufacturing PMI": "PMI Manufacturero ISM",
-    "ISM Services PMI": "PMI Servicios ISM",
-    "Fed Interest Rate Decision": "Decisión de Tipos de la Fed",
-    "FOMC Statement": "Declaración FOMC",
-    "FOMC Minutes": "Actas FOMC",
-    "Initial Jobless Claims": "Solicitudes de Desempleo",
-    "Building Permits": "Permisos de Construcción",
-    "Housing Starts": "Inicio de Viviendas",
-    "Trade Balance": "Balanza Comercial",
-    "Crude Oil Inventories": "Inventarios de Petróleo",
-    "Natural Gas Storage": "Almacenamiento Gas Natural",
-    "ECB Interest Rate Decision": "Decisión Tipos BCE",
-    "ECB Press Conference": "Rueda de Prensa BCE",
-    "ADP Nonfarm Employment": "Empleo ADP",
-    "JOLTS Job Openings": "Vacantes JOLTS",
-    "Michigan Consumer Sentiment": "Sentimiento Michigan",
-    "CB Consumer Confidence": "Confianza Consumidor CB",
-    "Durable Goods Orders": "Pedidos Bienes Duraderos",
-    "PCE Price Index": "Índice Precios PCE",
-    "Core PCE": "PCE Subyacente",
-    "Revised Industrial Production": "Producción Industrial Revisada",
-    "Industrial Production": "Producción Industrial",
-    "Manufacturing Production": "Producción Manufacturera",
-    "Construction Output": "Producción en Construcción",
-    "Index of Services": "Índice de Servicios",
-    "Consumer Inflation Expectations": "Expectativas de Inflación",
-    "M2 Money Supply": "Oferta Monetaria M2",
-    "New Loans": "Nuevos Préstamos",
-    "CB Leading Index": "Índice Adelantado CB",
-    "UoM Consumer Sentiment": "Sentimiento Consumidor UoM",
-    "Prelim UoM Consumer Sentiment": "Sentimiento Consumidor UoM (Prel.)",
-    "Prelim UoM Inflation Expectations": "Expectativas Inflación UoM (Prel.)",
-    "Existing Home Sales": "Ventas Viviendas Existentes",
-    "New Home Sales": "Ventas Viviendas Nuevas",
-    "Pending Home Sales": "Ventas Viviendas Pendientes",
-    "Empire State Manufacturing": "Índice Manufacturero Empire State",
-    "Philadelphia Fed": "Fed Filadelfia",
-    "Flash Manufacturing PMI": "PMI Manufacturero Flash",
-    "Flash Services PMI": "PMI Servicios Flash",
-    "Composite PMI": "PMI Compuesto",
-    "Current Account": "Cuenta Corriente",
-    "Consumer Price Index": "Índice de Precios al Consumo",
-    "Producer Price Index": "Índice de Precios al Productor",
-    "Import Prices": "Precios de Importación",
-    "Export Prices": "Precios de Exportación",
-    "Capacity Utilization": "Utilización de Capacidad",
-    "Average Hourly Earnings": "Salario por Hora Promedio",
-    "Labor Force Participation": "Tasa de Participación Laboral",
-    "Continuing Jobless Claims": "Solicitudes Continuas de Desempleo",
-    "Wholesale Inventories": "Inventarios al Por Mayor",
-    "Business Inventories": "Inventarios Empresariales",
-    "Factory Orders": "Órdenes de Fábrica",
-    "Chicago PMI": "PMI de Chicago",
-    "Richmond Fed": "Fed Richmond",
-    "Dallas Fed": "Fed Dallas",
-    "Kansas Fed": "Fed Kansas",
-}
-
-def translate_event(name):
-    for en, es in EVENT_TRANSLATIONS.items():
-        if en.lower() in name.lower():
-            return es
-    return name
-
-_HIGH_IMPACT_KW = [
-    'non farm payrolls', 'nonfarm payrolls', 'interest rate decision', 'rate decision',
-    'cpi', 'gdp', 'unemployment rate', 'fomc statement', 'employment change',
-    'ism manufacturing', 'ism services', 'core pce',
-]
-_MEDIUM_IMPACT_KW = [
-    'pmi', 'retail sales', 'ppi', 'consumer confidence', 'durable goods',
-    'trade balance', 'housing starts', 'building permits', 'jobless claims', 'consumer sentiment',
-]
-
-def _guess_impact(event_name):
-    name = (event_name or '').lower()
-    for kw in _HIGH_IMPACT_KW:
-        if kw in name:
-            return 'High'
-    for kw in _MEDIUM_IMPACT_KW:
-        if kw in name:
-            return 'Medium'
-    return 'Low'
-
-def _fmt_econ_value(v, unit=None):
-    if v is None or v == "":
-        return "-"
-    try:
-        v = float(v)
-        s = f"{int(v):,}" if v == int(v) else f"{v:,.2f}"
-    except Exception:
-        s = str(v)
-    if unit == '%':
-        return s + '%'
-    if unit:
-        return s + ' ' + str(unit)
-    return s
-
-def get_economic_calendar():
-    from services.cache import cache, TTL
-    cached = cache.get("market:calendar")
-    if cached: return cached
-    from config import settings
-    import requests, pytz
-    api_key = getattr(settings, "finnhub_api_key", "")
-    if not api_key:
-        return {"data": [], "timestamp": get_timestamp(), "ok": False, "error": "Falta FINNHUB_API_KEY en el .env"}
-    events = []
-    try:
-        now       = datetime.now(timezone(timedelta(hours=1))).replace(tzinfo=None)
-        date_from = now.strftime('%Y-%m-%d')
-        date_to   = (now + timedelta(days=7)).strftime('%Y-%m-%d')
-        r = requests.get(
-            "https://finnhub.io/api/v1/calendar/economic",
-            params={"from": date_from, "to": date_to, "token": api_key},
-            timeout=15,
-        )
-        if r.status_code != 200:
-            return {"data": [], "timestamp": get_timestamp(), "ok": False,
-                    "error": f"Finnhub {r.status_code}: {r.text[:200]}"}
-        payload = r.json()
-        data = payload.get("economicCalendar") if isinstance(payload, dict) else payload
-        if data is None:
-            msg = payload.get("error") if isinstance(payload, dict) else None
-            return {"data": [], "timestamp": get_timestamp(), "ok": False,
-                    "error": msg or "Respuesta inesperada de Finnhub (sin 'economicCalendar')"}
-        if not isinstance(data, list):
-            return {"data": [], "timestamp": get_timestamp(), "ok": False,
-                    "error": "Respuesta inesperada de Finnhub (no es una lista)"}
-        utc    = pytz.UTC
-        madrid = pytz.timezone('Europe/Madrid')
-        skipped_errors = 0
-        for item in data:
-            try:
-                date_str = item.get('time', '')
-                event_dt = datetime.strptime(date_str[:19], '%Y-%m-%d %H:%M:%S') if date_str else now
-                utc_dt   = utc.localize(event_dt)
-                mad_dt   = utc_dt.astimezone(madrid)
-                local_dt = mad_dt.replace(tzinfo=None)
-                if local_dt.date() < now.date():
-                    continue
-                if local_dt.weekday() >= 5:
-                    continue
-                impact = item.get('impact') or _guess_impact(item.get('event', ''))
-                if impact not in ['High', 'Medium', 'Low']:
-                    impact = 'Low'
-                if local_dt.date() == now.date():
-                    date_display = "HOY"
-                    date_color   = "#00ffad"
-                elif local_dt.date() == (now + timedelta(days=1)).date():
-                    date_display = "MAÑANA"
-                    date_color   = "#3b82f6"
-                else:
-                    date_display = local_dt.strftime('%d %b').upper()
-                    date_color   = "#888"
-                unit = item.get('unit') or ''
-                events.append({
-                    "date":       date_display,
-                    "date_color": date_color,
-                    "time":       local_dt.strftime('%H:%M'),
-                    "event":      translate_event(item.get('event', 'Evento')),
-                    "impact":     impact,
-                    "country":    (item.get('country') or 'US').upper()[:2],
-                    "actual":     _fmt_econ_value(item.get('actual'), unit),
-                    "forecast":   _fmt_econ_value(item.get('estimate'), unit),
-                    "previous":   _fmt_econ_value(item.get('prev'), unit),
-                })
-            except Exception:
-                skipped_errors += 1
-                continue
-        if not events and skipped_errors > 0:
-            return {"data": [], "timestamp": get_timestamp(), "ok": False,
-                    "error": f"Finnhub devolvió {len(data)} eventos pero {skipped_errors} fallaron al procesar (revisa formato de 'time')"}
-    except Exception as e:
-        return {"data": [], "timestamp": get_timestamp(), "ok": False, "error": str(e)}
-    result = {"data": events[:40], "timestamp": get_timestamp(), "ok": True}
-    cache.set("market:calendar", result, TTL["calendar"])
     return result
 
 # ── VIX
@@ -731,6 +542,18 @@ FRED_SERIES = [
     {"id": "BAMLC0A0CM",   "name": "IG OAS",  "label": "Investment Grade"},
 ]
 
+# Umbrales calibrados POR SEPARADO para cada serie — antes se usaba el mismo
+# corte (>8/>5/>3) para las dos, y como el IG OAS rara vez supera el 2-2.5%
+# (ronda 0.6-1% en entornos tranquilos, frente al 3-6% habitual del HY),
+# salía "BAJO" prácticamente siempre sin que esa etiqueta significara nada.
+# Referencia: media a 10 años del IG OAS ≈ 1.3%; el HY OAS por encima del
+# 8% ha coincidido o precedido recesión en EE.UU. de forma consistente desde
+# los años 90 (fuente: FRED, ICE BofA).
+SPREAD_THRESHOLDS = {
+    "BAMLH0A0HYM2": {"bajo": 3.5, "normal": 5.0, "elevado": 8.0},   # HY OAS
+    "BAMLC0A0CM":   {"bajo": 1.0, "normal": 1.5, "elevado": 2.5},   # IG OAS
+}
+
 def _fetch_fred_series(series_id, api_key, limit=5):
     import requests as _req
     try:
@@ -775,23 +598,31 @@ def get_credit_spreads():
     api_key = getattr(settings, "fred_api_key", "")
     results = []
     for series in FRED_SERIES:
-        history = _fetch_fred_series(series["id"], api_key)
+        # 260 sesiones (~1 año) para poder pintar el histórico real en el
+        # gráfico — antes solo se pedían 5 puntos (bastaban para el valor
+        # actual/anterior, pero no para un gráfico con sentido).
+        history = _fetch_fred_series(series["id"], api_key, limit=260)
+        th = SPREAD_THRESHOLDS.get(series["id"], {"bajo": 3.5, "normal": 5.0, "elevado": 8.0})
         if len(history) >= 2:
             current = history[-1]["value"]
             prev    = history[-2]["value"]
             change  = round(current - prev, 2)
-            if current > 8:   level, level_color = "ALTO",    "#f23645"
-            elif current > 5: level, level_color = "ELEVADO", "#ffb800"
-            elif current > 3: level, level_color = "NORMAL",  "#90ee90"
-            else:             level, level_color = "BAJO",    "#00ffad"
+            if current > th["elevado"]: level, level_color = "ALTO",    "#f23645"
+            elif current > th["normal"]: level, level_color = "ELEVADO", "#ffb800"
+            elif current > th["bajo"]:   level, level_color = "NORMAL",  "#90ee90"
+            else:                        level, level_color = "BAJO",    "#00ffad"
             results.append({
                 "id": series["id"], "name": series["name"], "label": series["label"],
                 "current": current, "prev": prev, "change": change,
                 "date": history[-1]["date"], "level": level, "level_color": level_color,
+                "thresholds": th, "history": history[-260:],
                 "ok": True,
             })
         else:
-            results.append({"id": series["id"], "name": series["name"], "label": series["label"], "current": None, "ok": False})
+            results.append({
+                "id": series["id"], "name": series["name"], "label": series["label"],
+                "current": None, "thresholds": th, "history": [], "ok": False,
+            })
     result = {"data": results, "timestamp": get_timestamp(), "ok": any(r["ok"] for r in results)}
     cache.set("market:spreads", result, TTL["spreads"])
     return result

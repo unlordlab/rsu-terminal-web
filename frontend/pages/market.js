@@ -19,13 +19,16 @@ export async function render(container) {
         + '<div style="color:var(--color-muted);font-size:12px;">Dashboard de mercado · Carga modular · Live WS</div>'
         + '</div>'
 
-        // Fila 1 — 3 columnas
-        + '<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:1rem;margin-bottom:1rem;">'
+        // Fila 1 — 3 columnas: Índices / Commodities / Forex, misma naturaleza
+        // de contenido (listas cortas de precios) así que quedan a longitud
+        // parecida sin necesidad de forzar altura. Fear & Greed se baja a la
+        // fila siguiente, junto a Earnings, con su mismo tratamiento "grande".
+        + '<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:1rem;margin-bottom:1rem;align-items:start;">'
         + '<div id="widget-briefing" style="grid-column:1/-1;display:flex;flex-direction:column;"></div>'
         + '<div id="widget-indices"     style="display:flex;flex-direction:column;"></div>'
-        + '<div id="widget-feargreed"   style="display:flex;flex-direction:column;"></div>'
+        + '<div id="widget-commodities" style="display:flex;flex-direction:column;"></div>'
         + '<div id="widget-forex"       style="display:flex;flex-direction:column;"></div>'
-        + '<div id="widget-commodities" style="display:flex;flex-direction:column;height:420px;"></div>'
+        + '<div id="widget-feargreed"   style="display:flex;flex-direction:column;height:420px;"></div>'
         + '<div id="widget-earnings"    style="grid-column:2/4;display:flex;flex-direction:column;height:420px;"></div>'
         + '<div style="grid-column:1/-1;height:0;"></div>'
         + '</div>'
@@ -1021,12 +1024,16 @@ async function loadCrypto(el) {
     }
 }
 
+let _spreadsData = null;
+let _spreadsChart = null;
+
 async function loadSpreads(el) {
     el.innerHTML = widgetShell('CREDIT SPREADS', 'OAS · FRED · ICE BofA', loading());
     try {
         const res  = await fetch('/api/v1/market/credit-spreads', { headers: authHeader() });
         const data = await res.json();
         if (!data.ok) throw new Error('Sin datos FRED');
+        _spreadsData = data.data;
 
         const cards = data.data.map(s => {
             if (!s.ok) return '<div style="padding:1rem;color:var(--color-muted);font-size:12px;">' + s.label + ': Sin datos</div>';
@@ -1043,37 +1050,73 @@ async function loadSpreads(el) {
 
         const summary = '<div style="display:flex;border-bottom:1px solid var(--color-border);">' + cards + '</div>';
 
-        const frameId  = 'spreads-tv-' + Date.now();
-        const tvUrl    = function(symbol) {
-            return 'https://s.tradingview.com/widgetembed/?frameElementId=' + frameId
-                + '&symbol=' + symbol
-                + '&interval=D&hidesidetoolbar=1&hidetoptoolbar=1&symboledit=0&saveimage=0&toolbarbg=1a1a1a&theme=dark&style=1&timezone=Europe%2FMadrid&studies=[]&locale=es';
-        };
-
         const tabs = '<div style="display:flex;gap:6px;padding:8px 12px;border-bottom:1px solid var(--color-border);">'
-            + '<button class="spreads-tab" data-symbol="FRED:BAMLH0A0HYM2" onclick="window.__spreadsSwitch(this,\'' + frameId + '\')" style="background:var(--color-accent);color:#000;border:none;border-radius:3px;padding:3px 10px;font-size:10px;cursor:pointer;">HIGH YIELD</button>'
-            + '<button class="spreads-tab" data-symbol="FRED:BAMLC0A0CM" onclick="window.__spreadsSwitch(this,\'' + frameId + '\')" style="background:transparent;color:var(--color-muted);border:1px solid var(--color-border);border-radius:3px;padding:3px 10px;font-size:10px;cursor:pointer;">INVESTMENT GRADE</button>'
+            + '<button class="spreads-tab" data-id="BAMLH0A0HYM2" onclick="window.__spreadsSwitch(this)" style="background:var(--color-accent);color:#000;border:none;border-radius:3px;padding:3px 10px;font-size:10px;cursor:pointer;">HIGH YIELD</button>'
+            + '<button class="spreads-tab" data-id="BAMLC0A0CM" onclick="window.__spreadsSwitch(this)" style="background:transparent;color:var(--color-muted);border:1px solid var(--color-border);border-radius:3px;padding:3px 10px;font-size:10px;cursor:pointer;">INVESTMENT GRADE</button>'
             + '</div>';
 
-        const chartHtml = '<div style="height:260px;">'
-            + '<iframe id="' + frameId + '" src="' + tvUrl('FRED:BAMLH0A0HYM2') + '"'
-            + ' style="width:100%;height:100%;border:none;" allowtransparency="true" frameborder="0" scrolling="no"></iframe>'
-            + '</div>';
+        const chartHtml = '<div style="height:260px;padding:10px;"><canvas id="spreads-chart"></canvas></div>';
 
-        el.innerHTML = widgetShell('CREDIT SPREADS ' + tt('credit-spreads'), 'OAS · FRED · ICE BofA', summary + tabs + chartHtml, data.timestamp);
+        el.innerHTML = widgetShell('CREDIT SPREADS ' + tt('credit-spreads'), 'OAS · FRED · ICE BofA · niveles críticos marcados', summary + tabs + chartHtml, data.timestamp);
+
+        _loadChartJsThen(() => renderSpreadsChart('BAMLH0A0HYM2'));
     } catch(e) {
         el.innerHTML = widgetShell('CREDIT SPREADS', 'OAS · FRED · ICE BofA', widgetError(e.message));
     }
 }
 
-window.__spreadsSwitch = function(btn, frameId) {
-    const symbol = btn.getAttribute('data-symbol');
-    const iframe = document.getElementById(frameId);
-    if (iframe) {
-        iframe.src = 'https://s.tradingview.com/widgetembed/?frameElementId=' + frameId
-            + '&symbol=' + symbol
-            + '&interval=D&hidesidetoolbar=1&hidetoptoolbar=1&symboledit=0&saveimage=0&toolbarbg=1a1a1a&theme=dark&style=1&timezone=Europe%2FMadrid&studies=[]&locale=es';
-    }
+function _loadChartJsThen(cb) {
+    if (window.Chart) { cb(); return; }
+    const script  = document.createElement('script');
+    script.src    = 'https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js';
+    script.onload = cb;
+    document.head.appendChild(script);
+}
+
+function renderSpreadsChart(seriesId) {
+    const ctx = document.getElementById('spreads-chart');
+    if (!ctx || !_spreadsData) return;
+    const series = _spreadsData.find(s => s.id === seriesId);
+    if (!series || !series.ok || !series.history || !series.history.length) return;
+
+    const th = series.thresholds || {};
+    const labels = series.history.map(h => h.date.slice(5));
+    const values = series.history.map(h => h.value);
+    const flat   = (v) => labels.map(() => v);
+
+    if (_spreadsChart) { _spreadsChart.destroy(); _spreadsChart = null; }
+
+    _spreadsChart = new Chart(ctx, {
+        type: 'line',
+        data: {
+            labels,
+            datasets: [
+                { label: series.name, data: values, borderColor: '#00d9ff', backgroundColor: '#00d9ff18', borderWidth: 1.5, pointRadius: 0, fill: true, tension: 0.2 },
+                { label: 'Elevado (' + th.normal + '%)', data: flat(th.normal), borderColor: '#ffb800', borderWidth: 1, pointRadius: 0, borderDash: [5,4], fill: false },
+                { label: 'Alto (' + th.elevado + '%)',   data: flat(th.elevado), borderColor: '#f23645', borderWidth: 1, pointRadius: 0, borderDash: [5,4], fill: false },
+            ]
+        },
+        options: {
+            responsive: true, maintainAspectRatio: false,
+            interaction: { mode: 'index', intersect: false },
+            plugins: {
+                legend: { display: true, position: 'top', labels: { color: '#888', boxWidth: 12, font: { size: 9 } } },
+                tooltip: {
+                    backgroundColor: '#111', borderColor: '#333', borderWidth: 1, titleColor: '#aaa', bodyColor: '#ccc',
+                    callbacks: { label: item => item.dataset.label + ': ' + item.parsed.y.toFixed(2) + '%' }
+                },
+            },
+            scales: {
+                x: { ticks: { color: '#555', font: { size: 9 }, maxTicksLimit: 6, maxRotation: 0 }, grid: { color: 'rgba(255,255,255,0.04)' } },
+                y: { ticks: { color: '#555', font: { size: 9 }, callback: v => v + '%' }, grid: { color: 'rgba(255,255,255,0.04)' } }
+            }
+        }
+    });
+}
+
+window.__spreadsSwitch = function(btn) {
+    const seriesId = btn.getAttribute('data-id');
+    renderSpreadsChart(seriesId);
     const siblings = btn.parentElement.querySelectorAll('.spreads-tab');
     siblings.forEach(function(b) {
         b.style.background = 'transparent';
@@ -1551,13 +1594,6 @@ async function loadFedMacro(el) {
     } catch(e) {
         el.innerHTML = widgetShell('FED & MACRO', 'Balance Fed · Curva de Tipos · FRED', widgetError(e.message));
     }
-}
-function flagEmoji(countryCode) {
-    if (!countryCode || countryCode.length !== 2) return '';
-    const cc = countryCode.toUpperCase();
-    if (!/^[A-Z]{2}$/.test(cc)) return '';
-    const points = [...cc].map(c => 127397 + c.charCodeAt(0));
-    return String.fromCodePoint(...points);
 }
 
 function loadCalendar(el) {

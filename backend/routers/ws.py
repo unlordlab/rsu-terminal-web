@@ -278,3 +278,31 @@ async def insider_ingest_loop():
         except Exception:
             pass
         await asyncio.sleep(1200)
+
+
+# Refresco proactivo de los widgets más pesados de Market — Amplitud de
+# Mercado (histórico SPY 2 años + scan de amplitud), Fed & Macro (varias
+# series FRED) y Credit Spreads (2 series FRED de 260 puntos). Sin esto, el
+# PRIMER usuario que entra después de que caduque la caché se come en vivo
+# la llamada externa completa; con esto, se refresca por detrás antes de
+# caducar y esa espera nunca la sufre ningún usuario real.
+#
+# Cada función se refresca a un ritmo ajustado a su propio TTL (ver
+# services/cache.py) — todo en un único bucle de 4 min para no multiplicar
+# tareas en segundo plano; Fed Macro y Credit Spreads simplemente se saltan
+# la mayoría de ciclos.
+async def market_cache_warm_loop():
+    tick = 0
+    while True:
+        await asyncio.sleep(240)  # 4 min — ritmo del más corto (Amplitud, TTL 300s)
+        tick += 240
+        try:
+            from services.market_service import get_market_breadth, get_fed_macro, get_credit_spreads
+            loop = asyncio.get_event_loop()
+            await loop.run_in_executor(None, get_market_breadth)
+            if tick % 1680 < 240:   # ~cada 28 min, bajo el TTL de 30 min de Fed Macro
+                await loop.run_in_executor(None, get_fed_macro)
+            if tick % 3360 < 240:   # ~cada 56 min, bajo el TTL de 1h de Credit Spreads
+                await loop.run_in_executor(None, get_credit_spreads)
+        except Exception as e:
+            print(f"[MarketWarm] Error refrescando caché: {e}")

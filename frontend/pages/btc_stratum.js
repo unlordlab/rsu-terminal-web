@@ -1,5 +1,7 @@
 import { tt } from '/components/tooltip.js';
 import { errorMessage } from '/core/ui.js';
+
+export async function render(container) {
     container.innerHTML = pageShell();
     const result = container.querySelector('#btc-result');
 

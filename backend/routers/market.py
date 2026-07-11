@@ -3,9 +3,9 @@ from auth import verify_token
 from services.market_service import (
     get_indices, get_fear_greed, get_forex,
     get_commodities, get_sectors,
-    get_economic_calendar, get_vix_term_structure,
+    get_vix_term_structure,
     get_reddit_pulse, get_nightly_briefing,
-    get_credit_spreads, get_market_breadth, get_advance_decline,
+    get_credit_spreads, get_market_breadth,
     get_fed_macro, get_vix_levels, get_crypto_prices, get_crypto_fear_greed,
     get_liquidity, get_sector_composition, get_crypto_relative_strength
 )
@@ -35,10 +35,6 @@ async def crypto_fear_greed(user=Depends(verify_token)):
 async def breadth(user=Depends(verify_token)):
     return get_market_breadth()
 
-@router.get("/ad-line")
-async def ad_line(user=Depends(verify_token)):
-    return get_advance_decline()
-
 @router.get("/indices")
 async def indices(user=Depends(verify_token)):
     return get_indices()
@@ -66,10 +62,6 @@ async def commodities(user=Depends(verify_token)):
 @router.get("/sectors")
 async def sectors(period: str = Query("1d"), user=Depends(verify_token)):
     return get_sectors(period=period)
-
-@router.get("/calendar")
-async def calendar(user=Depends(verify_token)):
-    return get_economic_calendar()
 
 @router.get("/vix")
 async def vix(user=Depends(verify_token)):

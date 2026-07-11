@@ -10,6 +10,7 @@ export async function render(container) {
             </div>
             <div id="health-badge" style="font-size:10px;color:var(--color-muted);padding:4px 10px;border:1px solid var(--color-border);border-radius:12px;">● comprobando...</div>
         </div>
+        <div id="shortcuts-tip"></div>
         <div id="daily-quote" style="margin-bottom:1.5rem;"></div>
         <div id="pulse-strip" style="margin-bottom:1.5rem;"></div>
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem;margin-bottom:1.5rem;">
@@ -45,6 +46,7 @@ export async function render(container) {
 
     loadAlgoritmo(container.querySelector('#algoritmo-widget'));
     renderDailyQuote(container.querySelector('#daily-quote'));
+    renderShortcutsTip(container.querySelector('#shortcuts-tip'));
     loadPulseStrip(container.querySelector('#pulse-strip'));
     loadBriefingPreview(container.querySelector('#briefing-preview'));
     loadWatchlistSummary(container.querySelector('#watchlist-summary'));
@@ -205,6 +207,23 @@ async function loadWatchlistSummary(el) {
     } catch (e) {
         el.innerHTML = watchlistShell('<div style="padding:1rem;color:var(--color-muted);font-size:12px;">' + e.message + '</div>');
     }
+}
+
+const SHORTCUTS_TIP_KEY = 'rsu_shortcuts_tip_dismissed';
+
+function renderShortcutsTip(el) {
+    if (!el) return;
+    if (localStorage.getItem(SHORTCUTS_TIP_KEY)) return; // ya lo vio, no insistir
+
+    el.innerHTML = '<div style="background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius);padding:10px 14px;margin-bottom:1.5rem;display:flex;justify-content:space-between;align-items:center;gap:12px;font-size:12px;">'
+        + '<span style="color:var(--color-muted);">💡 Pulsa <span style="color:var(--color-accent);background:var(--color-bg,#0a0a0a);border:1px solid var(--color-border);border-radius:4px;padding:1px 7px;">Ctrl/Cmd + K</span> para ir a cualquier sección al instante, o <span style="color:var(--color-accent);background:var(--color-bg,#0a0a0a);border:1px solid var(--color-border);border-radius:4px;padding:1px 7px;">?</span> para ver todos los atajos.</span>'
+        + '<button id="shortcuts-tip-dismiss" style="background:transparent;border:none;color:var(--color-muted);cursor:pointer;font-size:16px;line-height:1;flex-shrink:0;">✕</button>'
+        + '</div>';
+
+    el.querySelector('#shortcuts-tip-dismiss').addEventListener('click', () => {
+        localStorage.setItem(SHORTCUTS_TIP_KEY, '1');
+        el.innerHTML = '';
+    });
 }
 
 // ── FRASE DEL DÍA ────────────────────────────────────────────────────────────

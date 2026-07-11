@@ -1,6 +1,6 @@
 import { hasTier } from '/core/api.js';
 
-const NAV_ITEMS = [
+export const NAV_ITEMS = [
     { path: '/',          label: 'Dashboard',    icon: 'D' },
     { path: '/manifiesto', label: 'Manifiesto',  icon: '📜' },
     { path: '/market',    label: 'Market',       icon: 'M' },

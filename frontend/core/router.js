@@ -1,9 +1,10 @@
 import { Tooltip } from '/components/tooltip.js';
 import { initTheme } from '/core/theme.js';
-import { renderSidebar, setActiveNavItem } from '/components/sidebar.js';
+import { renderSidebar, setActiveNavItem, NAV_ITEMS } from '/components/sidebar.js';
 import { renderTopbar } from '/components/topbar.js';
 import { initWebSocket } from '/core/websocket.js';
 import { api, setSession, getToken } from '/core/api.js';
+import { initCommandPalette } from '/components/command_palette.js';
 
 const ROUTES = {
     '/':           () => import('/pages/dashboard.js'),
@@ -239,6 +240,7 @@ const token = getToken();
 if (token) initWebSocket(token);
 renderSidebar(document.getElementById('sidebar'), navigate);
 renderTopbar(document.getElementById('topbar'), navigate);
+initCommandPalette(NAV_ITEMS, navigate);
 
 // El tier guardado en sessionStorage es el que tenía el usuario en el
 // último login/registro. Si el admin lo ha subido de tier desde entonces,

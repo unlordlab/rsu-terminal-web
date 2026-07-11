@@ -438,18 +438,22 @@ Antes de eventos de impacto Alto, muchos traders reducen tamaño de posición, e
 
     "credit-spreads": {
         title: "Credit Spreads (OAS)",
-        short: "Diferencial de rentabilidad entre bonos corporativos y bonos del Tesoro. Mide el riesgo de crédito.",
+        short: "Diferencial de rentabilidad entre bonos corporativos y bonos del Tesoro. Mide el riesgo de crédito. Los niveles críticos se marcan como líneas discontinuas en el propio gráfico.",
         long: `Los Credit Spreads miden cuánto extra de rentabilidad exigen los inversores por asumir riesgo crediticio corporativo vs la seguridad del bono del Tesoro americano.
 
 HY OAS (High Yield Option-Adjusted Spread):
-Diferencial de bonos basura (calificación BB o inferior) vs Tesoro.
-- < 3% → Complacencia extrema. Mercado ignora riesgos.
-- 3-5% → Normal.
-- 5-8% → Estrés. Mercado pricing deterioro económico.
-- > 8% → Crisis. Zona de oportunidad histórica en renta variable.
+Diferencial de bonos basura (calificación BB o inferior) vs Tesoro — el indicador de estrés crediticio más seguido del mercado.
+- < 3,5% → Complacencia. Compensación mínima por riesgo de impago, típico de fases tardías de ciclo alcista.
+- 3,5-5% → Normal.
+- 5-8% → Elevado (línea amarilla en el gráfico). Mercado empezando a descontar deterioro económico.
+- > 8% → Alto (línea roja en el gráfico). Niveles que históricamente han coincidido o precedido recesión en EE.UU. de forma consistente desde los 90 — y también, paradójicamente, zona de oportunidad histórica en renta variable para quien tenga horizonte largo.
 
 IG OAS (Investment Grade):
-Diferencial de bonos de alta calidad vs Tesoro. Menos volátil.
+Diferencial de bonos de alta calidad (BBB o superior) vs Tesoro — mucho menos volátil que el HY, así que sus umbrales son distintos y bastante más bajos:
+- < 1% → Complacencia (media histórica a 10 años ronda 1,3%, así que estar por debajo del 1% es una zona relativamente ajustada).
+- 1-1,5% → Normal.
+- 1,5-2,5% → Elevado (línea amarilla).
+- > 2,5% → Alto (línea roja) — zona que se ha acercado a picos de estrés como el de la crisis del Covid en 2020 (~3,5%).
 
 POR QUÉ IMPORTA PARA ACCIONES:
 Los credit spreads se amplían ANTES de que el mercado de renta variable lo refleje. Son un indicador adelantado de recesión o crisis. Cuando los spreads se disparan, prepárate.
@@ -857,6 +861,39 @@ INTERPRETACIÓN:
 - < 30 → ROJO → Sin condiciones. Preservar capital.
 
 IMPORTANTE: este es un sistema de heurísticas de análisis técnico clásico, no una estrategia con ventaja estadística demostrada de forma independiente. Usa el botón de Backtest para ver cómo se ha comportado realmente sobre 10 años de histórico de SPY antes de darle un peso desproporcionado en tus decisiones.`
+    },
+
+    "algoritmo-gatekeepers": {
+        title: "Gatekeepers",
+        short: "Condiciones estructurales que deben cumplirse para que el algoritmo pueda encender VERDE, aunque el score ya sea alto.",
+        long: `Un score alto por sí solo no enciende el semáforo en VERDE — hace falta que, además, se cumpla al menos uno de los "gatekeepers" (condiciones de guardia):
+
+▸ Cerca de la EMA200 semanal — el precio está dentro de un margen razonable de la media de largo plazo, no muy extendido.
+▸ RVOL extremo en el mínimo — el volumen del día del mínimo de precio fue anormalmente alto, señal de capitulación real, no de un mínimo silencioso.
+▸ FTD confirmado — Follow-Through Day, una sesión de fuerza posterior al mínimo que confirma que la reversión tiene volumen detrás, no es solo un rebote técnico.
+
+POR QUÉ EXISTEN:
+Sin estos filtros, un score alto podría encenderse simplemente porque varios indicadores de momentum coinciden en un rebote débil, sin que haya ninguna evidencia estructural de que sea un giro real. Los gatekeepers son la diferencia entre "los números dicen que esto pinta bien" y "hay señales de que dinero grande está actuando", que es justo la misma filosofía que verás en el Módulo 22 de la Academia (El Triángulo RSU) aplicada aquí a la detección de fondos de mercado.
+
+También verás el Drawdown de 52 semanas junto a los gatekeepers — no es un gatekeeper en sí, es contexto: cuanto mayor la caída previa, más significativo es que se cumplan estas condiciones de giro.`
+    },
+
+    "algoritmo-importancia": {
+        title: "Importancia de Variables",
+        short: "Correlación histórica entre cada factor del algoritmo y el retorno real a 20 días — para ver qué variables aportan señal de verdad y cuáles son ruido.",
+        long: `Esta tabla responde a una pregunta distinta a la del backtest general: de los 6 factores que componen el score (RSI, VIX, McClellan, RVOL en mínimo, EMA200 semanal, régimen SMA200), ¿cuáles han pesado de verdad en el resultado y cuáles apenas han importado?
+
+CÓMO SE CALCULA:
+Para cada factor, se separan las señales históricas en "score alto" y "score bajo" en ESE factor concreto, y se compara el retorno medio real a 20 días de cada grupo. Si un factor con score alto obtuvo sistemáticamente mejor retorno que con score bajo, ese factor tiene correlación real con el resultado. Si no hay diferencia, el factor puede estar aportando poco pese a formar parte del score compuesto.
+
+LA COLUMNA "CORR":
+Correlación entre el valor del factor y el retorno a 20 días — más cercana a +1 indica que ese factor anticipa bien subidas, cercana a 0 indica que no aporta señal por sí solo.
+
+MUESTRA PEQUEÑA:
+Con menos de 2 señales en algún grupo (alto o bajo), la comparación no es estadísticamente fiable y se marca explícitamente — no la trates como concluyente si ves ese aviso.
+
+REQUISITO MÍNIMO:
+Hacen falta al menos 8 señales históricas con retorno ya calculado (necesitan 60 días desde que se dispararon para tener el dato a 60d) para que este análisis tenga sentido mínimo — con menos, se muestra un aviso en vez de forzar una conclusión sobre una muestra demasiado pequeña.`
     },
 
     "algoritmo-backtest": {
