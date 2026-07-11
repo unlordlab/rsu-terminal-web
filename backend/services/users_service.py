@@ -33,6 +33,13 @@ def init_db():
             created_at    TEXT NOT NULL
         )
     ''')
+    # Aceptación del disclaimer — se añadió después del lanzamiento inicial,
+    # así que va como ALTER TABLE idempotente (igual que el patrón ya usado
+    # en watchlist_service.py) en vez de tocar el CREATE TABLE original.
+    try:
+        conn.execute("ALTER TABLE users ADD COLUMN disclaimer_accepted_at TEXT")
+    except sqlite3.OperationalError:
+        pass  # la columna ya existe
     conn.commit()
     conn.close()
 
@@ -87,8 +94,23 @@ def get_user_by_email(email: str) -> dict | None:
     email = email.strip().lower()
     conn = _conn()
     try:
-        row = conn.execute("SELECT id, email, tier FROM users WHERE email = ?", (email,)).fetchone()
+        row = conn.execute(
+            "SELECT id, email, tier, disclaimer_accepted_at FROM users WHERE email = ?", (email,)
+        ).fetchone()
         return dict(row) if row else None
+    finally:
+        conn.close()
+
+
+def accept_disclaimer(user_id: int) -> dict:
+    conn = _conn()
+    try:
+        conn.execute(
+            "UPDATE users SET disclaimer_accepted_at = ? WHERE id = ?",
+            (datetime.now(timezone.utc).isoformat(), user_id)
+        )
+        conn.commit()
+        return {"ok": True}
     finally:
         conn.close()
 
@@ -140,4 +162,3 @@ def list_users() -> list[dict]:
 
 
 init_db()
-

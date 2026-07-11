@@ -84,7 +84,17 @@ async def me(payload: dict = Depends(verify_token)):
     email = payload.get("sub")
     user  = users_service.get_user_by_email(email) if email else None
     tier  = user["tier"] if user else payload.get("tier", "free")
-    return {"email": email, "tier": tier}
+    disclaimer_accepted = bool(user and user.get("disclaimer_accepted_at"))
+    return {"email": email, "tier": tier, "disclaimer_accepted": disclaimer_accepted}
+
+
+@router.post("/accept-disclaimer")
+async def accept_disclaimer(payload: dict = Depends(verify_token)):
+    email = payload.get("sub")
+    user  = users_service.get_user_by_email(email) if email else None
+    if not user:
+        raise HTTPException(status_code=401, detail="Usuario no encontrado")
+    return users_service.accept_disclaimer(user["id"])
 
 
 @router.post("/admin/set-tier")
@@ -129,4 +139,3 @@ async def admin_reset_password(req: ResetPasswordRequest, x_admin_key: str = Hea
     if not ok:
         raise HTTPException(status_code=404, detail="Usuario no encontrado")
     return {"ok": True, "email": req.email.strip().lower()}
-

@@ -9,19 +9,16 @@ export async function render(container) {
         + '<div id="rsrw-laggards"></div>'
         + '</div>'
         + tickerPanel()
-        + '<div id="rsrw-ticker-result"></div>'
-        + scanPanel()
-        + '<div id="rsrw-scan-result"></div>';
+        + '<div id="rsrw-ticker-result"></div>';
 
     setupTicker(container);
-    setupScan(container);
     loadGist(container);
 }
 
 function pageHeader() {
     return '<div style="margin-bottom:1.5rem;">'
         + '<div style="color:var(--color-accent);font-size:18px;letter-spacing:0.1em;text-shadow:var(--glow-text);margin-bottom:4px;">RS/RW SCANNER ' + tt('rsrw') + '</div>'
-        + '<div style="color:var(--color-muted);font-size:12px;">Relative Strength · Relative Weakness · IBD Methodology · S&P 500</div>'
+        + '<div style="color:var(--color-muted);font-size:12px;">Relative Strength · Relative Weakness · IBD Methodology · S&amp;P 500 completo (525 tickers) · Scan nocturno automático, sin scan on-demand</div>'
         + '</div>';
 }
 
@@ -32,25 +29,6 @@ function tickerPanel() {
         + '<input id="rsrw-ticker-input" type="text" placeholder="NVDA, AAPL, TSLA..." style="flex:1;background:var(--color-bg,#0a0a0a);border:1px solid var(--color-border);border-radius:var(--radius);padding:8px 12px;color:var(--color-text);font-family:var(--font-mono);font-size:13px;outline:none;">'
         + '<button id="rsrw-ticker-btn" style="background:var(--color-accent);color:#000;border:none;border-radius:var(--radius);padding:8px 16px;font-family:var(--font-mono);font-size:12px;cursor:pointer;letter-spacing:0.05em;">ANALIZAR</button>'
         + '</div>'
-        + '</div>';
-}
-
-function scanPanel() {
-    return '<div style="background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius);padding:1.25rem;margin-bottom:1.5rem;">'
-        + '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem;">'
-        + '<div style="color:var(--color-accent);font-size:13px;letter-spacing:0.08em;">SCAN ON-DEMAND</div>'
-        + '<div style="display:flex;gap:8px;align-items:center;">'
-        + '<label style="color:var(--color-muted);font-size:12px;">Tickers:</label>'
-        + '<select id="rsrw-max-tickers" style="background:var(--color-bg,#0a0a0a);border:1px solid var(--color-border);border-radius:var(--radius);padding:6px 10px;color:var(--color-text);font-family:var(--font-mono);font-size:12px;">'
-        + '<option value="100">100 — Rápido (~30s)</option>'
-        + '<option value="150">150 — Estándar (~60s)</option>'
-        + '<option value="250">250 — Amplio (~2min)</option>'
-        + '<option value="500" selected>500 — S&amp;P 500 completo (~4-5min)</option>'
-        + '</select>'
-        + '<button id="rsrw-scan-btn" style="background:var(--color-secondary);color:#000;border:none;border-radius:var(--radius);padding:8px 16px;font-family:var(--font-mono);font-size:12px;cursor:pointer;letter-spacing:0.05em;">ESCANEAR AHORA</button>'
-        + '</div>'
-        + '</div>'
-        + '<div style="color:var(--color-muted);font-size:11px;">El Gist se actualiza automáticamente cada noche via GitHub Actions. El scan on-demand usa datos en tiempo real.</div>'
         + '</div>';
 }
 
@@ -90,7 +68,7 @@ function renderSectors(el, sectors) {
     const maxAbs = Math.max(...sorted.map(s => Math.abs(s.rs || 0)));
 
     el.innerHTML = '<div style="background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius);padding:1rem;">'
-        + '<div style="color:var(--color-accent);font-size:12px;letter-spacing:0.08em;margin-bottom:0.75rem;">ROTACIÓN SECTORIAL · RS vs SPY</div>'
+        + '<div style="color:var(--color-accent);font-size:12px;letter-spacing:0.08em;margin-bottom:0.75rem;">ROTACIÓN SECTORIAL · RS vs SPY <span style="color:var(--color-muted);font-weight:normal;letter-spacing:0;">(63 sesiones · ~3 meses)</span></div>'
         + '<div style="display:flex;flex-direction:column;gap:6px;">'
         + sorted.map(s => {
             const rs     = s.rs || 0;
@@ -249,62 +227,6 @@ function renderTickerChart(data) {
     s.src = 'https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js';
     s.onload = draw;
     document.head.appendChild(s);
-}
-
-function setupScan(container) {
-    const btn    = container.querySelector('#rsrw-scan-btn');
-    const select = container.querySelector('#rsrw-max-tickers');
-    const result = container.querySelector('#rsrw-scan-result');
-
-    btn.addEventListener('click', async () => {
-        const max = select.value;
-        btn.textContent   = 'ESCANEANDO...';
-        btn.style.opacity = '0.7';
-        const estimate    = max >= 500 ? '4-5 minutos' : (max >= 250 ? '2 minutos' : '1 minuto');
-        result.innerHTML  = '<div style="color:var(--color-muted);font-size:12px;padding:0.5rem;">Escaneando ' + max + ' tickers... puede tardar hasta ' + estimate + '.</div>';
-
-        try {
-            const token = sessionStorage.getItem('rsu_token');
-            const res   = await fetch('/api/v1/rsrw/scan?max_tickers=' + max, { headers: token ? { 'Authorization': 'Bearer ' + token } : {} });
-            const data  = await res.json();
-            if (!data.ok) throw new Error(data.error || 'Error en el scan');
-
-            const requested = data.meta && data.meta.n_requested;
-            const got       = data.total;
-            let coverageHtml = '';
-            if (requested && got) {
-                const pct = Math.round((got / requested) * 100);
-                const color = pct >= 90 ? 'var(--color-accent)' : (pct >= 70 ? '#ff9800' : '#f23645');
-                coverageHtml = '<div style="color:' + color + ';font-size:11px;padding:0.4rem 0.5rem;">'
-                    + '✓ ' + got + ' / ' + requested + ' tickers con histórico suficiente (' + pct + '%)'
-                    + (pct < 90 ? ' — Yahoo puede haber limitado parte de la descarga; revisa la consola del backend para detalle.' : '')
-                    + '</div>';
-            }
-
-            const tempContainer  = document.createElement('div');
-            const sectorsBox     = document.createElement('div');
-            const leadersBox     = document.createElement('div');
-            const laggardsBox    = document.createElement('div');
-            leadersBox.style.marginTop  = '1rem';
-            laggardsBox.style.marginTop = '1rem';
-
-            renderSectors(sectorsBox, data.sectors);
-            renderTable(leadersBox, 'LÍDERES RS (SCAN LIVE)', data.leaders, true, null, data.total);
-            renderTable(laggardsBox, 'REZAGADOS RW (SCAN LIVE)', data.laggards, false, null, data.total);
-
-            tempContainer.appendChild(sectorsBox);
-            tempContainer.appendChild(leadersBox);
-            tempContainer.appendChild(laggardsBox);
-
-            result.innerHTML = coverageHtml;
-            result.appendChild(tempContainer);
-        } catch(e) {
-            result.innerHTML = errorMessage(e.message);
-        } finally {
-            btn.textContent   = 'ESCANEAR AHORA';
-            btn.style.opacity = '1';
-        }
-    });
 }
 
 function kpiCard(label, value, sub, color) {

@@ -1,0 +1,33 @@
+name: RS/RW Scanner S&P 500
+
+on:
+  schedule:
+    # Lunes a viernes a las 23:30 CET (22:30 UTC) — 15 min después del
+    # Scanner Universo, para no competir por rate limit de Yahoo con él.
+    - cron: '30 22 * * 1-5'
+  workflow_dispatch:  # Permite ejecutar manualmente desde la pestaña Actions
+
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          pip install requests yfinance pandas numpy
+
+      - name: Run RS/RW Scanner
+        env:
+          GIST_TOKEN:  ${{ secrets.GIST_TOKEN }}
+          RSRW_GIST_ID: ${{ secrets.RSRW_GIST_ID }}
+        run: |
+          python scripts/rsrw_scan.py

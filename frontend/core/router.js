@@ -5,6 +5,7 @@ import { renderTopbar } from '/components/topbar.js';
 import { initWebSocket } from '/core/websocket.js';
 import { api, setSession, getToken } from '/core/api.js';
 import { initCommandPalette } from '/components/command_palette.js';
+import { showDisclaimerModal } from '/components/disclaimer_modal.js';
 
 const ROUTES = {
     '/':           () => import('/pages/dashboard.js'),
@@ -252,6 +253,9 @@ if (token) {
             renderSidebar(document.getElementById('sidebar'), navigate);
             renderTopbar(document.getElementById('topbar'), navigate);
             setActiveNavItem(location.pathname);
+        }
+        if (me && me.disclaimer_accepted === false) {
+            showDisclaimerModal();
         }
     }).catch(() => {});
 }
