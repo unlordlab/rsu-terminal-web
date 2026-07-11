@@ -55,13 +55,17 @@ const MODULES = [
       videos:[{title:'Ingresos, Márgenes y Beneficio',duration:'14:00'},{title:'Rentabilidad y Eficiencia — ROE, ROA',duration:'13:00'},{title:'Valoración — P/E, PEG, EV/EBITDA, P/S, P/B',duration:'14:00'},{title:'Catalizadores — Earnings, Insiders, Institucionales',duration:'14:00'}]},
     { id:22, title:'El Triángulo RSU',           icon:'🔺', description:'Cuando el flujo de opciones, el posicionamiento institucional y la técnica se alinean, la probabilidad de una operación ganadora se dispara. La metodología de confluencia de tres señales.', duration:'50 min',
       videos:[{title:'Los Tres Pilares del Triángulo',duration:'12:00'},{title:'Order Flow — La Huella del Dinero Grande',duration:'13:00'},{title:'Posicionamiento — Qué Apuesta el Mercado',duration:'13:00'},{title:'El Checklist de Confluencia',duration:'12:00'}]},
+    { id:23, title:'Convicción a Largo Plazo',   icon:'🏔️', description:'Por qué a veces merece la pena pagar una prima de valoración por una posición estratégica en un tema de crecimiento secular — y cómo no confundir convicción con negación cuando la tesis se rompe.', duration:'50 min',
+      videos:[{title:'Pagar la Prima por Posición Estratégica',duration:'13:00'},{title:'Identificar Posiciones "Misión Crítica"',duration:'13:00'},{title:'El Marco Temporal de la Convicción',duration:'12:00'},{title:'Convicción Propia y Gestión del Riesgo',duration:'12:00'}]},
+    { id:24, title:'Volatilidad, el VIX y la Oportunidad', icon:'🌪️', description:'La volatilidad no es lo mismo que perder capital de forma permanente. Qué mide el VIX de verdad, por qué los picos extremos de miedo han sido históricamente zonas interesantes — y por qué desconfiar de cualquier tabla de rendimientos "hipotéticos".', duration:'50 min',
+      videos:[{title:'Volatilidad: Dispersión, no Pérdida',duration:'12:00'},{title:'El VIX — Qué Mide y Qué NO Mide',duration:'13:00'},{title:'Picos de Miedo y Reversión a la Media',duration:'13:00'},{title:'Usarlo con Criterio, no a Ciegas',duration:'12:00'}]},
 ];
 
 const PHASES = [
     { label:'🖥️ INTRO // RSU TERMINAL',              modules:[0] },
     { label:'📍 FASE 1 // ANÁLISIS TÉCNICO FUNDAMENTAL', modules:[1,2,3,4] },
-    { label:'🔬 FASE 2 // LECTURA DE MERCADO AVANZADA',  modules:[5,6,7,8,17] },
-    { label:'🎯 FASE 3 // ESTRATEGIA Y PLANIFICACIÓN',   modules:[9,10,11,18,19] },
+    { label:'🔬 FASE 2 // LECTURA DE MERCADO AVANZADA',  modules:[5,6,7,8,17,24] },
+    { label:'🎯 FASE 3 // ESTRATEGIA Y PLANIFICACIÓN',   modules:[9,10,11,18,19,23] },
     { label:'🚀 FASE 4 // EJECUCIÓN Y MENTALIDAD',       modules:[12,13,14,15] },
     { label:'🔄 FASE 5 // CICLO DE VIDA DEL PRECIO',     modules:[16] },
     { label:'🧮 FASE 6 // HERRAMIENTAS PROPIETARIAS RSU', modules:[20,21,22] },

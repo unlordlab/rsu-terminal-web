@@ -5442,4 +5442,254 @@ export const LESSONS = {
             },
         ]
     },
+
+    // ── MÓDULO 23, LECCIÓN 1 ───────────────────────────────────────────────
+    '23-1': {
+        moduleId: 23,
+        lessonIndex: 0,
+        title: 'Pagar la Prima por Posición Estratégica',
+        duration: '13 min',
+        intro: 'Hay dos formas legítimas de comprar una acción: pagar poco por algo mediocre que el mercado infravalora, o pagar de más por algo excepcional que el mercado todavía no ha terminado de reconocer. Esta lección trata de la segunda — y de por qué un múltiplo alto, por sí solo, nunca es motivo suficiente para descartar una posición.',
+        sections: [
+            {
+                heading: 'Dos filosofías, no una verdad universal',
+                blocks: [
+                    { type: 'text', content: 'El "value investing" clásico busca empresas baratas frente a sus fundamentales. El "growth investing" de convicción busca empresas que dominan un tema de crecimiento secular, aunque su múltiplo parezca caro hoy. Ninguna de las dos es "la correcta" — son marcos distintos, con perfiles de riesgo distintos, y la mayoría de carteras sólidas combinan ambas en proporciones distintas según el perfil del inversor.' },
+                    { type: 'concept', title: 'El error de juzgar solo por el múltiplo', content: 'Un PER de 60 no dice nada por sí solo. Dice mucho combinado con la pregunta correcta: ¿qué parte de ese múltiplo paga por crecimiento ya visible, y qué parte paga por una posición que ningún competidor puede replicar fácilmente?' },
+                ]
+            },
+            {
+                heading: 'Qué es un "moat" y por qué justifica una prima',
+                blocks: [
+                    { type: 'text', content: 'Un moat (foso defensivo) es cualquier barrera estructural que protege los márgenes futuros de una empresa de la competencia: escasez de producto, coste de cambio para el cliente, efectos de red, licencias regulatorias difíciles de replicar, o ser uno de muy pocos proveedores capaces de cumplir un requisito técnico o normativo concreto.' },
+                    { type: 'chart', id: 'moat_valuation_quadrant' },
+                    { type: 'text', content: 'La idea central de este marco es sencilla: una empresa cara con un moat real no está en la misma categoría que una empresa cara sin él. La primera puede seguir creciendo hacia su múltiplo. La segunda, tarde o temprano, tiene que caer hacia el suyo.' },
+                ]
+            },
+            {
+                heading: 'Esto no es una licencia para ignorar la valoración',
+                blocks: [
+                    { type: 'warning', content: 'Esta es la parte que con más facilidad se olvida cuando el mercado sube: "tiene moat" es la excusa más usada de la historia para justificar cualquier múltiplo, incluidos los que resultaron ser burbujas. La pregunta no es si la narrativa suena convincente — es si la barrera de entrada es estructural y verificable (contratos, cuota de mercado real, barreras regulatorias) o si es una historia que el mercado todavía no ha puesto a prueba.' },
+                    { type: 'tip', label: 'FILTRO MÍNIMO', content: 'Antes de aceptar una prima de valoración, exige evidencia concreta del moat — no solo el relato. Cuota de mercado documentada, contratos firmados, barreras regulatorias reales. Si la única prueba es "todo el mundo habla de ellos", no es un moat, es sentimiento.' },
+                ]
+            },
+        ]
+    },
+
+    // ── MÓDULO 23, LECCIÓN 2 ───────────────────────────────────────────────
+    '23-2': {
+        moduleId: 23,
+        lessonIndex: 1,
+        title: 'Identificar Posiciones "Misión Crítica"',
+        duration: '13 min',
+        intro: 'Una posición "misión crítica" es aquella en la que la empresa no es simplemente una más dentro de un sector en crecimiento — es una de las pocas (o la única) capaz de resolver un cuello de botella concreto dentro de ese sector. Esta lección da un marco para reconocerlas sin depender de una lista de tickers que quedará desactualizada en unos meses.',
+        sections: [
+            {
+                heading: 'Categorías de temas seculares, a modo de ejemplo',
+                blocks: [
+                    { type: 'text', content: 'Estos son tipos de contexto donde suele aparecer este tipo de posición — no una recomendación de ningún nombre concreto, sino el tipo de situación que vale la pena investigar cuando aparece:' },
+                    { type: 'concept', title: 'Escasez de un insumo estratégico', content: 'Sectores donde la oferta de un material o componente crítico está limitada por barreras regulatorias o de capacidad instalada, y la demanda depende de decisiones de política pública a largo plazo (energía, defensa, materias primas críticas).' },
+                    { type: 'concept', title: 'Infraestructura indispensable de un boom tecnológico', content: 'Cuando una tecnología crece más rápido que la infraestructura que la soporta (energía, refrigeración, capacidad de cómputo, conectividad), las empresas que resuelven ese cuello de botella físico capturan valor aunque no fabriquen el producto final de moda.' },
+                    { type: 'concept', title: 'Proveedor concentrado dentro de una cadena de suministro grande', content: 'Industrias donde un puñado de empresas controla un componente que aparece en la inmensa mayoría de proyectos del sector — su cuota de mercado, no su tamaño total, es lo que las hace relevantes.' },
+                    { type: 'concept', title: 'Prioridad de gasto público sostenida', content: 'Cuando un área recibe compromiso de gasto gubernamental plurianual (defensa, infraestructura estratégica), las empresas mejor posicionadas dentro de esos programas tienen visibilidad de ingresos que otras empresas del mismo sector no tienen.' },
+                ]
+            },
+            {
+                heading: 'El checklist de "misión crítica"',
+                blocks: [
+                    { type: 'chart', id: 'secular_theme_checklist' },
+                    { type: 'steps', items: [
+                        '¿Hay una barrera de entrada real (regulatoria, de capital, tecnológica) que impide que un competidor nuevo replique la posición en poco tiempo?',
+                        '¿La demanda del sector depende de una tendencia estructural plurianual, no de una moda del último trimestre?',
+                        '¿Esta empresa es una de las pocas capaces de cumplir el requisito técnico o normativo concreto, o simplemente "está en el sector de moda"?',
+                        '¿Existe evidencia verificable (contratos, cuota de mercado, alianzas documentadas) — no solo cobertura mediática favorable?',
+                    ]},
+                ]
+            },
+            {
+                heading: 'De la idea a la decisión',
+                blocks: [
+                    { type: 'text', content: 'Este checklist identifica candidatos, no compras automáticas. Una vez que un nombre pasa este filtro temático, todavía hace falta evaluar su ejecución financiera real — márgenes, generación de caja, calidad del balance — con las herramientas del Módulo 21 (Análisis Fundamental). La convicción temática sin ejecución financiera sólida es, simplemente, una apuesta narrativa.' },
+                ]
+            },
+        ]
+    },
+
+    // ── MÓDULO 23, LECCIÓN 3 ───────────────────────────────────────────────
+    '23-3': {
+        moduleId: 23,
+        lessonIndex: 2,
+        title: 'El Marco Temporal de la Convicción',
+        duration: '12 min',
+        intro: 'Una posición pensada para años no se evalúa con las mismas herramientas que una operación pensada para días. Esta lección explica por qué —y dónde está el límite entre "zoom out saludable" y "negación de que la tesis se ha roto".',
+        sections: [
+            {
+                heading: 'El ruido diario no es la misma señal en todos los horizontes',
+                blocks: [
+                    { type: 'text', content: 'Ya viste en el Módulo 10 (Alineación Multi-Temporalidad) que cuando mensual, semanal y diario coinciden, la probabilidad de una operación mejora. Para una posición de convicción a largo plazo, el principio es el mismo pero el peso cambia: el gráfico semanal o mensual es el que manda, y el diario pasa a ser una herramienta táctica — útil para decidir cuándo añadir en un retroceso, no para decidir si la tesis sigue viva.' },
+                    { type: 'chart', id: 'timeframe_noise_vs_signal' },
+                ]
+            },
+            {
+                heading: 'La prima de valoración amplifica la volatilidad',
+                blocks: [
+                    { type: 'text', content: 'Las empresas que cotizan con prima suelen caer más que la media en correcciones generales de mercado — cuando el apetito de riesgo baja, el capital rota hacia nombres defensivos y "de calidad barata", y las posiciones más caras son las primeras en sufrir compresión de múltiplo.' },
+                    { type: 'warning', content: 'Aquí está el matiz que más se pasa por alto: que la recuperación "suela" ser rápida cuando la tesis sigue intacta NO significa que toda caída sea ruido. A veces la corrección es el mercado repricing correctamente una tesis que se acaba de romper — un cambio de guidance, la pérdida de un contrato clave, o la entrada de un competidor que rompe la barrera de entrada. Confundir "esto es solo volatilidad" con "la tesis ya no es válida" es uno de los errores más caros en este estilo de inversión.' },
+                    { type: 'tip', label: 'PREGUNTA DE CONTROL', content: 'Antes de decirte a ti mismo "esto es solo ruido", vuelve al checklist de la Lección 2. Si alguna de esas respuestas ha cambiado — la barrera de entrada, el contrato, la cuota de mercado — no es ruido. Es la tesis rompiéndose.' },
+                ]
+            },
+        ]
+    },
+
+    // ── MÓDULO 23, LECCIÓN 4 ───────────────────────────────────────────────
+    '23-4': {
+        moduleId: 23,
+        lessonIndex: 3,
+        title: 'Convicción Propia y Gestión del Riesgo',
+        duration: '12 min',
+        intro: 'La convicción de otra persona nunca debería ser tu convicción. Esta lección cierra el módulo con lo que toda tesis de "misión crítica" necesita y muy pocas incluyen: una regla de tamaño de posición acorde al riesgo real que se está asumiendo.',
+        sections: [
+            {
+                heading: 'Investiga antes de heredar la convicción de otro',
+                blocks: [
+                    { type: 'text', content: 'Ninguna tesis ajena —por bien argumentada que esté— sustituye tu propio análisis. Si después de revisar el checklist de la Lección 2 y los fundamentales del Módulo 21 la posición no te convence, descartarla no es un fracaso: es exactamente cómo se supone que funciona el proceso. La convicción real viene de haber hecho el trabajo, no de haber leído el trabajo de otro.' },
+                ]
+            },
+            {
+                heading: 'El hueco que esta filosofía suele dejar: el tamaño de la posición',
+                blocks: [
+                    { type: 'text', content: 'Una posición de convicción a largo plazo no se gestiona con un stop loss técnico del 5% — no tendría sentido, porque estás dispuesto a aguantar correcciones mucho mayores mientras la tesis siga intacta. Pero eso NO significa que no haya control de riesgo. Significa que el control de riesgo se traslada del stop al tamaño de la posición.' },
+                    { type: 'chart', id: 'sizing_for_conviction' },
+                    { type: 'concept', title: 'El riesgo que un stop no captura', content: 'Una posición cara con moat real puede sufrir una compresión de múltiplo del 40-50% en una rotación de mercado sin que la tesis se haya roto. Si el tamaño de esa posición es excesivo para tu cartera, esa caída — aunque "sea solo volatilidad" — puede sacarte del juego antes de que la tesis tenga tiempo de jugar a tu favor.' },
+                    { type: 'text', content: 'Revisa el Módulo 12 (Gestión del Riesgo) y el Módulo 18 (Risk/Reward): los mismos principios de tamaño de posición y de no concentrar el riesgo total de cartera en una sola idea aplican aquí con más fuerza, no con menos, precisamente porque estas posiciones se sostienen durante más tiempo y con más volatilidad tolerada.' },
+                ]
+            },
+            {
+                heading: 'Resumen del módulo',
+                blocks: [
+                    { type: 'tip', label: 'CONVICCIÓN A LARGO PLAZO — LA REGLA', content: 'Pagar una prima solo se justifica con un moat verificable, no narrativo. Identifica posiciones "misión crítica" con el checklist, no con la lista de moda. Evalúa la tesis en semanal/mensual, pero vigila si alguna de las condiciones estructurales ha cambiado. Y sea cual sea tu nivel de convicción, el tamaño de la posición sigue siendo tu única protección real cuando la volatilidad llega — y llegará.' },
+                ]
+            },
+        ]
+    },
+
+    // ── MÓDULO 24, LECCIÓN 1 ───────────────────────────────────────────────
+    '24-1': {
+        moduleId: 24,
+        lessonIndex: 0,
+        title: 'Volatilidad: Dispersión, no Pérdida',
+        duration: '12 min',
+        intro: 'Uno de los errores más comunes en trading es tratar "volátil" y "arriesgado de perder dinero" como sinónimos. No lo son. Esta lección separa los dos conceptos, porque confundirlos lleva a dos errores opuestos: asustarse de estrategias que solo son ruidosas, o no tener respeto a estrategias que sí son genuinamente peligrosas.',
+        sections: [
+            {
+                heading: 'Qué es la volatilidad, en términos simples',
+                blocks: [
+                    { type: 'text', content: 'La volatilidad es la dispersión de los rendimientos alrededor de su media — en la práctica, es lo que hace que una cartera se sienta suave o movida de un mes a otro. Más volatilidad significa una diferencia más grande entre los meses buenos y los malos, caídas intermedias más profundas, y un camino menos lineal hacia el resultado final.' },
+                    { type: 'chart', id: 'volatility_vs_permanent_loss' },
+                    { type: 'concept', title: 'La distinción clave', content: 'Una cartera puede ser volátil y aun así crear mucho valor, si sus meses positivos compensan de sobra a los negativos. Volatilidad es el CAMINO. Pérdida permanente de capital es el DESTINO. No son lo mismo, y el gráfico de arriba lo muestra: la línea de arriba sube y baja mucho más, pero termina más alto.' },
+                ]
+            },
+            {
+                heading: 'El precio de entrada a un potencial mayor',
+                blocks: [
+                    { type: 'text', content: 'Una cartera diversificada y de baja rotación suele tener volatilidad y retorno bastante contenidos. Una estrategia más concentrada y oportunista — el estilo que enseña esta Academia: CAN SLIM, RS/RW, El Triángulo RSU — casi siempre tiene volatilidad más alta, precisamente porque intenta capturar un movimiento concreto, no diluirse en 500 nombres.' },
+                    { type: 'warning', content: 'Esto no es gratis. La volatilidad más alta puede poner a prueba tu paciencia y acortar tu horizonte temporal si no estás mentalmente preparado para ella — es lo que ya viste en el Módulo 23 sobre convicción: la volatilidad es, literalmente, el precio que se paga por el acceso a un mejor potencial de subida. No hay atajo para evitarla mientras sigas buscando ese tipo de retorno.' },
+                ]
+            },
+        ]
+    },
+
+    // ── MÓDULO 24, LECCIÓN 2 ───────────────────────────────────────────────
+    '24-2': {
+        moduleId: 24,
+        lessonIndex: 1,
+        title: 'El VIX — Qué Mide y Qué NO Mide',
+        duration: '13 min',
+        intro: 'El VIX es probablemente el indicador de sentimiento más citado en todo el mercado — y también uno de los más malinterpretados. Esta lección aclara exactamente qué información contiene y, más importante todavía, qué información NO contiene.',
+        sections: [
+            {
+                heading: 'Qué es el VIX',
+                blocks: [
+                    { type: 'text', content: 'El VIX (CBOE Volatility Index) mide la volatilidad implícita a 30 días que el mercado de opciones está pricing para el S&P 500. Se le llama "el índice del miedo" porque tiende a subir cuando los inversores pagan más por protección a corto plazo frente a caídas — es decir, cuando hay más demanda de puts como seguro.' },
+                ]
+            },
+            {
+                heading: 'El matiz que casi todo el mundo pasa por alto',
+                blocks: [
+                    { type: 'chart', id: 'vix_direction_neutral' },
+                    { type: 'concept', title: 'El VIX no predice dirección', content: 'Un VIX alto dice que el mercado espera movimientos MÁS GRANDES. No dice si esos movimientos van a ser al alza o a la baja. Un VIX de 40 es perfectamente compatible tanto con un desplome del 15% como con una subida del 15% en pocas semanas — el VIX solo habla de magnitud esperada, nunca de sentido.' },
+                    { type: 'text', content: 'Esto tiene una consecuencia práctica directa: reaccionar a "el VIX está alto" como si fuera automáticamente una señal bajista (o alcista) es un error de lectura. Lo que sí es cierto es que los entornos de VIX alto suelen sentirse incómodos en tiempo real — y precisamente por eso pueden generar errores de valoración (mispricing) y mejores oportunidades hacia adelante para quien mantenga la cabeza fría.' },
+                ]
+            },
+            {
+                heading: 'Ya tienes esta herramienta en RSU Terminal',
+                blocks: [
+                    { type: 'text', content: 'El widget de VIX Term Structure en Market ya te muestra si el mercado está en contango (normal) o backwardation (estrés) — y como viste en su propio tooltip, la backwardation señala capitulación, que es una oportunidad de compra en el marco histórico, no una señal para salir corriendo. Fear & Greed Index y Credit Spreads son las otras dos piezas del mismo puzle: ninguna por sí sola te dice todo, pero juntas dan una lectura mucho más completa que mirar solo el número del VIX.' },
+                ]
+            },
+        ]
+    },
+
+    // ── MÓDULO 24, LECCIÓN 3 ───────────────────────────────────────────────
+    '24-3': {
+        moduleId: 24,
+        lessonIndex: 2,
+        title: 'Picos de Miedo y Reversión a la Media',
+        duration: '13 min',
+        intro: 'Esta es la lección con más matices de todo el módulo, así que léela entera, no solo el titular. Hay un patrón histórico real detrás de "comprar en el miedo extremo" — pero también hay razones serias para no tratarlo como una fórmula segura.',
+        sections: [
+            {
+                heading: 'El patrón — qué dice la historia del mercado',
+                blocks: [
+                    { type: 'text', content: 'A lo largo de la historia del S&P 500, los picos extremos del VIX (episodios de pánico genuino, no subidas normales) han coincidido, con bastante frecuencia, con zonas donde el mercado terminó recuperándose en los meses siguientes — 2008-2009, marzo de 2020, y otros episodios de estrés agudo son los ejemplos más citados. La lógica de fondo es de sobrerreacción: el miedo extremo tiende a empujar los precios más abajo de lo que la situación real justifica, y ese exceso se acaba corrigiendo.' },
+                    { type: 'chart', id: 'fear_spike_mean_reversion' },
+                ]
+            },
+            {
+                heading: 'Por qué hay que tratar este patrón con mucho cuidado',
+                blocks: [
+                    { type: 'warning', content: 'Los episodios de VIX verdaderamente extremo (por encima de 30-35, sostenido) son RAROS — apenas un puñado por década. Con tan pocos casos, cualquier estadística sobre "qué pasó después" tiene un margen de error enorme. Una muestra de 6-8 episodios no es una ley del mercado, es una anécdota con encanto estadístico.' },
+                    { type: 'concept', title: 'Sesgo de superviviente', content: 'El patrón se observa en un mercado (la bolsa americana) que, en su conjunto, ha tenido una tendencia alcista de muy largo plazo durante el periodo estudiado. Eso no garantiza que el patrón se repita igual en un mercado, o en un periodo, con una tendencia de fondo distinta.' },
+                    { type: 'concept', title: 'El "después" no es "inmediatamente"', content: 'Que el retorno a 3-6 meses vista tienda a ser positivo NO significa que el suelo llegue enseguida. El precio puede seguir cayendo semanas o meses antes de girar — intentar acertar el mínimo exacto es, en la práctica, imposible.' },
+                    { type: 'concept', title: '"Esta vez sí es distinto" — a veces lo es', content: 'No todos los picos de VIX se resuelven rápido. Los primeros tramos de 2000 y de 2008 también empezaron con picos de miedo que "deberían" haber marcado suelo según el patrón histórico — y en ambos casos el mercado siguió cayendo mucho más antes de la recuperación real. El patrón es una tendencia estadística, no una garantía caso por caso.' },
+                ]
+            },
+            {
+                heading: 'Una advertencia extra, con ejemplo real',
+                blocks: [
+                    { type: 'warning', content: 'Ten especial cuidado con cualquier tabla de "rendimientos históricos" que veas en presentaciones de gestoras o fondos — incluida la que pudiera darte pie a esta misma lección. Es muy habitual que ese tipo de materiales incluyan, en la letra pequeña, avisos como "resultados hipotéticos", "preparados con la ventaja de la retrospectiva" o "no deben considerarse indicativos de la habilidad del gestor". Eso no es un tecnicismo legal sin importancia — es literalmente la propia gestora admitiendo que esos números no son un histórico real y auditado. Un backtest construido sabiendo ya cómo terminó la historia (con la ventaja de la retrospectiva) tiende a parecer mucho mejor de lo que habría sido operar esa estrategia en tiempo real, sin saber el desenlace.' },
+                ]
+            },
+        ]
+    },
+
+    // ── MÓDULO 24, LECCIÓN 4 ───────────────────────────────────────────────
+    '24-4': {
+        moduleId: 24,
+        lessonIndex: 3,
+        title: 'Usarlo con Criterio, no a Ciegas',
+        duration: '12 min',
+        intro: 'Cerramos el módulo con cómo aplicar todo esto de forma responsable, usando lo que ya tienes construido en la propia terminal — no comprando a ciegas cada vez que el VIX suba de un número concreto.',
+        sections: [
+            {
+                heading: 'No operes por un solo número',
+                blocks: [
+                    { type: 'text', content: 'El VIX por sí solo no te dice si estás ante un pánico genuino con probabilidad de reversión, o el arranque de algo estructuralmente más grave. Combínalo con el resto de señales de amplitud que ya tienes en Market: Fear & Greed Index (sus 7 componentes, no solo el número final), Amplitud de Mercado (McClellan real, % del S&P sobre su SMA50), y Credit Spreads (si el crédito corporativo también se está deteriorando, es una señal de estrés más seria que solo un VIX alto).' },
+                ]
+            },
+            {
+                heading: 'El tamaño de la posición sigue siendo tu única protección real',
+                blocks: [
+                    { type: 'text', content: 'Igual que en el Módulo 23, si decides actuar sobre esta tesis de "el miedo extremo históricamente ha sido zona interesante", el control de riesgo no desaparece — se traslada al tamaño de la posición y a un plan de entrada escalonado (no todo de golpe en el primer día de pánico), en vez de a un stop ajustado que probablemente saltaría por el ruido normal de un episodio de VIX alto.' },
+                    { type: 'text', content: 'Revisa el Módulo 12 (Gestión del Riesgo) y el Módulo 18 (Risk/Reward) antes de aplicar cualquier cosa de este módulo con dinero real.' },
+                ]
+            },
+            {
+                heading: 'Resumen del módulo',
+                blocks: [
+                    { type: 'tip', label: 'VOLATILIDAD Y VIX — LA REGLA', content: 'Volatilidad es dispersión, no pérdida permanente — pero es el precio de entrada a un mayor potencial. El VIX mide magnitud esperada, nunca dirección. El miedo extremo ha sido, históricamente y con matices importantes, una zona interesante — pero con muestra pequeña, sin garantía de timing, y sin que "esta vez" esté descartado. Y desconfía siempre de una tabla de rendimientos que no diga explícitamente si es real y auditada, o "hipotética".' },
+                ]
+            },
+        ]
+    },
 };

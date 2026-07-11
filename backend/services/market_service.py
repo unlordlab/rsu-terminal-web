@@ -606,7 +606,13 @@ def get_shiller_cape() -> dict:
     if cached: return cached
     try:
         import pandas as pd
-        url = "http://www.econ.yale.edu/~shiller/data/ie_data.xls"
+        # La URL clásica (econ.yale.edu/~shiller/data/ie_data.xls, la página
+        # personal antigua de Shiller en Yale) está CONGELADA desde septiembre
+        # de 2023 — ya no se actualiza. La fuente activa ahora es
+        # shillerdata.com, su web oficial actual ("Access ALL DATA FROM
+        # PROFESSOR ROBERT J. Shiller"), que aloja el mismo fichero
+        # actualizado en un CDN distinto.
+        url = "https://img1.wsimg.com/blobby/go/e5e77e0b-59d1-44d9-ab25-4763ac982e53/downloads/907c87f4-4176-4a13-9487-abddeadceb1b/ie_data.xls"
 
         # Fichero .xls antiguo (no .xlsx) — necesita el motor xlrd. La hoja
         # "Data" tiene varias filas de texto descriptivo antes de la cabecera
@@ -627,14 +633,67 @@ def get_shiller_cape() -> dict:
                 break
         if header_row is None:
             raise ValueError("No se encontró la fila de cabecera con la celda exacta 'CAPE' en el fichero de Shiller")
+        print(f"[ShillerCAPE] Fila de cabecera detectada: {header_row}")
 
         df = pd.read_excel(url, sheet_name="Data", header=header_row, engine="xlrd")
         df.columns = [str(c).strip() for c in df.columns]
-        cape_col = next((c for c in df.columns if c.upper() == "CAPE"), None)
-        if not cape_col:
-            raise ValueError("No se encontró la columna 'CAPE' con ese nombre exacto tras la cabecera")
+        print(f"[ShillerCAPE] Columnas detectadas ({len(df.columns)}): {list(df.columns)}")
 
-        cape_raw = pd.to_numeric(df[cape_col], errors="coerce").reset_index(drop=True)
+        # NO nos fiamos del NOMBRE de columna — la cabecera real de Shiller
+        # está partida en dos filas fusionadas (p.ej. "P/E10 or" en una fila
+        # y "CAPE" en la fila de abajo, que pandas lee como si fueran dos
+        # columnas distintas al usar una sola fila de cabecera). Esto quiere
+        # decir que la columna literalmente llamada "CAPE" puede en realidad
+        # ser otra serie distinta (por los valores que da, todo apunta a que
+        # es "Excess CAPE Yield", una métrica de rentabilidad, no el ratio).
+        # En vez de perseguir el nombre exacto, se prueban las columnas
+        # candidatas por NOMBRE y se valida cada una por el VALOR: el CAPE
+        # real del S&P 500 nunca ha estado fuera de, aproximadamente, 3-50 en
+        # 150 años, así que la columna correcta es la que tenga la mediana
+        # dentro de ese rango con suficientes datos (arranca ~10 años después
+        # del inicio de la serie, en torno a 1881, así que debe haber varios
+        # cientos de valores como mínimo).
+        candidate_names = ["CAPE", "P/E10 OR", "P/E10", "TR P/E10 OR", "TR CAPE"]
+        cape_col, cape_raw = None, None
+
+        def _try_column(col_name):
+            series = pd.to_numeric(df[col_name], errors="coerce")
+            valid  = series.dropna()
+            if len(valid) < 400:
+                return None
+            median = float(valid.median())
+            print(f"[ShillerCAPE]   Candidata '{col_name}': {len(valid)} valores, mediana={median:.2f}")
+            if 3 <= median <= 50:
+                return series
+            return None
+
+        for name in candidate_names:
+            match = next((c for c in df.columns if c.upper() == name), None)
+            if match:
+                result_series = _try_column(match)
+                if result_series is not None:
+                    cape_col, cape_raw = match, result_series.reset_index(drop=True)
+                    break
+
+        # Último recurso: si ninguna de las columnas "candidatas por nombre"
+        # cuadra, se escanean TODAS las columnas numéricas del fichero
+        # buscando la que tenga una mediana plausible de CAPE.
+        if cape_raw is None:
+            print("[ShillerCAPE] Ninguna columna candidata por nombre encajó — escaneando todas las columnas por valor...")
+            for col in df.columns:
+                result_series = _try_column(col)
+                if result_series is not None:
+                    cape_col, cape_raw = col, result_series.reset_index(drop=True)
+                    break
+
+        if cape_raw is None:
+            raise ValueError("No se encontró ninguna columna con valores plausibles de CAPE (mediana 3-50) en el fichero")
+
+        print(f"[ShillerCAPE] Columna elegida tras validar por valor: '{cape_col}'")
+        non_null = cape_raw.dropna()
+        print(f"[ShillerCAPE] Columna '{cape_col}': {len(non_null)} valores no nulos de {len(cape_raw)} filas totales")
+        print(f"[ShillerCAPE] Primeros 5 valores no nulos: {non_null.head(5).tolist()}")
+        print(f"[ShillerCAPE] Últimos 5 valores no nulos: {non_null.tail(5).tolist()}")
 
         # IMPORTANTE: no se parsea la columna "Date" del fichero de Shiller —
         # su formato (AAAA.M) es ambiguo por cómo Excel recorta decimales
@@ -659,6 +718,16 @@ def get_shiller_cape() -> dict:
         mean_all  = round(sum(cape_values) / len(cape_values), 2)
         std_all   = round(float(pd.Series(cape_values).std()), 2)
 
+        # Comprobación de cordura: el CAPE real nunca ha estado fuera de,
+        # aproximadamente, 3-50 en 150 años de histórico. Si sale de ese
+        # rango, algo del parseo está mal (columna equivocada, desalineación
+        # de filas...) — mejor avisarlo claramente que servir un número falso
+        # con la misma confianza que uno real.
+        plausible = 3 <= current <= 50
+        if not plausible:
+            print(f"[ShillerCAPE] AVISO: CAPE actual = {current}, fuera del rango histórico plausible "
+                  f"(3-50) — probable error de parseo (columna o fila equivocada). Revisar columnas arriba.")
+
         if current > CAPE_THRESHOLDS["elevado"]: level, level_color = "MUY ALTO", "#f23645"
         elif current > CAPE_THRESHOLDS["normal"]: level, level_color = "ELEVADO", "#ffb800"
         elif current > CAPE_THRESHOLDS["bajo"]:   level, level_color = "NORMAL",  "#90ee90"
@@ -675,11 +744,15 @@ def get_shiller_cape() -> dict:
             "level_color":    level_color,
             "thresholds":     CAPE_THRESHOLDS,
             "history":        history,
+            "plausible":      plausible,
             "timestamp":      get_timestamp(),
         }
         # 24h — dato mensual, no hace falta refrescar más a menudo. El fichero
         # completo (150+ años) tampoco es barato de descargar/parsear cada vez.
-        cache.set("market:shiller_cape", result, 86400)
+        # Si el valor no parece plausible, NO se cachea 24h — así el próximo
+        # intento (tras arreglar el parseo) no se queda atascado con el dato
+        # malo hasta mañana.
+        cache.set("market:shiller_cape", result, 86400 if plausible else 60)
         return result
     except Exception as e:
         print(f"[ShillerCAPE] ERROR: {type(e).__name__}: {e}")

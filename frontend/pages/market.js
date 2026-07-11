@@ -1136,8 +1136,11 @@ window.__spreadsSwitch = function(btn) {
 
 // ── CAPE DE SHILLER ───────────────────────────────────────────────────────────
 
-let _shillerData = null;
+const MONTH_ABBR = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
+
+let _shillerData  = null;
 let _shillerChart = null;
+let _shillerRange = '5y'; // '5y' | 'all'
 
 async function loadShillerCape(el) {
     if (!el) return;
@@ -1164,23 +1167,56 @@ async function loadShillerCape(el) {
             + '</div>'
             + '</div>';
 
+        const tabs = '<div style="display:flex;gap:6px;padding:8px 12px;border-bottom:1px solid var(--color-border);">'
+            + '<button class="shiller-tab" data-range="1y" onclick="window.__shillerSwitch(this)" style="background:transparent;color:var(--color-muted);border:1px solid var(--color-border);border-radius:3px;padding:3px 10px;font-size:10px;cursor:pointer;">ÚLTIMO AÑO</button>'
+            + '<button class="shiller-tab" data-range="5y" onclick="window.__shillerSwitch(this)" style="background:var(--color-accent);color:#000;border:none;border-radius:3px;padding:3px 10px;font-size:10px;cursor:pointer;">ÚLTIMOS 5 AÑOS</button>'
+            + '<button class="shiller-tab" data-range="all" onclick="window.__shillerSwitch(this)" style="background:transparent;color:var(--color-muted);border:1px solid var(--color-border);border-radius:3px;padding:3px 10px;font-size:10px;cursor:pointer;">TODO EL HISTÓRICO (1881-hoy)</button>'
+            + '</div>';
+
         const chartHtml = '<div style="height:260px;padding:10px;"><canvas id="shiller-chart"></canvas></div>';
+        const warningHtml = data.plausible === false
+            ? '<div style="background:rgba(242,54,69,0.08);border-top:1px solid #f2364544;padding:8px 14px;color:#f23645;font-size:11px;">⚠ Estos números no parecen fiables (fuera del rango histórico plausible del CAPE) — probable fallo de parseo del fichero de origen. Revisa el log del backend (busca "[ShillerCAPE]").</div>'
+            : '';
 
-        el.innerHTML = widgetShell('CAPE DE SHILLER ' + tt('shiller-cape'), 'Valoración de largo plazo · Yale · dato de ' + data.date + ' · niveles críticos marcados', summary + chartHtml, data.timestamp);
+        el.innerHTML = widgetShell('CAPE DE SHILLER ' + tt('shiller-cape'), 'Valoración de largo plazo · Yale · dato de ' + data.date + ' · niveles críticos marcados', summary + tabs + chartHtml + warningHtml, data.timestamp);
 
+        _shillerRange = '5y';
         _loadChartJsThen(() => renderShillerChart());
     } catch(e) {
         el.innerHTML = widgetShell('CAPE DE SHILLER', 'Valoración de largo plazo · Yale', widgetError(e.message));
     }
 }
 
+window.__shillerSwitch = function(btn) {
+    _shillerRange = btn.getAttribute('data-range');
+    renderShillerChart();
+    const siblings = btn.parentElement.querySelectorAll('.shiller-tab');
+    siblings.forEach(function(b) {
+        b.style.background = 'transparent';
+        b.style.color = 'var(--color-muted)';
+        b.style.border = '1px solid var(--color-border)';
+    });
+    btn.style.background = 'var(--color-accent)';
+    btn.style.color = '#000';
+    btn.style.border = 'none';
+};
+
 function renderShillerChart() {
     const ctx = document.getElementById('shiller-chart');
     if (!ctx || !_shillerData || !_shillerData.history) return;
 
     const th = _shillerData.thresholds || {};
-    const hist = _shillerData.history;
-    const labels = hist.map(h => h.date.slice(0, 4));
+    // 1 año: últimos 12 meses. 5 años: últimos 60 meses. Ambos con mes visible
+    // en el eje X. Histórico completo: solo el año (145 años con mes sería
+    // ilegible).
+    const fullHist = _shillerData.history;
+    const monthly  = _shillerRange === '1y' || _shillerRange === '5y';
+    const sliceN   = _shillerRange === '1y' ? 12 : (_shillerRange === '5y' ? 60 : null);
+    const hist     = sliceN ? fullHist.slice(-sliceN) : fullHist;
+    const labels = hist.map(h => {
+        const [y, m] = h.date.split('-');
+        return monthly ? (MONTH_ABBR[parseInt(m, 10) - 1] + ' ' + y.slice(2)) : y;
+    });
     const values = hist.map(h => h.cape);
     const flat = (v) => labels.map(() => v);
 
@@ -1191,7 +1227,7 @@ function renderShillerChart() {
         data: {
             labels,
             datasets: [
-                { label: 'CAPE', data: values, borderColor: '#00d9ff', backgroundColor: '#00d9ff12', borderWidth: 1, pointRadius: 0, fill: true, tension: 0.1 },
+                { label: 'CAPE', data: values, borderColor: '#00d9ff', backgroundColor: '#00d9ff12', borderWidth: 1, pointRadius: monthly ? 2 : 0, fill: true, tension: 0.1 },
                 { label: 'Elevado (' + th.normal + ')', data: flat(th.normal), borderColor: '#ffb800', borderWidth: 1, pointRadius: 0, borderDash: [5,4], fill: false },
                 { label: 'Muy alto (' + th.elevado + ')', data: flat(th.elevado), borderColor: '#f23645', borderWidth: 1, pointRadius: 0, borderDash: [5,4], fill: false },
             ]
@@ -1207,7 +1243,7 @@ function renderShillerChart() {
                 },
             },
             scales: {
-                x: { ticks: { color: '#555', font: { size: 9 }, maxTicksLimit: 10, maxRotation: 0 }, grid: { color: 'rgba(255,255,255,0.03)' } },
+                x: { ticks: { color: '#555', font: { size: 9 }, maxTicksLimit: monthly ? 15 : 10, maxRotation: monthly ? 45 : 0 }, grid: { color: 'rgba(255,255,255,0.03)' } },
                 y: { ticks: { color: '#555', font: { size: 9 } }, grid: { color: 'rgba(255,255,255,0.04)' } }
             }
         }

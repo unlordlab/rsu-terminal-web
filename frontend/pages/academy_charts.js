@@ -11303,6 +11303,161 @@ function triangle_workflow_order() {
     </svg>`;
 }
 
+function moat_valuation_quadrant() {
+    const W=680, H=320;
+    const ox=90, oy=40, w=520, h=220;
+    return `<svg viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg">
+        <rect width="${W}" height="${H}" fill="${C.bg}" rx="6"/>
+        <line x1="${ox}" y1="${oy}" x2="${ox}" y2="${oy+h}" stroke="${C.border}" stroke-width="1.5"/>
+        <line x1="${ox}" y1="${oy+h}" x2="${ox+w}" y2="${oy+h}" stroke="${C.border}" stroke-width="1.5"/>
+        <line x1="${ox+w/2}" y1="${oy}" x2="${ox+w/2}" y2="${oy+h}" stroke="${C.border}" stroke-width="1" stroke-dasharray="3,3" opacity="0.5"/>
+        <line x1="${ox}" y1="${oy+h/2}" x2="${ox+w}" y2="${oy+h/2}" stroke="${C.border}" stroke-width="1" stroke-dasharray="3,3" opacity="0.5"/>
+
+        <rect x="${ox+w/2}" y="${oy}" width="${w/2}" height="${h/2}" fill="${C.accent}" opacity="0.10"/>
+        <text x="${ox+w*0.75}" y="${oy+h*0.22}" fill="${C.accent}" font-size="11" font-family="monospace" text-anchor="middle" font-weight="bold">PRIMA JUSTIFICADA</text>
+        <text x="${ox+w*0.75}" y="${oy+h*0.32}" fill="${C.accent}" font-size="9" font-family="monospace" text-anchor="middle">Cara + moat real → objetivo</text>
+
+        <rect x="${ox}" y="${oy}" width="${w/2}" height="${h/2}" fill="${C.cyan}" opacity="0.08"/>
+        <text x="${ox+w*0.25}" y="${oy+h*0.22}" fill="${C.cyan}" font-size="11" font-family="monospace" text-anchor="middle" font-weight="bold">VALUE CLÁSICO</text>
+        <text x="${ox+w*0.25}" y="${oy+h*0.32}" fill="${C.cyan}" font-size="9" font-family="monospace" text-anchor="middle">Barata + moat real</text>
+
+        <rect x="${ox}" y="${oy+h/2}" width="${w/2}" height="${h/2}" fill="${C.orange}" opacity="0.08"/>
+        <text x="${ox+w*0.25}" y="${oy+h*0.72}" fill="${C.orange}" font-size="11" font-family="monospace" text-anchor="middle" font-weight="bold">TRAMPA DE VALOR</text>
+        <text x="${ox+w*0.25}" y="${oy+h*0.82}" fill="${C.orange}" font-size="9" font-family="monospace" text-anchor="middle">Barata, sin ventaja real</text>
+
+        <rect x="${ox+w/2}" y="${oy+h/2}" width="${w/2}" height="${h/2}" fill="${C.red}" opacity="0.10"/>
+        <text x="${ox+w*0.75}" y="${oy+h*0.72}" fill="${C.red}" font-size="11" font-family="monospace" text-anchor="middle" font-weight="bold">BURBUJA NARRATIVA</text>
+        <text x="${ox+w*0.75}" y="${oy+h*0.82}" fill="${C.red}" font-size="9" font-family="monospace" text-anchor="middle">Cara, sin moat real → evitar</text>
+
+        <text x="${ox+w/2}" y="${oy+h+22}" fill="${C.textDim}" font-size="10" font-family="monospace" text-anchor="middle">VALORACIÓN (barata → cara)</text>
+        <text x="${ox-15}" y="${oy+h/2}" fill="${C.textDim}" font-size="10" font-family="monospace" text-anchor="middle" transform="rotate(-90 ${ox-15} ${oy+h/2})">VENTAJA COMPETITIVA (débil → fuerte)</text>
+    </svg>`;
+}
+
+function secular_theme_checklist() {
+    const W=680, H=260;
+    const items = [
+        'Barrera de entrada estructural real',
+        'Demanda ligada a tendencia plurianual',
+        'Una de las pocas capaces de cumplirlo',
+        'Evidencia verificable, no solo relato',
+    ];
+    let rows='';
+    items.forEach((t,i)=>{
+        const y = 40 + i*52;
+        rows += `<rect x="30" y="${y}" width="22" height="22" rx="4" fill="none" stroke="${C.accent}" stroke-width="1.5"/>
+        <path d="M35 ${y+11} L40 ${y+16} L48 ${y+6}" stroke="${C.accent}" stroke-width="2" fill="none"/>
+        <text x="66" y="${y+16}" fill="${C.text}" font-size="12" font-family="monospace">${t}</text>`;
+    });
+    return `<svg viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg">
+        <rect width="${W}" height="${H}" fill="${C.bg}" rx="6"/>
+        <text x="30" y="22" fill="${C.textDim}" font-size="10" font-family="monospace">CHECKLIST — POSICIÓN "MISIÓN CRÍTICA"</text>
+        ${rows}
+    </svg>`;
+}
+
+function timeframe_noise_vs_signal() {
+    const W=680, H=260;
+    // Ruido diario (zigzag) arriba, misma tendencia suavizada semanal/mensual abajo
+    const dailyPts = [0,8,-4,14,2,18,10,24,14,30,20,26,32,28,38,34,44,40,48,44,52,50,58,54,62];
+    const smoothPts = [0,3,6,9,12,15,18,21,24,27,30,33,36,39,42,45,48,51,54,57,58,59,60,61,62];
+    const scaleX = 600/(dailyPts.length-1), baseYd=70, baseYs=200;
+    const toPath = (pts, baseY) => pts.map((v,i)=> (i===0?'M':'L') + (40+i*scaleX) + ' ' + (baseY - v*1.1)).join(' ');
+    return `<svg viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg">
+        <rect width="${W}" height="${H}" fill="${C.bg}" rx="6"/>
+        <text x="40" y="20" fill="${C.red}" font-size="10" font-family="monospace">DIARIO — ruido, decisiones tácticas</text>
+        <path d="${toPath(dailyPts, baseYd)}" stroke="${C.red}" stroke-width="1.5" fill="none" opacity="0.85"/>
+        <text x="40" y="150" fill="${C.accent}" font-size="10" font-family="monospace">SEMANAL/MENSUAL — tendencia, decisión de tesis</text>
+        <path d="${toPath(smoothPts, baseYs)}" stroke="${C.accent}" stroke-width="2.5" fill="none"/>
+        <text x="${W/2}" y="${H-10}" fill="${C.textDim}" font-size="10" font-family="monospace" text-anchor="middle">Misma tendencia de fondo — el ruido diario desaparece al alejar el zoom</text>
+    </svg>`;
+}
+
+function sizing_for_conviction() {
+    const W=680, H=210;
+    const rows = [
+        {label:'Swing táctico', pct:'3-5%', desc:'Stop técnico ajustado, tesis corta', w:150},
+        {label:'Convicción media', pct:'5-8%', desc:'Tesis con checklist parcial', w:260},
+        {label:'Alta convicción "misión crítica"', pct:'8-12%', desc:'Checklist completo + fundamentales sólidos', w:380},
+    ];
+    let content='', y=30;
+    rows.forEach(({label,pct,desc,w})=>{
+        content += `<rect x="20" y="${y}" width="${w}" height="42" fill="${C.accent}" opacity="0.10" rx="4" stroke="${C.accent}" stroke-width="1"/>
+        <text x="34" y="${y+17}" fill="${C.text}" font-size="11" font-family="monospace" font-weight="bold">${label}</text>
+        <text x="34" y="${y+32}" fill="${C.textDim}" font-size="9" font-family="monospace">${desc}</text>
+        <text x="${20+w-10}" y="${y+25}" fill="${C.accent}" font-size="12" font-family="monospace" text-anchor="end" font-weight="bold">${pct}</text>`;
+        y += 56;
+    });
+    return `<svg viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg">
+        <rect width="${W}" height="${H}" fill="${C.bg}" rx="6"/>
+        ${content}
+        <text x="${W/2}" y="${H-8}" fill="${C.textDim}" font-size="10" font-family="monospace" text-anchor="middle">Cifras ilustrativas — ajusta a tu propia tolerancia y tamaño de cartera total</text>
+    </svg>`;
+}
+
+function volatility_vs_permanent_loss() {
+    const W=680, H=280;
+    const ox=40, oy=30, w=600, h=200;
+    // Línea volátil que sube mucho más (con vaivenes) — línea suave que sube poco
+    const volPts    = [0,18,8,32,14,40,22,52,30,48,38,62,44,58,52,74,60,70,80];
+    const smoothPts = [0,4,7,11,14,17,20,23,25,27,29,30,31,32,32,33,33,34,34];
+    const scaleX = w/(volPts.length-1);
+    const toPath = (pts) => pts.map((v,i)=> (i===0?'M':'L') + (ox+i*scaleX) + ' ' + (oy+h - v*2)).join(' ');
+    return `<svg viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg">
+        <rect width="${W}" height="${H}" fill="${C.bg}" rx="6"/>
+        <path d="${toPath(volPts)}" stroke="${C.accent}" stroke-width="2" fill="none"/>
+        <path d="${toPath(smoothPts)}" stroke="${C.cyan}" stroke-width="2" fill="none"/>
+        <circle cx="${ox+w}" cy="${oy+h-80*2}" r="4" fill="${C.accent}"/>
+        <circle cx="${ox+w}" cy="${oy+h-34*2}" r="4" fill="${C.cyan}"/>
+        <text x="${ox+w+8}" y="${oy+h-80*2+4}" fill="${C.accent}" font-size="11" font-family="monospace">Volátil — termina más alto</text>
+        <text x="${ox+w-585}" y="${oy+h-34*2-8}" fill="${C.cyan}" font-size="11" font-family="monospace">Suave — termina más bajo</text>
+        <text x="${W/2}" y="${H-5}" fill="${C.textDim}" font-size="10" font-family="monospace" text-anchor="middle">Ambas líneas son ganadoras — la diferencia es el camino, no el destino</text>
+    </svg>`;
+}
+
+function vix_direction_neutral() {
+    const W=680, H=260;
+    const cx=W/2, cy=70;
+    return `<svg viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg">
+        <rect width="${W}" height="${H}" fill="${C.bg}" rx="6"/>
+        <rect x="${cx-90}" y="${cy-25}" width="180" height="50" rx="6" fill="${C.orange}" opacity="0.15" stroke="${C.orange}" stroke-width="1.5"/>
+        <text x="${cx}" y="${cy+5}" fill="${C.orange}" font-size="13" font-family="monospace" text-anchor="middle" font-weight="bold">VIX ALTO</text>
+        <text x="${cx}" y="${cy+20}" fill="${C.textDim}" font-size="9" font-family="monospace" text-anchor="middle">(movimiento grande esperado)</text>
+
+        <line x1="${cx-40}" y1="${cy+30}" x2="${cx-180}" y2="${cy+120}" stroke="${C.accent}" stroke-width="2"/>
+        <line x1="${cx+40}" y1="${cy+30}" x2="${cx+180}" y2="${cy+120}" stroke="${C.red}" stroke-width="2"/>
+
+        <rect x="${cx-250}" y="${cy+130}" width="140" height="50" rx="6" fill="${C.accent}" opacity="0.12" stroke="${C.accent}" stroke-width="1.5"/>
+        <text x="${cx-180}" y="${cy+152}" fill="${C.accent}" font-size="12" font-family="monospace" text-anchor="middle" font-weight="bold">+15%</text>
+        <text x="${cx-180}" y="${cy+168}" fill="${C.textDim}" font-size="9" font-family="monospace" text-anchor="middle">igual de posible</text>
+
+        <rect x="${cx+110}" y="${cy+130}" width="140" height="50" rx="6" fill="${C.red}" opacity="0.12" stroke="${C.red}" stroke-width="1.5"/>
+        <text x="${cx+180}" y="${cy+152}" fill="${C.red}" font-size="12" font-family="monospace" text-anchor="middle" font-weight="bold">-15%</text>
+        <text x="${cx+180}" y="${cy+168}" fill="${C.textDim}" font-size="9" font-family="monospace" text-anchor="middle">igual de posible</text>
+
+        <text x="${cx}" y="${H-10}" fill="${C.textDim}" font-size="10" font-family="monospace" text-anchor="middle">El VIX mide CUÁNTO se puede mover el mercado, nunca hacia dónde</text>
+    </svg>`;
+}
+
+function fear_spike_mean_reversion() {
+    const W=680, H=280;
+    const ox=40, oy=30, w=600, h=190;
+    // Caída brusca (pánico) seguida de rango ancho de posibles recuperaciones — ILUSTRATIVO
+    const pricePts = [60,58,50,38,22,14,10,16,24,30,26,34,40,38,46,52,50,58,64,60,68];
+    const scaleX = w/(pricePts.length-1);
+    const toPath = (pts) => pts.map((v,i)=> (i===0?'M':'L') + (ox+i*scaleX) + ' ' + (oy+h - v*2.6)).join(' ');
+    const spikeX = ox + 6*scaleX;
+    return `<svg viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg">
+        <rect width="${W}" height="${H}" fill="${C.bg}" rx="6"/>
+        <rect x="${spikeX-10}" y="${oy}" width="60" height="${h}" fill="${C.red}" opacity="0.08"/>
+        <line x1="${spikeX}" y1="${oy}" x2="${spikeX}" y2="${oy+h}" stroke="${C.red}" stroke-width="1" stroke-dasharray="3,3"/>
+        <text x="${spikeX}" y="${oy-8}" fill="${C.red}" font-size="10" font-family="monospace" text-anchor="middle">PICO DE MIEDO (VIX &gt; 30)</text>
+        <path d="${toPath(pricePts)}" stroke="${C.cyan}" stroke-width="2" fill="none"/>
+        <text x="${ox+w-10}" y="${oy+15}" fill="${C.textDim}" font-size="9" font-family="monospace" text-anchor="end">ILUSTRATIVO — no un histórico real</text>
+        <text x="${W/2}" y="${H-8}" fill="${C.textDim}" font-size="10" font-family="monospace" text-anchor="middle">Tendencia estadística observada — con muestra pequeña y sin garantía de timing exacto</text>
+    </svg>`;
+}
+
 export const CHARTS = {
     // Módulo 0
     rsu_philosophy, rsu_community, rsu_for_who,
@@ -11418,4 +11573,8 @@ export const CHARTS = {
     triangle_three_pillars, triangle_confidence_scale, order_flow_signal_reading,
     order_flow_consistency_days, positioning_three_signals, positioning_dynamic_warning,
     triangle_workflow_order,
+    // Módulo 23
+    moat_valuation_quadrant, secular_theme_checklist, timeframe_noise_vs_signal, sizing_for_conviction,
+    // Módulo 24
+    volatility_vs_permanent_loss, vix_direction_neutral, fear_spike_mean_reversion,
 };
