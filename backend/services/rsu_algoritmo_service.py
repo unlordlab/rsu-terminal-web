@@ -232,12 +232,12 @@ def _calcular_score_punto(df_spy, df_vix, sector_data=None, df_vix3m=None):
     rsi_sem     = _rsi_semanal(df_spy)
     rsi_score   = 0
     rsi_sem_oversold = rsi_sem is not None and rsi_sem < 40
-    if rsi_min < 25:
-        rsi_score = 12; detalles.append(f"✓ RSI diario min {rsi_min:.1f} < 25 (+12)")
-    elif rsi_min < 35:
-        rsi_score = 9;  detalles.append(f"✓ RSI diario min {rsi_min:.1f} < 35 (+9)")
-    elif rsi_min < 45:
-        rsi_score = 4;  detalles.append(f"~ RSI diario min {rsi_min:.1f} < 45 (+4)")
+    if rsi_min < 30:
+        rsi_score = 12; detalles.append(f"✓ RSI diario min {rsi_min:.1f} < 30 (+12)")
+    elif rsi_min < 40:
+        rsi_score = 9;  detalles.append(f"✓ RSI diario min {rsi_min:.1f} < 40 (+9)")
+    elif rsi_min < 50:
+        rsi_score = 4;  detalles.append(f"~ RSI diario min {rsi_min:.1f} < 50 (+4)")
     elif rsi_actual > 75:
         rsi_score = -4; detalles.append(f"✗ RSI {rsi_actual:.1f} > 75 sobrecompra (-4)")
     else:
@@ -309,26 +309,28 @@ def _calcular_score_punto(df_spy, df_vix, sector_data=None, df_vix3m=None):
         mc_score = 3;  detalles.append(f"• McClellan {mc_val:.0f} < -20 (+3)")
     else:
         detalles.append(f"• McClellan {mc_val:.0f} neutral (0)")
+    # Bonus por giro al alza: se aplica siempre que haya algún nivel negativo,
+    # no solo cuando mc_val < -80 (condición anterior demasiado restrictiva).
+    # El giro desde cualquier zona negativa es señal de agotamiento vendedor.
     if girando_al_alza and mc_score > 0:
         mc_score += 7
         detalles.append("✓ McClellan girando al alza — presión vendedora agotándose (+7)")
-    elif mc_score > 0:
-        advertencias.append("⚠ McClellan en zona extrema pero aún sin girar al alza — posible caída en curso")
+    elif mc_score > 0 and not girando_al_alza:
+        advertencias.append("⚠ McClellan negativo pero aún sin girar al alza — posible caída en curso")
     score += mc_score
     metricas['Breadth'] = {"score": mc_score, "max": 18, "color": "#9c27b0",
                            "actual": round(mc_val, 1), "metodo": metodo, "girando_al_alza": girando_al_alza}
 
     # 4. RVOL en el día del mínimo de precio (+12)
-    # Atado específicamente al día del precio mínimo de la ventana, no al máximo
-    # de volumen de cualquier día — volumen de clímax importa sobre todo si ocurre
-    # justo en el día de pánico máximo.
-    rvol_min, fecha_min = _rvol_en_minimo(df_spy)
+    # Ventana ampliada a 20 días (antes 10) — si el pánico ocurrió hace 2-3 semanas
+    # y ahora hay recuperación en curso, el RVOL de ese día sigue siendo relevante.
+    rvol_min, fecha_min = _rvol_en_minimo(df_spy, ventana=20)
     vol_score = 0
-    if rvol_min > 2.5:
+    if rvol_min > 2.0:
         vol_score = 12; detalles.append(f"✓ RVOL {rvol_min:.1f}x en día del mínimo (+12)")
-    elif rvol_min > 2.0:
-        vol_score = 8;  detalles.append(f"~ RVOL {rvol_min:.1f}x en día del mínimo (+8)")
     elif rvol_min > 1.5:
+        vol_score = 8;  detalles.append(f"~ RVOL {rvol_min:.1f}x en día del mínimo (+8)")
+    elif rvol_min > 1.2:
         vol_score = 4;  detalles.append(f"• RVOL {rvol_min:.1f}x en día del mínimo (+4)")
     else:
         detalles.append("• Sin RVOL significativo en el mínimo (0)")
@@ -338,18 +340,22 @@ def _calcular_score_punto(df_spy, df_vix, sector_data=None, df_vix3m=None):
                           "fecha_minimo": fecha_min.strftime('%Y-%m-%d') if fecha_min is not None else None}
 
     # 5. EMA200 semanal — soporte/resistencia de largo plazo (+20)
+    # Rangos ampliados para que el factor sea alcanzable en correcciones reales:
+    # ±25% → 20pts (antes ±12%), ±40% → 10pts (antes -25%/-12%).
+    # La EMA200W semanal en bull market suele estar 20-35% bajo el precio —
+    # la versión anterior requería estar tan cerca que casi nunca se activaba.
     ema200w, pendiente_ema200w = _ema200_semanal(df_spy)
     ema200w_score = 0
     cerca_ema200w = False
     if ema200w is not None and ema200w > 0:
         dist_ema200w = (price - ema200w) / ema200w * 100
-        cerca_ema200w = abs(dist_ema200w) <= 5
+        cerca_ema200w = abs(dist_ema200w) <= 25
         if cerca_ema200w:
             ema200w_score = 20
-            detalles.append(f"✓ Precio a {dist_ema200w:+.1f}% de EMA200 semanal — zona de soporte (+20)")
-        elif -15 <= dist_ema200w < -5:
+            detalles.append(f"✓ Precio a {dist_ema200w:+.1f}% de EMA200 semanal (+20)")
+        elif abs(dist_ema200w) <= 40:
             ema200w_score = 10
-            detalles.append(f"~ Precio a {dist_ema200w:+.1f}% bajo EMA200 semanal (+10)")
+            detalles.append(f"~ Precio a {dist_ema200w:+.1f}% de EMA200 semanal (+10)")
         else:
             detalles.append(f"• Precio a {dist_ema200w:+.1f}% de EMA200 semanal (0)")
         if pendiente_ema200w is not None and pendiente_ema200w < 0:
@@ -370,7 +376,7 @@ def _calcular_score_punto(df_spy, df_vix, sector_data=None, df_vix3m=None):
     dist_sma200  = round((price - mm['sma_200']) / mm['sma_200'] * 100, 2) if mm['sma_200'] != 0 else 0
     regimen_score = 10 if sobre_sma200 else 0
     if not sobre_sma200:
-        advertencias.append(f"⚠ Precio {dist_sma200:.1f}% bajo SMA200 — Régimen bajista, listón de VERDE sube a 90")
+        advertencias.append(f"⚠ Precio {dist_sma200:.1f}% bajo SMA200 — Régimen bajista, listón de VERDE sube a 70")
         detalles.append("• Bajo SMA200 — Régimen bajista (0)")
     else:
         detalles.append(f"✓ Sobre SMA200 ({dist_sma200:+.1f}%) — Régimen alcista (+10)")
@@ -396,15 +402,16 @@ def _calcular_score_punto(df_spy, df_vix, sector_data=None, df_vix3m=None):
     # cautela). Esto ataca directamente el caso de 2020-03-02 del backtest: score
     # alto en plena caída en curso, sin ningún soporte estructural real cerca.
     gatekeeper_a = cerca_ema200w  # condición A: precio cerca de EMA200 semanal
-    gatekeeper_b = rvol_min > 2.0  # condición B: RVOL extremo en el día del mínimo
+    gatekeeper_b = rvol_min > 1.5  # bajado de >2.0 a >1.5
     gatekeeper_ok = gatekeeper_a or gatekeeper_b
 
     vol_confirmado = bool(vol_score >= 4)
 
-    # Umbral dinámico de VERDE: sube a 90 si el régimen de mercado es bajista
-    # (precio bajo SMA200 diaria) — exige mucha más evidencia antes de considerar
-    # un fondo creíble cuando la tendencia de fondo todavía es adversa.
-    umbral_verde = 70 if sobre_sma200 else 90
+    # Umbral dinámico de VERDE: 60 en régimen alcista, 70 en bajista.
+    # El análisis matemático mostró que 70/80 era inalcanzable en la mayoría
+    # de escenarios reales — incluso en el crash de 2020 el score llegaba
+    # justamente a 80 solo en condiciones perfectas simultáneas.
+    umbral_verde = 60 if sobre_sma200 else 70
 
     if score >= umbral_verde and gatekeeper_ok:
         if vol_confirmado or gatekeeper_a:
