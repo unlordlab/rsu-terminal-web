@@ -59,13 +59,15 @@ const MODULES = [
       videos:[{title:'Pagar la Prima por Posición Estratégica',duration:'13:00'},{title:'Identificar Posiciones "Misión Crítica"',duration:'13:00'},{title:'El Marco Temporal de la Convicción',duration:'12:00'},{title:'Convicción Propia y Gestión del Riesgo',duration:'12:00'}]},
     { id:24, title:'Volatilidad, el VIX y la Oportunidad', icon:'🌪️', description:'La volatilidad no es lo mismo que perder capital de forma permanente. Qué mide el VIX de verdad, por qué los picos extremos de miedo han sido históricamente zonas interesantes — y por qué desconfiar de cualquier tabla de rendimientos "hipotéticos".', duration:'50 min',
       videos:[{title:'Volatilidad: Dispersión, no Pérdida',duration:'12:00'},{title:'El VIX — Qué Mide y Qué NO Mide',duration:'13:00'},{title:'Picos de Miedo y Reversión a la Media',duration:'13:00'},{title:'Usarlo con Criterio, no a Ciegas',duration:'12:00'}]},
+    { id:25, title:'Construir una Posición con DCA', icon:'🧱', description:'Promediar coste con aportaciones fijas no es lo mismo que escalar una posición en una caída — y confundirlas es un error caro, sobre todo en instrumentos apalancados. Cómo construir cualquiera de las dos con criterio, no a ciegas.', duration:'50 min',
+      videos:[{title:'DCA Clásico — Mecánica y Psicología',duration:'12:00'},{title:'DCA vs. Invertir de Golpe — la Evidencia',duration:'13:00'},{title:'DCA vs. Entrada Escalonada — No son lo Mismo',duration:'13:00'},{title:'Construir tu Propia Posición con Criterio',duration:'12:00'}]},
 ];
 
 const PHASES = [
     { label:'🖥️ INTRO // RSU TERMINAL',              modules:[0] },
     { label:'📍 FASE 1 // ANÁLISIS TÉCNICO FUNDAMENTAL', modules:[1,2,3,4] },
     { label:'🔬 FASE 2 // LECTURA DE MERCADO AVANZADA',  modules:[5,6,7,8,17,24] },
-    { label:'🎯 FASE 3 // ESTRATEGIA Y PLANIFICACIÓN',   modules:[9,10,11,18,19,23] },
+    { label:'🎯 FASE 3 // ESTRATEGIA Y PLANIFICACIÓN',   modules:[9,10,11,18,19,23,25] },
     { label:'🚀 FASE 4 // EJECUCIÓN Y MENTALIDAD',       modules:[12,13,14,15] },
     { label:'🔄 FASE 5 // CICLO DE VIDA DEL PRECIO',     modules:[16] },
     { label:'🧮 FASE 6 // HERRAMIENTAS PROPIETARIAS RSU', modules:[20,21,22] },

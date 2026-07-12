@@ -34,12 +34,19 @@ function pageShell() {
         + '<select id="alert-metric" style="background:var(--color-bg,#0a0a0a);border:1px solid var(--color-border);border-radius:var(--radius);padding:8px 10px;color:var(--color-text);font-family:var(--font-mono);font-size:12px;outline:none;">'
         + '<option value="price">Precio</option>'
         + '<option value="rvol">RVOL</option>'
+        + '<option value="ema_touch">Toque de EMA</option>'
         + '</select>'
         + '<select id="alert-condition" style="background:var(--color-bg,#0a0a0a);border:1px solid var(--color-border);border-radius:var(--radius);padding:8px 10px;color:var(--color-text);font-family:var(--font-mono);font-size:12px;outline:none;">'
         + '<option value="above">Por encima de</option>'
         + '<option value="below">Por debajo de</option>'
         + '</select>'
         + '<input id="alert-price" type="number" step="0.01" placeholder="Precio objetivo ($)" style="width:160px;background:var(--color-bg,#0a0a0a);border:1px solid var(--color-border);border-radius:var(--radius);padding:8px 10px;color:var(--color-text);font-family:var(--font-mono);font-size:13px;outline:none;">'
+        + '<select id="alert-ema-period" style="display:none;background:var(--color-bg,#0a0a0a);border:1px solid var(--color-border);border-radius:var(--radius);padding:8px 10px;color:var(--color-text);font-family:var(--font-mono);font-size:12px;outline:none;">'
+        + '<option value="10">EMA 10</option>'
+        + '<option value="20">EMA 20</option>'
+        + '<option value="50" selected>EMA 50</option>'
+        + '<option value="200">EMA 200</option>'
+        + '</select>'
         + '<button id="alert-create-btn" style="background:var(--color-accent);color:#000;border:none;border-radius:var(--radius);padding:8px 20px;font-family:var(--font-mono);font-size:12px;cursor:pointer;font-weight:500;">CREAR ALERTA</button>'
         + '<span id="alert-form-msg" style="font-size:11px;color:var(--color-muted);"></span>'
         + '</div>'
@@ -159,13 +166,17 @@ async function loadAlerts(container) {
             const header = '<div style="display:grid;grid-template-columns:90px 130px 110px 100px 1fr 40px;gap:8px;padding:7px 14px;border-bottom:1px solid var(--color-border);font-size:10px;color:var(--color-muted);">'
                 + '<div>TICKER</div><div>CONDICIÓN</div><div style="text-align:right;">OBJETIVO</div><div>ESTADO</div><div>DETALLE</div><div></div></div>';
             const rows = data.data.map(a => {
-                const isRvol    = a.metric === 'rvol';
-                const condLabel = (a.condition === 'above' ? 'Por encima de ' : 'Por debajo de ') + (isRvol ? 'RVOL' : 'precio');
-                const targetFmt = isRvol ? Number(a.target_price).toFixed(2) + 'x' : '$' + Number(a.target_price).toFixed(2);
+                const isRvol = a.metric === 'rvol';
+                const isEma  = a.metric === 'ema_touch';
+                const condLabel = isEma
+                    ? ('Toque de EMA' + a.ema_period)
+                    : (a.condition === 'above' ? 'Por encima de ' : 'Por debajo de ') + (isRvol ? 'RVOL' : 'precio');
+                const targetFmt = isEma ? '±0,5%' : (isRvol ? Number(a.target_price).toFixed(2) + 'x' : '$' + Number(a.target_price).toFixed(2));
                 const stColor   = IMPACT_COLOR[a.status] || 'var(--color-muted)';
                 const bg        = a.status === 'triggered' && !a.seen ? 'rgba(0,255,173,0.05)' : 'transparent';
+                const fmtTriggerPrice = (v) => isRvol ? v.toFixed(2) + 'x' : '$' + v.toFixed(2);
                 const detail    = a.status === 'triggered'
-                    ? ('Disparada a ' + (a.triggered_price != null ? (isRvol ? a.triggered_price.toFixed(2) + 'x' : '$' + a.triggered_price.toFixed(2)) : '?') + ' el ' + (a.triggered_at || '').substring(0, 10))
+                    ? ('Disparada a ' + (a.triggered_price != null ? fmtTriggerPrice(a.triggered_price) : '?') + ' el ' + (a.triggered_at || '').substring(0, 10))
                     : ('Creada el ' + (a.created_at || '').substring(0, 10));
                 return '<div style="display:grid;grid-template-columns:90px 130px 110px 100px 1fr 40px;gap:8px;padding:8px 14px;border-bottom:1px solid var(--color-border);font-size:12px;align-items:center;background:' + bg + ';">'
                     + '<div class="ticker-link" style="color:var(--color-accent);cursor:pointer;font-weight:500;" onclick="goToResearch(\'' + a.ticker + '\')">' + a.ticker + '</div>'
@@ -197,32 +208,50 @@ async function loadAlerts(container) {
 }
 
 function wireCreateAlert(container) {
-    const btn    = container.querySelector('#alert-create-btn');
-    const msg    = container.querySelector('#alert-form-msg');
-    const metric = container.querySelector('#alert-metric');
-    const price  = container.querySelector('#alert-price');
+    const btn       = container.querySelector('#alert-create-btn');
+    const msg       = container.querySelector('#alert-form-msg');
+    const metric    = container.querySelector('#alert-metric');
+    const price     = container.querySelector('#alert-price');
+    const condition = container.querySelector('#alert-condition');
+    const emaPeriod = container.querySelector('#alert-ema-period');
 
     metric.addEventListener('change', () => {
+        const isEma = metric.value === 'ema_touch';
+        price.style.display     = isEma ? 'none' : '';
+        condition.style.display = isEma ? 'none' : '';
+        emaPeriod.style.display = isEma ? '' : 'none';
         price.placeholder = metric.value === 'rvol' ? 'RVOL objetivo (ej. 2.5)' : 'Precio objetivo ($)';
     });
 
     btn.addEventListener('click', async () => {
         const ticker      = container.querySelector('#alert-ticker').value.trim().toUpperCase();
-        const condition   = container.querySelector('#alert-condition').value;
         const metricValue = metric.value;
-        const target      = parseFloat(price.value);
-        if (!ticker || !target || target <= 0) {
+        const isEma       = metricValue === 'ema_touch';
+
+        if (!ticker) {
             msg.style.color = '#f23645';
-            msg.textContent = metricValue === 'rvol' ? 'Rellena ticker y RVOL objetivo (p.ej. 2.5)' : 'Rellena ticker y precio objetivo';
+            msg.textContent = 'Escribe un ticker';
             return;
         }
+        if (!isEma) {
+            const target = parseFloat(price.value);
+            if (!target || target <= 0) {
+                msg.style.color = '#f23645';
+                msg.textContent = metricValue === 'rvol' ? 'Rellena ticker y RVOL objetivo (p.ej. 2.5)' : 'Rellena ticker y precio objetivo';
+                return;
+            }
+        }
+
         btn.disabled = true;
         msg.style.color = 'var(--color-muted)';
         msg.textContent = 'Creando...';
         try {
+            const payload = isEma
+                ? { ticker, metric: metricValue, ema_period: parseInt(emaPeriod.value, 10) }
+                : { ticker, condition: condition.value, target_price: parseFloat(price.value), metric: metricValue };
             const res  = await fetch('/api/v1/watchlist/alerts', {
                 method: 'POST', headers: authHeader(),
-                body: JSON.stringify({ ticker, condition, target_price: target, metric: metricValue }),
+                body: JSON.stringify(payload),
             });
             const data = await res.json();
             if (data.ok) {

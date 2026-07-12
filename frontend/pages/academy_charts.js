@@ -11458,6 +11458,77 @@ function fear_spike_mean_reversion() {
     </svg>`;
 }
 
+function dca_mechanics() {
+    const W=680, H=260;
+    const prices = [100, 80, 60, 90, 110];
+    const amount = 1000;
+    const ox=50, oy=30, w=580, h=170;
+    const barW = 80;
+    let content = '';
+    prices.forEach((p, i) => {
+        const shares = (amount / p).toFixed(1);
+        const x = ox + i * (w/prices.length) + 15;
+        const barH = (200 - p) * 0.7;
+        content += `<rect x="${x}" y="${oy+h-barH}" width="${barW}" height="${barH}" fill="${C.cyan}" opacity="0.7" rx="3"/>
+        <text x="${x+barW/2}" y="${oy+h-barH-8}" fill="${C.text}" font-size="11" font-family="monospace" text-anchor="middle">$${p}</text>
+        <text x="${x+barW/2}" y="${oy+h+18}" fill="${C.accent}" font-size="10" font-family="monospace" text-anchor="middle">${shares} acc.</text>
+        <text x="${x+barW/2}" y="${oy+h+32}" fill="${C.textDim}" font-size="9" font-family="monospace" text-anchor="middle">Mes ${i+1} · $${amount}</text>`;
+    });
+    return `<svg viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg">
+        <rect width="${W}" height="${H}" fill="${C.bg}" rx="6"/>
+        ${content}
+        <text x="${W/2}" y="${H-8}" fill="${C.textDim}" font-size="10" font-family="monospace" text-anchor="middle">Misma cantidad cada mes → más participaciones cuando el precio cae, menos cuando sube</text>
+    </svg>`;
+}
+
+function dca_vs_lumpsum() {
+    const W=680, H=220;
+    const cx = W/2, cy = 100, r = 70;
+    // Donut simple: ~65% lump sum gana, ~35% DCA gana (cifra ilustrativa del texto: "dos de cada tres")
+    const lumpAngle = 360 * 0.65;
+    const toXY = (angleDeg, radius) => {
+        const rad = (angleDeg - 90) * Math.PI / 180;
+        return [cx + radius * Math.cos(rad), cy + radius * Math.sin(rad)];
+    };
+    const [x1,y1] = toXY(0, r);
+    const [x2,y2] = toXY(lumpAngle, r);
+    const largeArc = lumpAngle > 180 ? 1 : 0;
+    return `<svg viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg">
+        <rect width="${W}" height="${H}" fill="${C.bg}" rx="6"/>
+        <path d="M${cx},${cy} L${x1},${y1} A${r},${r} 0 ${largeArc} 1 ${x2},${y2} Z" fill="${C.accent}" opacity="0.75"/>
+        <path d="M${cx},${cy} L${x2},${y2} A${r},${r} 0 ${1-largeArc} 1 ${x1},${y1} Z" fill="${C.orange}" opacity="0.75"/>
+        <text x="${cx+230}" y="${cy-15}" fill="${C.accent}" font-size="12" font-family="monospace" text-anchor="end">■ Invertir de golpe gana</text>
+        <text x="${cx+230}" y="${cy+5}" fill="${C.textDim}" font-size="10" font-family="monospace" text-anchor="end">~2 de cada 3 periodos históricos</text>
+        <text x="${cx+230}" y="${cy+35}" fill="${C.orange}" font-size="12" font-family="monospace" text-anchor="end">■ DCA gana</text>
+        <text x="${cx+230}" y="${cy+55}" fill="${C.textDim}" font-size="10" font-family="monospace" text-anchor="end">~1 de cada 3 — suele coincidir con caídas fuertes</text>
+        <text x="${W/2}" y="${H-8}" fill="${C.textDim}" font-size="9" font-family="monospace" text-anchor="middle">Cifras ilustrativas de estudios históricos sobre mercados con tendencia alcista de largo plazo — no una garantía</text>
+    </svg>`;
+}
+
+function leveraged_decay_example() {
+    const W=680, H=260;
+    const ox=50, oy=30, w=580, h=180;
+    // Dos líneas: SPX (cae -10%, sube +11.1% -> vuelve a 100) y SPXL (cae -30%, sube +33.3% -> queda en ~94)
+    const spxPts  = [100, 90, 90*1.111];
+    const spxlPts = [100, 70, 70*1.333];
+    const labels  = ['Inicio', 'Tras la caída', 'Tras la recuperación'];
+    const scaleX = w / (spxPts.length - 1);
+    const scaleY = h / 40;
+    const toY = (v) => oy + h - (v - 60) * scaleY;
+    const toPath = (pts) => pts.map((v,i) => (i===0?'M':'L') + (ox+i*scaleX) + ' ' + toY(v)).join(' ');
+    return `<svg viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg">
+        <rect width="${W}" height="${H}" fill="${C.bg}" rx="6"/>
+        <line x1="${ox}" y1="${toY(100)}" x2="${ox+w}" y2="${toY(100)}" stroke="${C.textDim}" stroke-width="1" stroke-dasharray="3,3"/>
+        <text x="${ox+w+5}" y="${toY(100)+4}" fill="${C.textDim}" font-size="9" font-family="monospace">100 (punto de partida)</text>
+        <path d="${toPath(spxPts)}" stroke="${C.cyan}" stroke-width="2.5" fill="none"/>
+        <path d="${toPath(spxlPts)}" stroke="${C.red}" stroke-width="2.5" fill="none"/>
+        <text x="${ox+w*0.95}" y="${toY(spxPts[2])-10}" fill="${C.cyan}" font-size="11" font-family="monospace" text-anchor="end">SPX: vuelve a 100 (breakeven)</text>
+        <text x="${ox+w*0.95}" y="${toY(spxlPts[2])+18}" fill="${C.red}" font-size="11" font-family="monospace" text-anchor="end">SPXL: se queda en ~94 (-6%)</text>
+        ${labels.map((l,i) => `<text x="${ox+i*scaleX}" y="${oy+h+20}" fill="${C.textDim}" font-size="9" font-family="monospace" text-anchor="middle">${l}</text>`).join('')}
+        <text x="${W/2}" y="${H-5}" fill="${C.textDim}" font-size="10" font-family="monospace" text-anchor="middle">-10%/+11,1% en el SPX = breakeven. -30%/+33,3% en SPXL (3x) ≠ breakeven, por la decay diaria</text>
+    </svg>`;
+}
+
 export const CHARTS = {
     // Módulo 0
     rsu_philosophy, rsu_community, rsu_for_who,
@@ -11577,4 +11648,6 @@ export const CHARTS = {
     moat_valuation_quadrant, secular_theme_checklist, timeframe_noise_vs_signal, sizing_for_conviction,
     // Módulo 24
     volatility_vs_permanent_loss, vix_direction_neutral, fear_spike_mean_reversion,
+    // Módulo 25
+    dca_mechanics, dca_vs_lumpsum, leveraged_decay_example,
 };

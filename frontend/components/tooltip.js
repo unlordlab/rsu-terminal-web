@@ -61,14 +61,15 @@ LÍMITE: hasta 50 tickers por usuario. Es una lista personal — no se comparte 
 
     "price-alerts": {
         title: "Alertas",
-        short: "Avisa cuando un ticker cruza un umbral de precio o de RVOL (por encima o por debajo). Se comprueban cada ~90 segundos.",
-        long: `Cada alerta compara un valor en vivo del ticker contra el objetivo que fijaste, con la condición "por encima de" o "por debajo de". Dos métricas disponibles:
+        short: "Avisa cuando un ticker cruza un umbral de precio o de RVOL, o toca una de sus EMAs (10/20/50/200). Se comprueban cada ~90 segundos.",
+        long: `Cada alerta compara un valor en vivo del ticker contra el objetivo que fijaste. Tres métricas disponibles:
 
-▸ PRECIO: compara el precio actual contra un precio objetivo en $.
+▸ PRECIO: compara el precio actual contra un precio objetivo en $, con la condición "por encima de" o "por debajo de".
 ▸ RVOL: compara el volumen relativo actual (volumen de hoy / media de 20 sesiones) contra un múltiplo objetivo — p.ej. "RVOL por encima de 2.5" avisa cuando el ticker negocia 2,5 veces su volumen medio, señal típica de entrada de dinero grande.
+▸ TOQUE DE EMA: avisa cuando el precio se acerca a menos de un 0,5% de la EMA que elijas (10, 20, 50 o 200 sesiones) — útil para vigilar posibles retrocesos a una media móvil clave sin tener que mirar el gráfico constantemente. A diferencia de precio/RVOL, no tiene "por encima" o "por debajo": es un aviso de proximidad, en cualquier dirección.
 
 CÓMO SE COMPRUEBAN:
-Un proceso en segundo plano revisa todas las alertas activas de todos los usuarios cada ~90 segundos (agrupando por ticker, así que no importa cuánta gente tenga una alerta en el mismo nombre — el dato se pide una sola vez por ticker y métrica). En cuanto se cumple la condición, la alerta pasa a "DISPARADA" y aparece un aviso (número rojo) junto a Watchlist en el menú lateral.
+Un proceso en segundo plano revisa todas las alertas activas de todos los usuarios cada ~90 segundos (agrupando por ticker, así que no importa cuánta gente tenga una alerta en el mismo nombre — el dato se pide una sola vez por ticker y métrica). Para las alertas de EMA, el valor de la media de las sesiones ya cerradas se calcula una vez al día (no tiene sentido recalcularlo cada 90 segundos si los cierres de ayer no cambian) y se combina con el precio en vivo de hoy en cada ciclo. En cuanto se cumple la condición, la alerta pasa a "DISPARADA" y aparece un aviso (número rojo) junto a Watchlist en el menú lateral.
 
 IMPORTANTE — SOLO DENTRO DE LA TERMINAL:
 Por ahora el aviso es únicamente dentro de la app (campanita + listado en Watchlist). Todavía no hay notificación por email, Discord o Telegram — si cierras la pestaña, la alerta se sigue comprobando en el servidor y la verás marcada como disparada la próxima vez que entres, pero no recibirás ningún aviso fuera de la terminal.
@@ -1314,8 +1315,16 @@ Los activos no están siempre en tendencia clara — pasan buena parte del tiemp
 
     "market-phase": {
         title: "Fase de Mercado (1-4)",
-        short: "Clasificación de las 4 fases clásicas de Stan Weinstein: Acumulación, Avance, Distribución, Declive.",
+        short: "Clasificación de las 4 fases clásicas de Stan Weinstein: Acumulación, Avance, Distribución, Declive. Fase diaria (rápida) + fase semanal (lenta, confirmación estructural).",
         long: `Este sistema de 4 fases, popularizado por Stan Weinstein en "Secrets for Profiting in Bull and Bear Markets", describe el ciclo natural por el que pasa cualquier activo a lo largo del tiempo.
+
+DOS TEMPORALIDADES, NO UNA:
+▸ FASE DIARIA: calculada sobre cierres diarios (EMA10/20/50/200 diarias) — rápida y táctica, pero más sensible al ruido de corto plazo. Es la que verás primero en pantalla.
+▸ FASE SEMANAL: calculada sobre velas semanales (mismos indicadores, resampleados) — la temporalidad ORIGINAL del método de Weinstein, mucho más lenta pero mucho más limpia. Se muestra al lado como confirmación estructural, no como sustituta de la diaria.
+Cuando ambas coinciden, la lectura es más fiable. Cuando discrepan (p.ej. diaria ya en Fase 3 pero semanal todavía en Fase 2), el desacuerdo en sí es información: suele significar que un movimiento reciente todavía no tiene entidad suficiente para cambiar el cuadro de fondo.
+
+DEBOUNCE — "SIN CONFIRMAR AÚN":
+La fase diaria exige que la clasificación se mantenga 3 sesiones seguidas antes de darse por buena. Si ves el aviso "cambio reciente, sin confirmar aún", significa que la fase acaba de cambiar y todavía no lleva las 3 sesiones seguidas necesarias — puede estabilizarse en la nueva fase o volver a la anterior. Esto reduce el "parpadeo" entre fases por ruido de un solo día, sin cambiar la fórmula de clasificación en sí.
 
 LAS 4 FASES:
 ▸ FASE 1 — ACUMULACIÓN: el activo lleva tiempo lateral tras una caída previa, las EMAs están entrelazadas sin pendiente clara, normalmente cerca o por debajo de la EMA200. Los inversores informados empiezan a acumular en silencio antes de que el precio confirme nada.
@@ -1326,14 +1335,17 @@ LAS 4 FASES:
 CÓMO SE DISTINGUEN 1 Y 3 EN ESTE SISTEMA (ambas son técnicamente "rango"):
 La diferencia clave es la posición respecto a la EMA200: si el precio está por debajo o pegado a ella tras un periodo lateral, se interpreta como acumulación temprana (Fase 1); si está por encima tras un periodo lateral, se interpreta como distribución tras una subida previa (Fase 3).
 
-SUBESTADO ESPECIAL — "FASE 1 · POSIBLE GIRO TEMPRANO":
-Existe un caso intermedio que el sistema trata de forma diferenciada: cuando las EMAs cortas (10 y 20) ya giran al alza y el precio cotiza por encima de la EMA20, pero las EMAs largas (50 y 200) siguen con pendiente bajista. Sin este matiz, ese escenario se clasificaría como BAJISTA/Fase 4 puro, ocultando que ya hay primeras señales de reversión — un rebote real desde mínimos siempre empieza así, con las medias cortas confirmando antes que las largas. Cuando se detecta este patrón, el sistema lo etiqueta como "Fase 1 · Posible Giro Temprano" en vez de Fase 4, para que la primera señal de cambio no quede enmascarada por la inercia bajista de las EMAs largas. Sigue siendo una fase de cautela, no de confirmación — las EMA50/200 todavía no respaldan el giro, así que puede revertirse y volver a Fase 4 si el rebote falla.
+SUBESTADOS ESPECIALES — GIROS TEMPRANOS (alcista y bajista):
+Existen dos casos intermedios que el sistema trata de forma diferenciada, uno espejo del otro:
+▸ "FASE 1 · POSIBLE GIRO TEMPRANO": las EMAs cortas (10 y 20) ya giran al alza y el precio cotiza por encima de la EMA20, pero las EMAs largas (50 y 200) siguen con pendiente bajista — un rebote real desde mínimos siempre empieza así.
+▸ "FASE 3 · POSIBLE GIRO BAJISTA TEMPRANO": el caso simétrico — las EMAs cortas ya giran a la baja con fuerza y el precio cotiza por debajo de la EMA20, pero las EMAs largas todavía no han terminado de confirmarlo. Sin este matiz, un activo cayendo con fuerza desde un techo reciente podía quedar clasificado como "Fase 1 · Acumulación" tranquila — justo lo contrario de lo que está pasando.
+En ambos casos sigue siendo una fase de cautela, no de confirmación.
 
 LIMITACIÓN A TENER EN CUENTA:
 Esta clasificación se basa puramente en el comportamiento de precio y EMAs (sin datos de volumen institucional real ni acumulación/distribución verificada), por lo que es una aproximación técnica razonable, no una confirmación de manual de Weinstein al 100%. Combínala con el resto de herramientas de la terminal antes de actuar.
 
 USO EN EL SCANNER:
-El módulo Scanner reutiliza exactamente esta misma lógica de fase (misma EMA10/20/50/200, mismos umbrales de pendiente) para clasificar las ~500 acciones del S&P 500 en el scan nocturno, sin llamadas de red adicionales por ticker — así el criterio "Fase" del Scanner y la Fase que ves aquí en Research son siempre coherentes entre sí.`
+El módulo Scanner reutiliza exactamente esta misma lógica (misma fórmula diaria, mismo debounce, misma fase semanal) para clasificar las ~500 acciones del S&P 500 en el scan nocturno, sin llamadas de red adicionales por ticker — así el criterio "Fase" del Scanner y la Fase que ves aquí en Research son siempre coherentes entre sí.`
     },
 
     "short-interest-pct": {

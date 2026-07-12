@@ -1,5 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
+from typing import Optional
 from auth import verify_token
 from services import users_service, watchlist_service
 
@@ -20,9 +21,10 @@ class WatchlistAdd(BaseModel):
 
 class AlertCreate(BaseModel):
     ticker: str = Field(..., min_length=1, max_length=15)
-    condition: str        # 'above' | 'below'
-    target_price: float
-    metric: str = "price"  # 'price' | 'rvol'
+    condition: str = "above"       # 'above' | 'below' — ignorado si metric='ema_touch'
+    target_price: float = 0        # ignorado si metric='ema_touch'
+    metric: str = "price"          # 'price' | 'rvol' | 'ema_touch'
+    ema_period: Optional[int] = None   # 10 | 20 | 50 | 200 — obligatorio si metric='ema_touch'
 
 
 # ── WATCHLIST ────────────────────────────────────────────────────────────────
@@ -54,7 +56,7 @@ async def list_alerts(user=Depends(verify_token)):
 
 @router.post("/alerts")
 async def add_alert(body: AlertCreate, user=Depends(verify_token)):
-    return watchlist_service.create_alert(_user_id(user), body.ticker, body.condition, body.target_price, body.metric)
+    return watchlist_service.create_alert(_user_id(user), body.ticker, body.condition, body.target_price, body.metric, body.ema_period)
 
 
 @router.delete("/alerts/triggered")

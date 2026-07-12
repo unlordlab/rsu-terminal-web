@@ -656,9 +656,16 @@ function trendPhaseBanner(t, rs) {
         + '<div style="color:' + tColor + ';font-size:14px;font-weight:600;letter-spacing:0.05em;">' + tIcon + ' ' + t.trend + '</div>'
         + '</div>'
         + '<div style="background:' + pColor + '11;border:1px solid ' + pColor + '44;border-radius:var(--radius);padding:8px 14px;flex:1;min-width:180px;">'
-        + '<div style="color:var(--color-muted);font-size:9px;letter-spacing:0.08em;margin-bottom:2px;">FASE DE MERCADO' + tt('market-phase') + '</div>'
+        + '<div style="color:var(--color-muted);font-size:9px;letter-spacing:0.08em;margin-bottom:2px;">FASE DE MERCADO (DIARIA)' + tt('market-phase') + '</div>'
         + '<div style="color:' + pColor + ';font-size:14px;font-weight:600;letter-spacing:0.05em;">' + (t.phase_label || ('Fase ' + t.market_phase)) + '</div>'
+        + (t.phase_confirmed === false ? '<div style="color:var(--color-muted);font-size:9px;margin-top:2px;">⚠ cambio reciente, sin confirmar aún</div>' : '')
         + '</div>'
+        + (t.phase_weekly_label
+            ? '<div style="background:' + (phaseColors[t.phase_weekly] || 'var(--color-muted)') + '11;border:1px solid ' + (phaseColors[t.phase_weekly] || 'var(--color-muted)') + '44;border-radius:var(--radius);padding:8px 14px;flex:1;min-width:180px;">'
+              + '<div style="color:var(--color-muted);font-size:9px;letter-spacing:0.08em;margin-bottom:2px;">FASE SEMANAL (CONFIRMACIÓN)' + tt('market-phase') + '</div>'
+              + '<div style="color:' + (phaseColors[t.phase_weekly] || 'var(--color-muted)') + ';font-size:14px;font-weight:600;letter-spacing:0.05em;">' + t.phase_weekly_label + '</div>'
+              + '</div>'
+            : '')
         + (rs && rs.rs_vs_spy != null
             ? '<div style="background:' + rs.rs_vs_spy_color + '11;border:1px solid ' + rs.rs_vs_spy_color + '44;border-radius:var(--radius);padding:8px 14px;flex:1;min-width:160px;">'
               + '<div style="color:var(--color-muted);font-size:9px;letter-spacing:0.08em;margin-bottom:2px;">FUERZA VS SPY (S&P500)' + tt('relative-strength') + '</div>'

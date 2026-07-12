@@ -235,6 +235,10 @@ def _classify_phase(close: pd.Series) -> dict:
     bull_score = sum(1 for c in bull_conditions if c)
 
     early_reversal = (slope10_dir == "alcista" and slope20_dir == "alcista" and price > ema20)
+    # Espejo del caso anterior — ver comentario detallado en research_service.py
+    # (caso real AMPX: momentum corto plazo claramente bajista mal etiquetado
+    # como "Fase 1 Acumulación" antes de este arreglo).
+    early_breakdown = (slope10_dir == "bajista" and slope20_dir == "bajista" and price < ema20)
 
     if bull_score >= 4:
         trend = "ALCISTA"
@@ -249,6 +253,128 @@ def _classify_phase(close: pd.Series) -> dict:
         phase, label = 4, "Fase 4 · Declive / Corrección"
     elif early_reversal and bull_score <= 1:
         phase, label = 1, "Fase 1 · Posible Giro Temprano"
+    elif early_breakdown:
+        phase, label = 3, "Fase 3 · Posible Giro Bajista Temprano"
+    elif ema200 and price >= ema200:
+        phase, label = 3, "Fase 3 · Distribución"
+    else:
+        phase, label = 1, "Fase 1 · Acumulación"
+
+    return {"phase": phase, "phase_label": label, "trend": trend}
+
+
+def _classify_phase_debounced(close: pd.Series, confirm_sessions: int = 3) -> dict:
+    """Exige que la fase se mantenga `confirm_sessions` sesiones seguidas
+    antes de darla por "confirmada" — si la fase de hoy no coincide con la de
+    hace 1 y 2 sesiones, se marca phase_confirmed=False y se añade
+    "(sin confirmar)" a la etiqueta, en vez de reportar el cambio el primer
+    día que aparece. No toca la fórmula de clasificación en sí — cada fase
+    individual se calcula exactamente igual, solo se exige que se repita
+    varias veces antes de confiar en un cambio. Reduce el parpadeo entre
+    fases por ruido de un solo día."""
+    today_result = _classify_phase(close)
+    if today_result["phase"] is None:
+        today_result["phase_confirmed"] = None
+        return today_result
+
+    recent_phases = [today_result["phase"]]
+    for i in range(1, confirm_sessions):
+        cutoff = len(close) - i
+        if cutoff < 50:
+            break
+        sub = _classify_phase(close.iloc[:cutoff])
+        if sub["phase"] is None:
+            break
+        recent_phases.append(sub["phase"])
+
+    if len(recent_phases) < confirm_sessions:
+        # Histórico insuficiente para confirmar del todo (ticker con poco
+        # recorrido) — se sirve el resultado de hoy, sin marcar ni confirmar
+        # ni desconfirmar.
+        today_result["phase_confirmed"] = None
+        return today_result
+
+    confirmed = len(set(recent_phases)) == 1
+    result = dict(today_result)
+    result["phase_confirmed"] = confirmed
+    if not confirmed:
+        result["phase_label"] = result["phase_label"] + " (sin confirmar)"
+    return result
+
+
+def _resample_weekly_close(close: pd.Series):
+    """Reagrupa una serie de cierres diarios en cierres semanales (viernes) —
+    misma técnica que ya usa rsu_algoritmo_service._resample_semanal, aplicada
+    aquí solo a la serie de cierre (todo lo que necesita _classify_phase)."""
+    if len(close) < 14:
+        return None
+    try:
+        weekly = close.resample('W-FRI').last().dropna()
+        return weekly if len(weekly) >= 10 else None
+    except Exception:
+        return None
+
+
+def _classify_phase_weekly(close_daily: pd.Series) -> dict:
+    """Fase Weinstein sobre velas SEMANALES — la temporalidad original del
+    método (el libro de Weinstein usa gráficos semanales, no diarios). Mucho
+    más lenta a reaccionar que _classify_phase (diaria), pero con muchísimo
+    menos ruido — pensada como CONFIRMACIÓN estructural junto a la fase
+    diaria (más rápida y táctica), no como sustituta.
+
+    Los lookbacks de pendiente se reescalan de sesiones diarias a semanas
+    (÷5 aprox.) manteniendo los mismos umbrales porcentuales. La EMA200
+    semanal necesita 200 semanas (~4 años) para estar "completa" — con los 2
+    años de histórico diario disponibles (~104 semanas) se queda corta, así
+    que se usa min_periods=20 (igual que ya hace
+    rsu_algoritmo_service._ema200_semanal) para que dé un valor utilizable
+    antes, aceptando que está menos "asentada" que con histórico completo."""
+    weekly = _resample_weekly_close(close_daily)
+    if weekly is None or len(weekly) < 30:
+        return {"phase": None, "phase_label": "Sin histórico semanal suficiente", "trend": None}
+
+    price    = float(weekly.iloc[-1])
+    ema10_s  = weekly.ewm(span=10,  adjust=False, min_periods=5).mean()
+    ema20_s  = weekly.ewm(span=20,  adjust=False, min_periods=10).mean()
+    ema50_s  = weekly.ewm(span=50,  adjust=False, min_periods=20).mean()
+    ema200_s = weekly.ewm(span=200, adjust=False, min_periods=20).mean() if len(weekly) >= 20 else None
+
+    ema20  = float(ema20_s.iloc[-1])
+    ema50  = float(ema50_s.iloc[-1])
+    ema200 = float(ema200_s.iloc[-1]) if ema200_s is not None else None
+
+    slope10_dir,  _ = _ema_slope(ema10_s,  1, 0.4)
+    slope20_dir,  _ = _ema_slope(ema20_s,  2, 0.4)
+    slope50_dir,  _ = _ema_slope(ema50_s,  3, 0.6)
+    slope200_dir, _ = _ema_slope(ema200_s, 4, 0.8) if ema200_s is not None else (None, None)
+
+    bull_conditions = [
+        price > ema20,
+        ema20 > ema50,
+        (ema50 > ema200) if ema200 else True,
+        slope50_dir == "alcista",
+        (slope200_dir in ("alcista", "plana")) if slope200_dir else True,
+    ]
+    bull_score = sum(1 for c in bull_conditions if c)
+
+    early_reversal  = (slope10_dir == "alcista" and slope20_dir == "alcista" and price > ema20)
+    early_breakdown = (slope10_dir == "bajista" and slope20_dir == "bajista" and price < ema20)
+
+    if bull_score >= 4:
+        trend = "ALCISTA"
+    elif bull_score <= 1 and not early_reversal:
+        trend = "BAJISTA"
+    else:
+        trend = "RANGO"
+
+    if trend == "ALCISTA":
+        phase, label = 2, "Fase 2 · Avance (Markup)"
+    elif trend == "BAJISTA":
+        phase, label = 4, "Fase 4 · Declive / Corrección"
+    elif early_reversal and bull_score <= 1:
+        phase, label = 1, "Fase 1 · Posible Giro Temprano"
+    elif early_breakdown:
+        phase, label = 3, "Fase 3 · Posible Giro Bajista Temprano"
     elif ema200 and price >= ema200:
         phase, label = 3, "Fase 3 · Distribución"
     else:
@@ -269,7 +395,7 @@ def _fetch_batch(all_syms: list) -> tuple:
     for i, batch in enumerate(batches):
         print(f"📦 Lote {i+1}/{n} ({len(batch)} símbolos)...")
         try:
-            raw = yf.download(batch, period="260d", auto_adjust=True, progress=False, threads=True)
+            raw = yf.download(batch, period="2y", auto_adjust=True, progress=False, threads=True)
             if isinstance(raw.columns, pd.MultiIndex):
                 closes = raw["Close"]  if "Close"  in raw.columns.get_level_values(0) else pd.DataFrame()
                 vols   = raw["Volume"] if "Volume" in raw.columns.get_level_values(0) else pd.DataFrame()
@@ -300,7 +426,7 @@ def _technical_score(rs_pct: float, phase: int, rvol: float) -> float:
 
 def _compute_breadth_history(close_d: dict, tickers: list, lookback_days: int = 65) -> list:
     """Amplitud de mercado REAL derivada del propio universo S&P 500 que este
-    script ya descarga cada noche (500 tickers x 260 sesiones) — en vez de
+    script ya descarga cada noche (500 tickers x 2 años de histórico) — en vez de
     depender de fuentes externas de avance/declive (^ADV/^DEC de Yahoo, que
     llevan tiempo dando datos poco fiables/planos) o de un proxy calculado
     sobre el precio de un solo índice.
@@ -382,7 +508,8 @@ def run_scan() -> dict:
             vol_avg   = float(vols.tail(RVOL_WINDOW).mean()) if len(vols) >= RVOL_WINDOW else 0.0
             rvol      = round(vol_today / vol_avg, 2) if vol_avg > 0 else 1.0
 
-            phase_info = _classify_phase(prices)
+            phase_info = _classify_phase_debounced(prices)
+            phase_weekly_info = _classify_phase_weekly(prices)
             price      = float(prices.iloc[-1])
             sector_raw = SP500_SECTOR_MAP.get(ticker, "")
 
@@ -393,21 +520,31 @@ def run_scan() -> dict:
             # sesiones ≈ 52 semanas, que es lo que se descarga en _fetch_batch). Con
             # menos histórico disponible sigue siendo una comparación válida, solo que
             # sobre una ventana más corta para los tickers con menos días.
-            new_high = bool(price >= float(prices.max()))
-            new_low  = bool(price <= float(prices.min()))
+            # Nuevo máximo/mínimo sobre las últimas 252 sesiones (52 semanas)
+            # EXPLÍCITAMENTE — antes se comparaba contra prices.max() de TODO
+            # el histórico descargado, lo cual era correcto mientras solo se
+            # descargaban 260 sesiones (~52 semanas) pero se habría roto en
+            # silencio al alargar el histórico a 2 años (habría pasado a
+            # comparar contra el máximo de 2 años, no de 52 semanas).
+            window_252 = prices.tail(252)
+            new_high = bool(price >= float(window_252.max()))
+            new_low  = bool(price <= float(window_252.min()))
 
             rows.append({
-                "ticker":      ticker,
-                "sector":      sector_raw,
-                "precio":      round(price, 2),
-                "rs_score":    round(rs_score_raw * 100, 2),
-                "rvol":        rvol,
-                "phase":       phase_info["phase"],
-                "phase_label": phase_info["phase_label"],
-                "trend":       phase_info["trend"],
-                "above_sma50": above_sma50,
-                "new_high":    new_high,
-                "new_low":     new_low,
+                "ticker":            ticker,
+                "sector":            sector_raw,
+                "precio":            round(price, 2),
+                "rs_score":          round(rs_score_raw * 100, 2),
+                "rvol":              rvol,
+                "phase":             phase_info["phase"],
+                "phase_label":       phase_info["phase_label"],
+                "phase_confirmed":   phase_info.get("phase_confirmed"),
+                "trend":             phase_info["trend"],
+                "phase_weekly":       phase_weekly_info["phase"],
+                "phase_weekly_label": phase_weekly_info["phase_label"],
+                "above_sma50":       above_sma50,
+                "new_high":          new_high,
+                "new_low":           new_low,
             })
         except Exception:
             continue

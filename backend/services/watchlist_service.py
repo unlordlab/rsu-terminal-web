@@ -20,7 +20,9 @@ MAX_WATCHLIST_ITEMS = 50
 MAX_ACTIVE_ALERTS   = 30
 
 VALID_CONDITIONS = ("above", "below")
-VALID_METRICS    = ("price", "rvol")
+VALID_METRICS    = ("price", "rvol", "ema_touch")
+EMA_PERIODS      = (10, 20, 50, 200)
+EMA_TOUCH_TOLERANCE_PCT = 0.5  # % de proximidad al valor de la EMA para considerar que el precio la "toca"
 
 
 def _conn():
@@ -45,8 +47,8 @@ def init_db():
             id               INTEGER PRIMARY KEY AUTOINCREMENT,
             user_id          INTEGER NOT NULL,
             ticker           TEXT NOT NULL,
-            condition        TEXT NOT NULL,                  -- 'above' | 'below'
-            target_price     REAL NOT NULL,                  -- valor objetivo: $ si metric='price', xVeces si metric='rvol'
+            condition        TEXT NOT NULL,                  -- 'above' | 'below' | 'touch'
+            target_price     REAL NOT NULL,                  -- valor objetivo: $ si metric='price', xVeces si metric='rvol', periodo de EMA si metric='ema_touch'
             status           TEXT NOT NULL DEFAULT 'active',  -- active | triggered | cancelled
             created_at       TEXT NOT NULL,
             triggered_at     TEXT,
@@ -59,6 +61,11 @@ def init_db():
     # envuelve en try/except para que sea idempotente en bases ya existentes.
     try:
         conn.execute("ALTER TABLE alerts ADD COLUMN metric TEXT NOT NULL DEFAULT 'price'")
+    except sqlite3.OperationalError:
+        pass  # la columna ya existe
+    # ema_period: qué EMA vigilar (10/20/50/200) — solo relevante si metric='ema_touch'.
+    try:
+        conn.execute("ALTER TABLE alerts ADD COLUMN ema_period INTEGER")
     except sqlite3.OperationalError:
         pass  # la columna ya existe
     conn.commit()
@@ -133,20 +140,32 @@ def get_watchlist(user_id: int) -> dict:
 
 # ── ALERTAS ──────────────────────────────────────────────────────────────────
 
-def create_alert(user_id: int, ticker: str, condition: str, target_price: float, metric: str = "price") -> dict:
+def create_alert(user_id: int, ticker: str, condition: str, target_price: float, metric: str = "price", ema_period: int = None) -> dict:
     ticker = (ticker or "").strip().upper()
     if not ticker:
         return {"ok": False, "error": "Ticker vacío"}
-    if condition not in VALID_CONDITIONS:
-        return {"ok": False, "error": "Condición inválida (usa 'above' o 'below')"}
     if metric not in VALID_METRICS:
-        return {"ok": False, "error": "Métrica inválida (usa 'price' o 'rvol')"}
-    try:
-        target_price = float(target_price)
-    except (TypeError, ValueError):
-        return {"ok": False, "error": "Valor objetivo inválido"}
-    if target_price <= 0:
-        return {"ok": False, "error": "Valor objetivo debe ser mayor que 0"}
+        return {"ok": False, "error": "Métrica inválida (usa 'price', 'rvol' o 'ema_touch')"}
+
+    if metric == "ema_touch":
+        try:
+            ema_period = int(ema_period)
+        except (TypeError, ValueError):
+            ema_period = None
+        if ema_period not in EMA_PERIODS:
+            return {"ok": False, "error": f"Periodo de EMA inválido (usa uno de {EMA_PERIODS})"}
+        condition = "touch"
+        target_price = float(ema_period)  # sin uso numérico real aquí — el periodo real vive en ema_period; se replica por compatibilidad con la columna NOT NULL
+    else:
+        if condition not in VALID_CONDITIONS:
+            return {"ok": False, "error": "Condición inválida (usa 'above' o 'below')"}
+        try:
+            target_price = float(target_price)
+        except (TypeError, ValueError):
+            return {"ok": False, "error": "Valor objetivo inválido"}
+        if target_price <= 0:
+            return {"ok": False, "error": "Valor objetivo debe ser mayor que 0"}
+        ema_period = None
 
     conn = _conn()
     try:
@@ -156,9 +175,9 @@ def create_alert(user_id: int, ticker: str, condition: str, target_price: float,
         if count >= MAX_ACTIVE_ALERTS:
             return {"ok": False, "error": f"Límite de {MAX_ACTIVE_ALERTS} alertas activas alcanzado"}
         cur = conn.execute(
-            "INSERT INTO alerts (user_id, ticker, condition, target_price, status, created_at, seen, metric) "
-            "VALUES (?, ?, ?, ?, 'active', ?, 1, ?)",
-            (user_id, ticker, condition, target_price, datetime.now(timezone.utc).isoformat(), metric)
+            "INSERT INTO alerts (user_id, ticker, condition, target_price, status, created_at, seen, metric, ema_period) "
+            "VALUES (?, ?, ?, ?, 'active', ?, 1, ?, ?)",
+            (user_id, ticker, condition, target_price, datetime.now(timezone.utc).isoformat(), metric, ema_period)
         )
         conn.commit()
         return {"ok": True, "id": cur.lastrowid}
@@ -266,6 +285,57 @@ def fetch_live_rvol(tickers: list) -> dict:
     return result
 
 
+# ── EMA EN VIVO (para alertas metric='ema_touch') ─────────────────────────────
+#
+# Calcular una EMA200 desde cero (con histórico completo) en cada ciclo de 90s
+# para cada alerta activa sería caro y redundante — los cierres de días ya
+# pasados no cambian en todo el día de hoy. Así que la EMA se calcula en dos
+# capas:
+#  1. Base de AYER: histórico real, cacheada una vez al día por (ticker, periodo).
+#  2. EMA "en vivo" de HOY: se combina esa base cacheada con el precio actual,
+#     exactamente el mismo cálculo que hace cualquier plataforma de gráficos
+#     para el último punto de una EMA en un gráfico diario — barato, sin
+#     volver a descargar histórico en cada ciclo.
+_ema_cache: dict = {}
+
+def _get_ema_baseline(ticker: str, period: int):
+    key = (ticker, period)
+    today = datetime.now(timezone.utc).strftime('%Y-%m-%d')
+    cached = _ema_cache.get(key)
+    if cached and cached["date"] == today:
+        return cached["ema"]
+    try:
+        import yfinance as yf
+        # Margen amplio para que la EMA esté "calentada" — sobre todo
+        # relevante para la EMA200, que necesita bastante histórico previo
+        # para converger a un valor estable y no arrastrar sesgo de arranque.
+        lookback_days = max(period * 3, 260)
+        hist = yf.Ticker(ticker).history(period=f"{lookback_days}d")
+        closes = hist["Close"].dropna()
+        if len(closes) < period:
+            return None
+        # Cierres hasta AYER — si el histórico ya trae la vela de hoy (p.ej.
+        # tras el cierre de mercado), se excluye para no contarla dos veces
+        # al combinarla más abajo con el precio en vivo.
+        if closes.index[-1].strftime('%Y-%m-%d') == today:
+            closes = closes.iloc[:-1]
+        if len(closes) < period:
+            return None
+        ema_value = float(closes.ewm(span=period, adjust=False).mean().iloc[-1])
+        _ema_cache[key] = {"ema": ema_value, "date": today}
+        return ema_value
+    except Exception:
+        return None
+
+
+def _get_live_ema(ticker: str, period: int, live_price: float):
+    baseline = _get_ema_baseline(ticker, period)
+    if baseline is None or live_price is None:
+        return None
+    k = 2 / (period + 1)
+    return live_price * k + baseline * (1 - k)
+
+
 # ── COMPROBACIÓN DE ALERTAS (llamada desde el bucle en segundo plano) ────────
 
 def check_all_active_alerts() -> list:
@@ -287,11 +357,19 @@ def check_all_active_alerts() -> list:
 
     price_alerts = [a for a in active if a.get("metric", "price") == "price"]
     rvol_alerts  = [a for a in active if a.get("metric") == "rvol"]
+    ema_alerts   = [a for a in active if a.get("metric") == "ema_touch"]
 
+    from services.cartera_service import fetch_live_prices
     prices = {}
     if price_alerts:
-        from services.cartera_service import fetch_live_prices
-        prices = fetch_live_prices(list({a["ticker"] for a in price_alerts}))
+        prices.update(fetch_live_prices(list({a["ticker"] for a in price_alerts})))
+    if ema_alerts:
+        # Las alertas de EMA también necesitan el precio en vivo — se piden
+        # solo los tickers que todavía no se hayan pedido para price_alerts,
+        # reutilizando el mismo caché de 60s de fetch_live_prices.
+        missing = [t for t in {a["ticker"] for a in ema_alerts} if t not in prices]
+        if missing:
+            prices.update(fetch_live_prices(missing))
 
     rvols = {}
     if rvol_alerts:
@@ -317,11 +395,35 @@ def check_all_active_alerts() -> list:
                 a["triggered_price"] = current_value
                 triggered.append(a)
 
+        def _check_ema_touch(a):
+            p = prices.get(a["ticker"])
+            if not p or p.get("price") is None:
+                return
+            live_price = p["price"]
+            period = a.get("ema_period")
+            if not period:
+                return
+            ema_value = _get_live_ema(a["ticker"], period, live_price)
+            if not ema_value:
+                return
+            distance_pct = abs(live_price - ema_value) / ema_value * 100
+            if distance_pct <= EMA_TOUCH_TOLERANCE_PCT:
+                conn.execute(
+                    "UPDATE alerts SET status = 'triggered', triggered_at = ?, "
+                    "triggered_price = ?, seen = 0 WHERE id = ?",
+                    (now_iso, live_price, a["id"])
+                )
+                a["triggered_at"]    = now_iso
+                a["triggered_price"] = live_price
+                triggered.append(a)
+
         for a in price_alerts:
             p = prices.get(a["ticker"])
             _check(a, p["price"] if p else None)
         for a in rvol_alerts:
             _check(a, rvols.get(a["ticker"]))
+        for a in ema_alerts:
+            _check_ema_touch(a)
 
         if triggered:
             conn.commit()

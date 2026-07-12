@@ -5692,4 +5692,123 @@ export const LESSONS = {
             },
         ]
     },
+
+    // ── MÓDULO 25, LECCIÓN 1 ───────────────────────────────────────────────
+    '25-1': {
+        moduleId: 25,
+        lessonIndex: 0,
+        title: 'DCA Clásico — Mecánica y Psicología',
+        duration: '12 min',
+        intro: 'DCA (Dollar-Cost Averaging, promediar coste en dólares) es probablemente la estrategia de construcción de posición más citada — y también una de las más mal entendidas. Esta lección explica qué es de verdad, antes de meternos en las variantes más avanzadas que ya usa la propia terminal.',
+        sections: [
+            {
+                heading: 'La definición clásica',
+                blocks: [
+                    { type: 'text', content: 'DCA es invertir una cantidad FIJA de dinero a intervalos FIJOS de tiempo (cada semana, cada mes...), sin importar si el precio está caro o barato ese día en concreto. Con la misma cantidad de dinero, compras más participaciones cuando el precio está bajo y menos cuando está alto — de ahí el nombre: el coste medio de tu posición se acaba promediando.' },
+                    { type: 'chart', id: 'dca_mechanics' },
+                ]
+            },
+            {
+                heading: 'Por qué funciona — y no es solo matemática',
+                blocks: [
+                    { type: 'concept', title: 'El verdadero valor del DCA es psicológico', content: 'DCA elimina la decisión de timing — no tienes que acertar "el mejor momento para entrar", porque nunca dependes de un solo día. Para la inmensa mayoría de gente que invierte con el dinero de su nómina mes a mes, no es una elección frente a invertir de golpe — es la única forma realista de invertir, porque el capital llega poco a poco, no de golpe.' },
+                    { type: 'text', content: 'Esto es clave para no sobrevalorar el DCA como una técnica "más lista" que otras — su fortaleza principal es la disciplina y la reducción del riesgo de arrepentimiento (entrar justo antes de una caída fuerte con todo el capital de una vez), no una ventaja matemática garantizada. Eso lo veremos en la siguiente lección.' },
+                ]
+            },
+        ]
+    },
+
+    // ── MÓDULO 25, LECCIÓN 2 ───────────────────────────────────────────────
+    '25-2': {
+        moduleId: 25,
+        lessonIndex: 1,
+        title: 'DCA vs. Invertir de Golpe — la Evidencia',
+        duration: '13 min',
+        intro: 'Si alguna vez te has preguntado "¿debería meter todo mi capital de golpe o repartirlo en el tiempo?", esta lección es para ti. La respuesta no es la que la intuición sugiere.',
+        sections: [
+            {
+                heading: 'Lo que dice la evidencia histórica',
+                blocks: [
+                    { type: 'text', content: 'Cuando SÍ tienes una suma de capital disponible de golpe (una herencia, la venta de un activo, un bonus grande) y te planteas repartirla en el tiempo vía DCA en vez de invertirla de una vez, los estudios históricos sobre mercados con tendencia alcista de largo plazo (como el mercado americano) encuentran que invertir de golpe ha superado al DCA en, aproximadamente, dos de cada tres periodos analizados.' },
+                    { type: 'chart', id: 'dca_vs_lumpsum' },
+                    { type: 'concept', title: 'La lógica detrás', content: 'Cuanto antes estés invertido, más tiempo tiene tu capital para componer. Como el mercado sube con más frecuencia de la que baja a lo largo de periodos largos, esperar y repartir la entrada tiene, de media, un coste de oportunidad — el dinero que se queda fuera del mercado mientras esperas tu siguiente aportación no está generando nada.' },
+                ]
+            },
+            {
+                heading: 'Entonces, ¿por qué tanta gente usa DCA de todas formas?',
+                blocks: [
+                    { type: 'warning', content: 'Porque "de media, gana más veces" no es lo mismo que "siempre gana", y el tercio de casos donde el DCA gana suele coincidir precisamente con los momentos en los que invertir de golpe sale peor: justo antes de una caída fuerte. El DCA reduce ese riesgo de cola (el peor escenario posible) a cambio de renunciar a algo de rendimiento esperado de media. Es una decisión de gestión de riesgo y de tranquilidad psicológica, no un "truco" que bate al mercado.' },
+                    { type: 'text', content: 'Si tienes verdaderamente un horizonte largo y capacidad de aguantar la volatilidad (Módulo 24), invertir de golpe suele ser lo matemáticamente más eficiente. Si el hecho de invertirlo todo de golpe te va a quitar el sueño hasta el punto de vender en pánico en la primera caída, el DCA — aunque sea "subóptimo" en el papel — puede ser la decisión correcta para TI, porque la mejor estrategia es la que de verdad vas a poder seguir.' },
+                ]
+            },
+        ]
+    },
+
+    // ── MÓDULO 25, LECCIÓN 3 ───────────────────────────────────────────────
+    '25-3': {
+        moduleId: 25,
+        lessonIndex: 2,
+        title: 'DCA vs. Entrada Escalonada — No son lo Mismo',
+        duration: '13 min',
+        intro: 'Aquí está la confusión más común, y la que más dinero puede costar si no la tienes clara: "comprar poco a poco" no siempre significa lo mismo. Hay dos técnicas distintas, y la propia terminal usa la segunda para SPXL, no la primera.',
+        sections: [
+            {
+                heading: 'Dos técnicas, no una',
+                blocks: [
+                    { type: 'concept', title: 'DCA clásico — dirigido por el CALENDARIO', content: 'Compras la misma cantidad cada semana o cada mes, pase lo que pase con el precio. La disciplina es la fecha, no el nivel de precio.' },
+                    { type: 'concept', title: 'Entrada escalonada — dirigida por el PRECIO', content: 'Compras más a medida que el precio cae más — no en una fecha fija, sino en niveles de caída progresiva definidos de antemano. La disciplina es el nivel, no el calendario.' },
+                    { type: 'text', content: 'Son primos, no gemelos. Ambas reparten el riesgo de entrada en el tiempo, pero responden a lógicas distintas — y la diferencia importa mucho más de lo que parece cuando el instrumento es apalancado.' },
+                ]
+            },
+            {
+                heading: 'Por qué esto es crítico en instrumentos apalancados',
+                blocks: [
+                    { type: 'warning', content: 'SPXL (3x el S&P 500) aplica el apalancamiento cada DÍA, no de forma acumulada. En mercados laterales con mucha volatilidad, SPXL puede perder valor aunque el índice de referencia no se mueva apenas — se llama "volatility decay" o "beta slippage", y ya lo explica el propio tooltip de SPXL en la terminal.' },
+                    { type: 'chart', id: 'leveraged_decay_example' },
+                    { type: 'text', content: 'Con ese mismo ejemplo: el S&P cae un 10% y luego sube un 11,1% — vuelve exactamente al punto de partida. SPXL, en el mismo escenario, cae un 30% y sube un 33,3% — pero eso NO le devuelve al punto de partida: se queda un ~6% por debajo. Ese es el coste estructural de la decay, y ocurre incluso si "acertaste" la dirección de fondo.' },
+                ]
+            },
+            {
+                heading: 'Por qué la estrategia RSU para SPXL escala en la caída, no en el calendario',
+                blocks: [
+                    { type: 'text', content: 'Precisamente por la decay, comprar SPXL de golpe es mucho más arriesgado que hacerlo con un índice normal. La estrategia que ya tienes construida en la sección SPXL de la terminal escala la posición en fases de caída progresiva — no en fechas fijas del calendario. La lógica: cuanto más ha caído (y más ha decaído por el apalancamiento), más barata está la entrada, y al comprar en el pánico y beneficiarte de la recuperación posterior, la propia decay puede trabajar A TU FAVOR en vez de en tu contra.' },
+                    { type: 'concept', title: 'Por qué no es DCA calendario', content: 'Si en vez de eso metieras la misma cantidad fija cada mes en SPXL sin importar el nivel de caída, estarías comprando igual de "caro" (en términos de decay acumulada) en un mes tranquilo que en un mes de pánico — perdiendo precisamente la ventaja que hace que la entrada escalonada tenga sentido en un instrumento apalancado.' },
+                ]
+            },
+        ]
+    },
+
+    // ── MÓDULO 25, LECCIÓN 4 ───────────────────────────────────────────────
+    '25-4': {
+        moduleId: 25,
+        lessonIndex: 3,
+        title: 'Construir tu Propia Posición con Criterio',
+        duration: '12 min',
+        intro: 'Cerramos con cómo decidir cuál de las dos técnicas (o ninguna) encaja con lo que estás construyendo, y cómo no convertir ninguna de las dos en una excusa para ignorar la gestión del riesgo.',
+        sections: [
+            {
+                heading: 'Cómo elegir',
+                blocks: [
+                    { type: 'steps', items: [
+                        '¿Tienes capital disponible de golpe, o vas aportando poco a poco desde tu ingreso regular? Si es lo segundo, el DCA calendario ya es tu situación por defecto — no hace falta "elegirlo".',
+                        '¿Es un activo no apalancado con horizonte largo (índice, posición de convicción del Módulo 23)? El DCA calendario clásico o incluso la entrada de golpe (si psicológicamente puedes con ello) son razonables.',
+                        '¿Es un instrumento apalancado o táctico, pensado para un ciclo de corrección-recuperación concreto, no para mantener indefinidamente? La entrada escalonada por nivel de caída (como SPXL en la terminal) tiene más sentido que el calendario fijo.',
+                        '¿La tesis de fondo sigue intacta? Repasa el Módulo 23 — seguir haciendo DCA o escalando entradas en algo cuya tesis ya se ha roto no es "promediar el coste", es negar la realidad con dinero nuevo.',
+                    ]},
+                ]
+            },
+            {
+                heading: 'El tamaño total sigue siendo la decisión más importante',
+                blocks: [
+                    { type: 'text', content: 'Ni el DCA calendario ni la entrada escalonada sustituyen a la gestión del riesgo de los Módulos 12 y 18 — definen CÓMO entras, no CUÁNTO puede llegar a pesar esa posición sobre tu cartera total. Define el tamaño máximo de la posición completa antes de empezar a construirla, no sobre la marcha a medida que sigues comprando.' },
+                ]
+            },
+            {
+                heading: 'Resumen del módulo',
+                blocks: [
+                    { type: 'tip', label: 'DCA — LA REGLA', content: 'DCA calendario reduce el riesgo de timing y es, para la mayoría de la gente, la única forma realista de invertir — no una ventaja matemática garantizada (invertir de golpe gana de media, pero no siempre). La entrada escalonada por nivel es una técnica distinta, dirigida por el precio, especialmente relevante en instrumentos apalancados como SPXL por la volatility decay. Ninguna de las dos sustituye a definir el tamaño máximo de la posición antes de empezar, ni a revisar si la tesis de fondo sigue viva.' },
+                ]
+            },
+        ]
+    },
 };
