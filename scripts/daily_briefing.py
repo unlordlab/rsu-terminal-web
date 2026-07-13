@@ -14,7 +14,7 @@ import numpy as np
 GROQ_KEY   = os.environ.get("GROQ_API_KEY", "")
 GIST_TOKEN = os.environ.get("GIST_TOKEN", "")
 GIST_ID    = os.environ.get("GIST_ID", "715ee0c4e571517c11fa65c5c2376c34")
-MODEL      = "moonshotai/kimi-k2-instruct-0905"
+MODEL      = "qwen/qwen3-235b-a22b"
 
 # Fichero adicional dentro del MISMO Gist (GIST_ID) — no hace falta un Gist
 # nuevo, GitHub permite varios ficheros por Gist. Guarda solo un registro
