@@ -263,6 +263,7 @@ def get_market_news(max_items: int = 8) -> list:
     saber qué está pasando hoy en el mundo (cambios de personal en la Fed,
     geopolítica, etc.), por mucho que los números de mercado sean correctos."""
     if not FINNHUB_KEY:
+        print("⚠️  FINNHUB_API_KEY no configurado — sin titulares de Finnhub (revisa los secrets del Action)")
         return []
     try:
         r = requests.get(
@@ -271,10 +272,13 @@ def get_market_news(max_items: int = 8) -> list:
             timeout=10,
         )
         if r.status_code != 200:
+            print(f"⚠️  Finnhub /news devolvió status {r.status_code}: {r.text[:200]}")
             return []
         items = r.json()
         if not isinstance(items, list):
+            print(f"⚠️  Finnhub /news devolvió un formato inesperado: {type(items)}")
             return []
+        print(f"📰 Finnhub: {len(items)} noticias totales recibidas, filtrando a últimas 30h...")
         cutoff = datetime.now() - timedelta(hours=30)
         out = []
         for it in items:
@@ -296,6 +300,7 @@ def get_market_news(max_items: int = 8) -> list:
             })
             if len(out) >= max_items:
                 break
+        print(f"📰 Finnhub: {len(out)} titulares dentro de la ventana de 30h, tras filtrar")
         return out
     except Exception as e:
         print(f"⚠️  No se pudieron obtener noticias: {e}")
@@ -338,9 +343,11 @@ def get_major_outlet_headlines(max_items: int = 8) -> list:
             headers={"User-Agent": "RSU-Terminal-Briefing/1.0"},
         )
         if r.status_code != 200:
+            print(f"⚠️  GDELT devolvió status {r.status_code}: {r.text[:200]}")
             return []
         data = r.json()
         articles = data.get("articles", [])
+        print(f"🌍 GDELT: {len(articles)} artículos totales recibidos de {domains}")
         out = []
         seen_titles = set()
         for a in articles:
@@ -362,6 +369,7 @@ def get_major_outlet_headlines(max_items: int = 8) -> list:
             })
             if len(out) >= max_items:
                 break
+        print(f"🌍 GDELT: {len(out)} titulares tras deduplicar")
         return out
     except Exception as e:
         print(f"⚠️  No se pudieron obtener titulares de medios internacionales (GDELT): {e}")
