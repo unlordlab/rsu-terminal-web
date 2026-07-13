@@ -785,22 +785,27 @@ def generate_briefing(prompt: str) -> str:
         json={
             "model":            MODEL,
             "messages":         [{"role": "user", "content": prompt}],
-            "max_tokens":       6000,
+            "max_tokens":       3000,
             "temperature":      0.45,
-            # Qwen3.6-27B es un modelo "razonador" — antes de la respuesta
-            # final genera un bloque de pensamiento interno que casi siempre
-            # sale en inglés, aunque el idioma pedido en el prompt sea
-            # español (comportamiento habitual en modelos de este tipo, no
-            # un fallo del prompt). Sin este parámetro, ese razonamiento se
-            # devolvía mezclado dentro del propio texto de la respuesta —
-            # "hidden" hace que Groq solo devuelva la respuesta final limpia.
-            # OJO: el pensamiento interno sigue contando dentro de max_tokens
-            # aunque se oculte del texto visible — con un límite bajo (2500)
-            # el modelo podía agotar todo el presupuesto pensando y no dejar
-            # nada para la respuesta real (de ahí un briefing de 0 palabras).
-            # Por eso max_tokens se subió a 6000: margen de sobra para pensar
-            # Y escribir las 500-700 palabras pedidas.
-            "reasoning_format": "hidden",
+            # Qwen3.6-27B soporta modo "pensador" (reasoning) y modo directo.
+            # Esta tarea es sintetizar datos ya dados en prosa fluida en un
+            # tono concreto — no resolver un problema lógico complejo — así
+            # que no se beneficia de razonamiento paso a paso, y desactivarlo
+            # resuelve DOS problemas a la vez en su raíz, en vez de ir
+            # ajustando max_tokens a ciegas cada vez que falla algo distinto:
+            #   1) El pensamiento interno de este modelo suele salir en
+            #      inglés, y aunque se oculte del texto visible con
+            #      reasoning_format="hidden", sigue contando dentro del
+            #      presupuesto de max_tokens — con un límite bajo, se podía
+            #      agotar todo pensando y no dejar nada para la respuesta
+            #      real (de ahí un briefing de 0 palabras en un intento).
+            #   2) Groq limita a 8000 tokens/minuto (entrada+salida) para
+            #      este modelo en el tier gratuito — sin pensamiento interno
+            #      de por medio, el total (prompt ~2900 + esta respuesta)
+            #      cabe con margen, sin tener que competir por presupuesto
+            #      entre "pensar" y "escribir".
+            "reasoning_effort": "none",
+            "reasoning_format": "hidden",  # inofensivo con reasoning_effort=none, pero no estorba dejarlo
         },
         timeout=120,
     )
