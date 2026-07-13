@@ -14,7 +14,7 @@ import numpy as np
 GROQ_KEY   = os.environ.get("GROQ_API_KEY", "")
 GIST_TOKEN = os.environ.get("GIST_TOKEN", "")
 GIST_ID    = os.environ.get("GIST_ID", "715ee0c4e571517c11fa65c5c2376c34")
-MODEL      = "openai/gpt-oss-120b"
+MODEL      = "moonshotai/kimi-k2-instruct-0905"
 
 # Fichero adicional dentro del MISMO Gist (GIST_ID) — no hace falta un Gist
 # nuevo, GitHub permite varios ficheros por Gist. Guarda solo un registro
@@ -302,6 +302,72 @@ def get_market_news(max_items: int = 8) -> list:
         return []
 
 
+# ── TITULARES DE ALTO IMPACTO — MEDIOS INTERNACIONALES (GDELT) ───────────────
+
+def get_major_outlet_headlines(max_items: int = 8) -> list:
+    """El feed de Finnhub (get_market_news) está orientado a mercado/empresa
+    y puede no recoger bien noticias de alto impacto que son ante todo
+    geopolíticas (conflictos, ataques, decisiones políticas mayores) aunque
+    tengan consecuencias directas en precios — el caso real que motivó esto:
+    un ataque en el Estrecho de Ormuz que mueve el petróleo y añade
+    volatilidad al mercado no tiene por qué aparecer en un feed financiero
+    estrecho.
+
+    En vez de intentar llamar a las APIs de Reuters/Bloomberg/FT (de pago,
+    sin acceso público gratuito), se usa GDELT — proyecto respaldado por
+    Google Jigsaw, gratuito, sin necesidad de API key, que monitoriza medios
+    de todo el mundo actualizándose cada 15 minutos. Se le pide
+    específicamente que traiga titulares recientes de esos dominios
+    concretos (Reuters, Bloomberg, WSJ, AP, Financial Times), no una
+    búsqueda genérica — así se acerca lo más posible a "qué llevan estos
+    medios ahora mismo" sin depender de sus APIs de pago."""
+    domains = ["reuters.com", "bloomberg.com", "wsj.com", "apnews.com", "ft.com"]
+    query = "(" + " OR ".join(f"domain:{d}" for d in domains) + ")"
+    try:
+        r = requests.get(
+            "https://api.gdeltproject.org/api/v2/doc/doc",
+            params={
+                "query": query,
+                "mode": "artlist",
+                "maxrecords": max_items * 2,  # margen, luego se filtra/recorta
+                "timespan": "24h",
+                "sort": "datedesc",
+                "format": "json",
+            },
+            timeout=15,
+            headers={"User-Agent": "RSU-Terminal-Briefing/1.0"},
+        )
+        if r.status_code != 200:
+            return []
+        data = r.json()
+        articles = data.get("articles", [])
+        out = []
+        seen_titles = set()
+        for a in articles:
+            title  = (a.get("title") or "").strip()
+            domain = (a.get("domain") or "").strip()
+            if not title or title.lower() in seen_titles:
+                continue
+            seen_titles.add(title.lower())
+            seendate = a.get("seendate", "")  # formato YYYYMMDDTHHMMSSZ
+            time_str = ""
+            try:
+                time_str = datetime.strptime(seendate, "%Y%m%dT%H%M%SZ").strftime("%H:%M UTC")
+            except Exception:
+                pass
+            out.append({
+                "headline": title[:180],
+                "source":   domain,
+                "time":     time_str,
+            })
+            if len(out) >= max_items:
+                break
+        return out
+    except Exception as e:
+        print(f"⚠️  No se pudieron obtener titulares de medios internacionales (GDELT): {e}")
+        return []
+
+
 # ── EARNINGS NOTABLES PRÓXIMOS 2 DÍAS (Finnhub) ───────────────────────────────
 
 def get_notable_earnings() -> list:
@@ -446,7 +512,7 @@ def get_yesterday_stance() -> str:
 
 # ── CONSTRUIR PROMPT ──────────────────────────────────────────────────────────
 
-def build_prompt(market_data: dict, news: list, earnings: list, breadth: dict,
+def build_prompt(market_data: dict, news: list, major_headlines: list, earnings: list, breadth: dict,
                   insider_clusters: list, yesterday_stance: str, bias_history: list) -> str:
     d = market_data
 
@@ -546,6 +612,18 @@ def build_prompt(market_data: dict, news: list, earnings: list, breadth: dict,
         news_lines += "\n"
     if not news_lines:
         news_lines = "Sin titulares disponibles hoy — no menciones catalizadores de noticias que no estén aquí.\n"
+
+    # Titulares de alto impacto de medios internacionales (Reuters/Bloomberg/
+    # WSJ/AP/FT vía GDELT) — complementa el feed de mercado de arriba con
+    # eventos de gran impacto que pueden ser ante todo geopolíticos (conflictos,
+    # ataques, decisiones políticas mayores) y no aparecer bien en un feed
+    # financiero estrecho, aunque tengan consecuencias directas en precios
+    # (petróleo, defensa, refugio como oro/USD, volatilidad general vía VIX).
+    major_headlines_lines = ""
+    for n in major_headlines:
+        major_headlines_lines += f"- [{n['time']}, {n['source']}] {n['headline']}\n"
+    if not major_headlines_lines:
+        major_headlines_lines = "Sin titulares de medios internacionales disponibles hoy — no inventes eventos geopolíticos que no estén aquí.\n"
 
     # Earnings notables próximos 1-2 días
     earnings_lines = ""
@@ -668,6 +746,9 @@ EARNINGS NOTABLES PRÓXIMAS 48H:
 
 TITULARES REALES DE MERCADO (últimas ~24-30h — usa 2-3 de los más relevantes para el mercado, no los enumeres todos, teje solo los que de verdad importan para el sesgo de hoy):
 {news_lines}
+
+TITULARES DE ALTO IMPACTO — MEDIOS INTERNACIONALES (Reuters/Bloomberg/WSJ/AP/FT, últimas 24h): estos pueden ser noticias GEOPOLÍTICAS o de otro tipo (conflictos, ataques, decisiones políticas mayores) que no son "económicas" en sentido estricto pero SÍ mueven mercado (petróleo, defensa, refugio, volatilidad general). Si hay algo aquí con impacto real de mercado hoy — aunque no sea una noticia financiera clásica — mencionalo explícitamente y conecta por qué le importa a un trader (qué activo concreto mueve, por qué):
+{major_headlines_lines}
 
 ---
 
@@ -826,6 +907,9 @@ def main():
     print("📰 Recopilando titulares reales del día...")
     news = get_market_news()
 
+    print("🌍 Recopilando titulares de alto impacto (Reuters/Bloomberg/WSJ/AP/FT vía GDELT)...")
+    major_headlines = get_major_outlet_headlines()
+
     print("📅 Recopilando earnings notables (próximas 48h)...")
     earnings = get_notable_earnings()
 
@@ -836,7 +920,7 @@ def main():
     insider_clusters = get_insider_clusters()
 
     print("🤖 Construyendo prompt...")
-    prompt = build_prompt(market_data, news, earnings, breadth, insider_clusters, yesterday_stance, bias_history)
+    prompt = build_prompt(market_data, news, major_headlines, earnings, breadth, insider_clusters, yesterday_stance, bias_history)
 
     print(f"🧠 Llamando a {MODEL} via Groq...")
     raw_briefing = generate_briefing(prompt)
