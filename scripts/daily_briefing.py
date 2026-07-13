@@ -785,7 +785,7 @@ def generate_briefing(prompt: str) -> str:
         json={
             "model":            MODEL,
             "messages":         [{"role": "user", "content": prompt}],
-            "max_tokens":       2500,
+            "max_tokens":       6000,
             "temperature":      0.45,
             # Qwen3.6-27B es un modelo "razonador" — antes de la respuesta
             # final genera un bloque de pensamiento interno que casi siempre
@@ -793,9 +793,13 @@ def generate_briefing(prompt: str) -> str:
             # español (comportamiento habitual en modelos de este tipo, no
             # un fallo del prompt). Sin este parámetro, ese razonamiento se
             # devolvía mezclado dentro del propio texto de la respuesta —
-            # "hidden" hace que Groq solo devuelva la respuesta final limpia,
-            # sin tocar la calidad del razonamiento en sí (sigue pensando
-            # igual por dentro, solo no se cuela en el texto final).
+            # "hidden" hace que Groq solo devuelva la respuesta final limpia.
+            # OJO: el pensamiento interno sigue contando dentro de max_tokens
+            # aunque se oculte del texto visible — con un límite bajo (2500)
+            # el modelo podía agotar todo el presupuesto pensando y no dejar
+            # nada para la respuesta real (de ahí un briefing de 0 palabras).
+            # Por eso max_tokens se subió a 6000: margen de sobra para pensar
+            # Y escribir las 500-700 palabras pedidas.
             "reasoning_format": "hidden",
         },
         timeout=120,
@@ -936,6 +940,17 @@ def main():
     raw_briefing = generate_briefing(prompt)
     briefing, bias = extract_bias_tag(raw_briefing)
     print(f"📌 Sesgo detectado hoy: {bias or 'N/D (el modelo no incluyó la etiqueta)'}")
+
+    # Si el modelo se queda sin presupuesto de tokens pensando (ver nota en
+    # generate_briefing) puede devolver un texto vacío o casi vacío — mejor
+    # que el Action falle con un error claro que guardar un briefing en
+    # blanco en el Gist sin que nadie se entere hasta que un usuario lo vea.
+    if len(briefing.split()) < 50:
+        raise ValueError(
+            f"El briefing generado tiene solo {len(briefing.split())} palabras — probablemente "
+            f"el modelo agotó el presupuesto de tokens pensando y no llegó a escribir la respuesta. "
+            f"No se guarda en el Gist. Respuesta cruda recibida: {raw_briefing[:300]!r}"
+        )
 
     print("💾 Guardando en GitHub Gist...")
     save_to_gist(briefing, market_data, bias, bias_history)
