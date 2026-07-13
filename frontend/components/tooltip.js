@@ -857,32 +857,44 @@ Compara la IV actual con el rango histórico del último año. IV Rank 80% = la 
     // ── ALGORITMO RSU ─────────────────────────────────────────────────────────
     "rsu-algoritmo": {
         title: "RSU Algoritmo — Detector de Fondos",
-        short: "Sistema multi-factor que detecta condiciones de fondo de mercado. Score 0-100.",
-        long: `El RSU Algoritmo analiza 5 factores simultáneamente para determinar si el mercado está creando un fondo comprable.
+        short: "Sistema multi-factor que detecta condiciones de fondo de mercado. Score 0-100. No busca el mínimo exacto, busca el punto de empezar a construir posición.",
+        long: `FILOSOFÍA — LEER ESTO PRIMERO:
+Este sistema NO intenta acertar el mínimo exacto — nadie lo hace de forma consistente. El objetivo es distinto: detectar el momento en que ya hay evidencia suficiente para EMPEZAR a construir posición de forma gradual, con gestión de riesgo (stop, tramos), no de una sola vez.
 
-LOS 5 FACTORES:
+Por eso el semáforo se usa así:
+▸ VERDE → arranca la construcción de posición (primer tramo, ~25%, con stop). No es "aquí está el suelo", es "aquí ya compensa empezar a entrar".
+▸ ÁMBAR → fase de watchlist, no de entrada. El trabajo en ámbar es tener claros y priorizados los candidatos de interés, para no improvisar si llega el VERDE.
+▸ ROJO → sin condiciones de fondo. Preservar capital y esperar.
 
-1. FOLLOW THROUGH DAY (30pts)
-Concepto IBD de William O'Neil. Día de rally en volumen alto tras una corrección. El factor de mayor peso, pero su fiabilidad histórica real (~55% de éxito en estudios independientes) es más moderada de lo que sugiere el marketing de IBD (70-80%) — trátalo como una señal de probabilidad favorable, no como confirmación fuerte por sí sola.
+El propio backtest existe justamente para esto — antes de fiarte de la filosofía "construir gradualmente", pulsa el botón de Backtest y mira la ventaja real por horizonte (5/10/20/60 días) en el histórico actual. Esa ventaja puede cambiar con el tiempo y con mejoras al algoritmo (ya ha pasado: un bug en el proxy de McClellan hacía que ese factor no aportara nunca, y arreglarlo cambió sustancialmente los resultados) — por eso esta guía no fija un número concreto aquí, consulta siempre el backtest en vivo.
 
-2. RSI SOBREVENDIDO DIARIO (19pts)
-RSI(14) mínimo en ventana de 10 días. < 25 = extremo, máxima puntuación. Mide agotamiento del momentum vendedor en temporalidad diaria.
+LOS 6 FACTORES DEL SCORE (0-100):
 
-3. VIX SPIKE — CAPITULACIÓN (24pts)
-Pico de volatilidad en ventana de 10 días. El miedo extremo (VIX > 35) suele coincidir con capitulación vendedora — el punto en que los últimos vendedores forzados ya han salido del mercado.
+1. RSI SOBREVENDIDO — DIARIO + SEMANAL (18pts)
+RSI(14) mínimo reciente en ambas temporalidades. Mide agotamiento del momentum vendedor.
 
-4. McCLELLAN OSCILLATOR (17pts)
-Amplitud del mercado (proxy basado en momentum de SPY cuando no hay datos sectoriales reales disponibles). Valores extremadamente negativos sugieren sobreventa generalizada.
+2. VIX — SPIKE DE MIEDO + CURVA VIX/VIX3M (22pts)
+Pico de volatilidad reciente, más la curva de futuros VIX/VIX3M. La curva en backwardation (VIX de corto por encima del de medio plazo) es señal de capitulación real, no un motivo de exclusión.
 
-5. VOLUMEN (10pts)
-Confirmación con volumen elevado. Sin volumen, no hay convicción institucional real detrás del movimiento.
+3. McCLELLAN — AMPLITUD DE MERCADO (18pts)
+Proxy basado en el percentil móvil (últimos ~2 años) del diferencial de momentum de SPY, cuando no hay datos sectoriales reales — se auto-calibra a cualquier régimen de volatilidad en vez de usar una escala absoluta fija. Valores muy negativos (percentil bajo) sugieren sobreventa generalizada.
 
-INTERPRETACIÓN:
-- ≥ 70 + volumen → VERDE → Fondo probable. Entrada gradual.
-- 50-70 → ÁMBAR → Condiciones desarrollándose. Preparar lista.
-- < 30 → ROJO → Sin condiciones. Preservar capital.
+4. VOLUMEN — CONFIRMACIÓN (12pts)
+Volumen elevado como evidencia de convicción institucional real detrás del movimiento.
 
-IMPORTANTE: este es un sistema de heurísticas de análisis técnico clásico, no una estrategia con ventaja estadística demostrada de forma independiente. Usa el botón de Backtest para ver cómo se ha comportado realmente sobre 10 años de histórico de SPY antes de darle un peso desproporcionado en tus decisiones.`
+5. EMA200 SEMANAL (20pts)
+Precio dentro de un margen razonable de la media de largo plazo — contexto de que no está excesivamente extendido.
+
+6. RÉGIMEN SMA200 (10pts)
+Sobre la SMA200 diaria = régimen alcista de fondo (listón de VERDE más bajo, 60/100). Bajo la SMA200 = régimen bajista (listón sube a 70/100, más exigente).
+
+GATEKEEPERS — el filtro que evita falsos verdes:
+Un score alto por sí solo NO enciende VERDE. Hace falta además al menos una condición estructural real: precio cerca de la EMA200 semanal, o RVOL extremo en el día del mínimo. El Follow-Through Day (FTD) ya no puntúa como factor del score — actúa como confirmación posterior: si llega, refuerza la convicción del VERDE, pero su ausencia no bloquea la señal (solo indica vigilar los próximos días).
+
+FILTRO DE ESTRÉS DE CRÉDITO (HY OAS):
+Añadido tras revisar el backtest de 2008: las señales de sep-oct 2008 (ya con el crédito roto, post-Lehman) fueron las peores de toda la muestra, mientras que las de ene-jul 2008 (crisis en curso pero crédito aún no en pánico sistémico) funcionaron razonablemente. El HY OAS (spread de la deuda corporativa de peor calidad frente al treasury) es la forma estándar de medir si el problema ya es de financiación real, no solo de precio de las acciones. Si está "elevado" (≥8%) se añade un aviso, sin más. Si está en nivel "crítico" (≥10%), cualquier VERDE se degrada automáticamente a VERDE-VOL (entrada muy reducida) — pero deliberadamente NO se bloquea del todo, porque los suelos reales de 2008-09 y COVID ocurrieron con el spread todavía cerca de su pico.
+
+IMPORTANTE: este es un sistema de heurísticas de análisis técnico clásico, no una estrategia con ventaja estadística garantizada. Usa el botón de Backtest para ver cómo se ha comportado realmente sobre 10 años de histórico de SPY antes de darle un peso desproporcionado en tus decisiones.`
     },
 
     "algoritmo-gatekeepers": {
@@ -897,7 +909,9 @@ IMPORTANTE: este es un sistema de heurísticas de análisis técnico clásico, n
 POR QUÉ EXISTEN:
 Sin estos filtros, un score alto podría encenderse simplemente porque varios indicadores de momentum coinciden en un rebote débil, sin que haya ninguna evidencia estructural de que sea un giro real. Los gatekeepers son la diferencia entre "los números dicen que esto pinta bien" y "hay señales de que dinero grande está actuando", que es justo la misma filosofía que verás en el Módulo 22 de la Academia (El Triángulo RSU) aplicada aquí a la detección de fondos de mercado.
 
-También verás el Drawdown de 52 semanas junto a los gatekeepers — no es un gatekeeper en sí, es contexto: cuanto mayor la caída previa, más significativo es que se cumplan estas condiciones de giro.`
+También verás el Drawdown de 52 semanas junto a los gatekeepers — no es un gatekeeper en sí, es contexto: cuanto mayor la caída previa, más significativo es que se cumplan estas condiciones de giro.
+
+HY OAS (spread de crédito high yield) también aparece aquí, pero funciona al revés que los demás: los gatekeepers de arriba son permisivos (basta con que se cumpla UNO). El HY OAS es un filtro de cautela — si está en nivel crítico (≥10%), degrada un VERDE que de otro modo sería pleno a VERDE-VOL, porque señala que el problema puede ser de crédito real, no solo de precio de las acciones (ver tooltip principal del algoritmo para el porqué, con el ejemplo real de 2008).`
     },
 
     "algoritmo-importancia": {
@@ -906,13 +920,19 @@ También verás el Drawdown de 52 semanas junto a los gatekeepers — no es un g
         long: `Esta tabla responde a una pregunta distinta a la del backtest general: de los 6 factores que componen el score (RSI, VIX, McClellan, RVOL en mínimo, EMA200 semanal, régimen SMA200), ¿cuáles han pesado de verdad en el resultado y cuáles apenas han importado?
 
 CÓMO SE CALCULA:
-Para cada factor, se separan las señales históricas en "score alto" y "score bajo" en ESE factor concreto, y se compara el retorno medio real a 20 días de cada grupo. Si un factor con score alto obtuvo sistemáticamente mejor retorno que con score bajo, ese factor tiene correlación real con el resultado. Si no hay diferencia, el factor puede estar aportando poco pese a formar parte del score compuesto.
+Para cada factor, se ordenan las señales históricas por el valor de ESE factor concreto y se dividen en dos grupos para comparar su retorno medio a 20 días. Factores discretos con pocos valores posibles (p.ej. Régimen SMA200, que solo vale 0 o 10) se agrupan por su valor real ("alto" = valor máximo observado, "bajo" = el resto); factores con variación más continua (RSI, VIX, RVOL) se dividen por ranking (mitad superior vs inferior). Si un factor con score alto obtuvo sistemáticamente mejor retorno que con score bajo, ese factor tiene correlación real con el resultado.
 
 LA COLUMNA "CORR":
-Correlación entre el valor del factor y el retorno a 20 días — más cercana a +1 indica que ese factor anticipa bien subidas, cercana a 0 indica que no aporta señal por sí solo.
+Correlación entre el valor del factor y el retorno a 20 días — más cercana a +1 indica que ese factor anticipa bien subidas, cercana a 0 indica que no aporta señal por sí solo, y cercana a -1 indica que el factor se ha correlacionado con RETORNOS PEORES en esta muestra (vale la pena vigilarlo, aunque con pocas señales puede ser ruido).
+
+SIN VARIACIÓN:
+Si un factor tuvo exactamente el mismo valor en TODAS las señales de la muestra (p.ej. si siempre estuvo al máximo), no hay nada que comparar — se marca como "sin variación" en vez de forzar un split artificial.
 
 MUESTRA PEQUEÑA:
 Con menos de 2 señales en algún grupo (alto o bajo), la comparación no es estadísticamente fiable y se marca explícitamente — no la trates como concluyente si ves ese aviso.
+
+INESTABILIDAD CONOCIDA — NO REPONDERAR SOBRE UN SOLO SNAPSHOT:
+Estas correlaciones pueden cambiar de signo por completo entre una corrida del backtest y otra, simplemente porque cambia qué señales entran en la muestra (ej. arreglar un bug que añade más señales de 2008 cambia la composición, no el mercado). Ya ha pasado: RSI, RVOL en mínimo y Régimen SMA200 invirtieron su signo entre dos corridas del mismo algoritmo. Trata estos números como diagnóstico exploratorio, no como base para tocar pesos del score — hace falta que un factor se mantenga estable en su signo a través de varias corridas y ventanas temporales distintas antes de considerar recalibrarlo.
 
 REQUISITO MÍNIMO:
 Hacen falta al menos 8 señales históricas con retorno ya calculado (necesitan 60 días desde que se dispararon para tener el dato a 60d) para que este análisis tenga sentido mínimo — con menos, se muestra un aviso en vez de forzar una conclusión sobre una muestra demasiado pequeña.`
@@ -925,7 +945,7 @@ Hacen falta al menos 8 señales históricas con retorno ya calculado (necesitan 
 
 METODOLOGÍA:
 - Se recalcula el score exacto del algoritmo (la misma lógica que ves en vivo) para cada día de los últimos 10 años de SPY.
-- Una "señal" se registra cuando el semáforo se enciende en VERDE (score ≥70 con volumen confirmado) tras no estarlo el día anterior — el momento exacto de encendido, no cada día que permanece encendido.
+- Una "señal" se registra cuando el semáforo se enciende en VERDE puro (score sobre umbral dinámico 60/70 + gatekeeper estructural cumplido + volumen o cercanía a EMA200 semanal) tras no estarlo el día anterior — el momento exacto de encendido, no cada día que permanece encendido.
 - Para cada señal, se mide el retorno real de SPY en los siguientes 5, 10, 20 y 60 días de trading.
 
 LA COMPARACIÓN CLAVE — BASELINE:
@@ -934,7 +954,10 @@ El "Baseline SPY" es el retorno medio que habría dado SPY en esos mismos horizo
 LIMITACIÓN CONOCIDA:
 El McClellan Oscillator se calcula con el proxy basado en SPY de forma consistente en todo el periodo (no datos sectoriales reales), ya que recalcular 9 ETFs sectoriales en miles de días históricos sería excesivamente costoso. Esto hace que el backtest sea fiel al comportamiento real del sistema en producción cuando los datos sectoriales no están disponibles, pero no representa el McClellan "ideal" con amplitud real de mercado.
 
-Un número de señales bajo (algo esperable en 10 años, ya que un fondo de mercado real no ocurre con frecuencia) limita la significancia estadística de las conclusiones — interpreta los resultados con esa cautela.`
+"N SEÑALES" VS "EPISODIOS":
+Varias señales seguidas (a pocos días de trading entre sí) suelen corresponder al mismo evento de mercado, no a pruebas independientes — p.ej. 4 señales en 2 semanas durante un mismo crash cuentan como 1 episodio real, no 4. Por eso se muestra también el número de episodios independientes (señales agrupadas cuando caen a ≤15 días de trading de la anterior): es la medida más honesta del tamaño de muestra real. Amplía el rango a 15-20 años para incluir más episodios genuinamente distintos (2008, 2011, 2015, 2018) antes de sacar conclusiones fuertes sobre pesos o umbrales.
+
+Un número de episodios bajo (algo esperable, ya que un fondo de mercado real no ocurre con frecuencia) limita la significancia estadística de las conclusiones — interpreta los resultados con esa cautela.`
     },
 
     "ftd": {

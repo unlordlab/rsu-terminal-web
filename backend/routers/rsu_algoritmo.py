@@ -9,5 +9,5 @@ async def algoritmo(user=Depends(verify_token)):
     return get_rsu_algoritmo()
 
 @router.get("/backtest")
-async def algoritmo_backtest(years: int = Query(10, ge=2, le=15), user=Depends(verify_token)):
+async def algoritmo_backtest(years: int = Query(10, ge=2, le=20), user=Depends(verify_token)):
     return get_rsu_algoritmo_backtest(years=years)

@@ -71,6 +71,10 @@ export async function render(container) {
 
         const gkColor = (ok) => ok ? 'var(--color-accent)' : 'var(--color-muted)';
         const gkIcon  = (ok) => ok ? '✓' : '○';
+        const creditColor = data.credit_spread_nivel === 'critico' ? '#f23645' : data.credit_spread_nivel === 'elevado' ? '#ff9800' : 'var(--color-muted)';
+        const creditTxt   = data.credit_spread_valor == null
+            ? 'HY OAS: sin datos'
+            : 'HY OAS: ' + data.credit_spread_valor + '% (' + (data.credit_spread_nivel === 'critico' ? 'CRÍTICO' : data.credit_spread_nivel === 'elevado' ? 'elevado' : 'normal') + ')';
         const gatekeepersHtml = '<div style="margin-top:1rem;padding:1rem;background:var(--color-bg,#0a0a0a);border-radius:var(--radius);border:1px solid var(--color-border);">'
             + '<div style="color:var(--color-muted);font-size:11px;letter-spacing:0.08em;margin-bottom:8px;">GATEKEEPERS ' + tt('algoritmo-gatekeepers') + ' (umbral VERDE: ' + data.umbral_verde + '/100)</div>'
             + '<div style="display:flex;gap:1.5rem;flex-wrap:wrap;font-size:12px;">'
@@ -78,6 +82,7 @@ export async function render(container) {
             + '<div style="color:' + gkColor(data.gatekeeper_b) + ';">' + gkIcon(data.gatekeeper_b) + ' RVOL extremo en el mínimo</div>'
             + '<div style="color:' + gkColor(data.ftd_confirmado) + ';">' + gkIcon(data.ftd_confirmado) + ' FTD confirmado</div>'
             + '<div style="color:var(--color-muted);">Drawdown 52w: <span style="color:' + (data.drawdown_52w_pct <= -15 ? '#f23645' : 'var(--color-text)') + ';">' + data.drawdown_52w_pct + '%</span></div>'
+            + '<div style="color:' + creditColor + ';">' + creditTxt + '</div>'
             + '</div>'
             + '</div>';
 
@@ -146,7 +151,14 @@ export async function render(container) {
             + '<div id="backtest-section" style="background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius);padding:1.25rem;margin-top:1rem;">'
             + '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem;">'
             + '<div style="color:var(--color-accent);font-size:12px;letter-spacing:0.08em;">BACKTEST · ¿TIENE VENTAJA REAL? ' + tt('algoritmo-backtest') + '</div>'
-            + '<button id="run-backtest-btn" style="background:var(--color-bg,#0a0a0a);color:var(--color-accent);border:1px solid var(--color-accent);border-radius:var(--radius);padding:6px 14px;font-family:var(--font-mono);font-size:11px;cursor:pointer;letter-spacing:0.05em;">EJECUTAR BACKTEST (10 AÑOS)</button>'
+            + '<div style="display:flex;gap:8px;align-items:center;">'
+            + '<select id="backtest-years" style="background:var(--color-bg,#0a0a0a);color:var(--color-text);border:1px solid var(--color-border);border-radius:var(--radius);padding:5px 8px;font-family:var(--font-mono);font-size:11px;">'
+            + '<option value="10">10 años</option>'
+            + '<option value="15">15 años</option>'
+            + '<option value="20">20 años (incluye 2008)</option>'
+            + '</select>'
+            + '<button id="run-backtest-btn" style="background:var(--color-bg,#0a0a0a);color:var(--color-accent);border:1px solid var(--color-accent);border-radius:var(--radius);padding:6px 14px;font-family:var(--font-mono);font-size:11px;cursor:pointer;letter-spacing:0.05em;">EJECUTAR BACKTEST</button>'
+            + '</div>'
             + '</div>'
             + '<div id="backtest-content" style="color:var(--color-muted);font-size:12px;">Pulsa el botón para recalcular el algoritmo sobre 10 años de histórico de SPY y comparar contra el rendimiento base del índice. Puede tardar 10-20 segundos.</div>'
             + '</div>';
@@ -163,13 +175,14 @@ export async function render(container) {
 async function runBacktest(container) {
     const btn     = container.querySelector('#run-backtest-btn');
     const content = container.querySelector('#backtest-content');
+    const years   = container.querySelector('#backtest-years')?.value || '10';
     btn.disabled  = true;
     btn.textContent = 'CALCULANDO...';
-    content.innerHTML = '<div style="color:var(--color-muted);">Recalculando el algoritmo día a día sobre 10 años de histórico — esto puede tardar 10-20 segundos...</div>';
+    content.innerHTML = '<div style="color:var(--color-muted);">Recalculando el algoritmo día a día sobre ' + years + ' años de histórico — esto puede tardar 10-30 segundos...</div>';
 
     try {
         const token = sessionStorage.getItem('rsu_token');
-        const res   = await fetch('/api/v1/algoritmo/backtest?years=10', {
+        const res   = await fetch('/api/v1/algoritmo/backtest?years=' + years, {
             headers: token ? { 'Authorization': 'Bearer ' + token } : {}
         });
         const data  = await res.json();
@@ -218,10 +231,13 @@ function renderBacktestResults(data) {
               const fmt = v => v == null ? '<span style="color:#555;">—</span>' : '<span style="color:' + (v >= 0 ? 'var(--color-accent)' : '#f23645') + ';">' + (v >= 0 ? '+' : '') + v + '%</span>';
               const gk = s.gatekeeper_a ? 'EMA200W' : (s.gatekeeper_b ? 'RVOL' : '—');
               const ftdTag = s.ftd_confirmado ? ' <span style="color:var(--color-accent);" title="FTD confirmado">✓FTD</span>' : '';
+              const creditTag = s.credit_spread_nivel === 'elevado'
+                  ? ' <span style="color:#ff9800;" title="HY OAS ' + s.credit_spread_valor + '% — elevado en el momento de la señal">⚠HY</span>'
+                  : '';
               return '<div style="display:grid;grid-template-columns:85px 55px 80px 70px 50px 50px 50px 50px;gap:6px;padding:6px 0;border-bottom:1px solid var(--color-border);font-size:10px;align-items:center;">'
                   + '<div style="color:var(--color-text);">' + s.fecha + '</div>'
                   + '<div style="color:var(--color-muted);">' + s.score + '/100</div>'
-                  + '<div style="color:var(--color-secondary,#00d9ff);">' + gk + ftdTag + '</div>'
+                  + '<div style="color:var(--color-secondary,#00d9ff);">' + gk + ftdTag + creditTag + '</div>'
                   + '<div style="color:' + (s.drawdown_pct <= -15 ? '#f23645' : 'var(--color-muted)') + ';">' + s.drawdown_pct + '%</div>'
                   + '<div>' + fmt(r.d5) + '</div><div>' + fmt(r.d10) + '</div><div>' + fmt(r.d20) + '</div><div>' + fmt(r.d60) + '</div>'
                   + '</div>';
@@ -244,9 +260,11 @@ function renderBacktestResults(data) {
             const corr = d.correlacion_d20;
             const corrColor = corr == null ? 'var(--color-muted)' : (corr > 0.3 ? 'var(--color-accent)' : corr < -0.3 ? '#f23645' : '#ffb800');
             const corrWidth = corr == null ? 0 : Math.min(100, Math.abs(corr) * 100);
-            const fiableTag = d.fiable
-                ? ''
-                : ' <span style="color:#ffb800;font-size:9px;" title="Grupo alto o bajo con menos de 2 señales — comparación no fiable">⚠ muestra pequeña</span>';
+            const fiableTag = d.sin_variacion
+                ? ' <span style="color:#666;font-size:9px;" title="El factor tuvo el mismo valor en todas las señales de la muestra — no hay nada que comparar">— sin variación</span>'
+                : d.fiable
+                    ? ''
+                    : ' <span style="color:#ffb800;font-size:9px;" title="Grupo alto o bajo con menos de 2 señales — comparación no fiable">⚠ muestra pequeña</span>';
             return '<div style="margin-bottom:10px;">'
                 + '<div style="display:flex;justify-content:space-between;font-size:11px;margin-bottom:3px;">'
                 + '<span style="color:var(--color-text);">' + (FACTOR_LABELS[factor] || factor) + fiableTag + '</span>'
@@ -270,7 +288,11 @@ function renderBacktestResults(data) {
 
     return '<div style="margin-bottom:1rem;font-size:11px;color:var(--color-muted);">'
         + 'Periodo: ' + data.periodo_inicio + ' → ' + data.periodo_fin + ' (' + data.total_dias + ' días) · '
-        + '<span style="color:var(--color-accent);">' + data.n_senales + ' señales VERDE puras detectadas</span>'
+        + '<span style="color:var(--color-accent);">' + data.n_senales + ' señales VERDE puras</span>'
+        + ' <span style="color:var(--color-muted);" title="Señales agrupadas por episodio de mercado (≤15 días de trading entre sí cuentan como el mismo episodio) — medida más honesta de cuántos eventos distintos ha visto el sistema">(≈' + data.n_episodios + ' episodios de mercado independientes)</span>'
+        + (data.credit_spread_disponible === false
+            ? '<div style="color:#ff9800;margin-top:4px;">⚠ FRED no respondió durante este cálculo — el filtro de estrés de crédito (HY OAS) NO se aplicó en esta corrida. Pulsa RECALCULAR de nuevo.</div>'
+            : '')
         + '</div>'
 
         + '<div style="display:grid;grid-template-columns:80px 1fr 1fr 1fr 1fr;gap:10px;padding:6px 0;border-bottom:1px solid var(--color-border);font-size:10px;color:var(--color-muted);">'
