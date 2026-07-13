@@ -783,10 +783,20 @@ def generate_briefing(prompt: str) -> str:
             "Content-Type":  "application/json",
         },
         json={
-            "model":       MODEL,
-            "messages":    [{"role": "user", "content": prompt}],
-            "max_tokens":  2500,
-            "temperature": 0.45,
+            "model":            MODEL,
+            "messages":         [{"role": "user", "content": prompt}],
+            "max_tokens":       2500,
+            "temperature":      0.45,
+            # Qwen3.6-27B es un modelo "razonador" — antes de la respuesta
+            # final genera un bloque de pensamiento interno que casi siempre
+            # sale en inglés, aunque el idioma pedido en el prompt sea
+            # español (comportamiento habitual en modelos de este tipo, no
+            # un fallo del prompt). Sin este parámetro, ese razonamiento se
+            # devolvía mezclado dentro del propio texto de la respuesta —
+            # "hidden" hace que Groq solo devuelva la respuesta final limpia,
+            # sin tocar la calidad del razonamiento en sí (sigue pensando
+            # igual por dentro, solo no se cuela en el texto final).
+            "reasoning_format": "hidden",
         },
         timeout=120,
     )
