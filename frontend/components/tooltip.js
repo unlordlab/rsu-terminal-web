@@ -885,16 +885,31 @@ Volumen elevado como evidencia de convicción institucional real detrás del mov
 5. EMA200 SEMANAL (20pts)
 Precio dentro de un margen razonable de la media de largo plazo — contexto de que no está excesivamente extendido.
 
-6. RÉGIMEN SMA200 (10pts)
-Sobre la SMA200 diaria = régimen alcista de fondo (listón de VERDE más bajo, 60/100). Bajo la SMA200 = régimen bajista (listón sube a 70/100, más exigente).
+6. RÉGIMEN SMA200 (umbral, no puntúa)
+Sobre la SMA200 diaria = régimen alcista de fondo (listón de VERDE más bajo, 60/100). Bajo la SMA200 = régimen bajista (listón sube a 70/100, más exigente). No suma puntos aparte al score — antes sí lo hacía, pero eso significaba que "estar sobre la SMA200" contaba dos veces a favor de lo mismo (los puntos Y el listón más bajo). Ahora solo cumple su función original: decidir el umbral.
 
 GATEKEEPERS — el filtro que evita falsos verdes:
 Un score alto por sí solo NO enciende VERDE. Hace falta además al menos una condición estructural real: precio cerca de la EMA200 semanal, o RVOL extremo en el día del mínimo. El Follow-Through Day (FTD) ya no puntúa como factor del score — actúa como confirmación posterior: si llega, refuerza la convicción del VERDE, pero su ausencia no bloquea la señal (solo indica vigilar los próximos días).
 
-FILTRO DE ESTRÉS DE CRÉDITO (HY OAS):
-Añadido tras revisar el backtest de 2008: las señales de sep-oct 2008 (ya con el crédito roto, post-Lehman) fueron las peores de toda la muestra, mientras que las de ene-jul 2008 (crisis en curso pero crédito aún no en pánico sistémico) funcionaron razonablemente. El HY OAS (spread de la deuda corporativa de peor calidad frente al treasury) es la forma estándar de medir si el problema ya es de financiación real, no solo de precio de las acciones. Si está "elevado" (≥8%) se añade un aviso, sin más. Si está en nivel "crítico" (≥10%), cualquier VERDE se degrada automáticamente a VERDE-VOL (entrada muy reducida) — pero deliberadamente NO se bloquea del todo, porque los suelos reales de 2008-09 y COVID ocurrieron con el spread todavía cerca de su pico.
+FILTRO DE ESTRÉS DE CRÉDITO (BAA10Y):
+Añadido tras revisar el backtest de 2008: las señales de sep-oct 2008 (ya con el crédito roto, post-Lehman) fueron las peores de toda la muestra, mientras que las de ene-jul 2008 (crisis en curso pero crédito aún no en pánico sistémico) funcionaron razonablemente. Se probó primero con el HY OAS de ICE BofA, pero FRED solo distribuye programáticamente los últimos ~3 años de esa serie por licencia (aunque su gráfico web muestre más) — así que se usa BAA10Y (diferencial entre el bono corporativo Baa de Moody's y el Treasury a 10 años), que mide el mismo tipo de estrés de crédito con histórico público completo desde 1986. Si está "elevado" (≥3%) se añade un aviso, sin más — SALVO que además esté empeorando (subiendo en los últimos 10 días), en cuyo caso se trata igual que "crítico". Si está en nivel "crítico" (≥4%), cualquier VERDE se degrada automáticamente a VERDE-VOL (entrada muy reducida) — pero deliberadamente NO se bloquea del todo, porque los suelos reales de 2008-09 y COVID ocurrieron con el spread todavía cerca de su pico.
+
+Por qué importa la tendencia y no solo el nivel: confirmado con el propio backtest, dos señales "elevado" en sep-2008 (crédito rompiéndose activamente) fueron un desastre (-18% a -26% a 60d), mientras que otras igual de "elevado" pero con el crédito ya sanando (jul-2009, sep-2011, tras la fase aguda de sus crisis) fueron excelentes (+12% a +20%). Bloquear TODO "elevado" sin distinguir mejoraba las cifras agregadas del backtest, pero a costa de descartar esas recuperaciones reales — de ahí el filtro de tendencia en vez de un corte plano por nivel.
 
 IMPORTANTE: este es un sistema de heurísticas de análisis técnico clásico, no una estrategia con ventaja estadística garantizada. Usa el botón de Backtest para ver cómo se ha comportado realmente sobre 10 años de histórico de SPY antes de darle un peso desproporcionado en tus decisiones.`
+    },
+
+    "algoritmo-historial-real": {
+        title: "Señales Reales (en vivo)",
+        short: "Señales disparadas desde que se activó el seguimiento, con su resultado real — distinto del backtest, que reanaliza histórico ya conocido.",
+        long: `POR QUÉ EXISTE ESTO, APARTE DEL BACKTEST:
+El backtest de arriba reanaliza el mismo histórico fijo de 20 años una y otra vez. Cada mejora al algoritmo viene de mirar mejor esos mismos datos — no de datos genuinamente nuevos. Eso es útil para depurar bugs, pero tiene un límite: nunca puede decirte con certeza si un ajuste concreto va a funcionar en el futuro, solo si habría funcionado en el pasado que ya conocemos.
+
+Este panel es la otra pata: cada vez que el semáforo cambia de estado, queda registrado — y si es un VERDE o VERDE-VOL, se guarda su desglose completo de factores. 5, 10, 20 y 60 días después, se rellena automáticamente qué pasó de verdad con SPY desde ese momento.
+
+Con el tiempo (meses, años), esto construye un historial de resultados que nadie pudo ver de antemano al diseñar las reglas — la validación más honesta posible de si el algoritmo funciona, sin el riesgo de sobreajuste que tiene cualquier backtest sobre datos ya conocidos.
+
+Empieza vacío. Es normal y esperado — se irá llenando solo, sin que haga falta hacer nada.`
     },
 
     "algoritmo-gatekeepers": {
@@ -911,7 +926,7 @@ Sin estos filtros, un score alto podría encenderse simplemente porque varios in
 
 También verás el Drawdown de 52 semanas junto a los gatekeepers — no es un gatekeeper en sí, es contexto: cuanto mayor la caída previa, más significativo es que se cumplan estas condiciones de giro.
 
-HY OAS (spread de crédito high yield) también aparece aquí, pero funciona al revés que los demás: los gatekeepers de arriba son permisivos (basta con que se cumpla UNO). El HY OAS es un filtro de cautela — si está en nivel crítico (≥10%), degrada un VERDE que de otro modo sería pleno a VERDE-VOL, porque señala que el problema puede ser de crédito real, no solo de precio de las acciones (ver tooltip principal del algoritmo para el porqué, con el ejemplo real de 2008).`
+BAA10Y (diferencial de crédito corporativo Baa vs Treasury 10y) también aparece aquí, pero funciona al revés que los demás: los gatekeepers de arriba son permisivos (basta con que se cumpla UNO). El BAA10Y es un filtro de cautela — si está en nivel crítico (≥4%), degrada un VERDE que de otro modo sería pleno a VERDE-VOL, porque señala que el problema puede ser de crédito real, no solo de precio de las acciones (ver tooltip principal del algoritmo para el porqué, con el ejemplo real de 2008).`
     },
 
     "algoritmo-importancia": {
@@ -946,10 +961,13 @@ Hacen falta al menos 8 señales históricas con retorno ya calculado (necesitan 
 METODOLOGÍA:
 - Se recalcula el score exacto del algoritmo (la misma lógica que ves en vivo) para cada día de los últimos 10 años de SPY.
 - Una "señal" se registra cuando el semáforo se enciende en VERDE puro (score sobre umbral dinámico 60/70 + gatekeeper estructural cumplido + volumen o cercanía a EMA200 semanal) tras no estarlo el día anterior — el momento exacto de encendido, no cada día que permanece encendido.
-- Para cada señal, se mide el retorno real de SPY en los siguientes 5, 10, 20 y 60 días de trading.
+- Para cada señal, se mide el retorno real de SPY en los siguientes 5, 10, 20 y 60 días de trading — de dos formas distintas, ver siguiente sección.
+
+DOS FORMAS DE MEDIR EL RETORNO — "SIN STOP" VS "CON STOP -7%":
+El texto de la señal VERDE recomienda una entrada gradual con un stop del -7%, no mantener sin tocar nada. Para medir la estrategia que de verdad se recomienda, hay dos vistas: "Sin stop" es la referencia simple (mantener sin tocar nada durante todo el horizonte). "Con stop -7%" simula qué habría pasado si de verdad se hubiera respetado ese stop — revisa el mínimo diario (no solo el cierre, un stop se dispara en cuanto el precio LO TOCA) en cada día del camino entre la señal y el horizonte, y si en algún punto se tocó el -7%, esa señal deja de participar en cualquier recuperación posterior para ese horizonte y los más largos. Pueden diferir bastante — sobre todo en señales con recuperación rápida en forma de V, donde un stop rígido puede sacarte justo antes del rebote.
 
 LA COMPARACIÓN CLAVE — BASELINE:
-El "Baseline SPY" es el retorno medio que habría dado SPY en esos mismos horizontes calculado sobre TODOS los días del periodo, no solo los días de señal. Esta es la comparación honesta: si el retorno medio tras una señal VERDE no supera claramente al baseline, el algoritmo no está aportando ventaja real sobre estar simplemente invertido siempre — solo está coincidiendo con un mercado que en general tiende a subir con el tiempo.
+El "Baseline SPY" es el retorno medio que habría dado SPY en esos mismos horizontes calculado sobre TODOS los días del periodo, no solo los días de señal. Esta es la comparación honesta: si el retorno medio tras una señal VERDE no supera claramente al baseline, el algoritmo no está aportando ventaja real sobre estar simplemente invertido siempre — solo está coincidiendo con un mercado que en general tiende a subir con el tiempo. El baseline es el mismo en ambas vistas (comprar y mantener SPY sin stop es la referencia neutral en los dos casos — el stop es una particularidad de esta estrategia concreta, no algo que también haría un inversor pasivo).
 
 LIMITACIÓN CONOCIDA:
 El McClellan Oscillator se calcula con el proxy basado en SPY de forma consistente en todo el periodo (no datos sectoriales reales), ya que recalcular 9 ETFs sectoriales en miles de días históricos sería excesivamente costoso. Esto hace que el backtest sea fiel al comportamiento real del sistema en producción cuando los datos sectoriales no están disponibles, pero no representa el McClellan "ideal" con amplitud real de mercado.

@@ -31,6 +31,12 @@ class Settings(BaseSettings):
     alpha_vantage_api_key: str = ""
     groq_api_key: str = ""
     openrouter_api_key: str = ""
+    # Notificaciones de Telegram — usado por el algoritmo RSU para avisar de
+    # cambios de semáforo (ROJO/ÁMBAR/VERDE). Bot creado gratis con @BotFather;
+    # chat_id puede ser el de un chat personal o el de un canal/grupo donde se
+    # quiera publicar (para un canal, empieza por "-100...").
+    telegram_bot_token: str = ""
+    telegram_chat_id: str = ""
 
     class Config:
         env_file = ".env"

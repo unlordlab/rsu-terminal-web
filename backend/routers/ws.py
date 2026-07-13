@@ -306,3 +306,35 @@ async def market_cache_warm_loop():
                 await loop.run_in_executor(None, get_credit_spreads)
         except Exception as e:
             print(f"[MarketWarm] Error refrescando caché: {e}")
+
+
+# Recalcula el RSU Algoritmo en vivo cada 30 min, independientemente de si
+# algún usuario tiene la página abierta — si no existiera esto, un cambio de
+# semáforo solo se detectaría (y notificaría por Telegram) cuando alguien
+# entrase a /algoritmo por casualidad, lo que podría tardar horas o no pasar
+# nunca en fin de semana. get_rsu_algoritmo() ya lleva dentro la llamada a
+# procesar_resultado_algoritmo() que compara contra el último estado
+# conocido y solo notifica si de verdad cambió.
+async def algoritmo_check_loop():
+    while True:
+        await asyncio.sleep(1800)  # 30 min
+        try:
+            from services.rsu_algoritmo_service import get_rsu_algoritmo
+            loop = asyncio.get_event_loop()
+            await loop.run_in_executor(None, get_rsu_algoritmo)
+        except Exception as e:
+            print(f"[AlgoritmoCheck] Error: {e}")
+
+
+# Una vez al día, rellena el retorno real (5/10/20/60d) de las señales
+# VERDE/VERDE-VOL trackeadas cuyo horizonte ya se ha cumplido. No hace falta
+# más frecuencia — los resultados solo cambian con el cierre del día.
+async def algoritmo_resultados_loop():
+    while True:
+        await asyncio.sleep(86400)  # 24h
+        try:
+            from services.algoritmo_tracking_service import actualizar_resultados_pendientes
+            loop = asyncio.get_event_loop()
+            await loop.run_in_executor(None, actualizar_resultados_pendientes)
+        except Exception as e:
+            print(f"[AlgoritmoResultados] Error: {e}")

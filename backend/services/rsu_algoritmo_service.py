@@ -6,76 +6,139 @@ from concurrent.futures import ThreadPoolExecutor
 
 VENTANA = 10
 
-# ── FILTRO DE ESTRÉS DE CRÉDITO (HY OAS) ────────────────────────────────────
+# ── FILTRO DE ESTRÉS DE CRÉDITO (BAA10Y) ────────────────────────────────────
 # Motivación real, con datos del propio backtest: las señales VERDE de 2008
 # que peor salieron (16/09, 23/09, 30/09 — hasta -25.77% a 60d) se dispararon
 # ya con el crédito roto (post-Lehman), mientras que las de enero-julio 2008
 # (crisis subprime en curso pero crédito aún no en pánico sistémico) dieron
-# resultados razonables. El HY OAS (ICE BofA US High Yield Option-Adjusted
-# Spread) es la forma estándar de medir eso: cuánto de más rendimiento exige
-# el mercado a la deuda de peor calidad sobre el treasury — cuando se dispara,
-# el problema ya no es solo de acciones, es de financiación real.
+# resultados razonables.
 #
-# Umbrales: "elevado" (8.0%) reutiliza el ya calibrado en market_service.py
-# (SPREAD_THRESHOLDS) para el widget de Credit Spreads. "crítico" (10.0%) es
-# nuevo aquí — separa crisis de crédito sistémicas genuinas (2008: pico
-# ~21.8% · COVID mar-2020: pico ~10.9%) de estrés elevado pero no sistémico
-# (crisis de deuda europea 2011: pico ~8.7% · energía/China 2015-16: pico
-# ~8.9%). Deliberadamente NO bloquea VERDE por completo — solo lo degrada a
-# VERDE-VOL (igual tratamiento que "sin volumen") — porque los suelos reales
-# de 2008-09 y COVID ocurrieron precisamente con el spread todavía cerca de
-# su pico; un veto total habría descartado también esas oportunidades.
-CREDIT_SPREAD_ELEVADO = 8.0
-CREDIT_SPREAD_CRITICO = 10.0
+# SERIE: se probó primero con el HY OAS de ICE BofA (BAMLH0A0HYM2), pero se
+# confirmó por tres vías independientes (CSV anónimo, endpoint /data/, API
+# oficial con API key válida) que FRED solo distribuye programáticamente los
+# últimos ~3 años de esa serie — es un índice propietario de ICE Data
+# Services con licencia restringida para redistribución vía API/descarga,
+# aunque el gráfico interactivo en su web sí muestre el histórico completo.
+# No es arreglable con reintentos ni con una key mejor.
+#
+# Se usa en su lugar BAA10Y (diferencial entre el bono corporativo Baa de
+# Moody's y el Treasury a 10 años) — mide el mismo concepto (prima de riesgo
+# de crédito exigida a deuda de peor calidad) y es dato público de la Fed sin
+# restricción de licencia, con histórico completo desde 1986.
+#
+# Umbrales (escala BAA10Y, distinta de la de HY OAS): "elevado" ≥3.0% y
+# "crítico" ≥4.0% — calibrados con picos históricos reales: 2008 GFC ~6.16%
+# (dic-2008), COVID mar-2020 ~3.94%, crisis de deuda europea 2011 ~3.5%,
+# energía/China 2015-16 ~3.5%. Deliberadamente NO bloquea VERDE por completo
+# — solo lo degrada a VERDE-VOL (igual tratamiento que "sin volumen") —
+# porque los suelos reales de 2008-09 y COVID ocurrieron precisamente con el
+# spread todavía cerca de su pico; un veto total habría descartado también
+# esas oportunidades. Umbrales provisionales — re-evaluar con el backtest ya
+# corriendo con datos reales de BAA10Y.
+CREDIT_SPREAD_ELEVADO = 3.0
+CREDIT_SPREAD_CRITICO = 4.0
+
+def _parsear_csv_fred(texto):
+    """Parsea el CSV de FRED a (fechas, valores) — tolerante a las dos
+    variantes de formato que usan /data/{id}.csv y /graph/fredgraph.csv
+    (cabecera y nombre de columna difieren, pero ambas son 'fecha,valor')."""
+    fechas, valores = [], []
+    for line in texto.strip().split("\n")[1:]:  # saltar cabecera
+        parts = line.split(",")
+        if len(parts) != 2:
+            continue
+        try:
+            v = float(parts[1])
+        except ValueError:
+            continue  # FRED marca los días sin dato con "."
+        fechas.append(parts[0])
+        valores.append(v)
+    return fechas, valores
 
 def _fetch_hy_spread_history():
     """
-    Histórico completo del HY OAS vía FRED (CSV público, sin API key) — misma
-    fuente y endpoint que ya usa market_service.py para el widget de Credit
-    Spreads. Se descarga una sola vez y se reutiliza tanto en vivo como en
-    cada día del backtest, para no golpear FRED miles de veces.
+    Histórico completo del BAA10Y vía FRED.
 
-    Logging explícito en vez de un except silencioso: este endpoint ya ha
-    dado timeouts en producción con otras series (ver _fetch_net_liquidity en
-    market_service.py) — sin log, un fallo aquí se ve idéntico a "sin estrés
-    de crédito" y pasa desapercibido.
+    CONFIRMADO EN PRODUCCIÓN (dos intentos, dos endpoints distintos —
+    /graph/fredgraph.csv y /data/{id}.csv): ambas rutas de descarga CSV
+    anónima de FRED (sin API key) truncan a los últimos ~3 años sin avisar,
+    aunque devuelvan 200 OK con datos aparentemente válidos. No es un bug de
+    parseo — es una limitación real del acceso anónimo. La única vía fiable
+    para histórico completo es la API oficial con una API key (gratuita,
+    instantánea: https://fred.stlouisfed.org/docs/api/api_key.html).
+
+    Si settings.fred_api_key está configurada, se usa la API oficial (JSON,
+    sin límite de rango). Si no, se cae al CSV como mejor esfuerzo — con el
+    aviso de "cobertura parcial" ya implementado en el backtest para que se
+    note en vez de fallar en silencio.
     """
     import requests
+    from config import settings
+    api_key = getattr(settings, "fred_api_key", "")
+
+    if api_key:
+        try:
+            url = (
+                "https://api.stlouisfed.org/fred/series/observations"
+                f"?series_id=BAA10Y&api_key={api_key}&file_type=json"
+                "&observation_start=1996-01-01&sort_order=asc&limit=100000"
+            )
+            url_log = url.replace(api_key, api_key[:4] + "..." + api_key[-4:])
+            print(f"[CreditStressGate] Pidiendo: {url_log}")
+            r = requests.get(url, timeout=20)
+            print(f"[CreditStressGate] FRED API respondió: HTTP {r.status_code}")
+            if r.status_code == 200:
+                body = r.json()
+                obs = body.get("observations", [])
+                print(f"[CreditStressGate] FRED API: 'count' del body = {body.get('count')}, observations recibidas = {len(obs)}"
+                      + (f", primera = {obs[0]}, última = {obs[-1]}" if obs else ""))
+                fechas, valores = [], []
+                for o in obs:
+                    try:
+                        valores.append(float(o["value"]))
+                        fechas.append(o["date"])
+                    except (ValueError, KeyError):
+                        continue  # "." = sin dato ese día
+                if valores:
+                    print(f"[CreditStressGate] FRED API (con key) BAA10Y: {len(valores)} puntos ({fechas[0]} → {fechas[-1]})")
+                    return pd.Series(valores, index=pd.to_datetime(fechas)).sort_index()
+                print("[CreditStressGate] FRED API: 200 OK pero 0 observaciones parseables")
+            else:
+                print(f"[CreditStressGate] FRED API: status HTTP {r.status_code} — cuerpo: {r.text[:300]}")
+        except requests.exceptions.Timeout:
+            print("[CreditStressGate] FRED API: TIMEOUT")
+        except Exception as e:
+            print(f"[CreditStressGate] FRED API: error inesperado ({type(e).__name__}: {e})")
+        # Si la API con key falla, no tiene sentido probar el CSV (misma
+        # limitación de rango) — se cae directo a "sin datos".
+        return None
+
+    print("[CreditStressGate] Sin FRED_API_KEY configurada — usando CSV anónimo (limitado a ~3 años, confirmado). "
+          "Consigue una key gratis en https://fred.stlouisfed.org/docs/api/api_key.html y añádela como FRED_API_KEY en .env para histórico completo.")
     try:
         r = requests.get(
-            "https://fred.stlouisfed.org/graph/fredgraph.csv?id=BAMLH0A0HYM2",
+            "https://fred.stlouisfed.org/graph/fredgraph.csv?id=BAA10Y",
             timeout=15,
             headers={'User-Agent': 'RSU Terminal contact@rsu-terminal.com'}
         )
         if r.status_code != 200:
-            print(f"[CreditStressGate] FRED BAMLH0A0HYM2: status HTTP {r.status_code} (esperado 200)")
+            print(f"[CreditStressGate] CSV anónimo: status HTTP {r.status_code}")
             return None
-        fechas, valores = [], []
-        for line in r.text.strip().split("\n")[1:]:
-            parts = line.split(",")
-            if len(parts) != 2:
-                continue
-            try:
-                v = float(parts[1])
-            except ValueError:
-                continue  # FRED marca los días sin dato con "."
-            fechas.append(parts[0])
-            valores.append(v)
+        fechas, valores = _parsear_csv_fred(r.text)
         if not valores:
-            print("[CreditStressGate] FRED BAMLH0A0HYM2: respuesta 200 OK pero 0 filas parseables (¿cambió el formato del CSV?)")
+            print("[CreditStressGate] CSV anónimo: 200 OK pero 0 filas parseables")
             return None
-        print(f"[CreditStressGate] FRED BAMLH0A0HYM2: {len(valores)} puntos descargados ({fechas[0]} → {fechas[-1]})")
-        serie = pd.Series(valores, index=pd.to_datetime(fechas)).sort_index()
-        return serie
+        print(f"[CreditStressGate] CSV anónimo BAA10Y: {len(valores)} puntos ({fechas[0]} → {fechas[-1]}) — cobertura limitada, ver nota arriba")
+        return pd.Series(valores, index=pd.to_datetime(fechas)).sort_index()
     except requests.exceptions.Timeout:
-        print("[CreditStressGate] FRED BAMLH0A0HYM2: TIMEOUT — problema de red/conectividad hacia fred.stlouisfed.org")
+        print("[CreditStressGate] CSV anónimo: TIMEOUT")
         return None
     except Exception as e:
-        print(f"[CreditStressGate] FRED BAMLH0A0HYM2: error inesperado ({type(e).__name__}: {e})")
+        print(f"[CreditStressGate] CSV anónimo: error inesperado ({type(e).__name__}: {e})")
         return None
 
 def _fetch_hy_spread_cached():
-    """Envoltorio con caché (6h — FRED publica el HY OAS una vez al día, con
+    """Envoltorio con caché (6h — FRED publica el BAA10Y una vez al día, con
     retraso de un día) para no golpear FRED en cada carga de la página.
 
     La caché compartida (L2, SQLite) serializa a JSON — una Series de pandas
@@ -84,7 +147,14 @@ def _fetch_hy_spread_cached():
     directamente (que se rompería en cuanto hubiera más de un worker o un
     reinicio, sirviendo un string inservible en vez de la Series real)."""
     from services.cache import cache
-    cache_key = "algoritmo:hy_spread_history:v1"
+    from config import settings
+    tiene_key = bool(getattr(settings, "fred_api_key", ""))
+    # La clave incluye si hay API key o no — si algún día se añade/quita la
+    # key, el cambio de sufijo invalida automáticamente la caché vieja sin
+    # depender de acordarse de subir el número de versión a mano (ya se nos
+    # olvidó una vez: la key se añadió pero el resultado limitado del CSV,
+    # cacheado 6h antes de añadirla, se siguió sirviendo igual).
+    cache_key = f"algoritmo:hy_spread_history:v7:{'key' if tiene_key else 'nokey'}"
     cached = cache.get(cache_key)
     if cached is not None:
         try:
@@ -98,17 +168,26 @@ def _fetch_hy_spread_cached():
         cache.set(cache_key, [[d.strftime('%Y-%m-%d'), v] for d, v in serie.items()], 3600 * 6)
     return serie
 
-def _credit_stress_gate(hy_spread_series, fecha=None):
+def _credit_stress_gate(hy_spread_series, fecha=None, ventana_tendencia=10):
     """
-    Devuelve (valor, nivel) del HY OAS en o antes de `fecha` (o el último dato
-    disponible si fecha=None, para el cálculo en vivo). nivel ∈
-    {'normal','elevado','critico'}, o (None, None) si no hay dato.
+    Devuelve (valor, nivel, empeorando) del BAA10Y en o antes de `fecha` (o el
+    último dato disponible si fecha=None, para el cálculo en vivo).
+    nivel ∈ {'normal','elevado','critico'}, o (None, None, None) si no hay dato.
+
+    "empeorando" = True si el spread ha subido en los últimos `ventana_tendencia`
+    días — no solo el NIVEL importa, importa la DIRECCIÓN. Confirmado con datos
+    reales del propio backtest: dos señales en "elevado" (16/09 y 23/09/2008,
+    con el crédito rompiéndose activamente tras la caída de Lehman) fueron un
+    desastre (-18% a -26% a 60d), mientras que otras igual de "elevado" pero con
+    el crédito ya sanando (jul-2009, sep-2011 — recuperación tras la fase aguda
+    de sus respectivas crisis) fueron excelentes (+12% a +20%). El nivel
+    absoluto no distingue estos dos casos — la tendencia sí.
     """
     if hy_spread_series is None or hy_spread_series.empty:
-        return None, None
+        return None, None, None
     serie = hy_spread_series[hy_spread_series.index <= fecha] if fecha is not None else hy_spread_series
     if serie.empty:
-        return None, None
+        return None, None, None
     valor = float(serie.iloc[-1])
     if valor >= CREDIT_SPREAD_CRITICO:
         nivel = "critico"
@@ -116,7 +195,12 @@ def _credit_stress_gate(hy_spread_series, fecha=None):
         nivel = "elevado"
     else:
         nivel = "normal"
-    return round(valor, 2), nivel
+    if len(serie) > ventana_tendencia:
+        valor_hace_n = float(serie.iloc[-(ventana_tendencia + 1)])
+        empeorando = valor > valor_hace_n
+    else:
+        empeorando = False  # sin histórico suficiente para juzgar tendencia — no penalizar por defecto
+    return round(valor, 2), nivel, empeorando
 
 def _fmt_fecha(d):
     """Formato de fecha estándar de la UI: día/mes/año (dd/mm/yyyy)."""
@@ -324,14 +408,14 @@ def _vix_vix3m_ratio(df_vix, df_vix3m=None):
     except Exception:
         return None
 
-def _calcular_score_punto(df_spy, df_vix, sector_data=None, df_vix3m=None, credit_spread=None):
+def _calcular_score_punto(df_spy, df_vix, sector_data=None, df_vix3m=None, credit_spread=None, mcclellan_precalculado=None):
     """
     Núcleo de scoring puro — recibe DataFrames ya recortados hasta un punto temporal
     dado y devuelve el score + desglose. Reutilizado tanto por get_rsu_algoritmo()
     (cálculo en vivo) como por get_rsu_algoritmo_backtest() (recálculo histórico día
     a día), para que ambos usen exactamente la misma lógica de pesos sin duplicarla.
 
-    credit_spread: tupla opcional (valor, nivel) del HY OAS ya resuelta por el
+    credit_spread: tupla opcional (valor, nivel) del BAA10Y ya resuelta por el
     llamador (ver _credit_stress_gate) — no se descarga aquí para no repetir la
     llamada a FRED en cada día del backtest.
     """
@@ -442,7 +526,16 @@ def _calcular_score_punto(df_spy, df_vix, sector_data=None, df_vix3m=None, credi
     # arriba. Ataca directamente el problema visto en el backtest original: una
     # señal con McClellan todavía cayendo (caída en curso) es mucho menos fiable
     # que una con McClellan ya recuperándose (presión vendedora agotándose).
-    mc_val, girando_al_alza, metodo = _mcclellan_con_giro(df_spy, sector_data)
+    #
+    # mcclellan_precalculado permite pasar (mc_val, girando_al_alza, metodo) ya
+    # resuelto en vez de recalcularlo aquí — usado por el backtest, que si no
+    # recalcularía el percentil móvil (ventana de 500 días) desde cero en cada
+    # uno de los ~5000 días simulados, sobre una porción cada vez mayor del
+    # histórico. Se calcula una única vez para todo el rango antes del bucle.
+    if mcclellan_precalculado is not None:
+        mc_val, girando_al_alza, metodo = mcclellan_precalculado
+    else:
+        mc_val, girando_al_alza, metodo = _mcclellan_con_giro(df_spy, sector_data)
     mc_score = 0
     if mc_val < -80:
         mc_score = 11; detalles.append(f"✓ McClellan {mc_val:.0f} < -80 (+11)")
@@ -512,20 +605,28 @@ def _calcular_score_punto(df_spy, df_vix, sector_data=None, df_vix3m=None, credi
                            "cerca": cerca_ema200w}
 
     # 6. Régimen de mercado — SMA200 diaria (+10)
-    # Antes era solo contexto informativo sin aportar score. Ahora aporta puntos
-    # reales porque el régimen de mercado (alcista/bajista de fondo) es information
-    # necesaria para decidir el umbral de VERDE más adelante (ver más abajo).
+    # RÉGIMEN DE MERCADO — decide el UMBRAL de VERDE (60 alcista / 70 bajista),
+    # ver más abajo. NO suma puntos al score.
+    #
+    # BUG CORREGIDO: antes sumaba +10 al score Y ADEMÁS bajaba el umbral de
+    # 70 a 60 — el mismo hecho binario (¿está el precio sobre la SMA200?)
+    # contaba dos veces a favor de la misma dirección, un balanceo efectivo
+    # de 20 puntos por una sola señal, mientras el resto de factores solo
+    # cuentan una vez. Se mantiene como determinante del umbral (su propósito
+    # original, documentado en el historial de este archivo) pero deja de
+    # aportar score aparte — se sigue mostrando y trackeando igual (contexto
+    # útil, y el propio panel de Importancia de Variables lo sigue midiendo),
+    # solo que ya no puntúa dos veces.
     sobre_sma200 = bool(price > mm['sma_200'])
     dist_sma200  = round((price - mm['sma_200']) / mm['sma_200'] * 100, 2) if mm['sma_200'] != 0 else 0
-    regimen_score = 10 if sobre_sma200 else 0
+    regimen_score = 10 if sobre_sma200 else 0  # se muestra/trackea, pero NO se suma a `score` (ver abajo)
     if not sobre_sma200:
-        advertencias.append(f"⚠ Precio {dist_sma200:.1f}% bajo SMA200 — Régimen bajista, listón de VERDE sube a 70")
-        detalles.append("• Bajo SMA200 — Régimen bajista (0)")
+        advertencias.append(f"⚠ Precio {dist_sma200:.1f}% bajo SMA200 — Régimen bajista, listón de VERDE sube a 63")
+        detalles.append("• Bajo SMA200 — Régimen bajista (umbral 63)")
     else:
-        detalles.append(f"✓ Sobre SMA200 ({dist_sma200:+.1f}%) — Régimen alcista (+10)")
+        detalles.append(f"✓ Sobre SMA200 ({dist_sma200:+.1f}%) — Régimen alcista (umbral 54)")
     if price < mm['ema_21']:
         advertencias.append("EMA21 actua como resistencia — Cuidado")
-    score += regimen_score
     metricas['SMA200'] = {"score": regimen_score, "max": 10,
                           "color": "#00ffad" if sobre_sma200 else "#ff9800",
                           "sobre_sma200": sobre_sma200, "distancia_pct": dist_sma200}
@@ -550,11 +651,14 @@ def _calcular_score_punto(df_spy, df_vix, sector_data=None, df_vix3m=None, credi
 
     vol_confirmado = bool(vol_score >= 4)
 
-    # Umbral dinámico de VERDE: 60 en régimen alcista, 70 en bajista.
-    # El análisis matemático mostró que 70/80 era inalcanzable en la mayoría
-    # de escenarios reales — incluso en el crash de 2020 el score llegaba
-    # justamente a 80 solo en condiciones perfectas simultáneas.
-    umbral_verde = 60 if sobre_sma200 else 70
+    # Umbral dinámico de VERDE: 54 en régimen alcista, 63 en bajista (60%/70%
+    # del máximo real alcanzable, 90 — ya no 100, porque SMA200 dejó de sumar
+    # al score, ver comentario junto a `regimen_score` más arriba). Reescalado
+    # proporcionalmente para no cambiar sin querer cuánto exige el sistema: si
+    # se hubieran dejado 60/70 fijos tras quitar esos 10 puntos del máximo
+    # alcanzable, el listón real habría subido de golpe (70/100 → 70/90 es
+    # más difícil que antes, no la misma exigencia).
+    umbral_verde = 54 if sobre_sma200 else 63
 
     # ── FILTRO DE ESTRÉS DE CRÉDITO ─────────────────────────────────────────
     # Ver comentario junto a CREDIT_SPREAD_CRITICO más arriba. No es un
@@ -564,16 +668,29 @@ def _calcular_score_punto(df_spy, df_vix, sector_data=None, df_vix3m=None, credi
     # sería pleno se degrada a VERDE-VOL — no se bloquea del todo, porque los
     # suelos reales de 2008-09 y COVID ocurrieron con el spread aún cerca de
     # su pico, y bloquear del todo habría descartado también esas señales.
-    credit_valor, credit_nivel = credit_spread if credit_spread else (None, None)
-    if credit_nivel == "elevado":
-        advertencias.append(f"⚠ HY OAS en {credit_valor}% (elevado, ≥{CREDIT_SPREAD_ELEVADO}%) — estrés de crédito por encima de lo normal, vigilar")
+    #
+    # "elevado" + empeorando (spread subiendo) se trata como "crítico" —
+    # confirmado con el propio backtest: 16/09 y 23/09/2008 (crédito
+    # rompiéndose activamente, recién caído Lehman) fueron un desastre pese a
+    # no cruzar el umbral crítico, mientras que otras señales igual de
+    # "elevado" pero con el crédito ya sanando (jul-2009, sep-2011) fueron
+    # excelentes. Bloquear TODO "elevado" sin distinguir tendencia mejoraba el
+    # agregado del backtest pero descartaba esas recuperaciones reales —
+    # verificado con números antes de implementar esto, no es una corazonada.
+    credit_valor, credit_nivel, credit_empeorando = credit_spread if credit_spread else (None, None, None)
+    credit_bloquea = credit_nivel == "critico" or (credit_nivel == "elevado" and credit_empeorando)
+    if credit_nivel == "elevado" and not credit_empeorando:
+        advertencias.append(f"⚠ BAA10Y en {credit_valor}% (elevado, ≥{CREDIT_SPREAD_ELEVADO}%) pero mejorando — estrés de crédito presente aunque no empeorando, vigilar igualmente")
+    elif credit_nivel == "elevado" and credit_empeorando:
+        advertencias.append(f"⚠ BAA10Y en {credit_valor}% (elevado, ≥{CREDIT_SPREAD_ELEVADO}%) y EMPEORANDO — tratado como crítico, crédito deteriorándose activamente")
     elif credit_nivel == "critico":
-        advertencias.append(f"⚠ HY OAS en {credit_valor}% (CRÍTICO, ≥{CREDIT_SPREAD_CRITICO}%) — crisis de crédito sistémica activa, no solo corrección de acciones")
+        advertencias.append(f"⚠ BAA10Y en {credit_valor}% (CRÍTICO, ≥{CREDIT_SPREAD_CRITICO}%) — crisis de crédito sistémica activa, no solo corrección de acciones")
 
     if score >= umbral_verde and gatekeeper_ok:
-        if credit_nivel == "critico":
+        if credit_bloquea:
             estado, senal, color = "VERDE-VOL", "CRÉDITO EN CRISIS", "#ff9800"
-            rec = f"Setup técnico óptimo (score {score}/100) pero el crédito está roto (HY OAS {credit_valor}%, crítico ≥{CREDIT_SPREAD_CRITICO}%) — el problema puede ser más profundo que un rebote técnico. Entrada muy reducida (10-15%) y vigilar si el spread empieza a comprimir antes de aumentar posición."
+            motivo = "crítico" if credit_nivel == "critico" else "elevado y empeorando"
+            rec = f"Setup técnico óptimo (score {score}/100) pero el crédito está {motivo} (BAA10Y {credit_valor}%) — el problema puede ser más profundo que un rebote técnico. Entrada muy reducida (10-15%) y vigilar si el spread empieza a comprimir antes de aumentar posición."
         elif vol_confirmado or gatekeeper_a:
             estado, senal, color = "VERDE", "FONDO PROBABLE", "#00ffad"
             ftd_txt = "FTD ya confirmado — convicción institucional verificada." if ftd_confirmado else "FTD aún no confirmado — vigilar próximos 4-7 días para la confirmación de volumen."
@@ -586,17 +703,19 @@ def _calcular_score_punto(df_spy, df_vix, sector_data=None, df_vix3m=None, credi
     elif score >= umbral_verde and not gatekeeper_ok:
         estado, senal, color = "VERDE-VOL", "SCORE ALTO SIN SOPORTE ESTRUCTURAL", "#ff9800"
         rec = f"Score alto ({score}) pero sin gatekeeper estructural (ni cerca de EMA200 semanal, ni RVOL extremo en el mínimo). Posible falsa señal — tratar como AMBAR, no como VERDE: watchlist, no entrada."
-    elif score >= 50:
+    elif score >= 45:  # 50% del máximo real alcanzable (90) — reescalado, ver comentario junto a umbral_verde
         estado, senal, color = "AMBAR", "DESARROLLANDO", "#ff9800"
         rec = "Condiciones mejorando pero aún sin confirmar. Fase de watchlist: identifica y prioriza los candidatos ahora, para tener la decisión ya tomada cuando (si) llegue el VERDE. Todavía no es momento de construir posición."
-    elif score >= 30:
+    elif score >= 27:  # 30% del máximo real alcanzable (90)
         estado, senal, color = "AMBAR-BAJO", "PRE-SETUP", "#ff9800"
         rec = "Algunos factores presentes pero insuficientes. Demasiado pronto incluso para watchlist activa — mantener liquidez y observar."
     else:
         estado, senal, color = "ROJO", "SIN FONDO", "#f23645"
         rec = "Sin condiciones de fondo detectadas. Preservar capital."
 
-    max_score_real = sum(m['max'] for m in metricas.values() if m['max'] > 0)
+    # SMA200 se excluye aquí porque ya no suma a `score` (solo decide el
+    # umbral) — incluir su max=10 sobrestimaría el máximo realmente alcanzable.
+    max_score_real = sum(m['max'] for k, m in metricas.items() if m['max'] > 0 and k != 'SMA200')
 
     return {
         "score":            score,
@@ -616,6 +735,7 @@ def _calcular_score_punto(df_spy, df_vix, sector_data=None, df_vix3m=None, credi
         "drawdown_52w_pct": drawdown_pct,
         "credit_spread_valor": credit_valor,
         "credit_spread_nivel": credit_nivel,
+        "credit_spread_empeorando": credit_empeorando,
     }
 
 def get_rsu_algoritmo():
@@ -653,6 +773,17 @@ def get_rsu_algoritmo():
 
         credit_spread = _credit_stress_gate(credit_hist)  # sin fecha → último dato disponible
         resultado = _calcular_score_punto(df_spy, df_vix, sector_data, df_vix3m, credit_spread=credit_spread)
+        resultado['precio'] = round(float(df_spy['Close'].iloc[-1]), 2)
+
+        # Registro de cambios de semáforo + notificación Telegram. Envuelto en
+        # su propio try/except: un fallo aquí (Telegram caído, BD bloqueada)
+        # no debe tumbar el cálculo del algoritmo en vivo, que es lo que ve
+        # el usuario en la página.
+        try:
+            from services.algoritmo_tracking_service import procesar_resultado_algoritmo
+            procesar_resultado_algoritmo(resultado)
+        except Exception as e:
+            print(f"[AlgoritmoTracking] Error procesando resultado: {type(e).__name__}: {e}")
 
         # Chart limpio con filtro robusto de percentiles
         closes_raw   = df_spy['Close'].tail(90)
@@ -674,6 +805,52 @@ def get_rsu_algoritmo():
 
     except Exception as e:
         return {"ok": False, "error": str(e)}
+
+def _retornos_con_stop(closes_full, lows_full, pos, horizontes, precio_entrada, stop_pct=-7.0):
+    """
+    Retornos forward simulando un stop-loss de stop_pct% desde la entrada —
+    la estrategia que de verdad se recomienda en el texto de la señal VERDE
+    ("entrada gradual 25% con stop -7%"), no "mantener sin tocar nada" que es
+    lo que mide el retorno normal.
+
+    Usa el MÍNIMO diario (Low), no el cierre — un stop se dispara en cuanto
+    el precio TOCA ese nivel intradía, cerrar por encima ese mismo día no lo
+    salva. Simplificación asumida: el stop se ejecuta exactamente al nivel
+    del stop, sin slippage por gap bajista (en la realidad, un hueco a la
+    baja podría ejecutar peor que el nivel exacto).
+
+    Una vez disparado el stop en el día k, TODOS los horizontes >= k devuelven
+    ese mismo retorno (stop_pct) — estás fuera, no participas de ninguna
+    recuperación posterior salvo que reentres (estrategia distinta, no
+    simulada aquí). Los horizontes < k no se ven afectados, el stop aún no
+    había saltado en ese punto.
+    """
+    precio_stop = precio_entrada * (1 + stop_pct / 100)
+    max_h = max(horizontes)
+    dia_stop = None
+    for k in range(1, max_h + 1):
+        if pos + k >= len(closes_full):
+            break
+        low_k = lows_full.iloc[pos + k]
+        if pd.notna(low_k) and low_k <= precio_stop:
+            dia_stop = k
+            break
+
+    resultado = {}
+    stopeada = {}
+    for h in horizontes:
+        if pos + h >= len(closes_full):
+            resultado[f'd{h}'] = None
+            stopeada[f'd{h}'] = False
+        elif dia_stop is not None and dia_stop <= h:
+            resultado[f'd{h}'] = round(stop_pct, 2)
+            stopeada[f'd{h}'] = True
+        else:
+            precio_h = closes_full.iloc[pos + h]
+            resultado[f'd{h}'] = round((precio_h - precio_entrada) / precio_entrada * 100, 2)
+            stopeada[f'd{h}'] = False
+    return resultado, stopeada
+
 
 def get_rsu_algoritmo_backtest(years: int = 10) -> dict:
     """
@@ -706,7 +883,7 @@ def get_rsu_algoritmo_backtest(years: int = 10) -> dict:
       si el algoritmo aporta ventaja sobre simplemente estar invertido siempre.
     """
     from services.cache import cache
-    cache_key = f"algoritmo:backtest:{years}y:v6"  # v6 — TTL corto si el fetch de HY OAS falla ese cálculo (evita congelar un fallo transitorio 12h); invalida caché v5
+    cache_key = f"algoritmo:backtest:{years}y:v16"  # v8 — endpoint FRED /data/{id}.csv en vez de /graph/fredgraph.csv (confirmado en logs de producción que este último trunca a ~3 años pase lo que pase); invalida caché v7
     cached = cache.get(cache_key)
     if cached:
         return cached
@@ -738,7 +915,7 @@ def get_rsu_algoritmo_backtest(years: int = 10) -> dict:
         df_vix_full.index = df_vix_full.index.normalize()
         if not df_vix3m_full.empty:
             df_vix3m_full.index = df_vix3m_full.index.normalize()
-        # El HY OAS viene de FRED sin timezone (naive) mientras que SPY/VIX
+        # El BAA10Y viene de FRED sin timezone (naive) mientras que SPY/VIX
         # vienen de yfinance con timezone (America/New_York) — sin esto,
         # comparar índices más abajo lanza TypeError.
         if hy_spread_full is not None and not hy_spread_full.empty and df_spy_full.index.tz is not None:
@@ -748,8 +925,20 @@ def get_rsu_algoritmo_backtest(years: int = 10) -> dict:
         if len(df_spy_full) <= BUFFER + 60:
             return {"ok": False, "error": "Histórico insuficiente tras aplicar buffer"}
 
+        # McClellan precalculado UNA sola vez sobre todo el histórico — evita
+        # recalcular el percentil móvil (ventana de 500 días) desde cero en
+        # cada uno de los ~5000 días del backtest, sobre una porción cada vez
+        # mayor del histórico (ver comentario en _calcular_score_punto).
+        mcclellan_full, mcclellan_metodo = _mcclellan_proxy(df_spy_full, sector_data=None)
+        VENTANA_GIRO = 5
+
         fechas = df_spy_full.index[BUFFER:]
         closes_full = df_spy_full['Close']
+        # 'Low' para simular el stop -7% (ver _retornos_con_stop) — si por lo
+        # que sea faltara algún día, se rellena con el Close de ese día como
+        # aproximación conservadora razonable (no hay huecos reales en SPY,
+        # pero por robustez frente a datos incompletos de yfinance).
+        lows_full = df_spy_full['Low'].fillna(closes_full) if 'Low' in df_spy_full.columns else closes_full
 
         senales = []
         fue_verde_ayer = False
@@ -764,8 +953,12 @@ def get_rsu_algoritmo_backtest(years: int = 10) -> dict:
             vix3m_slice = df_vix3m_full[df_vix3m_full.index <= fecha] if not df_vix3m_full.empty else None
             credit_spread = _credit_stress_gate(hy_spread_full, fecha)
 
+            mc_val    = _safe_float(mcclellan_full.iloc[pos])
+            mc_hace_n = _safe_float(mcclellan_full.iloc[pos - VENTANA_GIRO]) if pos >= VENTANA_GIRO else mc_val
+            mcclellan_precalculado = (mc_val, mc_val > mc_hace_n, mcclellan_metodo)
+
             try:
-                resultado = _calcular_score_punto(spy_slice, vix_slice, sector_data=None, df_vix3m=vix3m_slice, credit_spread=credit_spread)
+                resultado = _calcular_score_punto(spy_slice, vix_slice, sector_data=None, df_vix3m=vix3m_slice, credit_spread=credit_spread, mcclellan_precalculado=mcclellan_precalculado)
             except Exception:
                 fue_verde_ayer = False
                 continue
@@ -788,6 +981,7 @@ def get_rsu_algoritmo_backtest(years: int = 10) -> dict:
                     "drawdown_pct":   resultado['drawdown_52w_pct'],
                     "credit_spread_valor": resultado['credit_spread_valor'],
                     "credit_spread_nivel": resultado['credit_spread_nivel'],
+                    "credit_spread_empeorando": resultado['credit_spread_empeorando'],
                     "precio":         round(float(closes_full.iloc[pos]), 2),
                     # Desglose por factor — necesario para el análisis de importancia
                     # de variables (correlación factor-individual vs retorno real).
@@ -816,6 +1010,9 @@ def get_rsu_algoritmo_backtest(years: int = 10) -> dict:
                     s['retornos'][f'd{h}'] = ret
                 else:
                     s['retornos'][f'd{h}'] = None  # fuera de rango (señal muy reciente)
+            # Retornos siguiendo la estrategia realmente recomendada (stop -7%),
+            # no "mantener sin tocar nada" — ver _retornos_con_stop.
+            s['retornos_con_stop'], s['stopeada'] = _retornos_con_stop(closes_full, lows_full, pos, horizontes, precio_entrada, stop_pct=-7.0)
             del s['pos']  # no exponer el índice interno en la respuesta
 
         # Baseline: retorno medio de SPY en cada horizonte calculado sobre TODOS
@@ -846,6 +1043,27 @@ def get_rsu_algoritmo_backtest(years: int = 10) -> dict:
                 }
             else:
                 stats[key] = None
+
+        # Mismo cálculo pero con el stop -7% simulado — la estrategia que de
+        # verdad se recomienda, no "mantener sin tocar nada". El baseline es
+        # el mismo (comprar y mantener SPY sin stop es la comparación honesta
+        # en ambos casos — el stop es una particularidad de ESTA estrategia,
+        # no algo que también haría un inversor pasivo).
+        stats_con_stop = {}
+        for h in horizontes:
+            key = f'd{h}'
+            valid = [s['retornos_con_stop'][key] for s in senales if s['retornos_con_stop'][key] is not None]
+            if valid:
+                stats_con_stop[key] = {
+                    "retorno_medio_senal": round(float(np.mean(valid)), 2),
+                    "retorno_baseline":    baseline[key],
+                    "ventaja_pp":          round(float(np.mean(valid)) - (baseline[key] or 0), 2),
+                    "tasa_exito_pct":      round(sum(1 for v in valid if v > 0) / len(valid) * 100, 1),
+                    "n_senales":           len(valid),
+                    "n_stopeadas":         sum(1 for s in senales if s['stopeada'][key]),
+                }
+            else:
+                stats_con_stop[key] = None
 
         # ── ANÁLISIS DE IMPORTANCIA DE VARIABLES ────────────────────────────────
         # Para cada factor, mide su relación real con el retorno forward de las
@@ -964,6 +1182,8 @@ def get_rsu_algoritmo_backtest(years: int = 10) -> dict:
         for s in senales:
             s.pop('factores', None)
 
+        credit_ok = hy_spread_full is not None and not hy_spread_full.empty
+        credit_cobertura_completa = credit_ok and hy_spread_full.index.min() <= fechas[0]
         result = {
             "ok":              True,
             "years":           years,
@@ -974,18 +1194,22 @@ def get_rsu_algoritmo_backtest(years: int = 10) -> dict:
             "n_episodios":     n_episodios,
             "senales":         senales,
             "stats":           stats,
+            "stats_con_stop":  stats_con_stop,
             "importancia":     importancia,
             "horizonte_importancia": horizonte_analisis,
-            "credit_spread_disponible": bool(hy_spread_full is not None and not hy_spread_full.empty),
-            "metodologia":     "Sistema reformulado: sin Divergencia, FTD como confirmación posterior (no input del score), RSI diario+semanal, VIX con curva VIX/VIX3M, McClellan con giro al alza, RVOL en el día del mínimo, EMA200 semanal, régimen de mercado, gatekeepers obligatorios, filtro de estrés de crédito (HY OAS) · McClellan vía proxy SPY (consistente en todo el periodo) · Señal = transición a estado VERDE puro (no VERDE-VOL, que cubre casos de cautela)",
+            "credit_spread_disponible": credit_ok,
+            "credit_spread_cobertura_completa": credit_cobertura_completa,
+            "credit_spread_desde": _fmt_fecha(hy_spread_full.index.min()) if credit_ok else None,
+            "metodologia":     "Sistema reformulado: sin Divergencia, FTD como confirmación posterior (no input del score), RSI diario+semanal, VIX con curva VIX/VIX3M, McClellan con giro al alza, RVOL en el día del mínimo, EMA200 semanal, régimen de mercado, gatekeepers obligatorios, filtro de estrés de crédito (BAA10Y) · McClellan vía proxy SPY (consistente en todo el periodo) · Señal = transición a estado VERDE puro (no VERDE-VOL, que cubre casos de cautela)",
             "timestamp":       datetime.now().strftime('%H:%M:%S'),
         }
-        # Si el fetch de HY OAS falló ESTE cálculo en concreto, el backtest se
-        # completa igualmente (sin el filtro de crédito) pero no se guarda 12h
-        # — un fallo puntual de FRED no debe bloquear el filtro medio día.
-        # Sin esto es exactamente lo que pasó: un fallo transitorio quedó
-        # "congelado" en caché mientras el fetch en vivo ya funcionaba de nuevo.
-        ttl = 3600 * 12 if result["credit_spread_disponible"] else 300
+        # Si el fetch de BAA10Y falló ESTE cálculo en concreto, o si tiene
+        # datos pero no cubre todo el rango del backtest (ver
+        # credit_spread_cobertura_completa), el backtest se completa igualmente
+        # (sin filtro de crédito en los tramos sin cobertura) pero no se guarda
+        # 12h — un fallo puntual o parcial de FRED no debe bloquear el filtro
+        # medio día.
+        ttl = 3600 * 12 if credit_cobertura_completa else 300
         cache.set(cache_key, result, ttl)
         return result
 

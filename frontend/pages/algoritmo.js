@@ -46,9 +46,13 @@ export async function render(container) {
             .filter(([k]) => k !== 'FTD') // FTD ya no aporta score, se muestra aparte como confirmación
             .map(([key, m]) => {
                 const pct = m.max > 0 ? Math.round(m.score / m.max * 100) : 0;
+                // SMA200 ya no suma al score total (solo decide el umbral de VERDE, 60/70) —
+                // se muestra igual como contexto, pero con la etiqueta clara para no dar a
+                // entender que puntúa como el resto.
+                const etiqueta = key === 'SMA200' ? key + ' (umbral, no puntúa)' : key;
                 return '<div style="margin-bottom:10px;">'
                     + '<div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:3px;">'
-                    + '<span style="color:var(--color-muted);">' + key + '</span>'
+                    + '<span style="color:var(--color-muted);">' + etiqueta + '</span>'
                     + '<span style="color:' + m.color + ';font-weight:500;">' + m.score + ' / ' + m.max + '</span>'
                     + '</div>'
                     + '<div style="background:var(--color-bg,#0a0a0a);border-radius:3px;height:6px;">'
@@ -73,8 +77,8 @@ export async function render(container) {
         const gkIcon  = (ok) => ok ? '✓' : '○';
         const creditColor = data.credit_spread_nivel === 'critico' ? '#f23645' : data.credit_spread_nivel === 'elevado' ? '#ff9800' : 'var(--color-muted)';
         const creditTxt   = data.credit_spread_valor == null
-            ? 'HY OAS: sin datos'
-            : 'HY OAS: ' + data.credit_spread_valor + '% (' + (data.credit_spread_nivel === 'critico' ? 'CRÍTICO' : data.credit_spread_nivel === 'elevado' ? 'elevado' : 'normal') + ')';
+            ? 'BAA10Y: sin datos'
+            : 'BAA10Y: ' + data.credit_spread_valor + '% (' + (data.credit_spread_nivel === 'critico' ? 'CRÍTICO' : data.credit_spread_nivel === 'elevado' ? ('elevado, ' + (data.credit_spread_empeorando ? 'empeorando' : 'mejorando')) : 'normal') + ')';
         const gatekeepersHtml = '<div style="margin-top:1rem;padding:1rem;background:var(--color-bg,#0a0a0a);border-radius:var(--radius);border:1px solid var(--color-border);">'
             + '<div style="color:var(--color-muted);font-size:11px;letter-spacing:0.08em;margin-bottom:8px;">GATEKEEPERS ' + tt('algoritmo-gatekeepers') + ' (umbral VERDE: ' + data.umbral_verde + '/100)</div>'
             + '<div style="display:flex;gap:1.5rem;flex-wrap:wrap;font-size:12px;">'
@@ -161,12 +165,76 @@ export async function render(container) {
             + '</div>'
             + '</div>'
             + '<div id="backtest-content" style="color:var(--color-muted);font-size:12px;">Pulsa el botón para recalcular el algoritmo sobre 10 años de histórico de SPY y comparar contra el rendimiento base del índice. Puede tardar 10-20 segundos.</div>'
+            + '</div>'
+
+            // Fila 5: señales reales en vivo (distinto del backtest — se va llenando con el tiempo)
+            + '<div id="historial-real-section" style="background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius);padding:1.25rem;margin-top:1rem;">'
+            + '<div style="color:var(--color-accent);font-size:12px;letter-spacing:0.08em;margin-bottom:0.5rem;">SEÑALES REALES (EN VIVO) ' + tt('algoritmo-historial-real') + '</div>'
+            + '<div id="historial-real-content" style="color:var(--color-muted);font-size:12px;">Cargando...</div>'
             + '</div>';
 
         renderChart(chartId, data.chart, data.color);
 
         container.querySelector('#run-backtest-btn').addEventListener('click', () => runBacktest(container));
+        loadHistorialReal(container);
 
+    } catch(e) {
+        el.innerHTML = errorMessage(e.message);
+    }
+}
+
+async function loadHistorialReal(container) {
+    const el    = container.querySelector('#historial-real-content');
+    const token = sessionStorage.getItem('rsu_token');
+    try {
+        const res  = await fetch('/api/v1/algoritmo/historial-real', { headers: token ? { 'Authorization': 'Bearer ' + token } : {} });
+        const data = await res.json();
+        if (!data.ok) throw new Error(data.error || 'Sin datos');
+
+        if (!data.cambios_semaforo.length) {
+            el.innerHTML = '<div style="padding:0.5rem 0;">Todavía no hay señales registradas — esto se va llenando solo a partir de ahora. '
+                + 'A diferencia del backtest (que reanaliza el mismo histórico fijo), estas señales usan datos que no existían cuando se diseñó el algoritmo, así que con el tiempo son la validación más fiable de si de verdad funciona.</div>';
+            return;
+        }
+
+        const nota = '<div style="font-size:10px;color:var(--color-muted);margin-bottom:0.75rem;">A diferencia del backtest, esto no reanaliza histórico — son señales reales desde que se activó el seguimiento. El retorno se rellena solo cuando pasa el tiempo suficiente (5/10/20/60 días).</div>';
+
+        const cambiosHtml = '<div style="margin-bottom:1rem;">'
+            + '<div style="color:var(--color-muted);font-size:10px;letter-spacing:0.05em;margin-bottom:6px;">ÚLTIMOS CAMBIOS DE SEMÁFORO</div>'
+            + data.cambios_semaforo.slice(0, 10).map(c => {
+                const fecha = new Date(c.fecha).toLocaleString('es-ES', { day:'2-digit', month:'2-digit', year:'numeric', hour:'2-digit', minute:'2-digit' });
+                const color = c.estado_nuevo === 'VERDE' ? 'var(--color-accent)' : c.estado_nuevo === 'ROJO' ? '#f23645' : '#ff9800';
+                return '<div style="display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px solid var(--color-border);font-size:11px;">'
+                    + '<span style="color:var(--color-muted);">' + fecha + '</span>'
+                    + '<span>' + (c.estado_anterior || '(inicio)') + ' → <span style="color:' + color + ';font-weight:500;">' + c.estado_nuevo + '</span></span>'
+                    + '</div>';
+            }).join('')
+            + '</div>';
+
+        let senalesHtml = '';
+        if (data.senales.length) {
+            const fmtRet = (v) => v == null ? '<span style="color:var(--color-muted);">pendiente</span>' : '<span style="color:' + (v >= 0 ? 'var(--color-accent)' : '#f23645') + ';">' + (v >= 0 ? '+' : '') + v + '%</span>';
+            senalesHtml = '<div>'
+                + '<div style="color:var(--color-muted);font-size:10px;letter-spacing:0.05em;margin-bottom:6px;">SEÑALES ACCIONABLES (VERDE / VERDE-VOL) TRACKEADAS</div>'
+                + '<div style="display:grid;grid-template-columns:120px 90px 60px 70px 70px 70px 70px;gap:8px;padding:6px 0;border-bottom:1px solid var(--color-border);font-size:10px;color:var(--color-muted);">'
+                + '<div>FECHA</div><div>ESTADO</div><div>SCORE</div><div>+5D</div><div>+10D</div><div>+20D</div><div>+60D</div>'
+                + '</div>'
+                + data.senales.map(s => {
+                    const fecha = new Date(s.fecha).toLocaleDateString('es-ES', { day:'2-digit', month:'2-digit', year:'numeric' });
+                    return '<div style="display:grid;grid-template-columns:120px 90px 60px 70px 70px 70px 70px;gap:8px;padding:6px 0;border-bottom:1px solid var(--color-border);font-size:11px;align-items:center;">'
+                        + '<div>' + fecha + '</div>'
+                        + '<div style="color:' + (s.estado === 'VERDE' ? 'var(--color-accent)' : '#ff9800') + ';">' + s.estado + '</div>'
+                        + '<div>' + s.score + '</div>'
+                        + '<div>' + fmtRet(s.resultado_5d) + '</div>'
+                        + '<div>' + fmtRet(s.resultado_10d) + '</div>'
+                        + '<div>' + fmtRet(s.resultado_20d) + '</div>'
+                        + '<div>' + fmtRet(s.resultado_60d) + '</div>'
+                        + '</div>';
+                }).join('')
+                + '</div>';
+        }
+
+        el.innerHTML = nota + cambiosHtml + senalesHtml;
     } catch(e) {
         el.innerHTML = errorMessage(e.message);
     }
@@ -198,6 +266,22 @@ async function runBacktest(container) {
     }
 }
 
+window.__statsToggle = function(btn) {
+    const view = btn.getAttribute('data-view');
+    const container = btn.closest('#backtest-content');
+    if (!container) return;
+    container.querySelector('#stats-sinstop').style.display = view === 'sinstop' ? '' : 'none';
+    container.querySelector('#stats-constop').style.display = view === 'constop' ? '' : 'none';
+    container.querySelectorAll('.stats-toggle').forEach(function(b) {
+        b.style.background = 'transparent';
+        b.style.color = 'var(--color-muted)';
+        b.style.border = '1px solid var(--color-border)';
+    });
+    btn.style.background = 'var(--color-accent)';
+    btn.style.color = '#000';
+    btn.style.border = 'none';
+};
+
 function renderBacktestResults(data) {
     const horizontes = [
         { key: 'd5',  label: '5 días' },
@@ -206,19 +290,31 @@ function renderBacktestResults(data) {
         { key: 'd60', label: '60 días' },
     ];
 
-    const statsRows = horizontes.map(h => {
-        const s = data.stats[h.key];
-        if (!s) return '';
-        const ventajaColor = s.ventaja_pp > 0 ? 'var(--color-accent)' : '#f23645';
-        const ventajaStr   = (s.ventaja_pp > 0 ? '+' : '') + s.ventaja_pp + ' pp';
-        return '<div style="display:grid;grid-template-columns:80px 1fr 1fr 1fr 1fr;gap:10px;padding:10px 0;border-bottom:1px solid var(--color-border);align-items:center;font-size:12px;">'
-            + '<div style="color:var(--color-text);font-weight:500;">' + h.label + '</div>'
-            + '<div><span style="color:var(--color-muted);font-size:10px;">Señal: </span><span style="color:' + (s.retorno_medio_senal >= 0 ? 'var(--color-accent)' : '#f23645') + ';">' + (s.retorno_medio_senal >= 0 ? '+' : '') + s.retorno_medio_senal + '%</span></div>'
-            + '<div><span style="color:var(--color-muted);font-size:10px;">Baseline SPY: </span><span style="color:var(--color-text);">' + (s.retorno_baseline >= 0 ? '+' : '') + s.retorno_baseline + '%</span></div>'
-            + '<div><span style="color:var(--color-muted);font-size:10px;">Ventaja: </span><span style="color:' + ventajaColor + ';font-weight:600;">' + ventajaStr + '</span></div>'
-            + '<div><span style="color:var(--color-muted);font-size:10px;">Éxito: </span><span style="color:var(--color-text);">' + s.tasa_exito_pct + '% (' + s.n_senales + ')</span></div>'
-            + '</div>';
-    }).join('');
+    function filaStats(statsObj, conStop) {
+        return horizontes.map(h => {
+            const s = statsObj[h.key];
+            if (!s) return '';
+            const ventajaColor = s.ventaja_pp > 0 ? 'var(--color-accent)' : '#f23645';
+            const ventajaStr   = (s.ventaja_pp > 0 ? '+' : '') + s.ventaja_pp + ' pp';
+            const stopInfo = conStop ? '<span style="color:var(--color-muted);font-size:10px;"> · ' + s.n_stopeadas + ' stopeadas</span>' : '';
+            return '<div style="display:grid;grid-template-columns:80px 1fr 1fr 1fr 1fr;gap:10px;padding:10px 0;border-bottom:1px solid var(--color-border);align-items:center;font-size:12px;">'
+                + '<div style="color:var(--color-text);font-weight:500;">' + h.label + '</div>'
+                + '<div><span style="color:var(--color-muted);font-size:10px;">Señal: </span><span style="color:' + (s.retorno_medio_senal >= 0 ? 'var(--color-accent)' : '#f23645') + ';">' + (s.retorno_medio_senal >= 0 ? '+' : '') + s.retorno_medio_senal + '%</span></div>'
+                + '<div><span style="color:var(--color-muted);font-size:10px;">Baseline SPY: </span><span style="color:var(--color-text);">' + (s.retorno_baseline >= 0 ? '+' : '') + s.retorno_baseline + '%</span></div>'
+                + '<div><span style="color:var(--color-muted);font-size:10px;">Ventaja: </span><span style="color:' + ventajaColor + ';font-weight:600;">' + ventajaStr + '</span></div>'
+                + '<div><span style="color:var(--color-muted);font-size:10px;">Éxito: </span><span style="color:var(--color-text);">' + s.tasa_exito_pct + '% (' + s.n_senales + ')</span>' + stopInfo + '</div>'
+                + '</div>';
+        }).join('');
+    }
+
+    const statsToggle = '<div style="display:flex;gap:6px;margin-bottom:0.5rem;">'
+        + '<button class="stats-toggle" data-view="sinstop" onclick="window.__statsToggle(this)" style="background:var(--color-accent);color:#000;border:none;border-radius:3px;padding:4px 10px;font-size:10px;cursor:pointer;">SIN STOP (mantener)</button>'
+        + '<button class="stats-toggle" data-view="constop" onclick="window.__statsToggle(this)" style="background:transparent;color:var(--color-muted);border:1px solid var(--color-border);border-radius:3px;padding:4px 10px;font-size:10px;cursor:pointer;">CON STOP -7% (recomendado)</button>'
+        + '</div>';
+
+    const statsRows = '<div id="stats-sinstop">' + filaStats(data.stats, false) + '</div>'
+        + '<div id="stats-constop" style="display:none;">' + filaStats(data.stats_con_stop, true) + '</div>'
+        + '<div style="font-size:10px;color:var(--color-muted);margin-top:6px;">"Sin stop" mide mantener sin tocar nada durante todo el horizonte — no es la estrategia recomendada, es la referencia. "Con stop -7%" simula la entrada gradual con stop que sí se recomienda: usa el mínimo diario (no solo el cierre) para detectar si el precio llegó a tocar el nivel del stop en algún punto del camino, y a partir de ahí esa señal deja de participar en cualquier recuperación posterior — así que ambas tablas pueden diferir bastante, sobre todo en señales con recuperación en forma de V.</div>';
 
     const senalesHtml = data.senales.length === 0
         ? '<div style="color:var(--color-muted);font-size:12px;padding:1rem 0;">No se detectaron señales VERDE en el periodo analizado — el nuevo sistema con gatekeepers obligatorios es considerablemente más selectivo que la versión anterior.</div>'
@@ -232,14 +328,15 @@ function renderBacktestResults(data) {
               const gk = s.gatekeeper_a ? 'EMA200W' : (s.gatekeeper_b ? 'RVOL' : '—');
               const ftdTag = s.ftd_confirmado ? ' <span style="color:var(--color-accent);" title="FTD confirmado">✓FTD</span>' : '';
               const creditTag = s.credit_spread_nivel === 'elevado'
-                  ? ' <span style="color:#ff9800;" title="HY OAS ' + s.credit_spread_valor + '% — elevado en el momento de la señal">⚠HY</span>'
+                  ? ' <span style="color:#ff9800;" title="BAA10Y ' + s.credit_spread_valor + '% — elevado pero mejorando en el momento de la señal (si hubiera estado empeorando, se habría filtrado igual que crítico)">⚠BAA</span>'
                   : '';
+              const fmtConStop = (key) => fmt(r[key]) + (s.stopeada && s.stopeada[key] ? ' <span title="El stop -7% se habría disparado antes de este horizonte — este número asume que NO se usó stop">🛑</span>' : '');
               return '<div style="display:grid;grid-template-columns:85px 55px 80px 70px 50px 50px 50px 50px;gap:6px;padding:6px 0;border-bottom:1px solid var(--color-border);font-size:10px;align-items:center;">'
                   + '<div style="color:var(--color-text);">' + s.fecha + '</div>'
                   + '<div style="color:var(--color-muted);">' + s.score + '/100</div>'
                   + '<div style="color:var(--color-secondary,#00d9ff);">' + gk + ftdTag + creditTag + '</div>'
                   + '<div style="color:' + (s.drawdown_pct <= -15 ? '#f23645' : 'var(--color-muted)') + ';">' + s.drawdown_pct + '%</div>'
-                  + '<div>' + fmt(r.d5) + '</div><div>' + fmt(r.d10) + '</div><div>' + fmt(r.d20) + '</div><div>' + fmt(r.d60) + '</div>'
+                  + '<div>' + fmtConStop('d5') + '</div><div>' + fmtConStop('d10') + '</div><div>' + fmtConStop('d20') + '</div><div>' + fmtConStop('d60') + '</div>'
                   + '</div>';
           }).join('')
           + '</div>';
@@ -291,23 +388,22 @@ function renderBacktestResults(data) {
         + '<span style="color:var(--color-accent);">' + data.n_senales + ' señales VERDE puras</span>'
         + ' <span style="color:var(--color-muted);" title="Señales agrupadas por episodio de mercado (≤15 días de trading entre sí cuentan como el mismo episodio) — medida más honesta de cuántos eventos distintos ha visto el sistema">(≈' + data.n_episodios + ' episodios de mercado independientes)</span>'
         + (data.credit_spread_disponible === false
-            ? '<div style="color:#ff9800;margin-top:4px;">⚠ FRED no respondió durante este cálculo — el filtro de estrés de crédito (HY OAS) NO se aplicó en esta corrida. Pulsa RECALCULAR de nuevo.</div>'
-            : '')
+            ? '<div style="color:#ff9800;margin-top:4px;">⚠ FRED no respondió durante este cálculo — el filtro de estrés de crédito (BAA10Y) NO se aplicó en esta corrida. Pulsa RECALCULAR de nuevo.</div>'
+            : (data.credit_spread_cobertura_completa === false
+                ? '<div style="color:#ff9800;margin-top:4px;">⚠ El histórico de BAA10Y descargado solo llega hasta ' + data.credit_spread_desde + ' — no cubre todo el periodo del backtest, así que el filtro de crédito no actuó en las fechas anteriores a esa.</div>'
+                : ''))
         + '</div>'
 
         + '<div style="display:grid;grid-template-columns:80px 1fr 1fr 1fr 1fr;gap:10px;padding:6px 0;border-bottom:1px solid var(--color-border);font-size:10px;color:var(--color-muted);">'
         + '<div>HORIZONTE</div><div>RETORNO SEÑAL</div><div>BASELINE SPY</div><div>VENTAJA</div><div>TASA ÉXITO</div>'
         + '</div>'
+        + statsToggle
         + statsRows
 
         + '<div style="margin-top:1rem;color:var(--color-muted);font-size:11px;letter-spacing:0.05em;">HISTORIAL DE SEÑALES <span style="font-weight:normal;text-transform:none;letter-spacing:0;">(GATEKEEPER = qué condición estructural validó la señal · ✓FTD = confirmación de volumen ya llegada)</span></div>'
         + senalesHtml
 
-        + importanciaHtml
-
-        + '<div style="margin-top:1rem;padding:0.75rem;background:rgba(255,184,0,0.05);border:1px solid rgba(255,184,0,0.15);border-radius:var(--radius);font-size:10px;color:#ffb800;">'
-        + '⚠ ' + data.metodologia
-        + '</div>';
+        + importanciaHtml;
 }
 
 function renderChart(chartId, chart, color) {

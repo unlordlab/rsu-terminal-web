@@ -26,8 +26,8 @@ jobs:
 
       - name: Generate Daily Briefing
         env:
-          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
-          GIST_TOKEN:         ${{ secrets.GIST_TOKEN }}
-          GIST_ID:            ${{ secrets.GIST_ID }}
+          GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+          GIST_TOKEN:   ${{ secrets.GIST_TOKEN }}
+          GIST_ID:      ${{ secrets.GIST_ID }}
         run: |
           python scripts/daily_briefing.py
