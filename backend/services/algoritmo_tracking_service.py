@@ -72,10 +72,26 @@ def init_db():
             resultado_10d         REAL,
             resultado_20d         REAL,
             resultado_60d         REAL,
+            resultado_5d_stop     REAL,      -- mismo resultado pero simulando stop -7% (ver rsu_algoritmo_service._retornos_con_stop)
+            resultado_10d_stop    REAL,
+            resultado_20d_stop    REAL,
+            resultado_60d_stop    REAL,
+            stopeada_dia          INTEGER,   -- día (nº de sesiones desde la entrada) en que se disparó el stop, o NULL si nunca
             resultado_actualizado TEXT,
             creado_en             TEXT NOT NULL
         )
     ''')
+    # Migración segura para bases de datos ya existentes creadas antes de
+    # añadir las columnas *_stop — SQLite no soporta "ADD COLUMN IF NOT
+    # EXISTS", así que se comprueba primero qué columnas hay de verdad.
+    columnas_actuales = {row['name'] for row in conn.execute("PRAGMA table_info(senales_tracked)").fetchall()}
+    for columna, tipo in [
+        ('resultado_5d_stop', 'REAL'), ('resultado_10d_stop', 'REAL'),
+        ('resultado_20d_stop', 'REAL'), ('resultado_60d_stop', 'REAL'),
+        ('stopeada_dia', 'INTEGER'),
+    ]:
+        if columna not in columnas_actuales:
+            conn.execute(f"ALTER TABLE senales_tracked ADD COLUMN {columna} {tipo}")
     # Singleton: último estado conocido, para detectar cambios sin tener que
     # releer todo el historial cada vez.
     conn.execute('''
@@ -222,9 +238,12 @@ def procesar_resultado_algoritmo(resultado):
 def actualizar_resultados_pendientes():
     """
     Job periódico (llamado ~1 vez al día es más que suficiente) — busca
-    señales trackeadas cuya fecha ya tiene 5/10/20/60 días cumplidos pero
-    todavía no tienen ese resultado calculado, y lo rellena con el precio
-    real de SPY en esa fecha futura (ya pasada).
+    señales trackeadas cuya fecha ya tiene 5/10/20/60 días de trading
+    cumplidos pero todavía no tienen ese resultado calculado, y lo rellena
+    con precios reales de SPY: el retorno "sin stop" (mantener) Y el
+    retorno "con stop -7%" (revisando el mínimo diario en el camino, misma
+    lógica que _retornos_con_stop en rsu_algoritmo_service.py — una vez
+    disparado el stop, no participa de recuperación en horizontes más largos).
     """
     import yfinance as yf
 
@@ -245,10 +264,9 @@ def actualizar_resultados_pendientes():
         print("[AlgoritmoTracking] No se pudo descargar SPY para actualizar resultados pendientes")
         return {"actualizadas": 0, "error": "sin datos SPY"}
     hist.index = hist.index.tz_localize(None) if hist.index.tz is not None else hist.index
-
-    def precio_en_o_despues(fecha_obj):
-        futuros = hist[hist.index >= fecha_obj]
-        return float(futuros['Close'].iloc[0]) if not futuros.empty else None
+    closes = hist['Close']
+    lows   = hist['Low'].fillna(closes)
+    STOP_PCT = -7.0
 
     conn = _conn()
     actualizadas = 0
@@ -257,16 +275,40 @@ def actualizar_resultados_pendientes():
         precio_entrada = row['precio_entrada']
         if not precio_entrada:
             continue
+
+        # Posición (índice de sesión de trading) del primer día en o después
+        # de la señal — necesaria para recorrer el camino día a día, no solo
+        # el día del horizonte, porque el stop puede dispararse cualquier día
+        # intermedio.
+        posiciones_validas = closes.index[closes.index >= fecha_entrada]
+        if posiciones_validas.empty:
+            continue
+        pos_entrada = closes.index.get_loc(posiciones_validas[0])
+
+        precio_stop = precio_entrada * (1 + STOP_PCT / 100)
+        dia_stop = None
+        for k in range(1, 61):
+            if pos_entrada + k >= len(closes):
+                break
+            if lows.iloc[pos_entrada + k] <= precio_stop:
+                dia_stop = k
+                break
+
         cambios = {}
-        for dias, campo in [(5, 'resultado_5d'), (10, 'resultado_10d'), (20, 'resultado_20d'), (60, 'resultado_60d')]:
+        for dias, campo, campo_stop in [
+            (5, 'resultado_5d', 'resultado_5d_stop'), (10, 'resultado_10d', 'resultado_10d_stop'),
+            (20, 'resultado_20d', 'resultado_20d_stop'), (60, 'resultado_60d', 'resultado_60d_stop'),
+        ]:
             if row[campo] is not None:
                 continue
-            fecha_objetivo = fecha_entrada + timedelta(days=dias * 1.45)  # ~1.45 días naturales por día de trading
-            if fecha_objetivo > datetime.utcnow():
-                continue  # todavía no ha pasado suficiente tiempo para este horizonte
-            precio_futuro = precio_en_o_despues(fecha_objetivo)
-            if precio_futuro is not None:
-                cambios[campo] = round((precio_futuro - precio_entrada) / precio_entrada * 100, 2)
+            if pos_entrada + dias >= len(closes):
+                continue  # todavía no ha pasado suficiente tiempo de trading para este horizonte
+            precio_h = float(closes.iloc[pos_entrada + dias])
+            cambios[campo] = round((precio_h - precio_entrada) / precio_entrada * 100, 2)
+            cambios[campo_stop] = round(STOP_PCT, 2) if (dia_stop is not None and dia_stop <= dias) else cambios[campo]
+        if dia_stop is not None:
+            cambios['stopeada_dia'] = dia_stop
+
         if cambios:
             set_clause = ", ".join(f"{k} = ?" for k in cambios)
             conn.execute(
