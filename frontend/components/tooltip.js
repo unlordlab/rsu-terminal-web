@@ -500,7 +500,10 @@ EJEMPLOS HISTÓRICOS:
 - 2020: AD Line confirmó el rally post-COVID rápidamente → señal de salud.
 - 2021-2022: AD Line divergió negativamente mientras el SPX marcaba máximos → predijo la corrección.
 
-Un mercado sano tiene AD Line confirmando los máximos del índice.`
+Un mercado sano tiene AD Line confirmando los máximos del índice.
+
+FUENTE DE LOS DATOS:
+La etiqueta junto al gráfico indica de dónde sale el recuento de avances/declives: [S&P 500 + RUSSELL 2000 REAL] usa ~2.480 valores (scan nocturno propio, las 500 grandes más las ~1.960 del Russell 2000 — pensado específicamente para detectar cuándo el rally del S&P 500 no tiene participación real de las empresas más pequeñas). [S&P 500 REAL] es la misma fuente pero solo con las 500 grandes (aparece si el Russell 2000 aún no se ha cargado). [NYSE REAL] usa ^ADV/^DEC de Yahoo, NYSE de verdad pero con datos que llevan tiempo siendo poco fiables. [PROXY SPY] es un sustituto sintético cuando ninguna fuente real está disponible. Sigue sin ser NYSE completo (~2.800 valores incluyendo ETFs, preferentes y ADRs) — deliberadamente, esa mezcla diluye la señal más de lo que aporta.`
     },
 
     "market-indices": {
@@ -567,8 +570,8 @@ Para la inmensa mayoría de setups de ruptura que te interesan como trader (una 
 
     "nh-nl": {
         title: "New Highs − New Lows (NH-NL)",
-        short: "Nuevos máximos de 52 semanas menos nuevos mínimos, sobre el S&P 500 real. Mide la calidad del liderazgo del mercado.",
-        long: `NH-NL cuenta, sobre las ~500 acciones del S&P 500 (scan nocturno), cuántas están marcando un nuevo máximo de las últimas ~52 semanas frente a cuántas marcan un nuevo mínimo, y resta ambas cifras.
+        short: "Nuevos máximos de 52 semanas menos nuevos mínimos, sobre S&P 500 + Russell 2000 real. Mide la calidad del liderazgo del mercado.",
+        long: `NH-NL cuenta, sobre las ~2.480 acciones de S&P 500 + Russell 2000 (scan nocturno), cuántas están marcando un nuevo máximo de las últimas ~52 semanas frente a cuántas marcan un nuevo mínimo, y resta ambas cifras.
 
 POR QUÉ IMPORTA:
 A diferencia de la Línea A/D (que solo mira si sube o baja cada día) o el McClellan (que mira la aceleración), NH-NL mide la CALIDAD del liderazgo: cuántas acciones están realmente marcando terreno nuevo, no solo participando en el movimiento del día.
@@ -589,7 +592,7 @@ LECTURA:
         long: `El Oscilador McClellan es un indicador de amplitud que mide la diferencia entre dos medias exponenciales del avance/declive neto diario — cuántas acciones del S&P 500 suben menos cuántas bajan cada día, no el precio de un índice.
 
 CÁLCULO Y FUENTE:
-EMA(19) − EMA(39) del avance/declive neto diario, calculado directamente sobre el histórico de precios de las ~500 acciones del S&P 500 que ya descarga el Scanner cada noche — no depende de tickers compuestos externos (como ^ADV/^DEC de Yahoo, que llevan tiempo dando datos poco fiables). Si el Scanner todavía no tiene suficiente histórico acumulado (hacen falta 40+ sesiones), se muestra como [PROXY SPY] usando una fuente de respaldo en vez de un dato a medias.
+EMA(19) − EMA(39) del avance/declive neto diario, calculado directamente sobre el histórico de precios de las ~2.480 acciones (S&P 500 + Russell 2000) que ya descarga el Scanner cada noche — no depende de tickers compuestos externos (como ^ADV/^DEC de Yahoo, que llevan tiempo dando datos poco fiables). Ampliar más allá del S&P 500 fue deliberado: captura mejor los momentos en que solo las megacaps sostienen el rally mientras el resto del mercado ya está débil. Si el Scanner todavía no tiene suficiente histórico acumulado (hacen falta 40+ sesiones), se muestra como [PROXY SPY] usando una fuente de respaldo en vez de un dato a medias.
 
 VARIACIÓN SEMANAL:
 Junto al valor actual se muestra la variación frente a hace ~5 sesiones (una semana de mercado) — útil para ver si la amplitud se está acelerando o frenando, no solo su nivel absoluto en este momento.
@@ -601,6 +604,23 @@ INTERPRETACIÓN:
 
 DIFERENCIA CON EL RSI:
 El RSI mide momentum de PRECIO de un solo activo. El McClellan mide momentum de PARTICIPACIÓN — cuántas acciones están detrás del movimiento. Un McClellan muy negativo con precio estable puede anticipar un rebote técnico de corto plazo aunque el contexto de fondo siga siendo bajista.`
+    },
+
+    "abi-absolute-breadth": {
+        title: "Absolute Breadth Index (ABI)",
+        short: "Mide cuánta dispersión/actividad hay en el mercado, sin decir hacia dónde — |avances-declives| sobre el total. Lecturas extremas suelen coincidir con capitulación o cambios de régimen.",
+        long: `El Absolute Breadth Index (ABI), creado por Norman Fosback, es distinto a casi todos los demás indicadores de amplitud: NO es direccional. No dice si el mercado va a subir o bajar — dice cuánto está pasando internamente, sea cual sea el sentido.
+
+CÁLCULO:
+ABI = |avances − declives| / (avances + declives) × 100, usando el mismo recuento real de las ~2.480 acciones (S&P 500 + Russell 2000) que ya calcula el Scanner cada noche (el mismo dato que alimenta el McClellan real y la Línea A/D de aquí arriba).
+
+CÓMO LEERLO:
+▸ ABI alto (≥40%): mucha dispersión — un número inusualmente grande de acciones moviéndose con fuerza, sean cuales sean. Suele coincidir con capitulación, pánico vendedor o el arranque de un cambio de régimen — no con un día tranquilo.
+▸ ABI bajo (≤15%): mercado apagado, sin convicción clara en ningún sentido — ni fuerte presión compradora ni vendedora.
+▸ Fosback documentó en su investigación original que lecturas extremas de ABI han tendido a preceder subidas de precio en horizontes de 3 a 12 meses — no como señal de entrada inmediata, sino como contexto de que "algo se está moviendo" que merece la pena vigilar.
+
+POR QUÉ NO ES REDUNDANTE CON EL McCLELLAN:
+El McClellan de arriba es direccional (positivo = más avances, negativo = más declives). El ABI ignora esa dirección a propósito — un día con 400 acciones subiendo y 100 bajando da un ABI parecido a un día con 400 bajando y 100 subiendo. Son complementarios: el McClellan dice "hacia dónde", el ABI dice "con cuánta fuerza/dispersión", independientemente del sentido.`
     },
 
     // ── OPTIONS FLOW ──────────────────────────────────────────────────────────
@@ -877,7 +897,10 @@ RSI(14) mínimo reciente en ambas temporalidades. Mide agotamiento del momentum 
 Pico de volatilidad reciente, más la curva de futuros VIX/VIX3M. La curva en backwardation (VIX de corto por encima del de medio plazo) es señal de capitulación real, no un motivo de exclusión.
 
 3. McCLELLAN — AMPLITUD DE MERCADO (18pts)
-Proxy basado en el percentil móvil (últimos ~2 años) del diferencial de momentum de SPY, cuando no hay datos sectoriales reales — se auto-calibra a cualquier régimen de volatilidad en vez de usar una escala absoluta fija. Valores muy negativos (percentil bajo) sugieren sobreventa generalizada.
+En el cálculo EN VIVO, usa amplitud real de las ~2.480 acciones de S&P 500 + Russell 2000 (el mismo dato que ya calcula el Scanner cada noche, ver Amplitud de Mercado en la página de Mercado) cuando hay suficiente histórico acumulado. Si no, cae al proxy basado en el percentil móvil (últimos ~2 años) del diferencial de momentum de SPY — se auto-calibra a cualquier régimen de volatilidad en vez de usar una escala absoluta fija. El backtest de 20 años siempre usa el proxy (no hay 20 años de amplitud real de las 500 acciones guardados). Valores muy negativos sugieren sobreventa generalizada.
+
+ABI — ABSOLUTE BREADTH INDEX (contexto, no puntúa):
+Se muestra junto a los gatekeepers cuando hay amplitud real disponible. A diferencia del McClellan, el ABI no dice hacia dónde va el mercado — mide cuánta dispersión/actividad interna hay, sea cual sea el sentido. Lecturas altas (≥40%) suelen coincidir con capitulación o cambios de régimen. Solo disponible en vivo, por la misma razón que el McClellan real — ver el tooltip del ABI en la página de Mercado para más detalle.
 
 4. VOLUMEN — CONFIRMACIÓN (12pts)
 Volumen elevado como evidencia de convicción institucional real detrás del movimiento.

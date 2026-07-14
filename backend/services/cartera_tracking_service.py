@@ -1,0 +1,123 @@
+"""
+Notificaciones de Telegram para Cartera — nuevas entradas y cierres de posición.
+
+Cartera se lee en directo de un Google Sheet (get_cartera(), sin base de datos
+propia) — no hay un "evento" nativo de apertura/cierre al que engancharse,
+así que este módulo compara periódicamente el estado actual contra lo que ya
+se ha notificado antes, usando una clave estable (ticker + fecha de entrada +
+tipo de evento) para no repetir avisos.
+
+BOOTSTRAP: la primera vez que corre esto (base de datos vacía), NO envía nada
+— solo memoriza qué posiciones ya existen. Si no, la primera ejecución
+mandaría un aluvión de mensajes con todo el histórico de la hoja. A partir de
+ahí, solo se notifica lo que sea genuinamente nuevo.
+"""
+import sqlite3
+import os
+from datetime import datetime
+
+from services.telegram_service import enviar_telegram
+
+DB_PATH = os.path.join(os.path.dirname(__file__), '..', 'cartera_notificaciones.db')
+
+
+def _conn():
+    conn = sqlite3.connect(DB_PATH)
+    conn.row_factory = sqlite3.Row
+    return conn
+
+
+def init_db():
+    conn = _conn()
+    conn.execute('''
+        CREATE TABLE IF NOT EXISTS notificadas (
+            id          INTEGER PRIMARY KEY AUTOINCREMENT,
+            clave       TEXT UNIQUE NOT NULL,   -- ticker|fecha_entrada|tipo
+            tipo        TEXT NOT NULL,          -- 'apertura' | 'cierre'
+            ticker      TEXT,
+            enviado_en  TEXT NOT NULL
+        )
+    ''')
+    conn.commit()
+    conn.close()
+
+
+def _mensaje_apertura(row):
+    return (
+        "🟢 *NUEVA ENTRADA*\n\n"
+        f"📈 Ticker: {row['ticker']}\n"
+        f"💰 P. Compra: ${row['compra']}\n"
+        f"📅 Fecha: {row['fecha']}\n\n"
+        "_CARTERA RSU // POSICIÓN ABIERTA_"
+    )
+
+
+def _mensaje_cierre(row):
+    positivo = row['pnl'] > 0
+    check    = "✅" if positivo else "❌"
+    signo    = "+" if row['pnl'] >= 0 else ""
+    return (
+        "🔴 *POSICIÓN CERRADA*\n\n"
+        f"📈 Ticker: {row['ticker']}\n"
+        f"💰 P. Entrada: ${row['compra']}\n"
+        f"💵 P&L: {signo}{row['pnl']}% {check}\n"
+        f"📅 Entrada: {row['fecha']}\n\n"
+        "_CARTERA RSU // POSICIÓN CERRADA_"
+    )
+
+
+def procesar_cartera_notificaciones():
+    """
+    Job periódico — compara el estado actual de Cartera contra lo ya
+    notificado, y envía por Telegram cualquier apertura o cierre nuevo.
+    """
+    from services.cartera_service import get_cartera
+
+    data = get_cartera()
+    if not data.get('ok'):
+        print(f"[CarteraTracking] Error obteniendo cartera: {data.get('error')}")
+        return {"error": data.get('error')}
+
+    conn = _conn()
+    es_primera_vez = conn.execute("SELECT COUNT(*) as c FROM notificadas").fetchone()['c'] == 0
+
+    enviadas = 0
+    for row in data.get('abiertas', []):
+        clave = f"{row['ticker']}|{row['fecha']}|apertura"
+        ya_existe = conn.execute("SELECT 1 FROM notificadas WHERE clave = ?", (clave,)).fetchone()
+        if ya_existe:
+            continue
+        if not es_primera_vez:
+            enviar_telegram(_mensaje_apertura(row))
+            enviadas += 1
+        conn.execute(
+            "INSERT OR IGNORE INTO notificadas (clave, tipo, ticker, enviado_en) VALUES (?,?,?,?)",
+            (clave, 'apertura', row['ticker'], datetime.utcnow().isoformat())
+        )
+
+    for row in data.get('cerradas', []):
+        # Misma fecha de ENTRADA que en apertura (no la de cierre) — es la
+        # clave natural que conecta ambos eventos de la misma posición.
+        clave = f"{row['ticker']}|{row['fecha']}|cierre"
+        ya_existe = conn.execute("SELECT 1 FROM notificadas WHERE clave = ?", (clave,)).fetchone()
+        if ya_existe:
+            continue
+        if not es_primera_vez:
+            enviar_telegram(_mensaje_cierre(row))
+            enviadas += 1
+        conn.execute(
+            "INSERT OR IGNORE INTO notificadas (clave, tipo, ticker, enviado_en) VALUES (?,?,?,?)",
+            (clave, 'cierre', row['ticker'], datetime.utcnow().isoformat())
+        )
+
+    conn.commit()
+    conn.close()
+
+    if es_primera_vez:
+        print("[CarteraTracking] Primera ejecución — posiciones existentes memorizadas sin enviar Telegram (evita un aluvión de mensajes con todo el histórico)")
+    elif enviadas:
+        print(f"[CarteraTracking] {enviadas} notificación(es) enviada(s)")
+    return {"enviadas": enviadas, "bootstrap": es_primera_vez}
+
+
+init_db()

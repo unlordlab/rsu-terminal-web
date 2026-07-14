@@ -256,7 +256,19 @@ def _detectar_ftd(df):
         return {"signal": "active", "index": len(df)-1}
     return {"signal": "none"}
 
-def _mcclellan_proxy(df_spy, sector_data=None):
+def _mcclellan_proxy(df_spy, sector_data=None, breadth_real=None):
+    # PRIORIDAD 1: amplitud real de las ~500 acciones del S&P 500 — mismo dato
+    # que ya usa el widget "Amplitud de Mercado" (scan nocturno vía
+    # scripts/scanner_universe.py), EMA19-EMA39 sobre el avance/declive neto
+    # DIARIO REAL, el McClellan de verdad, no un proxy. Solo se pasa en el
+    # cálculo EN VIVO — el scan nocturno no guarda 20 años de histórico
+    # completo de las 500 acciones (sería un dataset enorme), así que el
+    # backtest sigue usando el proxy de más abajo sin cambios.
+    if breadth_real and len(breadth_real) >= 40:
+        net_series = pd.Series([h["advances"] - h["declines"] for h in breadth_real])
+        ema19 = net_series.ewm(span=19, adjust=False).mean()
+        ema39 = net_series.ewm(span=39, adjust=False).mean()
+        return ema19 - ema39, "Amplitud real S&P 500"
     if sector_data and len(sector_data) >= 3:
         up, down = 0, 0
         for etf, hist in sector_data.items():
@@ -367,7 +379,7 @@ def _rvol_en_minimo(df_spy, ventana=VENTANA):
     rvol      = vol_dia / vol_media if vol_media > 0 else 1.0
     return rvol, idx_min
 
-def _mcclellan_con_giro(df_spy, sector_data=None, ventana=5):
+def _mcclellan_con_giro(df_spy, sector_data=None, ventana=5, breadth_real=None):
     """
     Extiende _mcclellan_proxy con detección de "giro al alza" — no basta con que
     el oscilador esté en zona extrema negativa, debe estar recuperándose ya
@@ -376,7 +388,7 @@ def _mcclellan_con_giro(df_spy, sector_data=None, ventana=5):
     cayendo (en plena caída en curso) es mucho menos fiable que una con McClellan
     ya virando hacia arriba (indicio de que la presión vendedora está agotándose).
     """
-    mcclellan, metodo = _mcclellan_proxy(df_spy, sector_data)
+    mcclellan, metodo = _mcclellan_proxy(df_spy, sector_data, breadth_real)
     if not hasattr(mcclellan, 'iloc') or len(mcclellan) < ventana + 1:
         mc_val = float(mcclellan.iloc[-1]) if hasattr(mcclellan, 'iloc') else float(mcclellan or 0)
         return mc_val, False, metodo
@@ -408,7 +420,7 @@ def _vix_vix3m_ratio(df_vix, df_vix3m=None):
     except Exception:
         return None
 
-def _calcular_score_punto(df_spy, df_vix, sector_data=None, df_vix3m=None, credit_spread=None, mcclellan_precalculado=None):
+def _calcular_score_punto(df_spy, df_vix, sector_data=None, df_vix3m=None, credit_spread=None, mcclellan_precalculado=None, breadth_real=None):
     """
     Núcleo de scoring puro — recibe DataFrames ya recortados hasta un punto temporal
     dado y devuelve el score + desglose. Reutilizado tanto por get_rsu_algoritmo()
@@ -535,7 +547,7 @@ def _calcular_score_punto(df_spy, df_vix, sector_data=None, df_vix3m=None, credi
     if mcclellan_precalculado is not None:
         mc_val, girando_al_alza, metodo = mcclellan_precalculado
     else:
-        mc_val, girando_al_alza, metodo = _mcclellan_con_giro(df_spy, sector_data)
+        mc_val, girando_al_alza, metodo = _mcclellan_con_giro(df_spy, sector_data, breadth_real=breadth_real)
     mc_score = 0
     if mc_val < -80:
         mc_score = 11; detalles.append(f"✓ McClellan {mc_val:.0f} < -80 (+11)")
@@ -717,6 +729,21 @@ def _calcular_score_punto(df_spy, df_vix, sector_data=None, df_vix3m=None, credi
     # umbral) — incluir su max=10 sobrestimaría el máximo realmente alcanzable.
     max_score_real = sum(m['max'] for k, m in metricas.items() if m['max'] > 0 and k != 'SMA200')
 
+    # ABI (Absolute Breadth Index) — contextual, NO puntúa. Igual que el
+    # McClellan real, solo disponible en el cálculo en vivo (el scan nocturno
+    # no guarda 20 años de histórico de las 500 acciones para poder
+    # backtestearlo). |avances-declives| / total — no dice dirección, dice
+    # cuánta dispersión/actividad hay. Ver tooltip para la interpretación.
+    abi_valor, abi_estado = None, None
+    if breadth_real and len(breadth_real) > 0:
+        ultimo = breadth_real[-1]
+        total_issues = (ultimo.get("advances") or 0) + (ultimo.get("declines") or 0)
+        if total_issues > 0:
+            abi_valor = round(abs(ultimo["advances"] - ultimo["declines"]) / total_issues * 100, 1)
+            abi_estado = "ALTA DISPERSIÓN" if abi_valor >= 40 else ("BAJA ACTIVIDAD" if abi_valor <= 15 else "NORMAL")
+            if abi_estado == "ALTA DISPERSIÓN":
+                detalles.append(f"• ABI {abi_valor}% — alta dispersión de mercado (contexto, no puntúa)")
+
     return {
         "score":            score,
         "max_score":        max_score_real,
@@ -736,7 +763,13 @@ def _calcular_score_punto(df_spy, df_vix, sector_data=None, df_vix3m=None, credi
         "credit_spread_valor": credit_valor,
         "credit_spread_nivel": credit_nivel,
         "credit_spread_empeorando": credit_empeorando,
+        "abi_valor":  abi_valor,
+        "abi_estado": abi_estado,
     }
+
+def _fetch_breadth_real():
+    from services.scanner_service import get_breadth_history
+    return get_breadth_history()
 
 def get_rsu_algoritmo():
     try:
@@ -745,17 +778,23 @@ def get_rsu_algoritmo():
         # de factores (RSI, VIX, McClellan, RVOL) siguen operando sobre los
         # últimos meses vía .tail() dentro de cada función — el histórico extra
         # solo es relevante para el cálculo semanal.
-        with ThreadPoolExecutor(max_workers=5) as ex:
-            f_spy    = ex.submit(lambda: yf.Ticker("SPY").history(period="5y"))
-            f_vix    = ex.submit(lambda: yf.Ticker("^VIX").history(period="3mo"))
-            f_vix3m  = ex.submit(lambda: yf.Ticker("^VIX3M").history(period="5d"))
-            f_sect   = ex.submit(_descargar_sectores)
-            f_credit = ex.submit(_fetch_hy_spread_cached)
+        with ThreadPoolExecutor(max_workers=6) as ex:
+            f_spy     = ex.submit(lambda: yf.Ticker("SPY").history(period="5y"))
+            f_vix     = ex.submit(lambda: yf.Ticker("^VIX").history(period="3mo"))
+            f_vix3m   = ex.submit(lambda: yf.Ticker("^VIX3M").history(period="5d"))
+            f_sect    = ex.submit(_descargar_sectores)
+            f_credit  = ex.submit(_fetch_hy_spread_cached)
+            f_breadth = ex.submit(_fetch_breadth_real)
             df_spy      = f_spy.result()
             df_vix      = f_vix.result()
             df_vix3m    = f_vix3m.result()
             sector_data = f_sect.result()
             credit_hist = f_credit.result()
+            try:
+                breadth_real = f_breadth.result()
+            except Exception as e:
+                print(f"[RSU Algoritmo] Amplitud real no disponible, usando proxy: {type(e).__name__}: {e}")
+                breadth_real = None
 
         if len(df_spy) < 50:
             return {"ok": False, "error": "Datos insuficientes de SPY"}
@@ -772,7 +811,7 @@ def get_rsu_algoritmo():
         df_spy = pd.concat([df_spy.iloc[:-len(recent)], df_spy_clean_tail])
 
         credit_spread = _credit_stress_gate(credit_hist)  # sin fecha → último dato disponible
-        resultado = _calcular_score_punto(df_spy, df_vix, sector_data, df_vix3m, credit_spread=credit_spread)
+        resultado = _calcular_score_punto(df_spy, df_vix, sector_data, df_vix3m, credit_spread=credit_spread, breadth_real=breadth_real)
         resultado['precio'] = round(float(df_spy['Close'].iloc[-1]), 2)
 
         # Registro de cambios de semáforo + notificación Telegram. Envuelto en

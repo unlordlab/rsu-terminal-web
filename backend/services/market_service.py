@@ -1242,7 +1242,7 @@ def get_market_breadth():
         pct_sma50_week_ago = None
         nh_nl_week_ago = None
         ad_history_out, current_adv, current_dec, current_net = [], 0, 0, 0
-        ad_ok, ad_real_data = False, False
+        ad_ok, ad_real_data, ad_source = False, False, "n/d"
 
         WEEK_LOOKBACK = 5  # sesiones de mercado ≈ 1 semana natural
 
@@ -1285,7 +1285,15 @@ def get_market_breadth():
             current_dec = last["declines"]
             current_net = current_adv - current_dec
             ad_ok = True
-            ad_real_data = True  # real de verdad: nuestro propio universo, no un proxy
+            ad_real_data = True
+            # BUG CORREGIDO: antes esto compartía el mismo booleano ad_real_data=True
+            # que la rama de abajo (Yahoo ^ADV/^DEC, NYSE de verdad, ~2800 valores),
+            # y el frontend mostraba siempre "[NYSE REAL]" sin distinguir — pero esta
+            # rama usa el scan nocturno del S&P 500 (525 tickers), no NYSE completo.
+            # Detectado comparando avanzan+declinan (~486) contra "tickers evaluados"
+            # de % S&P500 (~487) en la propia UI — prácticamente idénticos, confirma
+            # que es el mismo universo, mal etiquetado como NYSE.
+            ad_source = "sp500"
 
         else:
             # Fallback: Scanner sin histórico suficiente todavía (recién
@@ -1296,6 +1304,7 @@ def get_market_breadth():
             ad_data = get_advance_decline()
             ad_ok = ad_data.get("ok", False)
             ad_real_data = ad_data.get("real_data", False)
+            ad_source = "nyse_yahoo" if ad_real_data else "proxy_spy"
             ad_history_out = ad_data.get("history", [])
             current_adv = ad_data.get("current_adv", 0)
             current_dec = ad_data.get("current_dec", 0)
@@ -1309,7 +1318,7 @@ def get_market_breadth():
 
         # ── % REAL del S&P 500 sobre SMA50 + New Highs/New Lows — mismo scan nocturno ──
         pct_above_sma50, sectors_checked, breadth_source = None, 0, "n/d"
-        new_highs, new_lows, nh_nl = None, None, None
+        new_highs, new_lows, nh_nl, nh_nl_source = None, None, None, "n/d"
         try:
             from services.scanner_service import get_universe_stocks
             universe = get_universe_stocks()
@@ -1319,10 +1328,24 @@ def get_market_breadth():
                 pct_above_sma50 = round(above / len(flagged) * 100, 1)
                 sectors_checked = len(flagged)
                 breadth_source = "sp500"
-            if universe:
+            # NH-NL: preferir el universo ampliado (S&P 500 + Russell 2000, el
+            # mismo breadth_hist que ya alimenta McClellan/ABI/A-D más arriba)
+            # en vez de recalcular solo sobre las 500 grandes — a diferencia de
+            # "% sobre SMA50" (que es explícitamente "del S&P 500" por nombre),
+            # NH-NL se presenta como amplitud general, así que debe beneficiarse
+            # de la misma cobertura ampliada que el resto de este widget.
+            if breadth_hist:
+                ultimo = breadth_hist[-1]
+                new_highs = ultimo.get("new_highs")
+                new_lows  = ultimo.get("new_lows")
+                if new_highs is not None and new_lows is not None:
+                    nh_nl = new_highs - new_lows
+                    nh_nl_source = "sp500_r2k"
+            if nh_nl is None and universe:
                 new_highs = sum(1 for v in universe.values() if v.get("new_high"))
                 new_lows  = sum(1 for v in universe.values() if v.get("new_low"))
                 nh_nl = new_highs - new_lows
+                nh_nl_source = "sp500"
         except Exception as e:
             print(f"[MarketBreadth] Scanner no disponible para % S&P500/NH-NL: {e}")
 
@@ -1351,6 +1374,29 @@ def get_market_breadth():
         nh_nl_wow     = (nh_nl - nh_nl_week_ago) if (nh_nl is not None and nh_nl_week_ago is not None) else None
         mcclellan_wow = round(mcclellan - mcclellan_week_ago, 1) if (mcclellan is not None and mcclellan_week_ago is not None) else None
 
+        # ── Absolute Breadth Index (ABI) ────────────────────────────────────────
+        # |avances - declives| / (avances + declives) — a diferencia del McClellan
+        # (direccional: dice si el mercado tiende a subir o bajar), el ABI NO dice
+        # hacia dónde va el mercado, solo CUÁNTA dispersión/actividad interna hay.
+        # Lecturas muy altas (muchas acciones subiendo Y muchas bajando a la vez)
+        # suelen asociarse a momentos de capitulación o cambio de régimen — Fosback
+        # (creador del indicador) encontró que lecturas extremas han precedido
+        # subidas de precio a 3-12 meses vista. Reutiliza current_adv/current_dec
+        # y ad_history_out ya calculados arriba (mismo dato que el McClellan real y
+        # la Línea A/D) — cero llamadas de red adicionales, funciona igual con datos
+        # reales (breadth_source="sp500") o con el fallback de Yahoo.
+        abi, abi_wow, abi_state = None, None, "N/D"
+        total_issues = current_adv + current_dec
+        if total_issues > 0:
+            abi = round(abs(current_adv - current_dec) / total_issues * 100, 1)
+            abi_state = "ALTA DISPERSIÓN" if abi >= 40 else ("BAJA ACTIVIDAD" if abi <= 15 else "NORMAL")
+            if ad_history_out and len(ad_history_out) > WEEK_LOOKBACK:
+                h_semana = ad_history_out[-1 - WEEK_LOOKBACK]
+                total_semana = (h_semana.get("adv") or 0) + (h_semana.get("dec") or 0)
+                if total_semana > 0:
+                    abi_semana = abs(h_semana["adv"] - h_semana["dec"]) / total_semana * 100
+                    abi_wow = round(abi - abi_semana, 1)
+
         golden_cross = (sma200 is not None) and (sma50 > sma200)
         above_sma200 = (sma200 is not None) and (current > sma200)
 
@@ -1369,6 +1415,9 @@ def get_market_breadth():
             "mcclellan": mcclellan,
             "mcclellan_state": mcclellan_state,
             "mcclellan_wow": mcclellan_wow,
+            "abi": abi,
+            "abi_wow": abi_wow,
+            "abi_state": abi_state,
             "pct_above_sma50": pct_above_sma50,
             "pct_above_sma50_wow": pct_sma50_wow,
             "sectors_checked": sectors_checked,
@@ -1376,10 +1425,12 @@ def get_market_breadth():
             "new_highs": new_highs,
             "new_lows": new_lows,
             "nh_nl": nh_nl,
+            "nh_nl_source": nh_nl_source,  # "sp500_r2k" (real, S&P 500 + Russell 2000) | "sp500" (fallback, solo S&P 500)
             "nh_nl_wow": nh_nl_wow,
             # Datos de Línea A/D fusionados (antes en el widget separado /market/ad-line)
             "ad_ok": ad_ok,
             "ad_real_data": ad_real_data,
+            "ad_source": ad_source,  # "sp500" (scan nocturno, 525 tickers) | "nyse_yahoo" (^ADV/^DEC real) | "proxy_spy"
             "ad_history": ad_history_out,
             "current_adv": current_adv,
             "current_dec": current_dec,
@@ -1397,11 +1448,12 @@ def get_market_breadth():
             "price": None, "sma50": None, "sma200": None,
             "above_sma50": False, "above_sma200": False, "golden_cross": False,
             "rsi": 50.0, "rsi_state": "N/D", "trend": "N/D", "strength": "N/D",
-            "mcclellan": None, "mcclellan_state": "N/D", "mcclellan_wow": None, "pct_above_sma50": None,
+            "mcclellan": None, "mcclellan_state": "N/D", "mcclellan_wow": None,
+            "abi": None, "abi_wow": None, "abi_state": "N/D", "pct_above_sma50": None,
             "pct_above_sma50_wow": None,
             "sectors_checked": 0, "breadth_source": "n/d",
-            "new_highs": None, "new_lows": None, "nh_nl": None, "nh_nl_wow": None,
-            "ad_ok": False, "ad_real_data": False, "ad_history": [],
+            "new_highs": None, "new_lows": None, "nh_nl": None, "nh_nl_source": "n/d", "nh_nl_wow": None,
+            "ad_ok": False, "ad_real_data": False, "ad_source": "n/d", "ad_history": [],
             "current_adv": 0, "current_dec": 0, "current_net": 0,
             "timestamp": get_timestamp(),
         }

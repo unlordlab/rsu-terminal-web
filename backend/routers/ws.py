@@ -338,3 +338,18 @@ async def algoritmo_resultados_loop():
             await loop.run_in_executor(None, actualizar_resultados_pendientes)
         except Exception as e:
             print(f"[AlgoritmoResultados] Error: {e}")
+
+
+# Revisa Cartera (Google Sheet) cada 15 min buscando aperturas/cierres nuevos
+# y notifica por Telegram — el sheet lo edita Marc a mano, así que no hace
+# falta más frecuencia que esta para no perderse cambios durante horario de
+# mercado sin golpear la hoja constantemente.
+async def cartera_check_loop():
+    while True:
+        await asyncio.sleep(900)  # 15 min
+        try:
+            from services.cartera_tracking_service import procesar_cartera_notificaciones
+            loop = asyncio.get_event_loop()
+            await loop.run_in_executor(None, procesar_cartera_notificaciones)
+        except Exception as e:
+            print(f"[CarteraCheck] Error: {e}")

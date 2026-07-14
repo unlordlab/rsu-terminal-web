@@ -8,6 +8,14 @@ router = APIRouter(prefix="/api/v1/cartera", tags=["cartera"])
 async def cartera(user=Depends(verify_token)):
     return get_cartera()
 
+@router.post("/notificaciones/check")
+async def cartera_notificaciones_check(user=Depends(verify_token)):
+    """Fuerza la comprobación de aperturas/cierres nuevos ahora mismo, sin
+    esperar a los 15 min del bucle periódico — para probar la conexión con
+    Telegram tras configurarla."""
+    from services.cartera_tracking_service import procesar_cartera_notificaciones
+    return procesar_cartera_notificaciones()
+
 @router.get("/prices")
 async def cartera_prices(user=Depends(verify_token)):
     """Precios live de las posiciones abiertas — con caché 60s."""

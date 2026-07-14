@@ -22,7 +22,6 @@ DOS RESPONSABILIDADES:
 import sqlite3
 import os
 import json
-import requests
 from datetime import datetime, timedelta
 
 DB_PATH = os.path.join(os.path.dirname(__file__), '..', 'algoritmo_history.db')
@@ -105,29 +104,10 @@ def init_db():
     conn.close()
 
 
-def _enviar_telegram(mensaje):
-    """Envía un mensaje a Telegram vía la API de bots (sendMessage). Requiere
-    TELEGRAM_BOT_TOKEN y TELEGRAM_CHAT_ID en .env — si no están configurados,
-    no hace nada (no rompe el resto del flujo)."""
-    from config import settings
-    token   = getattr(settings, "telegram_bot_token", "")
-    chat_id = getattr(settings, "telegram_chat_id", "")
-    if not token or not chat_id:
-        print("[AlgoritmoTracking] Sin TELEGRAM_BOT_TOKEN/TELEGRAM_CHAT_ID configurados — notificación no enviada (solo registrada en BD)")
-        return False
-    try:
-        r = requests.post(
-            f"https://api.telegram.org/bot{token}/sendMessage",
-            json={"chat_id": chat_id, "text": mensaje, "parse_mode": "Markdown"},
-            timeout=10
-        )
-        if r.status_code != 200:
-            print(f"[AlgoritmoTracking] Telegram respondió HTTP {r.status_code}: {r.text[:200]}")
-            return False
-        return True
-    except Exception as e:
-        print(f"[AlgoritmoTracking] Error enviando Telegram: {type(e).__name__}: {e}")
-        return False
+# Envío de Telegram ahora vive en telegram_service.py (compartido con Cartera,
+# ver ese archivo) — se re-importa aquí con el mismo nombre para no tener que
+# tocar el resto de este archivo.
+from services.telegram_service import enviar_telegram as _enviar_telegram
 
 
 def _emoji_estado(estado):

@@ -678,11 +678,14 @@ async function loadBreadth(el) {
         const rsiColor      = rsi > 70 ? '#f23645' : (rsi < 30 ? '#00ffad' : '#ff9800');
         const mcAvailable   = data.mcclellan != null;
         const mcColor       = mcAvailable ? (data.mcclellan > 0 ? '#00ffad' : '#f23645') : 'var(--color-muted)';
-        const mcRealData    = data.ad_real_data === true;
         const mcBadge       = !mcAvailable ? ''
-            : (mcRealData
-                ? '<span style="color:#00ffad;font-size:9px;">[REAL]</span>'
+            : (data.ad_source === 'sp500_r2k' ? '<span style="color:#00ffad;font-size:9px;">[S&amp;P 500 + RUSSELL 2000 REAL]</span>'
+                : data.ad_source === 'nyse_yahoo' ? '<span style="color:#00ffad;font-size:9px;">[NYSE REAL]</span>'
+                : data.ad_source === 'sp500' ? '<span style="color:#00ffad;font-size:9px;">[S&amp;P 500 REAL]</span>'
                 : '<span style="color:#ff9800;font-size:9px;">[PROXY SPY]</span>');
+        const abiAvailable  = data.abi != null;
+        const abiColor      = abiAvailable ? (data.abi >= 40 ? '#f23645' : (data.abi <= 15 ? 'var(--color-muted)' : '#ff9800')) : 'var(--color-muted)';
+        const abiBadge      = !abiAvailable ? '' : mcBadge; // mismo dato de origen que McClellan, misma etiqueta
         const pctColor      = data.pct_above_sma50 >= 60 ? '#00ffad' : (data.pct_above_sma50 <= 40 ? '#f23645' : '#ff9800');
         const sma200Str     = data.sma200 == null ? 'N/D (insuf. datos)' : '$' + data.sma200.toFixed(2);
         const sma200ColorUse= data.sma200 == null ? 'var(--color-muted)' : sma200Color;
@@ -730,6 +733,18 @@ async function loadBreadth(el) {
             + '<div style="font-size:9px;color:var(--color-muted);margin-top:3px;">&gt;+70 sobrecompra de amplitud · &lt;-70 sobreventa de amplitud ' + mcBadge + '</div>'
             + '</div>'
 
+            // ABI — Absolute Breadth Index (|avances-declives| / total, no direccional)
+            + '<div style="background:var(--color-bg);border:1px solid var(--color-border);border-radius:6px;padding:8px 12px;margin-bottom:6px;">'
+            + '<div style="display:flex;justify-content:space-between;margin-bottom:4px;">'
+            + '<span style="color:var(--color-muted);font-size:11px;">Absolute Breadth Index ' + tt('abi-absolute-breadth') + '</span>'
+            + '<span style="color:' + abiColor + ';font-size:11px;font-weight:600;">' + (abiAvailable ? (data.abi.toFixed(1) + '% · ' + data.abi_state) : 'N/D') + wowBadge(data.abi_wow, 'pp') + '</span>'
+            + '</div>'
+            + '<div style="width:100%;height:8px;background:var(--color-border);border-radius:4px;overflow:hidden;">'
+            + '<div style="height:100%;width:' + (abiAvailable ? Math.min(data.abi, 100) : 0) + '%;background:' + abiColor + ';"></div>'
+            + '</div>'
+            + '<div style="font-size:9px;color:var(--color-muted);margin-top:3px;">No direccional — mide dispersión/actividad, no hacia dónde va el mercado. ≥40% = mucho movimiento interno (capitulación o cambio de régimen) ' + abiBadge + '</div>'
+            + '</div>'
+
             // % S&P 500 sobre SMA50 (real, desde el scan nocturno de 500 tickers)
             + '<div style="background:var(--color-bg);border:1px solid var(--color-border);border-radius:6px;padding:8px 12px;margin-bottom:6px;">'
             + '<div style="display:flex;justify-content:space-between;margin-bottom:4px;">'
@@ -742,13 +757,13 @@ async function loadBreadth(el) {
             + '<div style="font-size:9px;color:var(--color-muted);margin-top:3px;">' + data.sectors_checked + ' tickers evaluados ' + breadthBadge + '</div>'
             + '</div>'
 
-            // New Highs - New Lows (52 semanas, desde el scan nocturno de 500 tickers)
+            // New Highs - New Lows (52 semanas, universo ampliado cuando está disponible)
             + '<div style="background:var(--color-bg);border:1px solid var(--color-border);border-radius:6px;padding:8px 12px;margin-bottom:10px;">'
             + '<div style="display:flex;justify-content:space-between;margin-bottom:4px;">'
             + '<span style="color:var(--color-muted);font-size:11px;">New Highs − New Lows ' + tt('nh-nl') + '</span>'
             + '<span style="color:' + nhNlColor + ';font-size:12px;font-weight:600;">' + (nhNlAvailable ? ((data.nh_nl >= 0 ? '+' : '') + data.nh_nl) : 'N/D') + wowBadge(data.nh_nl_wow, '') + '</span>'
             + '</div>'
-            + '<div style="font-size:9px;color:var(--color-muted);margin-top:3px;">' + (nhNlAvailable ? (data.new_highs + ' nuevos máximos · ' + data.new_lows + ' nuevos mínimos (52 semanas) <span style="color:#00ffad;">[S&amp;P 500 REAL]</span>') : 'Requiere el scan nocturno del Scanner — no disponible todavía') + '</div>'
+            + '<div style="font-size:9px;color:var(--color-muted);margin-top:3px;">' + (nhNlAvailable ? (data.new_highs + ' nuevos máximos · ' + data.new_lows + ' nuevos mínimos (52 semanas) <span style="color:#00ffad;">' + (data.nh_nl_source === 'sp500_r2k' ? '[S&P 500 + RUSSELL 2000 REAL]' : '[S&P 500 REAL]') + '</span>') : 'Requiere el scan nocturno del Scanner — no disponible todavía') + '</div>'
             + '</div>'
 
             // RSI gauge
@@ -778,9 +793,10 @@ async function loadBreadth(el) {
         let adSectionHtml = '';
         let chartId = null;
         if (data.ad_ok) {
-            const isReal   = data.ad_real_data;
-            const badgeText  = isReal ? '[NYSE REAL]' : '[PROXY SPY]';
-            const badgeColor = isReal ? '#00ffad' : '#ff9800';
+            const badgeText  = data.ad_source === 'nyse_yahoo' ? '[NYSE REAL]'
+                : data.ad_source === 'sp500' ? '[S&P 500 REAL]'
+                : '[PROXY SPY]';
+            const badgeColor = data.ad_source === 'proxy_spy' ? '#ff9800' : '#00ffad';
             const netColor   = data.current_net >= 0 ? '#00ffad' : '#f23645';
             const netArrow   = data.current_net >= 0 ? '▲' : '▼';
             chartId = 'ad-chart-' + Date.now();

@@ -79,6 +79,8 @@ export async function render(container) {
         const creditTxt   = data.credit_spread_valor == null
             ? 'BAA10Y: sin datos'
             : 'BAA10Y: ' + data.credit_spread_valor + '% (' + (data.credit_spread_nivel === 'critico' ? 'CRÍTICO' : data.credit_spread_nivel === 'elevado' ? ('elevado, ' + (data.credit_spread_empeorando ? 'empeorando' : 'mejorando')) : 'normal') + ')';
+        const abiColor = data.abi_estado === 'ALTA DISPERSIÓN' ? '#ff9800' : 'var(--color-muted)';
+        const abiTxt   = data.abi_valor == null ? 'ABI: sin datos (requiere scan nocturno)' : 'ABI: ' + data.abi_valor + '% (' + data.abi_estado + ')';
         const gatekeepersHtml = '<div style="margin-top:1rem;padding:1rem;background:var(--color-bg,#0a0a0a);border-radius:var(--radius);border:1px solid var(--color-border);">'
             + '<div style="color:var(--color-muted);font-size:11px;letter-spacing:0.08em;margin-bottom:8px;">GATEKEEPERS ' + tt('algoritmo-gatekeepers') + ' (umbral VERDE: ' + data.umbral_verde + '/100)</div>'
             + '<div style="display:flex;gap:1.5rem;flex-wrap:wrap;font-size:12px;">'
@@ -87,6 +89,7 @@ export async function render(container) {
             + '<div style="color:' + gkColor(data.ftd_confirmado) + ';">' + gkIcon(data.ftd_confirmado) + ' FTD confirmado</div>'
             + '<div style="color:var(--color-muted);">Drawdown 52w: <span style="color:' + (data.drawdown_52w_pct <= -15 ? '#f23645' : 'var(--color-text)') + ';">' + data.drawdown_52w_pct + '%</span></div>'
             + '<div style="color:' + creditColor + ';">' + creditTxt + '</div>'
+            + '<div style="color:' + abiColor + ';" title="Contexto — no puntúa en el score. ' + tt('abi-absolute-breadth') + '">' + abiTxt + '</div>'
             + '</div>'
             + '</div>';
 
