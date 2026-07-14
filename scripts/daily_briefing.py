@@ -234,10 +234,13 @@ def get_market_data() -> dict:
             headers={"User-Agent": "Mozilla/5.0"},
             timeout=8
         )
+        print(f"📅 Calendario económico: status HTTP {r.status_code}")
         if r.status_code == 200:
-            events = []
+            raw_events = r.json()
+            print(f"📅 Calendario económico: {len(raw_events)} eventos totales en la semana")
             today  = datetime.now().strftime("%Y-%m-%d")
-            for item in r.json():
+            events = []
+            for item in raw_events:
                 if item.get("impact") in ["High", "Medium"] and today in item.get("date", ""):
                     events.append({
                         "time":    item.get("date", "")[-8:-3],
@@ -247,8 +250,23 @@ def get_market_data() -> dict:
                         "forecast":item.get("forecast", ""),
                         "previous":item.get("previous", ""),
                     })
-            data["calendar"] = events[:10]
-    except Exception:
+            # BUG CORREGIDO: antes se recortaba a events[:10] sin ordenar por
+            # hora primero — en un día con muchos eventos de impacto alto/medio
+            # (ej. CPI de EEUU + testimonio Fed + varios británicos el mismo
+            # día), un evento clave podía quedar fuera del corte solo por el
+            # orden de llegada del feed, no por relevancia horaria. Se ordena
+            # por hora y se sube el límite ligeramente (15, no 10) — un solo
+            # día raramente tiene más de eso en alto/medio impacto, pero por
+            # si acaso ya no se pierde el primero de la lista sin más.
+            events.sort(key=lambda e: e["time"])
+            print(f"📅 Calendario económico: {len(events)} eventos de hoy con impacto alto/medio: "
+                  f"{', '.join(e['event'] for e in events) if events else '(ninguno)'}")
+            data["calendar"] = events[:15]
+        else:
+            print(f"⚠️  Calendario económico: status {r.status_code} — puede ser bloqueo de IP compartida de GitHub Actions (CloudFlare), mismo tipo de problema que ya se ve con GDELT")
+            data["calendar"] = []
+    except Exception as e:
+        print(f"⚠️  Calendario económico: error inesperado ({type(e).__name__}: {e})")
         data["calendar"] = []
 
     data["date"] = datetime.now().strftime("%Y-%m-%d")
@@ -433,8 +451,8 @@ def get_rsu_breadth_signals() -> dict:
     """Lee directamente el Gist que publica scripts/scanner_universe.py cada
     noche — el mismo dato que alimenta Market Breadth en la terminal — para
     que el briefing hable con las señales propias de RSU (McClellan real,
-    % del S&P sobre SMA50, NH-NL) en vez de vivir aislado del resto de la
-    herramienta. Lectura pública, sin necesidad de token."""
+    ABI, % del S&P sobre SMA50, NH-NL) en vez de vivir aislado del resto de
+    la herramienta. Lectura pública, sin necesidad de token."""
     try:
         r = requests.get(
             f"https://api.github.com/gists/{SCANNER_GIST_ID}",
@@ -449,12 +467,13 @@ def get_rsu_breadth_signals() -> dict:
         if not stocks:
             return {}
 
+        # % sobre SMA50 sigue siendo específicamente "del S&P 500" — solo el
+        # subconjunto de 500 tiene el flag above_sma50 (viene del bucle de
+        # scoring RS/fase, no del cálculo de amplitud ampliado).
         flagged = [v for v in stocks.values() if v.get("above_sma50") is not None]
         pct_above_sma50 = round(sum(1 for v in flagged if v["above_sma50"]) / len(flagged) * 100, 1) if flagged else None
-        new_highs = sum(1 for v in stocks.values() if v.get("new_high"))
-        new_lows  = sum(1 for v in stocks.values() if v.get("new_low"))
 
-        mcclellan = None
+        mcclellan, abi, new_highs, new_lows, universo_amplitud = None, None, None, None, None
         breadth_hist = gist.get("breadth_history", [])
         if len(breadth_hist) >= 40:
             net = [h["advances"] - h["declines"] for h in breadth_hist]
@@ -467,13 +486,30 @@ def get_rsu_breadth_signals() -> dict:
                 return e
             mcclellan = round(ema(net, 19) - ema(net, 39), 1)
 
+            # NH-NL y ABI del ÚLTIMO día del historial de amplitud — este
+            # historial ya cubre S&P 500 + Russell 2000 (ver
+            # scripts/scanner_universe.py:RUSSELL2000_TICKERS), no solo las
+            # 500 grandes. Antes este NH-NL se recalculaba aparte sobre
+            # `stocks` (solo S&P 500) — inconsistente con el McClellan de
+            # arriba, que ya usaba el universo ampliado. Ahora ambos leen de
+            # la misma fuente.
+            ultimo = breadth_hist[-1]
+            new_highs = ultimo.get("new_highs")
+            new_lows  = ultimo.get("new_lows")
+            adv, dec  = ultimo.get("advances"), ultimo.get("declines")
+            if adv is not None and dec is not None and (adv + dec) > 0:
+                abi = round(abs(adv - dec) / (adv + dec) * 100, 1)
+            universo_amplitud = adv + dec if (adv is not None and dec is not None) else None
+
         return {
             "pct_above_sma50": pct_above_sma50,
             "new_highs": new_highs,
             "new_lows": new_lows,
-            "nh_nl": new_highs - new_lows,
+            "nh_nl": (new_highs - new_lows) if (new_highs is not None and new_lows is not None) else None,
             "mcclellan": mcclellan,
-            "universe_size": gist.get("universe_size"),
+            "abi": abi,
+            "universe_size": gist.get("universe_size"),       # tamaño del universo de RS/fase (S&P 500, ~500)
+            "universo_amplitud": universo_amplitud,             # tamaño del universo de amplitud (S&P 500 + Russell 2000, ~2.480)
         }
     except Exception as e:
         print(f"⚠️  No se pudieron leer las señales de amplitud de RSU: {e}")
@@ -660,16 +696,22 @@ def build_prompt(market_data: dict, news: list, major_headlines: list, earnings:
     if not earnings_lines:
         earnings_lines = "Sin earnings de peso en las próximas 48h.\n"
 
-    # Señales de amplitud propias de RSU (McClellan real, % sobre SMA50, NH-NL)
-    # — calculadas sobre el propio universo de 500 tickers del Scanner, no
-    # sobre una fuente externa genérica
+    # Señales de amplitud propias de RSU: % sobre SMA50 sigue siendo del S&P
+    # 500 específicamente. McClellan, ABI y NH-NL ya usan el universo ampliado
+    # (S&P 500 + Russell 2000, ~2.480 tickers) — pensado para detectar cuándo
+    # el índice sube solo por megacaps mientras el resto del mercado no
+    # acompaña, algo que el S&P 500 en solitario no puede ver.
     if breadth:
-        pct_s = f"{breadth['pct_above_sma50']}%" if breadth.get('pct_above_sma50') is not None else "N/D"
-        mc_s  = f"{breadth['mcclellan']:+.1f}" if breadth.get('mcclellan') is not None else "N/D (histórico insuficiente todavía)"
+        pct_s  = f"{breadth['pct_above_sma50']}%" if breadth.get('pct_above_sma50') is not None else "N/D"
+        mc_s   = f"{breadth['mcclellan']:+.1f}" if breadth.get('mcclellan') is not None else "N/D (histórico insuficiente todavía)"
+        abi_s  = f"{breadth['abi']}%" if breadth.get('abi') is not None else "N/D"
         rsu_breadth_str = (
-            f"% S&P 500 sobre SMA50: {pct_s} | Oscilador McClellan RSU (real, sobre vuestro propio universo): {mc_s} | "
+            f"% S&P 500 sobre SMA50: {pct_s} | "
+            f"Oscilador McClellan RSU (real, sobre S&P 500 + Russell 2000): {mc_s} | "
+            f"ABI — Absolute Breadth Index (dispersión de mercado, NO direccional — no confundir con McClellan): {abi_s} "
+            f"(≥40% = mucha dispersión/actividad interna, propio de capitulación o cambios de régimen; ≤15% = mercado apagado) | "
             f"New Highs−New Lows: {breadth.get('nh_nl', 'N/D')} "
-            f"({breadth.get('new_highs', '?')} nuevos máximos de 52 sem. vs {breadth.get('new_lows', '?')} nuevos mínimos)"
+            f"({breadth.get('new_highs', '?')} nuevos máximos de 52 sem. vs {breadth.get('new_lows', '?')} nuevos mínimos, sobre S&P 500 + Russell 2000)"
         )
     else:
         rsu_breadth_str = "Dato no disponible (Scanner sin datos frescos)"
@@ -693,7 +735,16 @@ def build_prompt(market_data: dict, news: list, major_headlines: list, earnings:
 
     bias_history_str = format_bias_history(bias_history)
 
+    # HECHOS ACTUALES QUE EL MODELO PUEDE TENER DESACTUALIZADOS: bloque de
+    # mantenimiento manual — si cambia el chair de la Fed u otro cargo clave
+    # que el modelo tienda a mencionar con su nombre "por defecto" desactualizado
+    # (visto en producción: mezclaba "Jerome" con "Warsh", el chair actual real
+    # desde el 22-may-2026, porque el training del modelo es anterior al cambio),
+    # actualiza la lista de abajo.
     prompt = f"""Eres un trader macro-discrecional escribiendo tu propia nota de mercado de cada mañana, para tu comunidad de trading. No es un informe institucional de un banco — es tu lectura personal, en primera persona, con tu propio posicionamiento incluido ("mi cartera", "he cerrado las coberturas", "mantengo el objetivo de..."). El tono es directo, seguro, con opiniones claras — no un informe neutro que evita mojarse.
+
+HECHOS ACTUALES QUE TU ENTRENAMIENTO PUEDE TENER DESACTUALIZADOS (verificado externamente, no lo cuestiones ni lo "corrijas" a un nombre que te suene más familiar):
+- El actual presidente (Chair) de la Reserva Federal es Kevin Warsh, NO Jerome Powell — Warsh tomó posesión el 22 de mayo de 2026, sucediendo a Powell. Si mencionas al presidente de la Fed, es "Warsh" o "Kevin Warsh", nunca "Jerome Warsh" ni "Jerome Powell" en el cargo actual (Powell sigue en el consejo de gobernadores, pero ya no es el chair).
 
 IDIOMA: Español castellano, natural. Nada de emojis. Nada de listas interminables — prosa conectada, con algún bullet solo donde de verdad ayude a la lectura rápida.
 
@@ -754,7 +805,7 @@ SENTIMIENTO:
 - VIX Term Structure: {vix_str}
 - High Yield Spread (OAS): {hy_str}
 
-SEÑALES PROPIAS DE RSU (amplitud calculada sobre vuestro propio universo de 500 tickers — dales protagonismo, es lo que os diferencia de cualquier newsletter macro genérica):
+SEÑALES PROPIAS DE RSU (amplitud calculada sobre vuestro propio universo — S&P 500 + Russell 2000 para McClellan/ABI/NH-NL, S&P 500 para el % sobre SMA50 — dales protagonismo, es lo que os diferencia de cualquier newsletter macro genérica):
 {rsu_breadth_str}
 
 INSIDER FLOW — CLUSTERS DE COMPRA RECIENTES:
@@ -773,6 +824,8 @@ TITULARES REALES DE MERCADO (últimas ~24-30h — usa 2-3 de los más relevantes
 
 TITULARES DE ALTO IMPACTO — MEDIOS INTERNACIONALES (Reuters/Bloomberg/WSJ/AP/FT, últimas 24h): estos pueden ser noticias GEOPOLÍTICAS o de otro tipo (conflictos, ataques, decisiones políticas mayores) que no son "económicas" en sentido estricto pero SÍ mueven mercado (petróleo, defensa, refugio, volatilidad general). Si hay algo aquí con impacto real de mercado hoy — aunque no sea una noticia financiera clásica — mencionalo explícitamente y conecta por qué le importa a un trader (qué activo concreto mueve, por qué):
 {major_headlines_lines}
+
+{"⚠️ AVISO CRÍTICO: hoy NO hay NINGÚN titular real disponible, ni de mercado ni de medios internacionales — ambas fuentes fallaron. Esto significa que NO puedes mencionar ningún evento, declaración, testimonio, comparecencia, decisión de un banco central o nombre de cargo público concreto (ni siquiera uno que 'suene plausible' como agenda conocida) salvo que ya esté en los DATOS DE MERCADO numéricos de arriba (yields, VIX, futuros, niveles técnicos). Si necesitas explicar el movimiento del día, explícalo SOLO con esos datos técnicos y de amplitud — flujos, rotación sectorial, niveles rotos, tipos — nunca con un catalizador narrativo inventado. Es preferible una nota más técnica y menos narrativa que una nota fluida con datos falsos." if (not news_lines.strip() or news_lines.startswith("Sin titulares")) and (not major_headlines_lines.strip() or major_headlines_lines.startswith("Sin titulares")) else ""}
 
 ---
 
