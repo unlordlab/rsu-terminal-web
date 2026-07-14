@@ -34,6 +34,7 @@ SCANNER_GIST_ID = "cb9d69cbf6ca741b4fd86765a41813a7"
 SCANNER_GIST_FILE = "scanner_scan.json"
 
 FINNHUB_KEY = os.environ.get("FINNHUB_API_KEY", "")
+ALPHA_VANTAGE_KEY = os.environ.get("ALPHA_VANTAGE_API_KEY", "")
 
 # Insider Flow vive en SQLite dentro del backend (insider_history.db), no en
 # un Gist — así que solo es alcanzable desde este script si el backend está
@@ -407,6 +408,67 @@ def get_major_outlet_headlines(max_items: int = 8) -> list:
         return out
     except Exception as e:
         print(f"⚠️  No se pudieron obtener titulares de medios internacionales (GDELT): {e}")
+        return []
+
+
+def get_alphavantage_headlines(max_items: int = 8) -> list:
+    """Respaldo cuando GDELT falla (ver get_major_outlet_headlines) — usa el
+    endpoint NEWS_SENTIMENT de Alpha Vantage, que ya está configurado en este
+    proyecto para otras cosas (cero fricción de setup nueva). No es un feed de
+    Reuters/Bloomberg específico, es un agregador de noticias financieras y
+    macro con fuentes variadas — cubre menos "geopolítico puro" que GDELT
+    pero es una fuente completamente distinta, con su propia infraestructura,
+    así que si GDELT falla por un bloqueo de IP compartida, esta normalmente
+    no se ve afectada por el mismo problema al mismo tiempo.
+    Límite gratuito: 25 peticiones/día — de sobra para 1 vez al día."""
+    if not ALPHA_VANTAGE_KEY:
+        print("⚠️  ALPHA_VANTAGE_API_KEY no configurado — sin respaldo de Alpha Vantage (revisa los secrets del Action)")
+        return []
+    try:
+        r = requests.get(
+            "https://www.alphavantage.co/query",
+            params={
+                "function": "NEWS_SENTIMENT",
+                "topics": "economy_macro,financial_markets,economy_fiscal,economy_monetary",
+                "apikey": ALPHA_VANTAGE_KEY,
+                "limit": max_items * 2,
+                "sort": "LATEST",
+            },
+            timeout=15,
+        )
+        if r.status_code != 200:
+            print(f"⚠️  Alpha Vantage (respaldo GDELT): status HTTP {r.status_code}")
+            return []
+        data = r.json()
+        feed = data.get("feed", [])
+        if not feed:
+            # Alpha Vantage devuelve 200 con un mensaje de error/límite dentro
+            # del body en vez de un status HTTP de error — hay que revisar
+            # explícitamente, si no, un límite agotado se ve igual que "sin noticias hoy"
+            print(f"⚠️  Alpha Vantage (respaldo GDELT): 0 artículos — body: {str(data)[:200]}")
+            return []
+        print(f"🔁 Alpha Vantage (respaldo GDELT): {len(feed)} artículos recibidos")
+        out = []
+        for a in feed:
+            title = (a.get("title") or "").strip()
+            if not title:
+                continue
+            time_str = ""
+            try:
+                time_str = datetime.strptime(a.get("time_published", ""), "%Y%m%dT%H%M%S").strftime("%H:%M UTC")
+            except Exception:
+                pass
+            out.append({
+                "headline": title[:180],
+                "source":   a.get("source", "?"),
+                "time":     time_str,
+            })
+            if len(out) >= max_items:
+                break
+        print(f"🔁 Alpha Vantage (respaldo GDELT): {len(out)} titulares tras filtrar")
+        return out
+    except Exception as e:
+        print(f"⚠️  Alpha Vantage (respaldo GDELT): error inesperado ({type(e).__name__}: {e})")
         return []
 
 
@@ -1005,6 +1067,9 @@ def main():
 
     print("🌍 Recopilando titulares de alto impacto (Reuters/Bloomberg/WSJ/AP/FT vía GDELT)...")
     major_headlines = get_major_outlet_headlines()
+    if not major_headlines:
+        print("🔁 GDELT no devolvió nada — probando respaldo con Alpha Vantage...")
+        major_headlines = get_alphavantage_headlines()
 
     print("📅 Recopilando earnings notables (próximas 48h)...")
     earnings = get_notable_earnings()
