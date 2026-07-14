@@ -6,6 +6,7 @@ Genera análisis diario via OpenRouter (Qwen) y lo guarda en GitHub Gist
 
 import os
 import json
+import time
 import requests
 from datetime import datetime, timedelta
 import yfinance as yf
@@ -328,20 +329,35 @@ def get_major_outlet_headlines(max_items: int = 8) -> list:
     medios ahora mismo" sin depender de sus APIs de pago."""
     domains = ["reuters.com", "bloomberg.com", "wsj.com", "apnews.com", "ft.com"]
     query = "(" + " OR ".join(f"domain:{d}" for d in domains) + ")"
+    gdelt_params = {
+        "query": query,
+        "mode": "artlist",
+        "maxrecords": max_items * 2,  # margen, luego se filtra/recorta
+        "timespan": "24h",
+        "sort": "datedesc",
+        "format": "json",
+    }
     try:
-        r = requests.get(
-            "https://api.gdeltproject.org/api/v2/doc/doc",
-            params={
-                "query": query,
-                "mode": "artlist",
-                "maxrecords": max_items * 2,  # margen, luego se filtra/recorta
-                "timespan": "24h",
-                "sort": "datedesc",
-                "format": "json",
-            },
-            timeout=15,
-            headers={"User-Agent": "RSU-Terminal-Briefing/1.0"},
-        )
+        # Reintento con espera si GDELT devuelve 429 — el runner de GitHub
+        # Actions comparte un pool de IPs con muchísimos otros proyectos, así
+        # que aunque aquí solo se hace UNA petición, puede coincidir con una
+        # ráfaga de otro trabajo completamente distinto usando una IP cercana
+        # en ese mismo instante. GDELT pide explícitamente esperar 5s entre
+        # peticiones — con 8s de margen y hasta 2 reintentos debería bastar
+        # para una colisión puntual sin arriesgar el timeout de 20 min del Action.
+        r = None
+        for attempt in range(3):
+            r = requests.get(
+                "https://api.gdeltproject.org/api/v2/doc/doc",
+                params=gdelt_params,
+                timeout=15,
+                headers={"User-Agent": "RSU-Terminal-Briefing/1.0"},
+            )
+            if r.status_code != 429:
+                break
+            print(f"⚠️  GDELT devolvió 429 (límite de tasa compartido) — reintento {attempt + 1}/3 en 8s...")
+            time.sleep(8)
+
         if r.status_code != 200:
             print(f"⚠️  GDELT devolvió status {r.status_code}: {r.text[:200]}")
             return []
