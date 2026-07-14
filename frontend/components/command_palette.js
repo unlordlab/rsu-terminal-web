@@ -19,7 +19,7 @@ let selectedIndex = 0;
 let mode = 'nav'; // 'nav' (buscador) | 'help' (chuleta de atajos)
 
 const ACTIONS = [
-    { type: 'action', label: 'Cambiar tema (CRT / Dark Pro / Light)', icon: '🎨', run: () => cycleTheme() },
+    { type: 'action', label: 'Cambiar tema (CRT / Dark Pro / Light / Bubblebath)', icon: '🎨', run: () => cycleTheme() },
 ];
 
 // Atajos directos "g + letra" — solo las secciones más usadas. El palette

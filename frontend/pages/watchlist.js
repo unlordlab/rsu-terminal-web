@@ -6,7 +6,28 @@ function authHeader() {
     return token ? { 'Authorization': 'Bearer ' + token, 'Content-Type': 'application/json' } : { 'Content-Type': 'application/json' };
 }
 
+// Mismo estilo de "píldora" del ticker que ya usa Cartera — antes Watchlist
+// solo tenía la versión mínima de .ticker-link de base.css (sin fondo ni
+// borde), por eso se veía plano al lado de Cartera.
+function injectStyles() {
+    if (document.getElementById('watchlist-styles')) return;
+    const s = document.createElement('style');
+    s.id = 'watchlist-styles';
+    s.textContent = `
+        .ticker-link {
+            background:rgba(0,255,173,.1);color:var(--color-accent);
+            border:1px solid rgba(0,255,173,.3);border-radius:3px;
+            padding:2px 8px;font-size:12px;cursor:pointer;
+            text-decoration:none;transition:all .15s;display:inline-block;
+            justify-self:start;
+        }
+        .ticker-link:hover { background:rgba(0,255,173,.2);border-color:var(--color-accent); }
+    `;
+    document.head.appendChild(s);
+}
+
 export async function render(container) {
+    injectStyles();
     container.innerHTML = pageShell();
     wireForm(container);
     loadWatchlist(container);

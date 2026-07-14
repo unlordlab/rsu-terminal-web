@@ -19,6 +19,7 @@ async def lifespan(app: FastAPI):
     task6 = asyncio.create_task(ws.algoritmo_check_loop())
     task7 = asyncio.create_task(ws.algoritmo_resultados_loop())
     task8 = asyncio.create_task(ws.cartera_check_loop())
+    task9 = asyncio.create_task(ws.options_flow_scan_loop())
     yield
     task1.cancel()
     task2.cancel()
@@ -28,6 +29,7 @@ async def lifespan(app: FastAPI):
     task6.cancel()
     task7.cancel()
     task8.cancel()
+    task9.cancel()
 
 app = FastAPI(
     title=settings.app_name,

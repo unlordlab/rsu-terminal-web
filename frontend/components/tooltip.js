@@ -639,7 +639,45 @@ LO QUE BUSCAMOS:
 ▸ Vencimiento 14-60 días → timing direccional, no especulativo
 
 LIMITACIÓN IMPORTANTE:
-Estos datos son EOD (end of day) — del cierre del día anterior. Para opciones a corto plazo (0-5 días) el retraso importa mucho. Para posiciones a semanas o meses, el retraso es irrelevante — la señal sigue siendo válida.`
+Estos datos son EOD (end of day) — del cierre del día anterior. Para opciones a corto plazo (0-5 días) el retraso importa mucho. Para posiciones a semanas o meses, el retraso es irrelevante — la señal sigue siendo válida.
+
+NO ES TIEMPO REAL, Y ESO ES A PROPÓSITO:
+El escaneo corre 1 vez al día (no continuamente) y cada resultado se guarda de forma permanente en base de datos — por eso puedes buscar un ticker y ver su histórico de semanas o meses, no solo el día de hoy. La "fecha" que ves en cada entrada es el día en que el escaneo detectó la señal, no el instante exacto de la operación.`
+    },
+
+    "options-categories": {
+        title: "Calls Bought / Puts Sold / Puts Bought / Calls Sold",
+        short: "Las 4 categorías de flujo — las dos primeras son alcistas, las dos últimas bajistas. Buy/Sell se infiere del volumen frente al Open Interest, no es un dato directo.",
+        long: `Cada entrada de opciones se clasifica en una de estas 4 categorías, combinando el tipo de contrato (call/put) con si es apertura de posición nueva (buy) o cierre/venta (sell):
+
+▸ CALLS BOUGHT (alcista): alguien compra calls — apuesta a que el precio suba.
+▸ PUTS SOLD (alcista): alguien vende puts — apuesta a que el precio NO caiga por debajo del strike (cobra la prima sin obligación si el precio se mantiene).
+▸ PUTS BOUGHT (bajista): alguien compra puts — apuesta a que el precio baje, o cobertura de una posición larga.
+▸ CALLS SOLD (bajista): alguien vende calls — apuesta a que el precio no suba por encima del strike.
+
+CÓMO SE INFIERE BUY VS SELL:
+yfinance no dice directamente "esto fue una compra" o "esto fue una venta" — se infiere comparando el volumen negociado hoy contra el Open Interest ya existente (Vol/OI ≥ 0.3 sugiere posición nueva = compra). Es una aproximación razonable, no una certeza absoluta — así funciona cualquier herramienta de flujo de opciones basada en datos públicos, no solo esta.`
+    },
+
+    "options-large-oi": {
+        title: "Large OI Increase / Decrease",
+        short: "Contratos donde el Open Interest cambió mucho de un día al siguiente — sube o baja más del 1%. Necesita al menos 2 días de histórico guardado para poder compararse.",
+        long: `Compara el Open Interest (contratos abiertos) de cada contrato HOY contra el mismo contrato AYER (mismo ticker, strike, vencimiento y tipo).
+
+POR QUÉ IMPORTA:
+Un aumento grande de OI en un contrato concreto significa que se están abriendo muchas posiciones NUEVAS en ese strike/vencimiento exacto — más señal de convicción que un simple pico de volumen de un solo día, porque implica que la posición se mantiene, no que se cerró en el mismo día.
+
+LIMITACIÓN:
+Solo puede calcularse a partir del segundo día de escaneo guardado — con un único día de histórico no hay nada contra lo que comparar, y esta sección aparecerá vacía hasta entonces.`
+    },
+
+    "options-net-score": {
+        title: "Net Score",
+        short: "Recuento simple: +1 por cada entrada alcista (Buy Call / Sell Put) del periodo, -1 por cada bajista (Buy Put / Sell Call). No pondera por prima.",
+        long: `El Net Score de un ticker es la suma de todas sus entradas guardadas en el periodo seleccionado (1 semana a 4 meses): +1 si la entrada es alcista (Buy Call o Sell Put), -1 si es bajista (Buy Put o Sell Call).
+
+DELIBERADAMENTE SIMPLE:
+Es un recuento, no una media ponderada por prima — dos entradas alcistas de $200K pesan lo mismo que una de $5M. Esto es intencional para mantener la sección legible de un vistazo; si necesitas ver el tamaño real de cada operación, la prima de cada entrada está en la tabla justo debajo.`
     },
 
     "vol-oi-ratio": {

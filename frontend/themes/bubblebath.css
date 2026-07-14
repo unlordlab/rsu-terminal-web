@@ -1,0 +1,20 @@
+[data-theme="bubblebath"] {
+  --color-bg:        #d8dade;
+  --color-surface:   #eceef1;
+  --color-surface2:  #dfe1e5;
+  --color-border:    rgba(10, 10, 13, 0.14);
+  --color-accent:    #ff2d9e;
+  --color-secondary: #0a0a0d;
+  --color-text:      #17171b;
+  --color-muted:     #6b6b76;
+
+  --font-mono:  'Space Mono', monospace;
+  --font-size:  14px;
+
+  --scanlines:   none;
+
+  /* Sin resplandor — el glow es un efecto de tema oscuro (necesita un fondo
+     oscuro detrás para leerse bien); sobre gris claro se vería sucio, no nítido. */
+  --glow-accent: none;
+  --glow-text:   none;
+}

@@ -1,3 +1,5 @@
+import { renderThemeMaker } from '/pages/admin_theme_maker.js';
+
 const ADMIN_KEY_STORAGE = 'rsu_admin_key';
 
 async function keyFetch(fullPath, options = {}) {
@@ -62,6 +64,7 @@ export async function render(container) {
                 <button data-tab="usuarios" class="admin-tab-btn">USUARIOS</button>
                 <button data-tab="metricas" class="admin-tab-btn">MÉTRICAS</button>
                 <button data-tab="feedback" class="admin-tab-btn">FEEDBACK</button>
+                <button data-tab="temas" class="admin-tab-btn">TEMAS</button>
             </div>
             <div id="admin-content"></div>
         </div>
@@ -99,6 +102,8 @@ export async function render(container) {
             await renderUsersPanel(content);
         } else if (activeTab === 'feedback') {
             await renderFeedbackPanel(content);
+        } else if (activeTab === 'temas') {
+            await renderThemeMaker(content);
         } else {
             await renderMetricsPanel(content);
         }

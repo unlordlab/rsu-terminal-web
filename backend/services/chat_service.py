@@ -30,7 +30,12 @@ from collections import Counter
 DB_PATH = os.path.join(os.path.dirname(__file__), '..', 'chat_historial.db')
 KB_PATH = os.path.join(os.path.dirname(__file__), '..', 'data', 'chat_knowledge_base.json')
 
-MODEL = "qwen/qwen3.6-27b"  # mismo modelo que el Daily Briefing, ya probado en producción
+MODEL = "openai/gpt-oss-20b"
+# CAMBIO (14/07/2026): llama-3.1-8b-instant fue descontinuado por Groq el
+# 17-jun-2026 — su reemplazo oficial recomendado es este modelo. Sigue siendo
+# un modelo DISTINTO al del Daily Briefing (qwen/qwen3.6-27b), así que
+# mantiene su propio cupo de tokens/día separado (ver razonamiento completo
+# más abajo en _llamar_groq).
 
 STOPWORDS = {
     "el","la","los","las","un","una","unos","unas","de","del","al","a","ante","bajo",
@@ -136,8 +141,13 @@ def _buscar_chunks_relevantes(pregunta, top_k=6):
 
 def _construir_system_prompt(chunks_relevantes):
     if chunks_relevantes:
+        # Cada chunk se trunca — no hace falta el texto completo de una lección
+        # de 40 líneas para responder una pregunta puntual, y cada carácter de
+        # más reduce el margen para que varios usuarios chateen a la vez dentro
+        # del mismo presupuesto de tokens/minuto compartido de Groq.
+        MAX_CHARS_POR_CHUNK = 700
         contexto = "\n\n---\n\n".join(
-            f"[Fuente: {c['fuente']} — {c['titulo']}]\n{c['texto']}" for c in chunks_relevantes
+            f"[Fuente: {c['fuente']} — {c['titulo']}]\n{c['texto'][:MAX_CHARS_POR_CHUNK]}" for c in chunks_relevantes
         )
     else:
         contexto = "(No se encontró contenido específico de la base de conocimiento para esta pregunta.)"
@@ -170,15 +180,17 @@ def _llamar_groq(system_prompt, historial_mensajes, mensaje_nuevo):
         "https://api.groq.com/openai/v1/chat/completions",
         headers={"Authorization": f"Bearer {key}", "Content-Type": "application/json"},
         json={
-            "model":            MODEL,
-            "messages":         messages,
-            "max_tokens":       800,   # respuesta de chat, no un briefing de 3000 — más corto y más barato
-            "temperature":      0.3,   # más bajo que el briefing (0.45) — aquí prima la precisión sobre la prosa creativa
-            "reasoning_effort": "none",  # igual que el briefing — respuesta directa, no necesita "pensar" paso a paso
-            "reasoning_format": "hidden",
+            "model":             MODEL,
+            "messages":          messages,
+            "max_tokens":        500,   # respuesta de chat concisa — no un briefing de 3000 palabras
+            "temperature":       0.3,   # precisión sobre creatividad, esto responde con hechos de la terminal
+            "reasoning_effort":  "low",  # gpt-oss NO acepta "none" como qwen — "low" es el más rápido disponible
+            "include_reasoning": False,  # gpt-oss NO soporta reasoning_format (eso es de qwen) — este es su equivalente
         },
         timeout=30,
     )
+    if r.status_code == 429:
+        raise ValueError("RATE_LIMIT")
     if r.status_code != 200:
         raise ValueError(f"Groq error {r.status_code}: {r.text[:200]}")
     return r.json()["choices"][0]["message"]["content"]
@@ -199,19 +211,28 @@ def enviar_mensaje(usuario: str, mensaje: str) -> dict:
     conn = _conn()
     ahora = datetime.utcnow().isoformat()
 
-    # Últimos mensajes para dar continuidad a la conversación — no todo el
-    # historial (coste y presupuesto de tokens/minuto de Groq, ver nota en MODEL)
+    # Últimos mensajes para dar continuidad a la conversación — recortado a 6
+    # (3 intercambios), no 10, por el mismo motivo que el truncado de chunks:
+    # cada token de contexto es presupuesto de tokens/minuto que no está
+    # disponible para que otro usuario chatee en el mismo minuto.
     historial_rows = conn.execute(
-        "SELECT rol, mensaje FROM mensajes WHERE usuario = ? ORDER BY id DESC LIMIT 10",
+        "SELECT rol, mensaje FROM mensajes WHERE usuario = ? ORDER BY id DESC LIMIT 6",
         (usuario,)
     ).fetchall()
     historial = [dict(r) for r in reversed(historial_rows)]
 
-    chunks = _buscar_chunks_relevantes(mensaje, top_k=6)
+    chunks = _buscar_chunks_relevantes(mensaje, top_k=4)
     system_prompt = _construir_system_prompt(chunks)
 
     try:
         respuesta = _llamar_groq(system_prompt, historial, mensaje)
+    except ValueError as e:
+        conn.close()
+        if str(e) == "RATE_LIMIT":
+            print(f"[Chat] Rate limit de Groq alcanzado (usuario: {usuario})")
+            return {"ok": False, "error": "Hay mucha gente preguntando ahora mismo — espera unos segundos y vuelve a intentarlo."}
+        print(f"[Chat] Error llamando a Groq: {e}")
+        return {"ok": False, "error": "El asistente no está disponible ahora mismo, inténtalo de nuevo en un momento."}
     except Exception as e:
         print(f"[Chat] Error llamando a Groq: {type(e).__name__}: {e}")
         conn.close()
