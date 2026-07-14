@@ -96,10 +96,16 @@ def _fetch_price_single(ticker: str) -> dict | None:
     try:
         if settings.fmp_api_key:
             import requests
+            # NOTA: /api/v3/quote-short/{ticker} es legacy (misma migración que
+            # earnings-calendar, ver backend/services/earnings_service.py) — el
+            # endpoint nuevo es /stable/quote-short?symbol=X, parámetro symbol
+            # en la query en vez de en la ruta.
             r = requests.get(
-                f"https://financialmodelingprep.com/api/v3/quote-short/{ticker}",
-                params={"apikey": settings.fmp_api_key}, timeout=5
+                "https://financialmodelingprep.com/stable/quote-short",
+                params={"symbol": ticker, "apikey": settings.fmp_api_key}, timeout=5
             )
+            if r.status_code != 200:
+                print(f"[Cartera] FMP quote-short ({ticker}): status HTTP {r.status_code} — {r.text[:150]}")
             data = r.json()
             if data and isinstance(data, list):
                 price = float(data[0].get("price", 0))
@@ -108,8 +114,8 @@ def _fetch_price_single(ticker: str) -> dict | None:
                              "prev": price, "chg": 0.0, "updated": now}
                     _price_cache[ticker] = entry
                     return entry
-    except Exception:
-        pass
+    except Exception as e:
+        print(f"[Cartera] FMP quote-short ({ticker}): error inesperado ({type(e).__name__}: {e})")
     return None
 
 def fetch_live_prices(tickers: list) -> dict:

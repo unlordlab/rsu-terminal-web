@@ -312,17 +312,25 @@ def _get_finnhub(ticker: str) -> dict:
     except Exception:
         return {}
 
-def _get_fmp_analyst_changes(ticker: str) -> list:
+def _get_finnhub_analyst_changes(ticker: str) -> list:
+    """Antes se llamaba _get_fmp_analyst_changes — nombre engañoso, esto nunca
+    ha llamado a FMP, es 100% Finnhub. Renombrado para que quede claro."""
     try:
         key = settings.finnhub_api_key
-        if not key: return []
+        if not key:
+            print(f"[Research] finnhub_api_key no configurado — sin cambios de analistas para {ticker}")
+            return []
         r = requests.get(
             f"https://finnhub.io/api/v1/stock/recommendation?symbol={ticker}&token={key}",
             timeout=8
         )
-        if r.status_code != 200: return []
+        if r.status_code != 200:
+            print(f"[Research] Finnhub recommendation ({ticker}): status HTTP {r.status_code} — {r.text[:150]}")
+            return []
         data = r.json()
-        if not isinstance(data, list) or not data: return []
+        if not isinstance(data, list) or not data:
+            print(f"[Research] Finnhub recommendation ({ticker}): respuesta vacía o inesperada — {str(data)[:150]}")
+            return []
 
         # Finnhub devuelve recomendaciones mensuales — convertimos a cambios
         results = []
@@ -353,8 +361,10 @@ def _get_fmp_analyst_changes(ticker: str) -> list:
                 "from_grade":   f"{buy_pct}% alcistas",
                 "to_grade":     f"{total} analistas",
             })
+        print(f"[Research] Finnhub recommendation ({ticker}): {len(results)} periodos recibidos")
         return results
-    except Exception:
+    except Exception as e:
+        print(f"[Research] Finnhub recommendation ({ticker}): error inesperado ({type(e).__name__}: {e})")
         return []
 
 def _get_analyst_ratings_history(ticker: str) -> dict:
@@ -362,7 +372,7 @@ def _get_analyst_ratings_history(ticker: str) -> dict:
     Histórico real de cambios de rating por firma de analistas (upgrades/downgrades),
     vía yfinance — gratuito, sin API key, sin riesgo de scraping de terceros (a
     diferencia de librerías tipo finviz/finvizfinance que sí hacen scraping no oficial).
-    Distinto de _get_fmp_analyst_changes(), que es una agregación mensual de
+    Distinto de _get_finnhub_analyst_changes(), que es una agregación mensual de
     sentimiento (compra/mantener/venta), no cambios de grado por firma real.
     """
     try:
@@ -1834,7 +1844,7 @@ def get_research(ticker: str) -> dict:
         f_yf      = ex.submit(_get_yfinance, ticker)
         f_fh      = ex.submit(_get_finnhub, ticker)
         f_av      = ex.submit(_get_alpha_vantage, ticker)
-        f_fmp     = ex.submit(_get_fmp_analyst_changes, ticker)
+        f_analyst_chg = ex.submit(_get_finnhub_analyst_changes, ticker)
         f_insider = ex.submit(_get_insider_trading, ticker)
         f_short   = ex.submit(_get_short_interest, ticker)
         f_season  = ex.submit(_get_seasonality, ticker)
@@ -1846,7 +1856,7 @@ def get_research(ticker: str) -> dict:
         yf_data   = f_yf.result()
         fh_data   = f_fh.result()
         av_data   = f_av.result()
-        fmp_data  = f_fmp.result()
+        analyst_chg_data = f_analyst_chg.result()
         insider   = f_insider.result()
         short     = f_short.result()
         season    = f_season.result()
@@ -1899,7 +1909,7 @@ def get_research(ticker: str) -> dict:
         "rsu_score":          rsu_score,
         "piotroski":          piotroski,
         "institutional":      instit,
-        "analyst_changes":    fmp_data,
+        "analyst_changes":    analyst_chg_data,
         "ratings_history":    ratings_history,
         "insider_trading":    insider.get("transactions", []),
         "insider_summary":    insider.get("summary"),

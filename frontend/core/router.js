@@ -6,6 +6,7 @@ import { initWebSocket } from '/core/websocket.js';
 import { api, setSession, getToken } from '/core/api.js';
 import { initCommandPalette } from '/components/command_palette.js';
 import { showDisclaimerModal } from '/components/disclaimer_modal.js';
+import { initChatWidget } from '/components/chat_widget.js';
 
 const ROUTES = {
     '/':           () => import('/pages/dashboard.js'),
@@ -239,6 +240,7 @@ export function navigate(path, options = {}) {
 initTheme();
 const token = getToken();
 if (token) initWebSocket(token);
+if (token) initChatWidget();
 renderSidebar(document.getElementById('sidebar'), navigate);
 renderTopbar(document.getElementById('topbar'), navigate);
 initCommandPalette(NAV_ITEMS, navigate);

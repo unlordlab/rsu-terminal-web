@@ -16,11 +16,25 @@ def _get_timestamp():
 # ── FUENTE 1: FMP ─────────────────────────────────────────────────────────────
 
 def _get_fmp_earnings(from_date: str, to_date: str) -> list:
+    if not FMP_KEY:
+        print("[Earnings] fmp_api_key no configurado — sin datos de FMP")
+        return []
     try:
-        url  = f"https://financialmodelingprep.com/api/v3/earning_calendar?from={from_date}&to={to_date}&apikey={FMP_KEY}"
+        # NOTA: /api/v3/earning_calendar es un endpoint "legacy" desde ago-2025,
+        # devuelve 403 para cuentas/suscripciones posteriores a esa fecha
+        # (confirmado en producción). El endpoint nuevo es /stable/earnings-calendar,
+        # mismos parámetros (from/to/apikey).
+        url  = f"https://financialmodelingprep.com/stable/earnings-calendar?from={from_date}&to={to_date}&apikey={FMP_KEY}"
         r    = requests.get(url, timeout=8)
+        if r.status_code != 200:
+            print(f"[Earnings] FMP: status HTTP {r.status_code} — {r.text[:200]}")
+            return []
         data = r.json()
-        if not isinstance(data, list): return []
+        if not isinstance(data, list):
+            print(f"[Earnings] FMP: respuesta inesperada (no es una lista) — {str(data)[:200]}")
+            return []
+        if data:
+            print(f"[Earnings] FMP: ejemplo de registro recibido — {data[0]}")
         results = []
         for item in data[:80]:
             ticker = item.get('symbol', '')
@@ -33,17 +47,28 @@ def _get_fmp_earnings(from_date: str, to_date: str) -> list:
                 "rev_est": item.get('revenueEstimated'),
                 "source":  "FMP",
             })
+        print(f"[Earnings] FMP: {len(results)} earnings recibidos")
         return results
-    except Exception:
+    except Exception as e:
+        print(f"[Earnings] FMP: error inesperado ({type(e).__name__}: {e})")
         return []
 
 # ── FUENTE 2: Finnhub ─────────────────────────────────────────────────────────
 
 def _get_finnhub_earnings(from_date: str, to_date: str) -> list:
+    if not FINNHUB_KEY:
+        print("[Earnings] finnhub_api_key no configurado — sin datos de Finnhub")
+        return []
     try:
         url  = f"https://finnhub.io/api/v1/calendar/earnings?from={from_date}&to={to_date}&token={FINNHUB_KEY}"
         r    = requests.get(url, timeout=8)
-        data = r.json().get('earningsCalendar', [])
+        if r.status_code != 200:
+            print(f"[Earnings] Finnhub: status HTTP {r.status_code} — {r.text[:200]}")
+            return []
+        body = r.json()
+        data = body.get('earningsCalendar', [])
+        if not data:
+            print(f"[Earnings] Finnhub: 0 earnings en el body — {str(body)[:200]}")
         results = []
         for item in data[:80]:
             ticker = item.get('symbol', '')
@@ -57,8 +82,10 @@ def _get_finnhub_earnings(from_date: str, to_date: str) -> list:
                 "rev_est":    item.get('revenueEstimate'),
                 "source":     "Finnhub",
             })
+        print(f"[Earnings] Finnhub: {len(results)} earnings recibidos")
         return results
-    except Exception:
+    except Exception as e:
+        print(f"[Earnings] Finnhub: error inesperado ({type(e).__name__}: {e})")
         return []
 
 # ── FUENTE 3: yfinance individual ─────────────────────────────────────────────
