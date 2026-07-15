@@ -71,10 +71,14 @@ async function loadDashboard(container) {
 }
 
 function renderDashboard(data) {
+    const fechaDatos = data.scan_date
+        ? `<div style="color:var(--color-muted);font-size:11px;margin-bottom:10px;">📊 Datos del escaneo: <span style="color:var(--color-text);font-weight:600;">${_fmtFecha(data.scan_date)}</span></div>`
+        : '';
+
     const biasColor = data.dia_bias_label === 'ALCISTA' ? 'var(--color-accent)' : (data.dia_bias_label === 'BAJISTA' ? '#f23645' : 'var(--color-muted)');
     const biasBanner = data.dia_bias_pct != null
         ? `<div style="background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius);padding:12px 16px;margin-bottom:1rem;font-size:13px;">
-            <span style="color:var(--color-muted);">Hoy: </span><span style="color:${biasColor};font-weight:700;">${data.dia_bias_pct}% ${data.dia_bias_label}</span><span style="color:var(--color-muted);"> por prima (Calls Bought + Puts Sold vs. Puts Bought + Calls Sold)</span>
+            <span style="color:var(--color-muted);">Hoy: </span><span style="color:${biasColor};font-weight:700;">${data.dia_bias_pct}% ${data.dia_bias_label}</span><span style="color:var(--color-muted);"> por prima (Calls Bought + Puts Sold vs. Puts Bought + Calls Sold) ${tt('options-dia-bias')}</span>
         </div>`
         : '';
 
@@ -108,7 +112,7 @@ function renderDashboard(data) {
         ? '<div style="color:var(--color-muted);font-size:11px;margin-top:10px;">Los cambios de Open Interest necesitan al menos 2 días de histórico guardado — aparecerán a partir de mañana.</div>'
         : '';
 
-    return biasBanner + topBoxes + flowTables + oiTables + nota;
+    return fechaDatos + biasBanner + topBoxes + flowTables + oiTables + nota;
 }
 
 function flowTable(title, rows, color) {
@@ -118,10 +122,13 @@ function flowTable(title, rows, color) {
             <span style="color:var(--color-muted);font-size:11px;letter-spacing:0.06em;">${title}</span>
             <span style="color:var(--color-muted);font-size:11px;">${rows.length}</span>
         </div>
+        <div style="display:grid;grid-template-columns:70px 1fr 90px 70px;gap:8px;padding:6px 14px;border-bottom:1px solid var(--color-border);font-size:9px;color:var(--color-muted);letter-spacing:0.05em;">
+            <div>TICKER</div><div>STRIKE</div><div>EXP</div><div style="text-align:right;">PREMIUM</div>
+        </div>
         <div style="max-height:340px;overflow-y:auto;">
             ${rows.length ? rows.map(r => `
             <div style="display:grid;grid-template-columns:70px 1fr 90px 70px;gap:8px;padding:7px 14px;border-bottom:1px solid var(--color-border);font-size:11px;align-items:center;">
-                <span onclick="window.__optionsSearchTicker('${r.ticker}')" style="cursor:pointer;color:${color};font-weight:600;">${r.ticker}${r.near_earnings ? ' <span title="Vencimiento cerca de la fecha de earnings">📅</span>' : ''}${r.en_cartera ? ' <span title="Ya tienes esta acción en Cartera">💼</span>' : ''}</span>
+                <span onclick="window.__optionsSearchTicker('${r.ticker}')" style="cursor:pointer;color:${color};font-weight:600;">${r.ticker}${r.near_earnings ? ' <span title="Vencimiento cerca de la fecha de earnings">📅</span>' : ''}${r.en_cartera ? ' <span title="Ya tienes esta acción en Cartera">💼</span>' : ''}${r.es_repetida ? ' <span title="Mismo contrato repetido en días anteriores">🔁</span>' : ''}</span>
                 <span style="color:var(--color-text);">$${r.strike} <span style="color:var(--color-muted);">(${r.strike_pct})</span></span>
                 <span style="color:var(--color-muted);">${_fmtFecha(r.exp)}</span>
                 <span style="color:var(--color-text);text-align:right;">${r.premium_fmt}</span>
@@ -136,6 +143,9 @@ function oiTable(title, rows, color, arrow) {
         <div style="padding:10px 14px;border-bottom:1px solid var(--color-border);display:flex;justify-content:space-between;">
             <span style="color:var(--color-muted);font-size:11px;letter-spacing:0.06em;">${title}</span>
             <span style="color:var(--color-muted);font-size:11px;">${rows.length}</span>
+        </div>
+        <div style="display:grid;grid-template-columns:70px 1fr 90px 70px;gap:8px;padding:6px 14px;border-bottom:1px solid var(--color-border);font-size:9px;color:var(--color-muted);letter-spacing:0.05em;">
+            <div>TICKER</div><div>STRIKE</div><div>EXP</div><div style="text-align:right;">CAMBIO OI</div>
         </div>
         <div style="max-height:280px;overflow-y:auto;">
             ${rows.length ? rows.map(r => `
@@ -196,7 +206,7 @@ function renderTicker(data) {
     return `
     <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:1rem;flex-wrap:wrap;gap:12px;">
         <div>
-            <div style="color:var(--color-text);font-size:24px;font-weight:700;margin-bottom:10px;">${data.ticker}${data.en_cartera ? ' <span style="font-size:12px;background:var(--color-accent);color:var(--color-bg,#0a0a0a);padding:3px 8px;border-radius:3px;vertical-align:middle;">💼 EN CARTERA</span>' : ''}</div>
+            <div style="color:var(--color-text);font-size:24px;font-weight:700;margin-bottom:10px;">${data.ticker} <span onclick="window.__navigate('/research?ticker=${data.ticker}')" style="cursor:pointer;color:var(--color-accent);font-size:12px;font-weight:400;text-decoration:underline;vertical-align:middle;" title="Ver análisis completo en Research">→ Research</span>${data.en_cartera ? ' <span style="font-size:12px;background:var(--color-accent);color:var(--color-bg,#0a0a0a);padding:3px 8px;border-radius:3px;vertical-align:middle;">💼 EN CARTERA</span>' : ''}</div>
             <div style="display:flex;gap:6px;">${periodBtns}</div>
         </div>
         <div style="background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius);min-width:180px;overflow:hidden;">
@@ -217,7 +227,7 @@ function renderTicker(data) {
             const badgeColor = bullish ? 'var(--color-accent)' : '#f23645';
             return `<div style="display:grid;grid-template-columns:90px 100px 90px 90px 60px 90px;gap:8px;padding:8px 14px;border-bottom:1px solid var(--color-border);font-size:12px;align-items:center;">
                 <span style="color:var(--color-muted);">${_fmtFecha(e.fecha)}</span>
-                <span style="background:${badgeColor}22;border:1px solid ${badgeColor}88;color:${badgeColor};border-radius:3px;padding:2px 7px;font-size:10px;text-align:center;">${e.order_type}</span>
+                <span style="background:${badgeColor}22;border:1px solid ${badgeColor}88;color:${badgeColor};border-radius:3px;padding:2px 7px;font-size:10px;text-align:center;">${e.order_type}${e.es_repetida ? ' <span title="Mismo contrato repetido en días anteriores">🔁</span>' : ''}</span>
                 <span style="color:var(--color-text);">$${e.strike}</span>
                 <span style="color:var(--color-muted);">${_fmtFecha(e.exp)}${e.near_earnings ? ' <span title="Vencimiento cerca de la fecha de earnings">📅</span>' : ''}</span>
                 <span style="color:var(--color-text);">${e.oi}</span>

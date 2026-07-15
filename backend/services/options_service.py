@@ -211,7 +211,24 @@ def get_history_from_db(ticker: str = None, period: str = '1w') -> list:
 # Calls Bought / Puts Sold / Puts Bought / Calls Sold / Large OI Increase /
 # Large OI Decrease, y nada más.
 
-def _entrada_simple(item: dict, order_type: str, cartera_tickers: set = None) -> dict:
+def _obtener_contratos_repetidos(days: int = 7, min_repeats: int = 2) -> set:
+    """Igual que get_repeat_signals pero devuelve solo las claves (ticker,
+    strike, exp, type, action) como conjunto, para marcar con icono 🔁 las
+    entradas que son repetición de días anteriores — no una tabla aparte,
+    solo un icono en las tablas que ya existen (mejora #1 pedida por Marc)."""
+    try:
+        señales = get_repeat_signals(days=days, min_repeats=min_repeats)
+        return {(s["ticker"], s["strike"], s["exp"], s["type"], s["action"]) for s in señales}
+    except Exception as e:
+        print(f"[OptionsFlow] No se pudieron calcular contratos repetidos: {e}")
+        return set()
+
+def _entrada_simple(item: dict, order_type: str, cartera_tickers: set = None, repetidos: set = None) -> dict:
+    tipo, accion = {
+        "Buy Call": ("call", "buy"), "Sell Put": ("put", "sell"),
+        "Buy Put": ("put", "buy"), "Sell Call": ("call", "sell"),
+    }[order_type]
+    clave = (item["ticker"], item["strike"], item["exp"], tipo, accion)
     return {
         "ticker":        item["ticker"],
         "order_type":    order_type,
@@ -223,6 +240,7 @@ def _entrada_simple(item: dict, order_type: str, cartera_tickers: set = None) ->
         "premium_fmt":   item["premium_fmt"],
         "near_earnings": bool(item.get("near_earnings")),
         "en_cartera":    item["ticker"] in cartera_tickers if cartera_tickers is not None else False,
+        "es_repetida":   clave in repetidos if repetidos is not None else False,
     }
 
 def _obtener_tickers_cartera() -> set:
@@ -294,6 +312,7 @@ def get_options_flow_simple() -> dict:
 
     oi_changes      = get_oi_changes(limit=15)
     cartera_tickers = _obtener_tickers_cartera()
+    repetidos       = _obtener_contratos_repetidos()
 
     # Sesgo del día — un único número, sin gráficos ni heatmaps (mejora #3):
     # % de la prima total del día que es alcista (Calls Bought + Puts Sold)
@@ -312,10 +331,10 @@ def get_options_flow_simple() -> dict:
         "scan_date":          ultima_fecha,
         "dia_bias_pct":       dia_bias_pct,
         "dia_bias_label":     dia_bias_label,
-        "calls_bought":       [_entrada_simple(e, "Buy Call",  cartera_tickers) for e in grupos["Buy Call"]][:25],
-        "puts_sold":          [_entrada_simple(e, "Sell Put",  cartera_tickers) for e in grupos["Sell Put"]][:25],
-        "puts_bought":        [_entrada_simple(e, "Buy Put",   cartera_tickers) for e in grupos["Buy Put"]][:20],
-        "calls_sold":         [_entrada_simple(e, "Sell Call", cartera_tickers) for e in grupos["Sell Call"]][:20],
+        "calls_bought":       [_entrada_simple(e, "Buy Call",  cartera_tickers, repetidos) for e in grupos["Buy Call"]][:25],
+        "puts_sold":          [_entrada_simple(e, "Sell Put",  cartera_tickers, repetidos) for e in grupos["Sell Put"]][:25],
+        "puts_bought":        [_entrada_simple(e, "Buy Put",   cartera_tickers, repetidos) for e in grupos["Buy Put"]][:20],
+        "calls_sold":         [_entrada_simple(e, "Sell Call", cartera_tickers, repetidos) for e in grupos["Sell Call"]][:20],
         "large_oi_increase":  oi_changes["increase"],
         "large_oi_decrease":  oi_changes["decrease"],
         "top_premium":        [{"ticker": t, "premium_fmt": _fmt_premium(p)} for t, p in top_premium],
@@ -396,12 +415,14 @@ def get_ticker_flow_simple(ticker: str, period: str = "1w") -> dict:
         return {"ok": False, "error": f"Sin señales de {ticker.upper()} en este periodo (no significa que no haya operado opciones, solo que no hubo actividad lo bastante inusual para registrarse). Prueba un periodo más largo."}
 
     en_cartera = ticker.upper() in _obtener_tickers_cartera()
+    repetidos  = _obtener_contratos_repetidos()
     ORDER_TYPE = {("call","buy"): "Buy Call", ("put","sell"): "Sell Put",
                   ("put","buy"): "Buy Put", ("call","sell"): "Sell Call"}
     entradas, net_score = [], 0
     for r in rows:
         ot = ORDER_TYPE.get((r["type"], r["action"]), f"{r['action']} {r['type']}")
         net_score += 1 if ot in ("Buy Call", "Sell Put") else -1
+        clave = (ticker.upper(), r["strike"], r["exp"], r["type"], r["action"])
         entradas.append({
             "fecha":         r["scan_date"],
             "order_type":    ot,
@@ -409,6 +430,7 @@ def get_ticker_flow_simple(ticker: str, period: str = "1w") -> dict:
             "exp":           r["exp"],
             "oi":            r["oi"],
             "near_earnings": bool(r["near_earnings"]),
+            "es_repetida":   clave in repetidos,
             "premium_fmt": r["premium_fmt"],
         })
 

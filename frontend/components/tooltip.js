@@ -632,11 +632,18 @@ El McClellan de arriba es direccional (positivo = más avances, negativo = más 
 POR QUÉ IMPORTA:
 Las instituciones no pueden ocultar sus operaciones en opciones. Cuando alguien paga $3M en calls de HOOD a 60 días, eso deja huella en el volumen — y nosotros la vemos.
 
-LO QUE BUSCAMOS:
-▸ Prima alta (>$100K) → tamaño institucional
-▸ Vol/OI ratio alto (>2x) → posición completamente nueva
+LO QUE BUSCAMOS (actualizado tras el ajuste de criterios de 14/07/2026):
+▸ Volumen mínimo 200 contratos y Open Interest mínimo 100 → filtra contratos ilíquidos donde cualquier ratio es ruido, no señal
+▸ Vol/OI ratio alto (≥2x) → posición completamente nueva, no ajuste de una posición existente
+▸ Prima MUY POR ENCIMA de la media propia del ticker (cuando hay 5+ días de histórico guardado) → un trade de $500K en una small-cap no es lo mismo que en NVDA, así que se compara cada ticker contra sí mismo, no contra un umbral fijo igual para todos. Sin histórico suficiente todavía, cae a un umbral absoluto (>$100K) como red de seguridad
+▸ IV en percentil alto DENTRO del histórico propio del ticker (mismo criterio que la prima) — 60% de IV es raro en una utility y rutinario en una biotecnológica
 ▸ Strike OTM 5-25% → el sweet spot táctico institucional
 ▸ Vencimiento 14-60 días → timing direccional, no especulativo
+
+ICONOS EN CADA ENTRADA:
+📅 = el vencimiento cae cerca de la próxima fecha de earnings — contexto, no necesariamente más "inusual" (el volumen sube de forma rutinaria antes de resultados en casi cualquier ticker)
+💼 = ya tienes esa acción en posición abierta en Cartera
+🔁 = el mismo contrato exacto (ticker+strike+vencimiento+tipo) ya apareció en un día de escaneo anterior — actividad repetida en la misma dirección es una señal más fuerte que una entrada puntual de un solo día
 
 LIMITACIÓN IMPORTANTE:
 Estos datos son EOD (end of day) — del cierre del día anterior. Para opciones a corto plazo (0-5 días) el retraso importa mucho. Para posiciones a semanas o meses, el retraso es irrelevante — la señal sigue siendo válida.
@@ -678,6 +685,25 @@ Solo puede calcularse a partir del segundo día de escaneo guardado — con un �
 
 DELIBERADAMENTE SIMPLE:
 Es un recuento, no una media ponderada por prima — dos entradas alcistas de $200K pesan lo mismo que una de $5M. Esto es intencional para mantener la sección legible de un vistazo; si necesitas ver el tamaño real de cada operación, la prima de cada entrada está en la tabla justo debajo.`
+    },
+
+    "options-dia-bias": {
+        title: "Sesgo del día",
+        short: "% de la prima total del último escaneo que es alcista (Calls Bought + Puts Sold) frente a bajista (Puts Bought + Calls Sold). Un único número, sin gráficos.",
+        long: `Suma toda la prima de las 4 categorías del último escaneo guardado y calcula qué proporción es alcista:
+
+ALCISTA = Calls Bought + Puts Sold
+BAJISTA = Puts Bought + Calls Sold
+
+Sesgo % = prima alcista / (prima alcista + prima bajista) × 100
+
+INTERPRETACIÓN:
+▸ ≥60% → ALCISTA
+▸ ≤40% → BAJISTA
+▸ Entre ambos → NEUTRAL
+
+QUÉ NO ES:
+No es un indicador de todo el mercado, es la agregación de los ~570 tickers de vuestra propia watchlist de escaneo — un día con mucha actividad concentrada en 2-3 tickers grandes puede mover este número igual que un día con actividad repartida entre 50 tickers. Sirve como contexto rápido de apertura, no como señal por sí sola.`
     },
 
     "vol-oi-ratio": {

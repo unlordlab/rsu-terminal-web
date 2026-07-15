@@ -1,0 +1,19 @@
+{
+  "name": "RSU Terminal",
+  "short_name": "RSU",
+  "description": "Terminal de análisis bursátil RSU — Algoritmo, Mercado, Cartera y Watchlist",
+  "start_url": "/mobile",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#0a0a0d",
+  "theme_color": "#0a0a0d",
+  "icons": [
+    {
+      "src": "/assets/logo.png",
+      "sizes": "1024x1024",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}

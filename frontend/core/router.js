@@ -7,6 +7,7 @@ import { api, setSession, getToken } from '/core/api.js';
 import { initCommandPalette } from '/components/command_palette.js';
 import { showDisclaimerModal } from '/components/disclaimer_modal.js';
 import { initChatWidget } from '/components/chat_widget.js';
+import { initInstallPrompt } from '/components/install_prompt.js';
 
 const ROUTES = {
     '/':           () => import('/pages/dashboard.js'),
@@ -32,6 +33,7 @@ const ROUTES = {
     '/register':   () => import('/pages/register.js'),
     '/admin':      () => import('/pages/admin.js'),
     '/disclaimer': () => import('/pages/disclaimer.js'),
+    '/mobile':     () => import('/pages/mobile.js'),
 };
 
 const TOKEN_KEY = 'rsu_token';
@@ -212,7 +214,7 @@ function trackPageView(cleanPath) {
 export function navigate(path, options = {}) {
     const isPopState = !!options.isPopState;
     const cleanPath = path.split('?')[0];
-    const protectedRoutes = ['/', '/manifiesto', '/market', '/cartera', '/rsrw', '/scanner', '/watchlist', '/community', '/newsfeed', '/spxl', '/btc-stratum', '/roadmap', '/academy', '/tesis', '/options', '/research', '/disclaimer', '/canslim', '/algoritmo', '/insider', '/admin'];
+    const protectedRoutes = ['/', '/manifiesto', '/market', '/cartera', '/rsrw', '/scanner', '/watchlist', '/community', '/newsfeed', '/spxl', '/btc-stratum', '/roadmap', '/academy', '/tesis', '/options', '/research', '/disclaimer', '/canslim', '/algoritmo', '/insider', '/admin', '/mobile'];
     const needsAuth = protectedRoutes.includes(cleanPath);
 
     if (needsAuth && isAuthenticated()) trackPageView(cleanPath);
@@ -238,6 +240,7 @@ export function navigate(path, options = {}) {
 }
 
 initTheme();
+initInstallPrompt();
 const token = getToken();
 if (token) initWebSocket(token);
 if (token) initChatWidget();

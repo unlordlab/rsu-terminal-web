@@ -114,6 +114,17 @@ async def clear_cache(prefix: str, user=Depends(verify_token)):
     cache.clear_prefix(prefix)
     return {"ok": True, "cleared": prefix}
 
+@app.get("/sw.js")
+async def service_worker():
+    # Necesita ruta explícita — si no, cae en el comodín del SPA de más abajo
+    # y se sirve index.html (HTML) en vez del JS real, que el navegador
+    # rechaza al intentar registrarlo como service worker.
+    return FileResponse("../frontend/sw.js", media_type="application/javascript")
+
+@app.get("/manifest.json")
+async def pwa_manifest():
+    return FileResponse("../frontend/manifest.json", media_type="application/manifest+json")
+
 @app.get("/{full_path:path}")
 async def spa_fallback(full_path: str):
     if not full_path.startswith("api/"):
