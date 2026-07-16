@@ -35,6 +35,7 @@ class RegisterRequest(BaseModel):
 class LoginRequest(BaseModel):
     email: str
     password: str
+    remember: bool = False
 
     @field_validator("email")
     @classmethod
@@ -73,7 +74,13 @@ async def login(req: LoginRequest):
     user = users_service.authenticate(req.email, req.password)
     if user is None:
         raise HTTPException(status_code=401, detail="Email o contraseña incorrectos")
-    token = create_token({"sub": user["email"], "tier": user["tier"]})
+    # "Mantener sesión" antes solo decidía DÓNDE se guardaba el token
+    # (localStorage vs sessionStorage) pero el token en sí caducaba igual a
+    # las 8h siempre — así que alguien cerraba el portátil por la noche y al
+    # día siguiente el token ya llevaba horas caducado, aunque siguiera
+    # "guardado". Ahora si se marca, el token dura 30 días de verdad.
+    minutos = 60 * 24 * 30 if req.remember else None  # None = usa el default (8h)
+    token = create_token({"sub": user["email"], "tier": user["tier"]}, expire_minutes=minutos)
     return {"access_token": token, "token_type": "bearer", "tier": user["tier"], "email": user["email"]}
 
 

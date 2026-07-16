@@ -31,6 +31,13 @@ class Settings(BaseSettings):
     alpha_vantage_api_key: str = ""
     groq_api_key: str = ""
     openrouter_api_key: str = ""
+    # Proxy para TODAS las llamadas a yfinance (Algoritmo, Cartera, Scanner,
+    # Options Flow, Research, Market — cada sitio que use yfinance en toda
+    # la terminal) — ver conversación 16/07/2026 sobre bloqueos de Yahoo a
+    # IPs de datacenter (Hetzner). Formato: http://usuario:contraseña@host:puerto
+    # Vacío = sin proxy, yfinance funciona igual que siempre (comportamiento
+    # actual sin cambios hasta que se configure uno de verdad).
+    yfinance_proxy_url: str = ""
     # Notificaciones de Telegram — usado por el algoritmo RSU para avisar de
     # cambios de semáforo (ROJO/ÁMBAR/VERDE). Bot creado gratis con @BotFather;
     # chat_id puede ser el de un chat personal o el de un canal/grupo donde se

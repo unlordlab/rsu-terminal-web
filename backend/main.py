@@ -9,6 +9,31 @@ from auth import verify_token, require_tier
 from middleware.rate_limit import rate_limit
 from middleware.analytics import AnalyticsMiddleware
 from routers import auth, market, cartera, canslim, rsu_algoritmo, research, newsfeed, tesis, spxl, rsrw, ws, options, btc_stratum, insider, scanner, analytics, watchlist, community, chat
+
+# Proxy global para yfinance — se aplica UNA vez aquí y afecta a TODAS las
+# llamadas a yfinance en cualquier archivo del backend (Algoritmo, Cartera,
+# Scanner, Options Flow, Research, Market), sin tocar esos archivos.
+#
+# IMPORTANTE: la versión fijada en requirements.txt (0.2.54) NO tiene el
+# sistema yf.config de versiones más recientes (lo comprobé antes de usarlo,
+# yf.config no existe ahí — habría reventado con AttributeError en el primer
+# arranque). Lo que SÍ acepta esta versión es un parámetro `proxy=` directo
+# en yf.Ticker(...) — así que en vez de tocar cada uno de los muchos sitios
+# del backend que llaman a yf.Ticker(), se parchea el propio constructor
+# una sola vez aquí, para que use el proxy como valor por defecto cuando no
+# se pase uno explícito. Si yfinance_proxy_url está vacío (por defecto),
+# esto no cambia nada — comportamiento actual, sin proxy, igual que siempre.
+if settings.yfinance_proxy_url:
+    import yfinance as yf
+    _yf_ticker_init_original = yf.Ticker.__init__
+    def _yf_ticker_init_con_proxy(self, ticker, session=None, proxy=None):
+        if proxy is None:
+            proxy = settings.yfinance_proxy_url
+        _yf_ticker_init_original(self, ticker, session=session, proxy=proxy)
+    yf.Ticker.__init__ = _yf_ticker_init_con_proxy
+    print(f"[Startup] Proxy de yfinance activado para toda la terminal (parcheado en yf.Ticker)")
+else:
+    print(f"[Startup] Sin proxy configurado para yfinance (yfinance_proxy_url vacío)")
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     task1 = asyncio.create_task(ws.broadcast_loop())

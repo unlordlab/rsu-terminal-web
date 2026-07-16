@@ -60,8 +60,33 @@ window.fetch = async function(...args) {
     if (response.status === 401 && url.includes('/api/v1/') && !url.includes('/auth/admin') && location.pathname !== '/login') {
         localStorage.removeItem(TOKEN_KEY);
         sessionStorage.removeItem(TOKEN_KEY);
-        navigate('/login');
+        navigate('/login?expired=1');
         return response;
+    }
+
+    // FastAPI/Starlette devuelve 403 (no 401) cuando la cabecera Authorization
+    // llega vacía o mal formada (comportamiento propio de HTTPBearer, no un
+    // fallo nuestro) — esto puede pasar en cascada tras un token caducado,
+    // si algún fetch se queda sin cabecera. Sin este bloque, un 403 así
+    // deja al usuario viendo errores por toda la pantalla en vez de
+    // mandarlo al login, que es lo que realmente necesita. Se distingue de
+    // un 403 legítimo de "no tienes ese plan" mirando el mensaje exacto que
+    // usa require_tier() en el backend — ese sí debe mostrar su propio aviso,
+    // no forzar un logout de alguien que está bien autenticado.
+    if (response.status === 403 && url.includes('/api/v1/') && !url.includes('/auth/admin') && location.pathname !== '/login') {
+        let esRestriccionDePlan = false;
+        try {
+            const body = await response.clone().json();
+            const detail = body.detail || '';
+            esRestriccionDePlan = typeof detail === 'string' && detail.includes('requiere el plan');
+        } catch (e) { /* respuesta no-JSON, tratar como fallo de auth */ }
+
+        if (!esRestriccionDePlan) {
+            localStorage.removeItem(TOKEN_KEY);
+            sessionStorage.removeItem(TOKEN_KEY);
+            navigate('/login?expired=1');
+            return response;
+        }
     }
 
     if (response.status === 429 && url.includes('/api/v1/')) {
