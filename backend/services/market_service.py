@@ -3,6 +3,7 @@ import yfinance as yf
 import pandas as pd
 import requests
 from concurrent.futures import ThreadPoolExecutor
+from services.yf_pool import yf_executor
 
 def get_timestamp():
     cet = timezone(timedelta(hours=1))
@@ -90,10 +91,9 @@ def get_indices():
     # Yahoo desde una IP de datacenter que nunca las ha visto antes (recién
     # migrado a Hetzner) tiene más pinta de bot que las mismas peticiones
     # más espaciadas. No es una garantía, pero reduce la "firma" de ráfaga.
-    with ThreadPoolExecutor(max_workers=2) as ex:
-        futures = {ex.submit(_fetch_ticker, item): item for item in INDICES}
-        for future in futures:
-            results.append(future.result())
+    futures = {yf_executor.submit(_fetch_ticker, item): item for item in INDICES}
+    for future in futures:
+        results.append(future.result())
     results.sort(key=lambda x: ["SPX","RSP","NDX","DJI","RUT","VIX"].index(x["ticker"]))
     ok_general = any(r["ok"] for r in results)
     result = {"data": results, "timestamp": get_timestamp(), "ok": ok_general}
@@ -266,10 +266,9 @@ def get_forex():
     cached = cache.get("market:forex")
     if cached: return cached
     results = []
-    with ThreadPoolExecutor(max_workers=2) as ex:
-        futures = {ex.submit(_fetch_fx, item): item for item in FOREX_TICKERS}
-        for future in futures:
-            results.append(future.result())
+    futures = {yf_executor.submit(_fetch_fx, item): item for item in FOREX_TICKERS}
+    for future in futures:
+        results.append(future.result())
     results.sort(key=lambda x: [i["short"] for i in FOREX_TICKERS].index(x["ticker"]))
     ok_general = any(r["ok"] for r in results)
     result = {"data": results, "timestamp": get_timestamp(), "ok": ok_general}
@@ -362,10 +361,9 @@ def get_commodities():
     cached = cache.get("market:commodities")
     if cached: return cached
     results = []
-    with ThreadPoolExecutor(max_workers=2) as ex:
-        futures = {ex.submit(_fetch_commodity, item): item for item in COMMODITY_TICKERS}
-        for future in futures:
-            results.append(future.result())
+    futures = {yf_executor.submit(_fetch_commodity, item): item for item in COMMODITY_TICKERS}
+    for future in futures:
+        results.append(future.result())
     results.sort(key=lambda x: [i["short"] for i in COMMODITY_TICKERS].index(x["ticker"]))
     ok_general = any(r["ok"] for r in results)
     result = {"data": results, "timestamp": get_timestamp(), "ok": ok_general}
@@ -424,10 +422,9 @@ def get_sectors(period: str = "1d"):
     cached = cache.get(f"market:sectors:{period}")
     if cached: return cached
     results = []
-    with ThreadPoolExecutor(max_workers=11) as ex:
-        futures = {ex.submit(_fetch_sector, item, period): item for item in SECTOR_ETFS}
-        for future in futures:
-            results.append(future.result())
+    futures = {yf_executor.submit(_fetch_sector, item, period): item for item in SECTOR_ETFS}
+    for future in futures:
+        results.append(future.result())
     results.sort(key=lambda x: x["pct"], reverse=True)
     result = {"data": results, "timestamp": get_timestamp(), "ok": any(r["ok"] for r in results)}
     cache.set(f"market:sectors:{period}", result, TTL["sectors"])
@@ -458,10 +455,9 @@ def get_vix_term_structure():
     cached = cache.get("market:vix")
     if cached: return cached
     results = []
-    with ThreadPoolExecutor(max_workers=4) as ex:
-        futures_map = {ex.submit(_fetch_vix_point, item): item for item in VIX_DIRECT}
-        for future in futures_map:
-            results.append(future.result())
+    futures_map = {yf_executor.submit(_fetch_vix_point, item): item for item in VIX_DIRECT}
+    for future in futures_map:
+        results.append(future.result())
 
     ordered = []
     for item in VIX_DIRECT:
@@ -609,10 +605,9 @@ def get_reddit_pulse():
     max_mentions = max(ticker_mentions.values())
 
     results = []
-    with ThreadPoolExecutor(max_workers=8) as ex:
-        futures_map = {ex.submit(_enrich_ticker, t, ticker_mentions[t], max_mentions, st_tickers): t for t in top}
-        for future in futures_map:
-            results.append(future.result())
+    futures_map = {yf_executor.submit(_enrich_ticker, t, ticker_mentions[t], max_mentions, st_tickers): t for t in top}
+    for future in futures_map:
+        results.append(future.result())
 
     results.sort(key=lambda x: -x["buzz"])
     result = {"data": results[:15], "sources": list(set(sources)), "timestamp": get_timestamp(), "ok": True}
@@ -1088,13 +1083,12 @@ def get_fed_macro() -> dict:
             return {}
 
     try:
-        with ThreadPoolExecutor(max_workers=3) as ex:
-            f_b = ex.submit(_fetch_balance)
-            f_y = ex.submit(_fetch_yields)
-            f_i = ex.submit(_fetch_indicators)
-            balance    = f_b.result()
-            yields     = f_y.result()
-            indicators = f_i.result()
+        f_b = yf_executor.submit(_fetch_balance)
+        f_y = yf_executor.submit(_fetch_yields)
+        f_i = yf_executor.submit(_fetch_indicators)
+        balance    = f_b.result()
+        yields     = f_y.result()
+        indicators = f_i.result()
     except Exception as e:
         return {'ok': False, 'error': str(e)}
 
@@ -1241,13 +1235,12 @@ def get_liquidity() -> dict:
             return []
 
     try:
-        with ThreadPoolExecutor(max_workers=3) as ex:
-            f_nl  = ex.submit(_fetch_net_liquidity)
-            f_m2  = ex.submit(_fetch_m2)
-            f_spx = ex.submit(_fetch_spx_overlay)
-            net_liquidity = f_nl.result()
-            m2            = f_m2.result()
-            spx           = f_spx.result()
+        f_nl  = yf_executor.submit(_fetch_net_liquidity)
+        f_m2  = yf_executor.submit(_fetch_m2)
+        f_spx = yf_executor.submit(_fetch_spx_overlay)
+        net_liquidity = f_nl.result()
+        m2            = f_m2.result()
+        spx           = f_spx.result()
     except Exception as e:
         return {'ok': False, 'error': str(e)}
 
@@ -1513,8 +1506,7 @@ def get_market_breadth():
         # null y el frontend lo muestra como N/D en vez de inventar un número.
         if pct_above_sma50 is None:
             above_count, total_checked = 0, 0
-            with ThreadPoolExecutor(max_workers=6) as ex:
-                results = list(ex.map(_check_sector_above_sma50, SECTOR_ETFS_BREADTH))
+            results = list(yf_executor.map(_check_sector_above_sma50, SECTOR_ETFS_BREADTH))
             for r in results:
                 if r is not None:
                     total_checked += 1
@@ -1822,8 +1814,7 @@ def get_crypto_prices():
     if cached:
         return cached
 
-    with ThreadPoolExecutor(max_workers=6) as ex:
-        results = list(ex.map(_fetch_crypto, CRYPTO_TICKERS))
+    results = list(yf_executor.map(_fetch_crypto, CRYPTO_TICKERS))
 
     result = {"ok": True, "data": results, "timestamp": get_timestamp()}
     result = _sanitize_breadth(result)

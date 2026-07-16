@@ -4,6 +4,7 @@ import time
 import math
 from datetime import datetime
 from concurrent.futures import ThreadPoolExecutor
+from services.yf_pool import yf_executor
 import pytz
 from config import settings
 
@@ -129,15 +130,14 @@ def fetch_live_prices(tickers: list) -> dict:
         else:
             stale.append(t)
     if stale:
-        with ThreadPoolExecutor(max_workers=4) as ex:
-            futures = {ex.submit(_fetch_price_single, t): t for t in stale}
-            for fut, t in futures.items():
-                try:
-                    r = fut.result(timeout=10)
-                    if r:
-                        result[t] = r
-                except Exception:
-                    pass
+        futures = {yf_executor.submit(_fetch_price_single, t): t for t in stale}
+        for fut, t in futures.items():
+            try:
+                r = fut.result(timeout=10)
+                if r:
+                    result[t] = r
+            except Exception:
+                pass
     return result
 
 _sector_cache: dict = {}
@@ -183,13 +183,12 @@ def fetch_sectors(tickers: list) -> dict:
         else:
             stale.append(t)
     if stale:
-        with ThreadPoolExecutor(max_workers=4) as ex:
-            futures = {ex.submit(_fetch_sector_single, t): t for t in stale}
-            for fut, t in futures.items():
-                try:
-                    result[t] = fut.result(timeout=10)
-                except Exception:
-                    pass
+        futures = {yf_executor.submit(_fetch_sector_single, t): t for t in stale}
+        for fut, t in futures.items():
+            try:
+                result[t] = fut.result(timeout=10)
+            except Exception:
+                pass
     return result
 
 
@@ -216,15 +215,14 @@ def _fetch_sparkline_single(ticker: str, days: int) -> dict | None:
 
 def fetch_sparklines(tickers: list, days: int = 30) -> dict:
     result = {}
-    with ThreadPoolExecutor(max_workers=4) as ex:
-        futures = {ex.submit(_fetch_sparkline_single, t, days): t for t in tickers}
-        for fut, t in futures.items():
-            try:
-                r = fut.result(timeout=10)
-                if r:
-                    result[t] = r
-            except Exception:
-                pass
+    futures = {yf_executor.submit(_fetch_sparkline_single, t, days): t for t in tickers}
+    for fut, t in futures.items():
+        try:
+            r = fut.result(timeout=10)
+            if r:
+                result[t] = r
+        except Exception:
+            pass
     return result
 
 
@@ -261,11 +259,10 @@ def get_portfolio_history(abiertas_rows: list, days: int = 180) -> list:
             return ticker, None
 
     series = {}
-    with ThreadPoolExecutor(max_workers=6) as ex:
-        for ticker, s in ex.map(_hist_for, [p["ticker"] for p in positions]):
-            if s is not None and not s.empty:
-                s.index = s.index.tz_localize(None)
-                series[ticker] = s
+    for ticker, s in yf_executor.map(_hist_for, [p["ticker"] for p in positions]):
+        if s is not None and not s.empty:
+            s.index = s.index.tz_localize(None)
+            series[ticker] = s
 
     if not series:
         return []
