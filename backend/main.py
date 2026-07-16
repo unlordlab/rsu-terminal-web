@@ -34,6 +34,21 @@ if settings.yfinance_proxy_url:
     print(f"[Startup] Proxy de yfinance activado para toda la terminal (parcheado en yf.Ticker)")
 else:
     print(f"[Startup] Sin proxy configurado para yfinance (yfinance_proxy_url vacío)")
+
+# "Precalentar" el crumb de sesión de yfinance con UNA sola llamada síncrona
+# antes de que arranque nada concurrente (ThreadPoolExecutor en market_service,
+# cartera_service, etc.). yfinance cachea el crumb una vez por proceso, y si dos
+# hilos lo piden a la vez en el primer arranque, uno puede pisar la caché
+# compartida con un crumb inválido (el propio texto de un 429), contaminando
+# TODAS las peticiones del proceso a partir de ahí — ver conversación 16/07/2026
+# sobre el bloqueo de Yahoo/proxy residencial. Esto evita la carrera por completo.
+try:
+    import yfinance as _yf_warmup
+    _yf_warmup.Ticker("SPY").history(period="1d")
+    print("[Startup] Crumb de yfinance precalentado correctamente")
+except Exception as _e:
+    print(f"[Startup] No se pudo precalentar el crumb de yfinance ({type(_e).__name__}: {_e}) — se reintentará en la primera petición real")
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     task1 = asyncio.create_task(ws.broadcast_loop())
