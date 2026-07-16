@@ -6,8 +6,9 @@ from config import settings
 
 bearer = HTTPBearer()
 
-def create_token(data: dict) -> str:
-    expire = datetime.now(timezone.utc) + timedelta(minutes=settings.token_expire_minutes)
+def create_token(data: dict, expire_minutes: int | None = None) -> str:
+    minutos = expire_minutes if expire_minutes is not None else settings.token_expire_minutes
+    expire = datetime.now(timezone.utc) + timedelta(minutes=minutos)
     return jwt.encode(
         {**data, "exp": expire},
         settings.secret_key,

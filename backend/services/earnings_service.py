@@ -204,6 +204,18 @@ def get_earnings_calendar() -> dict:
     from_date = start.strftime('%Y-%m-%d')
     to_date   = (start + timedelta(days=14)).strftime('%Y-%m-%d')
 
+    # Caché diaria — antes se llamaba a FMP/Finnhub (y a yfinance para el
+    # precio de cada ticker) EN VIVO cada vez que alguien abría Mercado,
+    # sin ningún límite. Con 250 peticiones/día de cuota gratuita en FMP,
+    # eso se agota en un rato con varios usuarios mirando la página. La
+    # clave incluye from_date, así que se renueva sola cada día que cambia
+    # la ventana de 14 días, sin necesidad de invalidar nada a mano.
+    from services.cache import cache
+    cache_key = f"earnings_calendar:{from_date}"
+    cached = cache.get(cache_key)
+    if cached is not None:
+        return cached
+
     fmp_data     = _get_fmp_earnings(from_date, to_date)
     finnhub_data = _get_finnhub_earnings(from_date, to_date)
 
@@ -257,7 +269,7 @@ def get_earnings_calendar() -> dict:
             "source":     item.get('source', ''),
         })
 
-    return {
+    resultado = {
         "ok":        True,
         "data":      formatted,
         "total":     len(formatted),
@@ -265,6 +277,8 @@ def get_earnings_calendar() -> dict:
         "to_date":   to_date,
         "timestamp": datetime.now().strftime('%H:%M:%S'),
     }
+    cache.set(cache_key, resultado, 86400)  # 24h
+    return resultado
 
 def get_earnings_ticker(ticker: str) -> dict:
     now      = datetime.now()

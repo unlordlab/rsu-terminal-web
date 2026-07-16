@@ -2,6 +2,7 @@ import { setSession } from '/core/api.js';
 import { api } from '/core/api.js';
 
 export async function render(container) {
+    const expirada = new URLSearchParams(location.search).get('expired') === '1';
     container.innerHTML = `
         <div style="
             display: flex;
@@ -30,6 +31,18 @@ export async function render(container) {
                     font-size: 12px;
                     margin-bottom: 2rem;
                 ">Acceso restringido · Comunidad de traders</div>
+
+                ${expirada ? `
+                <div style="
+                    background: rgba(255,152,0,0.1);
+                    border: 1px solid rgba(255,152,0,0.4);
+                    border-radius: var(--radius);
+                    padding: 10px 12px;
+                    margin-bottom: 1.2rem;
+                    color: #ff9800;
+                    font-size: 12px;
+                ">⏱ Tu sesión ha caducado. Inicia sesión de nuevo para continuar.</div>
+                ` : ''}
 
                 <div style="margin-bottom: 1rem;">
                     <label style="
@@ -167,7 +180,7 @@ export async function render(container) {
         error.textContent = '';
 
         try {
-            const data = await api.post('/auth/login', { email, password });
+            const data = await api.post('/auth/login', { email, password, remember: rememberInput.checked });
             if (data?.access_token) {
                 setSession(data.access_token, data.tier, data.email, rememberInput.checked);
                 window.__navigate('/');

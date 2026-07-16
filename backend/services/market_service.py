@@ -1,6 +1,7 @@
 from datetime import datetime, timedelta, timezone
 import yfinance as yf
 import pandas as pd
+import requests
 from concurrent.futures import ThreadPoolExecutor
 
 def get_timestamp():
@@ -17,6 +18,42 @@ INDICES = [
     {"ticker": "^RUT",  "name": "Russell 2000","short": "RUT"},
     {"ticker": "^VIX",  "name": "VIX",         "short": "VIX"},
 ]
+
+def _fetch_ticker_fmp_fallback(item):
+    """Respaldo cuando yfinance falla (bloqueo/rate-limit de Yahoo desde la IP
+    del servidor, ver conversación 15/07/2026) — usa FMP, una API de verdad
+    con clave, no un scraper como yfinance, así que no sufre el mismo tipo
+    de bloqueo por IP de datacenter. Solo se llama cuando yfinance ya falló,
+    no sustituye a yfinance como fuente principal (yfinance es gratis e
+    ilimitado cuando funciona; FMP tiene cuota diaria de 250 peticiones)."""
+    try:
+        from config import settings
+        if not settings.fmp_api_key:
+            return None
+        r = requests.get(
+            "https://financialmodelingprep.com/stable/quote",
+            params={"symbol": item["ticker"], "apikey": settings.fmp_api_key},
+            timeout=6,
+        )
+        if r.status_code != 200:
+            print(f"[Market] FMP fallback ({item['ticker']}): status HTTP {r.status_code}")
+            return None
+        data = r.json()
+        if not data or not isinstance(data, list):
+            return None
+        q = data[0]
+        price, change, pct = q.get("price"), q.get("change"), q.get("changesPercentage")
+        if price is None:
+            return None
+        return {
+            "ticker": item["short"], "name": item["name"],
+            "price": round(price, 2), "change": round(change, 2) if change is not None else None,
+            "pct": round(pct, 2) if pct is not None else None,
+            "ok": True, "source": "fmp_fallback",
+        }
+    except Exception as e:
+        print(f"[Market] FMP fallback ({item['ticker']}): error inesperado ({type(e).__name__}: {e})")
+        return None
 
 def _fetch_ticker(item):
     try:
@@ -37,6 +74,11 @@ def _fetch_ticker(item):
             "ok":     True
         }
     except Exception as e:
+        # yfinance falló (a menudo bloqueo/rate-limit de Yahoo, ver nota más
+        # arriba) — antes de rendirse, un intento con FMP como respaldo.
+        fallback = _fetch_ticker_fmp_fallback(item)
+        if fallback:
+            return fallback
         return {"ticker": item["short"], "name": item["name"], "price": None, "change": None, "pct": None, "ok": False, "error": str(e)}
 
 def get_indices():
@@ -44,13 +86,26 @@ def get_indices():
     cached = cache.get("market:indices")
     if cached: return cached
     results = []
-    with ThreadPoolExecutor(max_workers=5) as ex:
+    # max_workers bajado de 5 a 2 — una ráfaga de 5 peticiones simultáneas a
+    # Yahoo desde una IP de datacenter que nunca las ha visto antes (recién
+    # migrado a Hetzner) tiene más pinta de bot que las mismas peticiones
+    # más espaciadas. No es una garantía, pero reduce la "firma" de ráfaga.
+    with ThreadPoolExecutor(max_workers=2) as ex:
         futures = {ex.submit(_fetch_ticker, item): item for item in INDICES}
         for future in futures:
             results.append(future.result())
     results.sort(key=lambda x: ["SPX","RSP","NDX","DJI","RUT","VIX"].index(x["ticker"]))
-    result = {"data": results, "timestamp": get_timestamp(), "ok": any(r["ok"] for r in results)}
-    cache.set("market:indices", result, TTL["market"])
+    ok_general = any(r["ok"] for r in results)
+    result = {"data": results, "timestamp": get_timestamp(), "ok": ok_general}
+    if ok_general:
+        cache.set("market:indices", result, TTL["market"])
+    else:
+        # NO cachear un fallo total — si Yahoo está bloqueando/limitando
+        # ahora mismo (ej. IP de datacenter recién vista), cachear ese
+        # fallo significa quedarse "atascado" mostrando "Sin datos" los
+        # próximos 5 minutos completos aunque el bloqueo ya se haya
+        # levantado. Mejor dejar que la siguiente petición reintente.
+        print(f"[Market] Índices: fallo total, sin cachear. Ejemplo de error: {results[0].get('error') if results else 'N/D'}")
     return result
 
 # ── FEAR & GREED ──────────────────────────────────────────────────────────────
@@ -139,6 +194,50 @@ FOREX_TICKERS = [
     {"ticker": "DX-Y.NYB",  "name": "Índice Dólar",         "short": "DXY"},
 ]
 
+FOREX_FMP_MAP = {
+    "EUR/USD": "EURUSD", "GBP/USD": "GBPUSD", "USD/JPY": "USDJPY",
+    "USD/CHF": "USDCHF", "AUD/USD": "AUDUSD",
+    # DXY (Índice Dólar) excluido a propósito — es un índice, no un par de
+    # divisas normal, y el ticker de Yahoo (DX-Y.NYB) no tiene una
+    # traducción obvia al símbolo de FMP. Mejor sin respaldo aquí que uno
+    # adivinado que devuelva un dato incorrecto sin que se note.
+}
+
+def _fetch_fx_fmp_fallback(item):
+    """Mismo respaldo que _fetch_ticker_fmp_fallback pero para forex — FMP
+    usa el par sin barra ni sufijo (EURUSD, no EUR/USD ni EURUSD=X)."""
+    simbolo_fmp = FOREX_FMP_MAP.get(item["short"])
+    if not simbolo_fmp:
+        return None
+    try:
+        from config import settings
+        if not settings.fmp_api_key:
+            return None
+        r = requests.get(
+            "https://financialmodelingprep.com/stable/quote",
+            params={"symbol": simbolo_fmp, "apikey": settings.fmp_api_key},
+            timeout=6,
+        )
+        if r.status_code != 200:
+            print(f"[Market] FMP fallback forex ({item['short']}): status HTTP {r.status_code}")
+            return None
+        data = r.json()
+        if not data or not isinstance(data, list):
+            return None
+        q = data[0]
+        price, change, pct = q.get("price"), q.get("change"), q.get("changesPercentage")
+        if price is None:
+            return None
+        return {
+            "ticker": item["short"], "name": item["name"],
+            "price": round(price, 4), "change": round(change, 4) if change is not None else None,
+            "pct": round(pct, 2) if pct is not None else None,
+            "ok": True, "source": "fmp_fallback",
+        }
+    except Exception as e:
+        print(f"[Market] FMP fallback forex ({item['short']}): error inesperado ({type(e).__name__}: {e})")
+        return None
+
 def _fetch_fx(item):
     tickers_to_try = [item["ticker"]]
     alt = {"EUR/USD": "EURUSD=X", "GBP/USD": "GBPUSD=X", "USD/JPY": "USDJPY=X", "USD/CHF": "USDCHF=X", "AUD/USD": "AUDUSD=X"}
@@ -157,6 +256,9 @@ def _fetch_fx(item):
             return {"ticker": item["short"], "name": item["name"], "price": round(last, 4), "change": round(chg, 4), "pct": round(pct, 2), "ok": True}
         except Exception:
             continue
+    fallback = _fetch_fx_fmp_fallback(item)
+    if fallback:
+        return fallback
     return {"ticker": item["short"], "name": item["name"], "ok": False, "error": "Sin datos"}
 
 def get_forex():
@@ -164,13 +266,17 @@ def get_forex():
     cached = cache.get("market:forex")
     if cached: return cached
     results = []
-    with ThreadPoolExecutor(max_workers=6) as ex:
+    with ThreadPoolExecutor(max_workers=2) as ex:
         futures = {ex.submit(_fetch_fx, item): item for item in FOREX_TICKERS}
         for future in futures:
             results.append(future.result())
     results.sort(key=lambda x: [i["short"] for i in FOREX_TICKERS].index(x["ticker"]))
-    result = {"data": results, "timestamp": get_timestamp(), "ok": any(r["ok"] for r in results)}
-    cache.set("market:forex", result, TTL["market"])
+    ok_general = any(r["ok"] for r in results)
+    result = {"data": results, "timestamp": get_timestamp(), "ok": ok_general}
+    if ok_general:
+        cache.set("market:forex", result, TTL["market"])
+    else:
+        print(f"[Market] Forex: fallo total, sin cachear. Ejemplo de error: {results[0].get('error') if results else 'N/D'}")
     return result
 
 # ── COMMODITIES
@@ -183,6 +289,48 @@ COMMODITY_TICKERS = [
     {"ticker": "NG=F", "name": "Gas Natural",     "short": "NATGAS", "prefix": "$"},
     {"ticker": "HG=F", "name": "Cobre",           "short": "COPPER", "prefix": "$"},
 ]
+
+COMMODITY_FMP_MAP = {
+    "GC=F": "GCUSD",  # Oro — confirmado en la documentación de FMP
+    "SI=F": "SIUSD",  # Plata
+    "CL=F": "CLUSD",  # Petróleo WTI — confirmado
+    "BZ=F": "BZUSD",  # Petróleo Brent
+    "NG=F": "NGUSD",  # Gas Natural
+    "HG=F": "HGUSD",  # Cobre — confirmado
+}
+
+def _fetch_commodity_fmp_fallback(item):
+    simbolo_fmp = COMMODITY_FMP_MAP.get(item["ticker"])
+    if not simbolo_fmp:
+        return None
+    try:
+        from config import settings
+        if not settings.fmp_api_key:
+            return None
+        r = requests.get(
+            "https://financialmodelingprep.com/stable/quote",
+            params={"symbol": simbolo_fmp, "apikey": settings.fmp_api_key},
+            timeout=6,
+        )
+        if r.status_code != 200:
+            print(f"[Market] FMP fallback commodity ({item['short']}): status HTTP {r.status_code}")
+            return None
+        data = r.json()
+        if not data or not isinstance(data, list):
+            return None
+        q = data[0]
+        price, change, pct = q.get("price"), q.get("change"), q.get("changesPercentage")
+        if price is None:
+            return None
+        return {
+            "ticker": item["short"], "name": item["name"],
+            "price": round(price, 4), "change": round(change, 4) if change is not None else None,
+            "pct": round(pct, 2) if pct is not None else None,
+            "prefix": item["prefix"], "ok": True, "source": "fmp_fallback",
+        }
+    except Exception as e:
+        print(f"[Market] FMP fallback commodity ({item['short']}): error inesperado ({type(e).__name__}: {e})")
+        return None
 
 def _fetch_commodity(item):
     try:
@@ -204,6 +352,9 @@ def _fetch_commodity(item):
             "ok":     True
         }
     except Exception as e:
+        fallback = _fetch_commodity_fmp_fallback(item)
+        if fallback:
+            return fallback
         return {"ticker": item["short"], "name": item["name"], "ok": False, "error": str(e)}
 
 def get_commodities():
@@ -211,13 +362,17 @@ def get_commodities():
     cached = cache.get("market:commodities")
     if cached: return cached
     results = []
-    with ThreadPoolExecutor(max_workers=6) as ex:
+    with ThreadPoolExecutor(max_workers=2) as ex:
         futures = {ex.submit(_fetch_commodity, item): item for item in COMMODITY_TICKERS}
         for future in futures:
             results.append(future.result())
     results.sort(key=lambda x: [i["short"] for i in COMMODITY_TICKERS].index(x["ticker"]))
-    result = {"data": results, "timestamp": get_timestamp(), "ok": any(r["ok"] for r in results)}
-    cache.set("market:commodities", result, TTL["market"])
+    ok_general = any(r["ok"] for r in results)
+    result = {"data": results, "timestamp": get_timestamp(), "ok": ok_general}
+    if ok_general:
+        cache.set("market:commodities", result, TTL["market"])
+    else:
+        print(f"[Market] Commodities: fallo total, sin cachear. Ejemplo de error: {results[0].get('error') if results else 'N/D'}")
     return result
 
 # ── SECTOR
