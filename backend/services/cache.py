@@ -152,9 +152,11 @@ TTL = {
     "research":    900,   # 15 min — fundamentales no cambian tan rápido
     "market":      300,   # 5 min  — índices, forex, commodities (antes 60s: caducaba
                            # cada minuto y disparaba llamadas en vivo constantemente)
-    "sectors":     120,   # 2 min  — sectores
-    "fear_greed":  300,   # 5 min  — fear & greed
-    "vix":         120,   # 2 min  — VIX
+    "sectors":     300,   # 5 min (antes 120s) — no hay margen de sobra para
+                           # trading intradía en la filosofía de la terminal,
+                           # así que no hace falta refrescar cada 2 min
+    "fear_greed":  300,   # 5 min — fear & greed
+    "vix":         300,   # 5 min (antes 120s) — mismo razonamiento
     "spreads":     3600,  # 1 hora — credit spreads FRED
     "reddit":      300,   # 5 min  — reddit pulse
     "briefing":    3600,  # 1 hora — nightly briefing
@@ -162,5 +164,5 @@ TTL = {
     "earnings":    1800,  # 30 min — earnings calendar
     "canslim":     600,   # 10 min — CANSLIM screener
     "rsrw":        300,   # 5 min  — RS/RW scanner
-    "options":     120,   # 2 min  — options flow
+    "options":     300,   # 5 min (antes 120s) — options flow
 }

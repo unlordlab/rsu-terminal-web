@@ -45,3 +45,17 @@ async def summary(days: int = 30, x_admin_key: str = Header(None)):
     if not settings.admin_key or x_admin_key != settings.admin_key:
         raise HTTPException(status_code=401, detail="Clave de administrador inválida")
     return analytics_service.get_summary(days=days)
+
+
+@router.get("/yfinance-health")
+async def yfinance_health(hours: int = 24, x_admin_key: str = Header(None)):
+    """Salud de las llamadas a yfinance por módulo (Índices, Sectores,
+    Forex, Commodities...) en las últimas N horas — panel de admin,
+    pestaña PETICIONES. Ver conversación 16/07/2026.
+
+    Protegido con la misma X-Admin-Key que el resto de endpoints /admin/*.
+    """
+    if not settings.admin_key or x_admin_key != settings.admin_key:
+        raise HTTPException(status_code=401, detail="Clave de administrador inválida")
+    from services import yf_health
+    return yf_health.summary(hours=hours)

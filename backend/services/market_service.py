@@ -96,6 +96,8 @@ def get_indices():
         results.append(future.result())
     results.sort(key=lambda x: ["SPX","RSP","NDX","DJI","RUT","VIX"].index(x["ticker"]))
     ok_general = any(r["ok"] for r in results)
+    from services.yf_health import log as _yf_log
+    _yf_log("indices", ok_general, None if ok_general else "; ".join(r.get("error", "") for r in results if not r["ok"])[:250])
     result = {"data": results, "timestamp": get_timestamp(), "ok": ok_general}
     if ok_general:
         cache.set("market:indices", result, TTL["market"])
@@ -271,6 +273,8 @@ def get_forex():
         results.append(future.result())
     results.sort(key=lambda x: [i["short"] for i in FOREX_TICKERS].index(x["ticker"]))
     ok_general = any(r["ok"] for r in results)
+    from services.yf_health import log as _yf_log
+    _yf_log("forex", ok_general, None if ok_general else "; ".join(r.get("error", "") for r in results if not r["ok"])[:250])
     result = {"data": results, "timestamp": get_timestamp(), "ok": ok_general}
     if ok_general:
         cache.set("market:forex", result, TTL["market"])
@@ -366,6 +370,8 @@ def get_commodities():
         results.append(future.result())
     results.sort(key=lambda x: [i["short"] for i in COMMODITY_TICKERS].index(x["ticker"]))
     ok_general = any(r["ok"] for r in results)
+    from services.yf_health import log as _yf_log
+    _yf_log("commodities", ok_general, None if ok_general else "; ".join(r.get("error", "") for r in results if not r["ok"])[:250])
     result = {"data": results, "timestamp": get_timestamp(), "ok": ok_general}
     if ok_general:
         cache.set("market:commodities", result, TTL["market"])
@@ -388,6 +394,30 @@ SECTOR_ETFS = [
     {"ticker": "XLRE", "name": "Inmobiliario"},
     {"ticker": "XLC",  "name": "Comunicaciones"},
 ]
+
+def _extract_sector_pct(item, df, period):
+    """Extrae el % de cambio de un sector a partir del DataFrame combinado
+    de yf.download() (una sola llamada para los 11 sectores, en vez de 11
+    objetos Ticker() por separado) — ver conversación 16/07/2026 sobre
+    reducir el número de peticiones reales a yfinance."""
+    ticker = item["ticker"]
+    try:
+        if ticker not in df.columns.get_level_values(0):
+            raise ValueError("Sin datos en el batch")
+        close = df[ticker]["Close"].dropna()
+        if period == "1w":
+            if len(close) < 6: raise ValueError("Sin datos")
+            prev, last = float(close.iloc[-6]), float(close.iloc[-1])
+        elif period == "1m":
+            if len(close) < 22: raise ValueError("Sin datos")
+            prev, last = float(close.iloc[-22]), float(close.iloc[-1])
+        else:
+            if len(close) < 2: raise ValueError("Sin datos")
+            prev, last = float(close.iloc[-2]), float(close.iloc[-1])
+        pct = ((last - prev) / prev) * 100
+        return {"ticker": ticker, "name": item["name"], "pct": round(pct, 2), "ok": True}
+    except Exception as e:
+        return {"ticker": ticker, "name": item["name"], "pct": 0, "ok": False, "error": str(e)}
 
 def _fetch_sector(item, period="1d"):
     try:
@@ -421,13 +451,31 @@ def get_sectors(period: str = "1d"):
     from services.cache import cache, TTL
     cached = cache.get(f"market:sectors:{period}")
     if cached: return cached
-    results = []
-    futures = {yf_executor.submit(_fetch_sector, item, period): item for item in SECTOR_ETFS}
-    for future in futures:
-        results.append(future.result())
+
+    def _download_and_extract():
+        tickers = [item["ticker"] for item in SECTOR_ETFS]
+        # Una sola llamada para los 11 sectores en vez de 11 objetos Ticker()
+        # separados — threads=False porque ya la lanzamos dentro del pool
+        # compartido (yf_executor), no queremos que yf.download abra su
+        # propia concurrencia interna por encima de nuestro límite global.
+        df = yf.download(tickers=tickers, period="3mo", interval="1d",
+                          group_by="ticker", threads=False, progress=False)
+        return [_extract_sector_pct(item, df, period) for item in SECTOR_ETFS]
+
+    try:
+        results = yf_executor.submit(_download_and_extract).result()
+    except Exception as e:
+        print(f"[Sectores] Batch download falló ({type(e).__name__}: {e}) — usando fallback ticker a ticker")
+        futures = {yf_executor.submit(_fetch_sector, item, period): item for item in SECTOR_ETFS}
+        results = [future.result() for future in futures]
+
     results.sort(key=lambda x: x["pct"], reverse=True)
-    result = {"data": results, "timestamp": get_timestamp(), "ok": any(r["ok"] for r in results)}
-    cache.set(f"market:sectors:{period}", result, TTL["sectors"])
+    ok_general = any(r["ok"] for r in results)
+    from services.yf_health import log as _yf_log
+    _yf_log("sectors", ok_general, None if ok_general else "; ".join(r.get("error", "") for r in results if not r["ok"])[:250])
+    result = {"data": results, "timestamp": get_timestamp(), "ok": ok_general}
+    if ok_general:
+        cache.set(f"market:sectors:{period}", result, TTL["sectors"])
     return result
 
 # ── VIX

@@ -63,6 +63,7 @@ export async function render(container) {
             <div id="admin-tabs" style="display:flex;gap:4px;margin-bottom:1.25rem;border-bottom:1px solid var(--color-border);">
                 <button data-tab="usuarios" class="admin-tab-btn">USUARIOS</button>
                 <button data-tab="metricas" class="admin-tab-btn">MÉTRICAS</button>
+                <button data-tab="peticiones" class="admin-tab-btn">PETICIONES</button>
                 <button data-tab="feedback" class="admin-tab-btn">FEEDBACK</button>
                 <button data-tab="temas" class="admin-tab-btn">TEMAS</button>
             </div>
@@ -104,6 +105,8 @@ export async function render(container) {
             await renderFeedbackPanel(content);
         } else if (activeTab === 'temas') {
             await renderThemeMaker(content);
+        } else if (activeTab === 'peticiones') {
+            await renderHealthPanel(content);
         } else {
             await renderMetricsPanel(content);
         }
@@ -318,6 +321,7 @@ async function renderUsersPanel(content) {
 // ─── MÉTRICAS ───────────────────────────────────────────────────────────
 
 let metricsDays = 30;
+let healthHours = 24;
 
 async function renderMetricsPanel(content) {
     let data;
@@ -405,6 +409,112 @@ async function renderMetricsPanel(content) {
     content.querySelector('#metrics-days').addEventListener('change', (e) => {
         metricsDays = parseInt(e.target.value, 10) || 30;
         renderMetricsPanel(content);
+    });
+}
+
+const MODULE_LABELS = {
+    indices: 'Índices', sectors: 'Sectores', forex: 'Forex', commodities: 'Commodities',
+};
+
+function healthColor(rate) {
+    if (rate === null || rate === undefined) return 'var(--color-muted)';
+    if (rate >= 95) return '#3ecf8e';
+    if (rate >= 80) return '#e0b13e';
+    return '#e05d5d';
+}
+
+async function renderHealthPanel(content) {
+    let data;
+    try {
+        data = await analyticsFetch(`/yfinance-health?hours=${healthHours}`);
+    } catch (err) {
+        if (err.isAuthError) {
+            sessionStorage.removeItem(ADMIN_KEY_STORAGE);
+        }
+        renderKeyPrompt(content, () => renderHealthPanel(content));
+        if (err.isAuthError) {
+            content.querySelector('#admin-key-error').textContent = '✗ Clave de administrador inválida';
+        }
+        return;
+    }
+
+    const totalOk   = data.modules.reduce((s, m) => s + m.ok, 0);
+    const totalFail = data.modules.reduce((s, m) => s + m.fail, 0);
+    const totalAll  = totalOk + totalFail;
+    const globalRate = totalAll ? Math.round((totalOk / totalAll) * 1000) / 10 : null;
+    const worstModule = data.modules.length ? data.modules[0] : null;
+
+    const modulesHtml = data.modules.length
+        ? data.modules.map(m => `
+            <div style="margin-bottom:10px;">
+                <div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:3px;">
+                    <span style="color:var(--color-text);">${MODULE_LABELS[m.module] || m.module}</span>
+                    <span style="color:${healthColor(m.success_rate)};">${m.success_rate === null ? '—' : m.success_rate + '%'} · ${m.ok}/${m.total}</span>
+                </div>
+                <div style="background:var(--color-surface2);border-radius:3px;height:6px;overflow:hidden;">
+                    <div style="width:${m.success_rate ?? 0}%;height:100%;background:${healthColor(m.success_rate)};"></div>
+                </div>
+            </div>
+        `).join('')
+        : '<p style="color:var(--color-muted);font-size:12px;">Sin datos todavía en esta ventana.</p>';
+
+    const failuresHtml = data.recent_failures.length
+        ? data.recent_failures.map(f => {
+            const d = new Date(f.timestamp * 1000);
+            return `
+                <div style="padding:6px 0;border-bottom:1px solid var(--color-border);font-size:11px;">
+                    <div style="display:flex;justify-content:space-between;color:var(--color-text);">
+                        <span>${MODULE_LABELS[f.module] || f.module}</span>
+                        <span style="color:var(--color-muted);">${d.toLocaleString('es-ES')}</span>
+                    </div>
+                    <div style="color:var(--color-muted);margin-top:2px;word-break:break-word;">${(f.detail || 'sin detalle').slice(0, 160)}</div>
+                </div>
+            `;
+        }).join('')
+        : '<p style="color:var(--color-muted);font-size:12px;">Sin fallos registrados en esta ventana. 🎉</p>';
+
+    content.innerHTML = `
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem;flex-wrap:wrap;gap:8px;">
+            <div style="display:flex;gap:6px;align-items:center;">
+                <span style="color:var(--color-muted);font-size:11px;">VENTANA:</span>
+                <select id="health-hours" style="background:var(--color-bg);color:var(--color-text);border:1px solid var(--color-border);border-radius:var(--radius);padding:4px 8px;font-family:var(--font-mono);font-size:12px;">
+                    <option value="1"${healthHours === 1 ? ' selected' : ''}>Última hora</option>
+                    <option value="6"${healthHours === 6 ? ' selected' : ''}>6 horas</option>
+                    <option value="24"${healthHours === 24 ? ' selected' : ''}>24 horas</option>
+                    <option value="72"${healthHours === 72 ? ' selected' : ''}>3 días</option>
+                    <option value="168"${healthHours === 168 ? ' selected' : ''}>7 días</option>
+                </select>
+            </div>
+            <button id="health-refresh" style="background:none;border:1px solid var(--color-border);color:var(--color-muted);padding:4px 10px;border-radius:var(--radius);cursor:pointer;font-family:var(--font-mono);font-size:11px;">REFRESCAR</button>
+        </div>
+
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px;margin-bottom:1.5rem;">
+            ${statCard('Peticiones totales', totalAll)}
+            ${statCard('% éxito global', globalRate === null ? '—' : globalRate + '%')}
+            ${statCard('Módulo más débil', worstModule ? (MODULE_LABELS[worstModule.module] || worstModule.module) : '—')}
+        </div>
+
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:1.25rem;">
+            <div style="background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius-lg);padding:1rem;">
+                <div style="color:var(--color-accent);font-size:12px;letter-spacing:0.08em;margin-bottom:0.75rem;">% ÉXITO POR MÓDULO</div>
+                ${modulesHtml}
+            </div>
+            <div style="background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius-lg);padding:1rem;">
+                <div style="color:var(--color-accent);font-size:12px;letter-spacing:0.08em;margin-bottom:0.75rem;">ÚLTIMOS FALLOS</div>
+                <div style="max-height:400px;overflow-y:auto;">${failuresHtml}</div>
+            </div>
+        </div>
+
+        <p style="color:var(--color-muted);font-size:11px;margin-top:1rem;">
+            Guía: por debajo del 80% de éxito sostenido durante horas (no un pico puntual) es la señal de que
+            hace falta revisar la versión de yfinance, retomar un proxy, o evaluar migrar a una API de pago.
+        </p>
+    `;
+
+    content.querySelector('#health-refresh').addEventListener('click', () => renderHealthPanel(content));
+    content.querySelector('#health-hours').addEventListener('change', (e) => {
+        healthHours = parseInt(e.target.value, 10) || 24;
+        renderHealthPanel(content);
     });
 }
 
