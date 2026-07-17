@@ -1,0 +1,24 @@
+[data-theme="polygon-window"] {
+  --color-bg:        #008080;
+  --color-surface:   #C0C0C0;
+  --color-surface2:  #C0C0C0;
+  --color-border:    rgba(18, 2, 2, 0.45);
+  --color-accent:    #000080;
+  --color-secondary: #008080;
+  --color-text:      #000080;
+  --color-muted:     #808080;
+
+  --font-mono:  'MS Sans Serif', monospace;
+  --font-size:  14px;
+
+  --scanlines:   repeating-linear-gradient(
+    0deg,
+    rgba(0,0,0,0.18) 0px,
+    rgba(0,0,0,0.18) 1px,
+    transparent 1px,
+    transparent 2px
+  );
+
+  --glow-accent: 0 0 8px rgba(0, 0, 128, 0.40);
+  --glow-text:   0 0 6px rgba(0, 0, 128, 0.25);
+}

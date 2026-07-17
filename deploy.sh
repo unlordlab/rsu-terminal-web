@@ -13,14 +13,14 @@ echo "=== 1/5: Comprobando estado de git ==="
 # Solo bloqueamos por cambios en archivos que YA están en git (modificados,
 # borrados, en stage) — no por archivos sueltos sin trackear (backups, etc.),
 # que son normales y no afectan al despliegue.
-DIRTY_TRACKED=$(git status --porcelain | grep -v '^??')
+DIRTY_TRACKED=$(git status --porcelain | grep -v '^??' || true)
 if [ -n "$DIRTY_TRACKED" ]; then
     echo "✗ Hay cambios sin commitear en archivos que SÍ están en git. Esto no debería pasar nunca."
     echo "  Revisa 'git status' a mano antes de desplegar — abortando por seguridad."
     echo "$DIRTY_TRACKED"
     exit 1
 fi
-UNTRACKED=$(git status --porcelain | grep '^??')
+UNTRACKED=$(git status --porcelain | grep '^??' || true)
 if [ -n "$UNTRACKED" ]; then
     echo "  (aviso, no bloquea) hay archivos sueltos sin trackear:"
     echo "$UNTRACKED"
