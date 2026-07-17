@@ -70,12 +70,14 @@ LIMITS = {
         # conservador; confirma el numero real en ai.google.dev/pricing
         # antes de asumir que hay mas margen del que realmente hay.
         "max_requests_per_day": 200,
-        "max_output_tokens": 16000,     # informe pide 4.000-6.500 palabras (~9.000 tokens)
+        "max_output_tokens": 32000,     # subido de 16.000 -- el informe con tablas y
+                                         # formato markdown puede pesar mas de lo que
+                                         # sugieren las 4.000-6.500 palabras "en texto"
         "pausa_entre_tickers_seg": 10,
     },
     "claude": {
         "max_requests_per_day": 200,    # límite propio, conservador — es de pago
-        "max_output_tokens": 16000,
+        "max_output_tokens": 32000,
         "pausa_entre_tickers_seg": 3,
     },
 }
@@ -153,6 +155,23 @@ def _extraer_resumen(texto: str) -> str:
     return ""
 
 
+def _extraer_precio_objetivo(texto: str) -> float | None:
+    """Heurística, no exacta: busca la sección 13 (Precios Objetivo de
+    Analistas) y coge la última cifra en dólares mencionada ahí — suele
+    ser el target más reciente en la tabla. No es infalible (el informe lo
+    escribe un LLM, el formato de tabla puede variar) — revisa el precio
+    objetivo en el panel de admin antes de dar por buena la cifra."""
+    m = re.search(r"\*\*13\. PRECIOS OBJETIVO DE ANALISTAS\*\*(.+?)(?=\n\*\*14\.|\Z)", texto, re.DOTALL)
+    bloque = m.group(1) if m else texto
+    precios = re.findall(r"\$\s?([0-9]+(?:[.,][0-9]+)?)", bloque)
+    if not precios:
+        return None
+    try:
+        return float(precios[-1].replace(",", "."))
+    except Exception:
+        return None
+
+
 def _obtener_sector(ticker: str) -> str:
     try:
         import yfinance as yf
@@ -192,6 +211,14 @@ def _generar_con_gemini(ticker: str) -> str:
                     max_output_tokens=LIMITS["gemini"]["max_output_tokens"],
                 ),
             )
+            finish_reason = None
+            try:
+                finish_reason = response.candidates[0].finish_reason
+            except Exception:
+                pass
+            if finish_reason and str(finish_reason).upper() not in ("STOP", "1", "FINISHREASON.STOP"):
+                print(f"[Bull] AVISO: la respuesta de Gemini terminó por '{finish_reason}', no por fin natural "
+                      f"— es posible que el informe esté cortado (revísalo antes de aprobar).")
             return response.text
         except Exception as e:
             if "429" in str(e) and intentos < 4:
@@ -255,8 +282,10 @@ def generar_tesis(ticker: str, provider: str) -> dict:
     titulo, nombre = _extraer_titulo_y_nombre(texto)
     resumen = _extraer_resumen(texto)
     sector = _obtener_sector(ticker)
+    precio_objetivo = _extraer_precio_objetivo(texto)
 
-    return {"contenido": texto, "titulo": titulo, "nombre": nombre, "resumen": resumen, "sector": sector}
+    return {"contenido": texto, "titulo": titulo, "nombre": nombre, "resumen": resumen,
+            "sector": sector, "precio_objetivo": precio_objetivo}
 
 
 def main():
@@ -300,6 +329,7 @@ def main():
                 nombre=resultado["nombre"],
                 sector=resultado["sector"],
                 resumen=resultado["resumen"],
+                precio_objetivo=resultado["precio_objetivo"],
                 autor=f"Agente Bull ({provider})",
                 fuente=f"agente_bull_{provider}",
                 criterio=criterio,
