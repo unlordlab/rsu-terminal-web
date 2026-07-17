@@ -10,11 +10,20 @@
 set -e  # cualquier fallo detiene el script en vez de seguir a ciegas
 
 echo "=== 1/5: Comprobando estado de git ==="
-if [ -n "$(git status --porcelain)" ]; then
-    echo "✗ Hay cambios sin commitear en el VPS. Esto no debería pasar nunca."
+# Solo bloqueamos por cambios en archivos que YA están en git (modificados,
+# borrados, en stage) — no por archivos sueltos sin trackear (backups, etc.),
+# que son normales y no afectan al despliegue.
+DIRTY_TRACKED=$(git status --porcelain | grep -v '^??')
+if [ -n "$DIRTY_TRACKED" ]; then
+    echo "✗ Hay cambios sin commitear en archivos que SÍ están en git. Esto no debería pasar nunca."
     echo "  Revisa 'git status' a mano antes de desplegar — abortando por seguridad."
-    git status --short
+    echo "$DIRTY_TRACKED"
     exit 1
+fi
+UNTRACKED=$(git status --porcelain | grep '^??')
+if [ -n "$UNTRACKED" ]; then
+    echo "  (aviso, no bloquea) hay archivos sueltos sin trackear:"
+    echo "$UNTRACKED"
 fi
 
 echo "=== 2/5: Trayendo cambios de GitHub ==="
