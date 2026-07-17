@@ -32,9 +32,9 @@ git pull
 AFTER_COMMIT=$(git rev-parse HEAD)
 
 if [ "$BEFORE_COMMIT" == "$AFTER_COMMIT" ]; then
-    echo "  Ya estabas al día — nada nuevo que desplegar."
-    echo "=== Terminado (sin cambios) ==="
-    exit 0
+    echo "  Este 'git pull' no trajo nada nuevo (puede que ya lo hubieras traído a mano)."
+    echo "  Seguimos igualmente: recrear el contenedor es barato y así nos aseguramos"
+    echo "  de que lo que está corriendo coincide siempre con lo último en disco."
 fi
 
 echo "=== 3/5: Comprobando si cambiaron las dependencias de Python ==="
