@@ -246,6 +246,7 @@ def main():
                 tipo="nueva_leccion",
                 titulo=leccion.get("title", "(sin título)"),
                 bloque_js=bloque_js,
+                contenido_json=json.dumps(leccion, ensure_ascii=False),
                 resumen=leccion.get("intro", ""),
                 modulo_id=leccion.get("moduleId"),
             )
@@ -257,6 +258,7 @@ def main():
                 tipo="revision",
                 titulo=f"Ampliación para: {leccion['title']}",
                 bloque_js=bloque_js,
+                contenido_json=json.dumps(seccion, ensure_ascii=False),
                 resumen=seccion.get("justificacion", ""),
                 leccion_ref=f"{leccion['moduleId']}-{leccion['lessonIndex']}",
             )

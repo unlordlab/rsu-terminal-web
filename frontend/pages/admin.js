@@ -697,22 +697,44 @@ async function renderAcademyReviewPanel(content) {
                     <div style="font-size:11px;color:var(--color-muted);margin-top:4px;">${tipoLabel}${item.leccion_ref ? ' \u00b7 leccion ' + item.leccion_ref : ''} \u00b7 ${fecha}</div>
                     ${item.resumen ? `<div style="font-size:12px;color:var(--color-muted);margin-top:6px;">${item.resumen}</div>` : ''}
                 </div>
-                <div style="display:flex;gap:6px;flex-shrink:0;">
-                    <button class="academy-toggle-btn" style="background:none;border:1px solid var(--color-border);color:var(--color-muted);padding:4px 10px;border-radius:var(--radius);cursor:pointer;font-family:var(--font-mono);font-size:11px;">VER</button>
+                <div style="display:flex;gap:6px;flex-shrink:0;flex-wrap:wrap;">
+                    <button class="academy-preview-btn" style="background:none;border:1px solid var(--color-accent);color:var(--color-accent);padding:4px 10px;border-radius:var(--radius);cursor:pointer;font-family:var(--font-mono);font-size:11px;">VISTA PREVIA</button>
+                    <button class="academy-toggle-btn" style="background:none;border:1px solid var(--color-border);color:var(--color-muted);padding:4px 10px;border-radius:var(--radius);cursor:pointer;font-family:var(--font-mono);font-size:11px;">VER CÓDIGO</button>
                     <button class="academy-copy-btn" style="background:none;border:1px solid var(--color-secondary);color:var(--color-secondary);padding:4px 10px;border-radius:var(--radius);cursor:pointer;font-family:var(--font-mono);font-size:11px;">COPIAR</button>
                     <button class="academy-approve-btn" style="background:none;border:1px solid #3ecf8e;color:#3ecf8e;padding:4px 10px;border-radius:var(--radius);cursor:pointer;font-family:var(--font-mono);font-size:11px;">APROBAR</button>
                     <button class="academy-reject-btn" style="background:none;border:1px solid #e05d5d;color:#e05d5d;padding:4px 10px;border-radius:var(--radius);cursor:pointer;font-family:var(--font-mono);font-size:11px;">RECHAZAR</button>
                 </div>
             </div>
+            <div class="academy-preview-content" style="display:none;margin-top:12px;padding:16px;background:var(--color-bg);border:1px solid var(--color-border);border-radius:var(--radius);max-height:600px;overflow-y:auto;"></div>
             <pre class="academy-full-content" style="display:none;margin-top:12px;padding:10px;background:var(--color-surface2);border-radius:var(--radius);white-space:pre-wrap;font-size:11px;line-height:1.5;color:var(--color-text);max-height:500px;overflow-y:auto;font-family:var(--font-mono);">${item.bloque_js}</pre>
         `;
         list.appendChild(card);
+
+        card.querySelector('.academy-preview-btn').addEventListener('click', (e) => {
+            const box = card.querySelector('.academy-preview-content');
+            const isOpen = box.style.display !== 'none';
+            box.style.display = isOpen ? 'none' : 'block';
+            e.target.textContent = isOpen ? 'VISTA PREVIA' : 'OCULTAR PREVIA';
+            if (!isOpen && !box.dataset.loaded) {
+                if (!item.contenido_json) {
+                    box.innerHTML = '<p style="color:var(--color-muted);font-size:12px;">Sin JSON disponible para vista previa (propuesta generada antes de este arreglo) — usa VER CÓDIGO en su lugar.</p>';
+                } else {
+                    try {
+                        const parsed = JSON.parse(item.contenido_json);
+                        box.innerHTML = renderAcademyPreview(parsed, item.tipo);
+                    } catch (err) {
+                        box.innerHTML = '<p style="color:#e05d5d;font-size:12px;">Error al parsear el JSON: ' + err.message + '</p>';
+                    }
+                }
+                box.dataset.loaded = '1';
+            }
+        });
 
         card.querySelector('.academy-toggle-btn').addEventListener('click', (e) => {
             const box = card.querySelector('.academy-full-content');
             const isOpen = box.style.display !== 'none';
             box.style.display = isOpen ? 'none' : 'block';
-            e.target.textContent = isOpen ? 'VER' : 'OCULTAR';
+            e.target.textContent = isOpen ? 'VER CÓDIGO' : 'OCULTAR';
         });
 
         card.querySelector('.academy-copy-btn').addEventListener('click', async (e) => {
@@ -776,6 +798,71 @@ async function renderAcademyReviewPanel(content) {
         });
     });
 }
+function renderAcademyBlock(block) {
+    switch (block.type) {
+        case 'text':
+            return `<p style="color:var(--color-text);font-size:13px;line-height:1.7;margin:0.6rem 0;">${block.content}</p>`;
+        case 'tip':
+            return `<div style="background:var(--color-surface2);border-left:2px solid var(--color-accent);border-radius:var(--radius);padding:10px 14px;margin:12px 0;">
+                <div style="color:var(--color-accent);font-size:10px;letter-spacing:.1em;margin-bottom:5px;">${block.label || 'CONSEJO'}</div>
+                <div style="color:var(--color-text);font-size:13px;line-height:1.7;">${block.content}</div>
+            </div>`;
+        case 'warning':
+            return `<div style="background:var(--color-surface2);border-left:2px solid #ff9800;border-radius:var(--radius);padding:10px 14px;margin:12px 0;">
+                <div style="color:#ff9800;font-size:10px;letter-spacing:.1em;margin-bottom:5px;">⚠ ATENCIÓN</div>
+                <div style="color:var(--color-text);font-size:13px;line-height:1.7;">${block.content}</div>
+            </div>`;
+        case 'concept':
+            return `<div style="background:var(--color-surface2);border-left:2px solid var(--color-secondary);border-radius:var(--radius);padding:10px 14px;margin:12px 0;">
+                <div style="color:var(--color-secondary);font-size:11px;letter-spacing:.1em;margin-bottom:8px;">💡 CONCEPTO — ${(block.title || '').toUpperCase()}</div>
+                <div style="color:var(--color-text);font-size:13px;line-height:1.7;">${block.content}</div>
+            </div>`;
+        case 'steps':
+            return `<ol style="color:var(--color-text);font-size:13px;line-height:1.9;padding-left:1.4rem;margin:0.75rem 0;">
+                ${(block.items || []).map(item => `<li>${item}</li>`).join('')}
+            </ol>`;
+        case 'table':
+            return `<div style="overflow-x:auto;margin:14px 0;">
+                <table style="border-collapse:collapse;width:100%;font-size:12px;">
+                    <thead><tr>${(block.headers || []).map(h => `<th style="border:1px solid var(--color-border);padding:6px 10px;text-align:left;color:var(--color-accent);background:var(--color-surface2);">${h}</th>`).join('')}</tr></thead>
+                    <tbody>${(block.rows || []).map(row => `<tr>${row.map(cell => `<td style="border:1px solid var(--color-border);padding:6px 10px;">${cell}</td>`).join('')}</tr>`).join('')}</tbody>
+                </table>
+            </div>`;
+        case 'divider':
+            return `<hr style="border:none;border-top:1px solid var(--color-border);margin:20px 0;">`;
+        case 'chart':
+            return `<div style="color:var(--color-muted);font-size:11px;padding:8px;border:1px dashed var(--color-border);border-radius:4px;margin:12px 0;">[Gráfico no generable por Elia: ${block.id || '?'}]</div>`;
+        default:
+            return '';
+    }
+}
+
+function renderAcademySection(sec) {
+    const blocks = (sec.blocks || []).map(b => renderAcademyBlock(b)).join('');
+    return `<div style="margin-bottom:1.5rem;">
+        <h2 style="color:var(--color-accent);font-size:16px;letter-spacing:0.03em;margin-bottom:0.75rem;">${sec.heading || ''}</h2>
+        ${blocks}
+    </div>`;
+}
+
+function renderAcademyPreview(parsed, tipo) {
+    if (tipo === 'nueva_leccion') {
+        const sections = (parsed.sections || []).map(s => renderAcademySection(s)).join('');
+        return `
+            <div style="margin-bottom:1rem;padding-bottom:1rem;border-bottom:1px solid var(--color-border);">
+                <div style="color:var(--color-muted);font-size:11px;letter-spacing:0.08em;">MÓDULO ${parsed.moduleId ?? '?'} · ${parsed.duration || ''}</div>
+                <div style="color:var(--color-accent);font-size:20px;letter-spacing:0.03em;margin:4px 0;">${parsed.title || ''}</div>
+                <p style="color:var(--color-text);font-size:14px;">${parsed.intro || ''}</p>
+            </div>
+            ${sections}
+        `;
+    }
+    // tipo === 'revision': una sola sección suelta
+    return renderAcademySection(parsed) + (parsed.justificacion
+        ? `<p style="color:var(--color-muted);font-size:11px;font-style:italic;margin-top:1rem;">Por qué Elia propone esto: ${parsed.justificacion}</p>`
+        : '');
+}
+
 function statCard(label, value) {
     return `
         <div style="background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius-lg);padding:0.9rem 1rem;">

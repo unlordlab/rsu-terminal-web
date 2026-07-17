@@ -30,6 +30,7 @@ def _init_db():
             titulo       TEXT NOT NULL,
             resumen      TEXT,            -- explicación en prosa de qué propone y por qué
             bloque_js    TEXT NOT NULL,   -- el objeto listo para pegar en academy_lessons.js
+            contenido_json TEXT,           -- JSON valido del mismo contenido, para la vista previa
             status       TEXT NOT NULL DEFAULT 'pending',  -- pending | approved | rejected
             fuente       TEXT NOT NULL DEFAULT 'agente_elia',
             created_at   REAL NOT NULL,
@@ -37,6 +38,11 @@ def _init_db():
             approved_by  TEXT
         )
     ''')
+    # Migración para tablas creadas antes de añadir esta columna (17/07/2026)
+    try:
+        conn.execute('ALTER TABLE academy_review ADD COLUMN contenido_json TEXT')
+    except sqlite3.OperationalError:
+        pass  # ya existe
     conn.execute('CREATE INDEX IF NOT EXISTS idx_academy_review_status ON academy_review(status)')
     conn.commit()
     conn.close()
@@ -47,12 +53,13 @@ _init_db()
 
 def create_review(tipo: str, titulo: str, bloque_js: str, resumen: str = "",
                    modulo_id: int = None, leccion_ref: str = None,
-                   fuente: str = "agente_elia", status: str = "pending") -> int:
+                   fuente: str = "agente_elia", status: str = "pending",
+                   contenido_json: str = None) -> int:
     conn = _conn()
     cur = conn.execute(
-        """INSERT INTO academy_review (tipo, modulo_id, leccion_ref, titulo, resumen, bloque_js, status, fuente, created_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
-        (tipo, modulo_id, leccion_ref, titulo, resumen, bloque_js, status, fuente, time.time())
+        """INSERT INTO academy_review (tipo, modulo_id, leccion_ref, titulo, resumen, bloque_js, contenido_json, status, fuente, created_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+        (tipo, modulo_id, leccion_ref, titulo, resumen, bloque_js, contenido_json, status, fuente, time.time())
     )
     conn.commit()
     new_id = cur.lastrowid
