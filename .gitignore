@@ -21,3 +21,4 @@ venv/
 Thumbs.db
 backend/*.db
 data/*.db
+agents/.bull_agent_state.json
