@@ -290,6 +290,21 @@ def reject_tesis(tesis_id: int, approved_by: str = "admin") -> bool:
     return ok
 
 
+def get_approved_bull_tesis_last_days(days: int = 7) -> list:
+    """Tesis del agente Bull aprobadas en los últimos N días -- para el
+    resumen semanal de Telegram (domingo por la mañana), que elige la
+    mejor de la semana en vez de notificar cada aprobación por separado."""
+    since = time.time() - days * 86400
+    conn = _conn()
+    rows = conn.execute(
+        """SELECT * FROM tesis WHERE status = 'approved' AND fuente LIKE 'agente_bull%'
+           AND approved_at >= ? ORDER BY approved_at DESC""",
+        (since,)
+    ).fetchall()
+    conn.close()
+    return [dict(r) for r in rows]
+
+
 def get_approved_tesis(limit: int = 20) -> list:
     """Últimas tesis aprobadas -- para poder retirarlas desde el panel de
     admin si hace falta (volver a 'pending', desaparece de la sección
