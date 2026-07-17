@@ -1812,6 +1812,27 @@ CÓMO USARLO EN LA PRÁCTICA:
 Un Score Técnico alto (70+) te dice que el ticker combina fuerza relativa alta, buena fase técnica y volumen por encima de lo normal — es una señal de "vale la pena mirarlo de cerca", no una recomendación de compra. El paso lógico siguiente para un candidato que destaque aquí es abrirlo en Research y revisar su RSU Score completo antes de tomar cualquier decisión.`
     },
 
+    // ── CARTERA ───────────────────────────────────────────────────────────────
+    "cartera-concentracion-sector": {
+        title: "Concentración por Sector (HHI)",
+        short: "Índice de concentración 0-100% de tu cartera por sectores. No es '% en el sector top' — mide qué tan repartida está toda la cartera.",
+        long: `Se calcula con el Índice Herfindahl-Hirschman (HHI), un estándar en finanzas para medir concentración: se suma el peso% de cada sector al cuadrado, y se divide entre 100.
+
+FÓRMULA: (peso₁² + peso₂² + peso₃² + ...) / 100
+
+Cuanto más concentrada esté la cartera en pocos sectores, más alto sale el número — porque elevar al cuadrado penaliza mucho más los pesos grandes que los pequeños.
+
+CÓMO LEERLO:
+- 0-15% → Baja concentración → cartera bien repartida entre sectores
+- 15-25% → Concentración moderada → un par de sectores dominan, pero sin exceso
+- 25%+ → Alta concentración → gran parte del riesgo depende de pocos sectores
+
+DIFERENCIA CON "EXPOSICIÓN POR SECTOR":
+El bloque de al lado (Exposición por Sector) te dice el % exacto en cada sector individual — por ejemplo, "Technology 25.4%". La Concentración (HHI) es un resumen de TODOS los sectores a la vez en un solo número, para que no tengas que sumar mentalmente cuánto "peso combinado" tienen tus 2-3 sectores más grandes.
+
+Una cartera con 5 sectores al 20% cada uno tiene HHI = 20% (bien repartida). Una cartera con un sector al 60% y el resto repartido tiene un HHI mucho más alto, aunque el "Exposición por Sector" solo muestre ese 60% como dato individual.`
+    },
+
     // ── GENERAL ───────────────────────────────────────────────────────────────
     "market-cap": {
         title: "Market Cap — Capitalización bursátil",

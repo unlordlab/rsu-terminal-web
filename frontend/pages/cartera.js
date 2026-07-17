@@ -399,7 +399,7 @@ function riskPanel(abiertas) {
             ${sectorBars || '<div style="color:var(--color-muted);font-size:11px;">Sin datos de sector.</div>'}
         </div>
         <div style="background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius);padding:.85rem 1rem;">
-            <div style="color:var(--color-muted);font-size:10px;letter-spacing:.08em;margin-bottom:5px;">CONCENTRACIÓN POR SECTOR</div>
+            <div style="color:var(--color-muted);font-size:10px;letter-spacing:.08em;margin-bottom:5px;">CONCENTRACIÓN POR SECTOR <span class="tt-trigger" data-tooltip="cartera-concentracion-sector" title="¿Qué es esto?">?</span></div>
             <div style="color:${hhiColor};font-size:20px;font-weight:500;">${fix(hhi,1)}%</div>
             <div style="color:${hhiColor};font-size:11px;margin-top:2px;">${hhiLabel} · sector top: ${topSector ? topSector[0] : '—'} (${topSector ? fix(topSector[1],1) : 0}%)</div>
         </div>
