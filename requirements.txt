@@ -11,7 +11,9 @@ pydantic-settings==2.3.0
 python-dotenv==1.0.0
 
 # HTTP
-httpx==0.27.0
+httpx>=0.28.1,<1.0.0  # rango abierto, no version exacta -- anthropic exige
+                      # >=0.25.0 y google-genai exige >=0.28.1, un pin
+                      # exacto como el de antes (0.27.0) choca con ambos
 requests==2.32.3
 
 # Data
