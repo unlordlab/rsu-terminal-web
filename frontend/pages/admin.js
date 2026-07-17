@@ -28,6 +28,7 @@ const adminFetch     = (path, options) => keyFetch('/api/v1/auth' + path, option
 const analyticsFetch = (path, options) => keyFetch('/api/v1/analytics' + path, options);
 const communityFetch = (path, options) => keyFetch('/api/v1/community' + path, options);
 const tesisFetch      = (path, options) => keyFetch('/api/v1/tesis' + path, options);
+const academyReviewFetch = (path, options) => keyFetch('/api/v1/academy-review' + path, options);
 
 const TIER_LABELS = { free: 'FREE', tier1: 'TIER 1', tiers: 'TIER S' };
 
@@ -66,6 +67,7 @@ export async function render(container) {
                 <button data-tab="metricas" class="admin-tab-btn">MÉTRICAS</button>
                 <button data-tab="peticiones" class="admin-tab-btn">PETICIONES</button>
                 <button data-tab="tesis" class="admin-tab-btn">TESIS PENDIENTES</button>
+                <button data-tab="academy" class="admin-tab-btn">ACADEMY PENDIENTE</button>
                 <button data-tab="feedback" class="admin-tab-btn">FEEDBACK</button>
                 <button data-tab="temas" class="admin-tab-btn">TEMAS</button>
             </div>
@@ -111,6 +113,8 @@ export async function render(container) {
             await renderHealthPanel(content);
         } else if (activeTab === 'tesis') {
             await renderTesisPanel(content);
+        } else if (activeTab === 'academy') {
+            await renderAcademyReviewPanel(content);
         } else {
             await renderMetricsPanel(content);
         }
@@ -605,6 +609,105 @@ async function renderTesisPanel(content) {
             try {
                 await tesisFetch(`/admin/${item.id}/reject`, { method: 'POST' });
                 renderTesisPanel(content);
+            } catch (err) {
+                alert('Error al rechazar: ' + err.message);
+            }
+        });
+    });
+}
+
+async function renderAcademyReviewPanel(content) {
+    let data;
+    try {
+        data = await academyReviewFetch('/pending');
+    } catch (err) {
+        if (err.isAuthError) sessionStorage.removeItem(ADMIN_KEY_STORAGE);
+        renderKeyPrompt(content, () => renderAcademyReviewPanel(content));
+        if (err.isAuthError) content.querySelector('#admin-key-error').textContent = '✗ Clave de administrador inválida';
+        return;
+    }
+
+    const items = data.items || [];
+
+    if (!items.length) {
+        content.innerHTML = `
+            <p style="color:var(--color-muted);font-size:13px;">
+                No hay propuestas de Academy pendientes de revisión ahora mismo. 🎉
+            </p>
+        `;
+        return;
+    }
+
+    content.innerHTML = `
+        <p style="color:var(--color-muted);font-size:11px;margin-bottom:1rem;">
+            ${items.length} propuestas de Elia a la espera de revisión. Al aprobar, copia el bloque con el botón COPIAR
+            y pégalo tú mismo en <code style="background:var(--color-surface2);padding:1px 5px;border-radius:3px;">academy_lessons.js</code> — Elia no edita el código directamente.
+        </p>
+        <div id="academy-pending-list" style="display:flex;flex-direction:column;gap:12px;"></div>
+    `;
+
+    const list = content.querySelector('#academy-pending-list');
+
+    items.forEach(item => {
+        const card = document.createElement('div');
+        card.style.cssText = `
+            background:var(--color-surface);border:1px solid var(--color-border);
+            border-radius:var(--radius-lg);padding:1rem;
+        `;
+        const fecha = new Date(item.created_at * 1000).toLocaleString('es-ES');
+        const tipoLabel = item.tipo === 'nueva_leccion' ? '🆕 Lección nueva' : '✏️ Ampliación de lección existente';
+
+        card.innerHTML = `
+            <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px;flex-wrap:wrap;">
+                <div>
+                    <div style="font-size:14px;color:var(--color-text);font-weight:600;">${item.titulo}</div>
+                    <div style="font-size:11px;color:var(--color-muted);margin-top:4px;">${tipoLabel}${item.leccion_ref ? ' · leccion ' + item.leccion_ref : ''} · ${fecha}</div>
+                    ${item.resumen ? `<div style="font-size:12px;color:var(--color-muted);margin-top:6px;">${item.resumen}</div>` : ''}
+                </div>
+                <div style="display:flex;gap:6px;flex-shrink:0;">
+                    <button class="academy-toggle-btn" style="background:none;border:1px solid var(--color-border);color:var(--color-muted);padding:4px 10px;border-radius:var(--radius);cursor:pointer;font-family:var(--font-mono);font-size:11px;">VER</button>
+                    <button class="academy-copy-btn" style="background:none;border:1px solid var(--color-secondary);color:var(--color-secondary);padding:4px 10px;border-radius:var(--radius);cursor:pointer;font-family:var(--font-mono);font-size:11px;">COPIAR</button>
+                    <button class="academy-approve-btn" style="background:none;border:1px solid #3ecf8e;color:#3ecf8e;padding:4px 10px;border-radius:var(--radius);cursor:pointer;font-family:var(--font-mono);font-size:11px;">APROBAR</button>
+                    <button class="academy-reject-btn" style="background:none;border:1px solid #e05d5d;color:#e05d5d;padding:4px 10px;border-radius:var(--radius);cursor:pointer;font-family:var(--font-mono);font-size:11px;">RECHAZAR</button>
+                </div>
+            </div>
+            <pre class="academy-full-content" style="display:none;margin-top:12px;padding:10px;background:var(--color-surface2);border-radius:var(--radius);white-space:pre-wrap;font-size:11px;line-height:1.5;color:var(--color-text);max-height:500px;overflow-y:auto;font-family:var(--font-mono);">${item.bloque_js}</pre>
+        `;
+        list.appendChild(card);
+
+        card.querySelector('.academy-toggle-btn').addEventListener('click', (e) => {
+            const box = card.querySelector('.academy-full-content');
+            const isOpen = box.style.display !== 'none';
+            box.style.display = isOpen ? 'none' : 'block';
+            e.target.textContent = isOpen ? 'VER' : 'OCULTAR';
+        });
+
+        card.querySelector('.academy-copy-btn').addEventListener('click', async (e) => {
+            try {
+                await navigator.clipboard.writeText(item.bloque_js);
+                const original = e.target.textContent;
+                e.target.textContent = '¡COPIADO!';
+                setTimeout(() => { e.target.textContent = original; }, 1500);
+            } catch (err) {
+                alert('No se pudo copiar automáticamente — selecciona el texto a mano con VER.');
+            }
+        });
+
+        card.querySelector('.academy-approve-btn').addEventListener('click', async () => {
+            if (!confirm(`¿Marcar como aprobada? Recuerda: esto NO lo publica solo, tienes que copiarlo tú a academy_lessons.js.`)) return;
+            try {
+                await academyReviewFetch(`/${item.id}/approve`, { method: 'POST' });
+                renderAcademyReviewPanel(content);
+            } catch (err) {
+                alert('Error al aprobar: ' + err.message);
+            }
+        });
+
+        card.querySelector('.academy-reject-btn').addEventListener('click', async () => {
+            if (!confirm(`¿Descartar esta propuesta? No se puede deshacer.`)) return;
+            try {
+                await academyReviewFetch(`/${item.id}/reject`, { method: 'POST' });
+                renderAcademyReviewPanel(content);
             } catch (err) {
                 alert('Error al rechazar: ' + err.message);
             }
