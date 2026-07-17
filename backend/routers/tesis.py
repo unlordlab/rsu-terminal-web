@@ -4,7 +4,7 @@ from auth import verify_token
 from config import settings
 from services.tesis_service import (
     get_tesis_list, get_tesis_detail, get_pending_tesis, get_tesis_by_id,
-    approve_tesis, reject_tesis, create_tesis,
+    approve_tesis, reject_tesis, create_tesis, get_approved_tesis, unpublish_tesis,
 )
 
 router = APIRouter(prefix="/api/v1/tesis", tags=["tesis"])
@@ -69,6 +69,24 @@ async def admin_pending_tesis(x_admin_key: str = Header(None)):
     pestaña TESIS PENDIENTES."""
     _check_admin(x_admin_key)
     return {"items": get_pending_tesis()}
+
+
+@admin_router.get("/approved")
+async def admin_approved_tesis(limit: int = 20, x_admin_key: str = Header(None)):
+    """Últimas tesis aprobadas, para poder retirarlas si hace falta."""
+    _check_admin(x_admin_key)
+    return {"items": get_approved_tesis(limit=limit)}
+
+
+@admin_router.post("/{tesis_id}/unpublish")
+async def admin_unpublish_tesis(tesis_id: int, x_admin_key: str = Header(None)):
+    """Retira una tesis ya aprobada -- vuelve a pendiente, desaparece de
+    la sección pública al instante."""
+    _check_admin(x_admin_key)
+    ok = unpublish_tesis(tesis_id)
+    if not ok:
+        raise HTTPException(status_code=404, detail="Tesis no encontrada o no estaba aprobada")
+    return {"ok": True}
 
 
 @admin_router.post("/{tesis_id}/approve")

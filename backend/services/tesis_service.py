@@ -290,6 +290,33 @@ def reject_tesis(tesis_id: int, approved_by: str = "admin") -> bool:
     return ok
 
 
+def get_approved_tesis(limit: int = 20) -> list:
+    """Últimas tesis aprobadas -- para poder retirarlas desde el panel de
+    admin si hace falta (volver a 'pending', desaparece de la sección
+    pública al instante)."""
+    conn = _conn()
+    rows = conn.execute(
+        "SELECT * FROM tesis WHERE status = 'approved' ORDER BY approved_at DESC LIMIT ?",
+        (limit,)
+    ).fetchall()
+    conn.close()
+    return [dict(r) for r in rows]
+
+
+def unpublish_tesis(tesis_id: int) -> bool:
+    """Retira una tesis ya aprobada -- vuelve a 'pending', deja de verse
+    en la sección pública inmediatamente."""
+    conn = _conn()
+    cur = conn.execute(
+        "UPDATE tesis SET status = 'pending', approved_at = NULL, approved_by = NULL WHERE id = ? AND status = 'approved'",
+        (tesis_id,)
+    )
+    conn.commit()
+    ok = cur.rowcount > 0
+    conn.close()
+    return ok
+
+
 def recent_tickers_with_tesis(days: int = 60) -> set:
     """Tickers que ya tienen una tesis (aprobada o pendiente) reciente —
     para que el agente Bull no proponga el mismo ticker una y otra vez en

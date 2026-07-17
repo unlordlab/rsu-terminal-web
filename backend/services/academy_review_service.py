@@ -60,6 +60,32 @@ def create_review(tipo: str, titulo: str, bloque_js: str, resumen: str = "",
     return new_id
 
 
+def get_approved_reviews(limit: int = 20) -> list:
+    conn = _conn()
+    rows = conn.execute(
+        "SELECT * FROM academy_review WHERE status = 'approved' ORDER BY approved_at DESC LIMIT ?",
+        (limit,)
+    ).fetchall()
+    conn.close()
+    return [dict(r) for r in rows]
+
+
+def unapprove_review(review_id: int) -> bool:
+    """Revierte una propuesta ya aprobada de vuelta a 'pending' -- solo
+    afecta al registro de seguimiento en el panel de admin, no a
+    academy_lessons.js (eso lo pegas tú a mano, así que si ya lo habías
+    copiado al código, retirarlo aquí no lo borra de ahí)."""
+    conn = _conn()
+    cur = conn.execute(
+        "UPDATE academy_review SET status = 'pending', approved_at = NULL, approved_by = NULL WHERE id = ? AND status = 'approved'",
+        (review_id,)
+    )
+    conn.commit()
+    ok = cur.rowcount > 0
+    conn.close()
+    return ok
+
+
 def get_pending_reviews() -> list:
     conn = _conn()
     rows = conn.execute(
