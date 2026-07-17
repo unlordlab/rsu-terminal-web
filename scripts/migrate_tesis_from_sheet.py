@@ -37,9 +37,11 @@ def main():
         print(f"✗ Faltan columnas esperadas en el CSV: {missing}. Revisa el Sheet a mano.")
         return
 
-    # Normalizar nombres de columna a minúsculas para no depender de
-    # mayúsculas exactas del Sheet.
-    df.columns = [c.lower().strip() for c in df.columns]
+    # Normalizar nombres de columna: minúsculas, sin espacios NI guiones
+    # bajos — mismo criterio que usaba el tesis_service.py antiguo
+    # (c.lower().replace(" ", "").replace("_", "")), para que columnas
+    # como "URL_Doc" o "Precio_Objetivo" se reconozcan igual.
+    df.columns = [c.lower().strip().replace(" ", "").replace("_", "") for c in df.columns]
 
     conn = _conn()
     insertados = 0
@@ -47,7 +49,13 @@ def main():
 
     for _, row in df.iterrows():
         ticker = str(row.get('ticker', '')).strip().upper()
-        fecha = str(row.get('fecha', '')).strip()
+        fecha_raw = str(row.get('fecha', '')).strip()
+        # El Sheet usa DD/MM/YYYY; el resto del sistema usa YYYY-MM-DD para
+        # que el orden cronológico (ORDER BY fecha) funcione bien como texto.
+        try:
+            fecha = pd.to_datetime(fecha_raw, dayfirst=True).strftime("%Y-%m-%d")
+        except Exception:
+            fecha = fecha_raw
         rating = str(row.get('rating', 'HOLD')).strip().upper() or 'HOLD'
         nombre = str(row.get('nombre', '') or '').strip()
         sector = str(row.get('sector', '') or '').strip()
@@ -63,6 +71,7 @@ def main():
             precio_objetivo = None
 
         if not ticker or not fecha or ticker == 'NAN':
+            print(f"  SALTADA (sin ticker/fecha válidos): ticker={ticker!r} fecha={fecha!r}")
             saltados += 1
             continue
 
@@ -70,6 +79,7 @@ def main():
             "SELECT id FROM tesis WHERE ticker = ? AND fecha = ?", (ticker, fecha)
         ).fetchone()
         if existe:
+            print(f"  SALTADA (ya existe): {ticker} {fecha}")
             saltados += 1
             continue
 
