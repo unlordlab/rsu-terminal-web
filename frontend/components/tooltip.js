@@ -1833,6 +1833,26 @@ El bloque de al lado (Exposición por Sector) te dice el % exacto en cada sector
 Una cartera con 5 sectores al 20% cada uno tiene HHI = 20% (bien repartida). Una cartera con un sector al 60% y el resto repartido tiene un HHI mucho más alto, aunque el "Exposición por Sector" solo muestre ese 60% como dato individual.`
     },
 
+    "cartera-nivel": {
+        title: "Nivel de Convicción (CORE / HIGH / LOTTERY)",
+        short: "No es solo una etiqueta — determina el tamaño real de la posición como % fijo de tu capital total.",
+        long: `Cada posición se etiqueta con un nivel de convicción, y ese nivel fija directamente cuánto capital se asigna, como % de tu capital total:
+
+▸ CORE → 5% del capital total
+▸ HIGH → 3% del capital total
+▸ LOTTERY → 1% del capital total
+
+CÓMO FUNCIONA:
+En vez de decidir manualmente cuántas acciones comprar de cada posición, se etiqueta la convicción que tienes en la idea y el sistema deriva el tamaño en $ aplicando ese % fijo sobre el capital total configurado. Así el tamaño de cada posición es consistente con tu nivel de convicción real, no con cuánto "te apetece" comprar en el momento.
+
+CÓMO LEERLO EN LA TABLA:
+- CORE → tus mejores ideas, mayor convicción, mayor tamaño
+- HIGH → convicción media-alta, tamaño intermedio
+- LOTTERY → apuestas especulativas de alto riesgo/alta recompensa, tamaño deliberadamente pequeño para limitar el daño si sale mal
+
+Si una fila no tiene un nivel válido, el sistema cae al cálculo antiguo (a partir de Cantidad/Inversión de la hoja), para no romper posiciones ya registradas de otra forma.`
+    },
+
     // ── GENERAL ───────────────────────────────────────────────────────────────
     "market-cap": {
         title: "Market Cap — Capitalización bursátil",

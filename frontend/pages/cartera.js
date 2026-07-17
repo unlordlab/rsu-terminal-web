@@ -66,6 +66,7 @@ async function loadCartera(container) {
         if (c && c.total > 0) {
             html += sectionHeader('04 // HISTORIAL CERRADAS');
             html += closedStats(c);
+            html += pnlHistogram(data.cerradas || []);
             html += '<div id="closed-table-wrap"></div>';
         }
 
@@ -313,7 +314,8 @@ function metricsRow(m) {
             'Inicial $' + usd(m.capital_inicial) + ' ' + realSign + '$' + usd(Math.abs(n(m.pnl_realizado_acum))) + ' realiz.', realColor);
     }
 
-    return `<div style="display:grid;grid-template-columns:repeat(${cols},1fr);gap:1rem;margin-bottom:1.5rem;">${cards}</div>`;
+    return `<div style="display:grid;grid-template-columns:repeat(${cols},1fr);gap:1rem;margin-bottom:.5rem;">${cards}</div>
+    <p style="color:var(--color-muted);font-size:10px;margin:0 0 1.5rem;">Solo posiciones abiertas — las operaciones cerradas se calculan aparte, en la sección "Historial Cerradas" de más abajo.</p>`;
 }
 
 function metricCard(label, value, sub, color) {
@@ -486,7 +488,7 @@ function activeTable(rows) {
         { label: '',            key: null },
         { label: 'FECHA',       key: 'fecha' },
         { label: 'TICKER',      key: 'ticker' },
-        { label: 'NIVEL',       key: 'tier' },
+        { label: 'NIVEL <span class="tt-trigger" data-tooltip="cartera-nivel" title="¿Qué es esto?">?</span>', key: 'tier' },
         { label: 'SECTOR',      key: 'sector' },
         { label: 'P. COMPRA',   key: 'compra' },
         { label: 'P. ACTUAL',   key: 'actual' },
@@ -554,6 +556,43 @@ function activeTable(rows) {
 }
 
 // ── TABLA CERRADAS ────────────────────────────────────────────────────────────
+
+function pnlHistogram(cerradas) {
+    if (!cerradas || !cerradas.length) return '';
+
+    const buckets = [
+        { label: '< -25%',      min: -Infinity, max: -25, color: '#f23645' },
+        { label: '-25% a -10%', min: -25,       max: -10, color: '#f23645' },
+        { label: '-10% a 0%',   min: -10,       max: 0,   color: '#f23645' },
+        { label: '0% a 10%',    min: 0,         max: 10,  color: 'var(--color-accent)' },
+        { label: '10% a 25%',   min: 10,        max: 25,  color: 'var(--color-accent)' },
+        { label: '25%+',        min: 25,        max: Infinity, color: 'var(--color-accent)' },
+    ];
+
+    buckets.forEach(b => { b.count = 0; });
+    cerradas.forEach(r => {
+        const pnl = n(r.pnl);
+        const bucket = buckets.find(b => pnl >= b.min && pnl < b.max) || buckets[buckets.length - 1];
+        bucket.count++;
+    });
+
+    const maxCount = Math.max(...buckets.map(b => b.count), 1);
+
+    const bars = buckets.map(b => `
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:5px;">
+            <span style="color:var(--color-muted);font-size:10px;width:90px;flex-shrink:0;">${b.label}</span>
+            <div style="flex:1;height:14px;background:var(--color-border);border-radius:3px;overflow:hidden;">
+                <div style="height:100%;width:${(b.count / maxCount * 100)}%;background:${b.color};opacity:.75;"></div>
+            </div>
+            <span style="color:var(--color-text);font-size:10px;width:20px;text-align:right;flex-shrink:0;">${b.count}</span>
+        </div>`
+    ).join('');
+
+    return `<div style="background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius);padding:1rem 1.25rem;margin-bottom:1rem;">
+        <div style="color:var(--color-muted);font-size:10px;letter-spacing:.08em;margin-bottom:10px;">DISTRIBUCIÓN DE P&L% (CERRADAS)</div>
+        ${bars}
+    </div>`;
+}
 
 function closedStats(c) {
     const wrColor  = c.win_rate >= 50 ? 'var(--color-accent)' : '#f23645';
