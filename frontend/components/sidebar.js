@@ -10,6 +10,7 @@ export const NAV_ITEMS = [
     { path: '/watchlist', label: 'Watchlist',    icon: '★' },
     { path: '/newsfeed',  label: 'News Feed',    icon: 'N' },
     { path: '/tesis',     label: 'Tesis', icon: 'T', minTier: 'tier1' },
+    { path: '/equipo',    label: 'Equipo RSU',   icon: '👥' },
     { path: '/spxl',      label: 'SPXL',         icon: 'S' },
     { path: '/btc-stratum', label: 'BTC Stratum', icon: '₿' },
     { path: '/options', label: 'Options Flow', icon: 'O' },
