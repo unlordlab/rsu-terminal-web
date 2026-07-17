@@ -1,0 +1,24 @@
+[data-theme="isopropophlex"] {
+  --color-bg:        #1a0a12;
+  --color-surface:   #241019;
+  --color-surface2:  #301722;
+  --color-border:    rgba(232, 184, 75, 0.16);
+  --color-accent:    #F2C572;
+  --color-secondary: #E8A0C4;
+  --color-text:      #F5E6D8;
+  --color-muted:     #8A6078;
+
+  --font-mono:  'VT323', monospace;
+  --font-size:  15px;
+
+  --scanlines: repeating-linear-gradient(
+    0deg,
+    rgba(0,0,0,0.14) 0px,
+    rgba(0,0,0,0.14) 1px,
+    transparent 1px,
+    transparent 2px
+  );
+
+  --glow-accent: 0 0 10px rgba(242, 197, 114, 0.4);
+  --glow-text:   0 0 8px rgba(232, 160, 196, 0.3);
+}

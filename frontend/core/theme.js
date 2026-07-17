@@ -1,4 +1,4 @@
-const THEMES = ["crt", "dark-pro", "light", "bubblebath", "polygon-window", "xtal"];
+const THEMES = ["crt", "dark-pro", "light", "bubblebath", "polygon-window", "xtal", "isopropophlex"];
 const STORAGE_KEY = "rsu_theme";
 
 export function initTheme() {
