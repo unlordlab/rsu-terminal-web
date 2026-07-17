@@ -1853,6 +1853,52 @@ CÓMO LEERLO EN LA TABLA:
 Si una fila no tiene un nivel válido, el sistema cae al cálculo antiguo (a partir de Cantidad/Inversión de la hoja), para no romper posiciones ya registradas de otra forma.`
     },
 
+    "cartera-capital-invertido": {
+        title: "Capital Invertido",
+        short: "Suma del $ realmente comprometido en tus posiciones abiertas, al precio de compra — no incluye cerradas.",
+        long: `Es la suma, en dólares, de lo que se invirtió en cada posición que sigue **abierta** ahora mismo, calculado al precio de compra (no al precio actual).
+
+Si tienes el sizing por Nivel de Convicción activado (CORE/HIGH/LOTTERY), este número sale de aplicar el % fijo de cada nivel sobre tu capital total, respetando el orden cronológico de entrada y cuánto capital quedaba disponible en cada momento — no es simplemente "Cantidad × Precio" de la hoja.
+
+Es la base de referencia (0%) sobre la que se calcula el "% vs compra" de Valor de Mercado y el "% sobre capital" de P&L Neto.
+
+No incluye ninguna posición ya cerrada — esas se calculan aparte, en la sección Historial Cerradas.`
+    },
+
+    "cartera-valor-mercado": {
+        title: "Valor de Mercado",
+        short: "Lo que valdrían hoy tus posiciones abiertas, a precio actual — se actualiza en vivo.",
+        long: `Es la suma, en dólares, del valor **actual** de todas tus posiciones abiertas — mismas acciones que en Capital Invertido, pero valoradas al precio de mercado de ahora mismo en vez de al precio de compra.
+
+Se recalcula con cada refresco de precio en vivo (cada 60 segundos, o al instante vía WebSocket si tienes la pestaña abierta).
+
+El "% vs compra" que aparece debajo es simplemente (Valor de Mercado − Capital Invertido) / Capital Invertido — el rendimiento bruto de tu cartera abierta, ANTES de restar comisiones (para eso está la tarjeta de P&L Neto, al lado).`
+    },
+
+    "cartera-pnl-neto": {
+        title: "P&L Neto (menos comisiones)",
+        short: "Ganancia/pérdida real de tus posiciones abiertas, después de restar todas las comisiones pagadas.",
+        long: `Fórmula: (Valor de Mercado − Capital Invertido) − Total de Comisiones pagadas en esas posiciones.
+
+Es el número más "de verdad" de los tres de arriba — el de Valor de Mercado te dice el rendimiento bruto, pero este resta las comisiones reales que pagaste al entrar (y, si las registras, al salir), dándote el beneficio/pérdida neto que realmente te llevarías si cerraras todo ahora mismo.
+
+Solo cuenta posiciones ABIERTAS — el P&L de las que ya cerraste vive aparte, en el "P&L Total Acum." de la sección Historial Cerradas (ese si es 100% realizado, no una foto del momento).`
+    },
+
+    "cartera-capital-disponible": {
+        title: "Capital Disponible",
+        short: "Cuánto capital tienes libre ahora mismo para abrir posiciones nuevas, contando ganancias/pérdidas ya realizadas.",
+        long: `Es una simulación cronológica de tu capital, pensada para el sizing por Nivel de Convicción (CORE/HIGH/LOTTERY):
+
+1. Se parte de tu Capital Inicial configurado.
+2. Se procesan todas tus operaciones en orden de fecha: cada apertura compromete capital (según el % del nivel), cada cierre libera ese capital comprometido y suma/resta el P&L realizado a tu equity total.
+3. Capital Disponible = tu equity actual (inicial + todo el P&L ya realizado de cerradas) − lo que sigue comprometido en posiciones abiertas ahora mismo.
+
+En otras palabras: es cuánto podrías invertir en una posición CORE/HIGH/LOTTERY nueva ahora mismo, sin necesidad de aportar más capital, contando con que tus ganancias (o pérdidas) ya cerradas se han sumado (o restado) a tu bolsa real.
+
+El texto pequeño debajo ("Inicial $X, +$Y realiz.") te desglosa de dónde sale ese número: tu capital de partida, más el P&L acumulado de todo lo que ya has cerrado.`
+    },
+
     // ── GENERAL ───────────────────────────────────────────────────────────────
     "market-cap": {
         title: "Market Cap — Capitalización bursátil",

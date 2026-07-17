@@ -303,24 +303,25 @@ function metricsRow(m) {
     const hasSim = m.capital_disponible != null;
     const cols = hasSim ? 4 : 3;
 
-    let cards = metricCard('Capital Invertido',  '$' + usd(m.total_inv), 'Base de referencia', 'var(--color-text)')
-        + metricCard('Valor de Mercado',   '$' + usd(m.total_val), valSign + fix(m.val_pct) + '% vs compra', valColor)
-        + metricCard('P&L Neto (−comis.)', pnlSign + '$' + usd(Math.abs(n(m.pnl_neto))), pnlSign + fix(m.pnl_pct) + '% sobre capital', pnlColor);
+    let cards = metricCard('Capital Invertido',  '$' + usd(m.total_inv), 'Base de referencia', 'var(--color-text)', 'cartera-capital-invertido')
+        + metricCard('Valor de Mercado',   '$' + usd(m.total_val), valSign + fix(m.val_pct) + '% vs compra', valColor, 'cartera-valor-mercado')
+        + metricCard('P&L Neto (−comis.)', pnlSign + '$' + usd(Math.abs(n(m.pnl_neto))), pnlSign + fix(m.pnl_pct) + '% sobre capital', pnlColor, 'cartera-pnl-neto');
 
     if (hasSim) {
         const realColor = m.pnl_realizado_acum >= 0 ? 'var(--color-accent)' : '#f23645';
         const realSign  = m.pnl_realizado_acum >= 0 ? '+' : '';
         cards += metricCard('Capital Disponible', '$' + usd(m.capital_disponible),
-            'Inicial $' + usd(m.capital_inicial) + ' ' + realSign + '$' + usd(Math.abs(n(m.pnl_realizado_acum))) + ' realiz.', realColor);
+            'Inicial $' + usd(m.capital_inicial) + ' ' + realSign + '$' + usd(Math.abs(n(m.pnl_realizado_acum))) + ' realiz.', realColor, 'cartera-capital-disponible');
     }
 
     return `<div style="display:grid;grid-template-columns:repeat(${cols},1fr);gap:1rem;margin-bottom:.5rem;">${cards}</div>
     <p style="color:var(--color-muted);font-size:10px;margin:0 0 1.5rem;">Solo posiciones abiertas — las operaciones cerradas se calculan aparte, en la sección "Historial Cerradas" de más abajo.</p>`;
 }
 
-function metricCard(label, value, sub, color) {
+function metricCard(label, value, sub, color, tooltipKey) {
+    const tt = tooltipKey ? ` <span class="tt-trigger" data-tooltip="${tooltipKey}" title="¿Qué es esto?">?</span>` : '';
     return `<div style="background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius);padding:1.25rem;text-align:center;">
-        <div style="color:var(--color-muted);font-size:11px;letter-spacing:.1em;margin-bottom:6px;">${label}</div>
+        <div style="color:var(--color-muted);font-size:11px;letter-spacing:.1em;margin-bottom:6px;">${label}${tt}</div>
         <div style="color:${color};font-size:22px;font-weight:500;">${value}</div>
         <div style="color:${color};font-size:11px;margin-top:4px;opacity:.7;">${sub}</div>
     </div>`;
