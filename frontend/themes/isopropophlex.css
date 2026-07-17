@@ -9,7 +9,7 @@
   --color-muted:     #8A6078;
 
   --font-mono:  'VT323', monospace;
-  --font-size:  56px;
+  --font-size:  17px;
 
   --scanlines: repeating-linear-gradient(
     0deg,
@@ -21,4 +21,14 @@
 
   --glow-accent: 0 0 10px rgba(242, 197, 114, 0.4);
   --glow-text:   0 0 8px rgba(232, 160, 196, 0.3);
+}
+
+/* La variable --font-size de arriba apenas se nota en la práctica: casi
+   todo el texto de la app tiene su tamaño puesto a mano en px en cada
+   página (más de 1.000 sitios), y esos valores fijos ganan siempre a la
+   variable heredada. Para que "letra más grande" se note de verdad sin
+   reescribir toda la base de código, se escala la app entera con zoom
+   (afecta al renderizado completo, no solo a lo que hereda la variable). */
+[data-theme="isopropophlex"] #app {
+  zoom: 1.15;
 }
