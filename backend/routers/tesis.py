@@ -9,6 +9,15 @@ from services.tesis_service import (
 
 router = APIRouter(prefix="/api/v1/tesis", tags=["tesis"])
 
+# Router de administración SEPARADO — no debe llevar la dependencia `paid`
+# (sesión de usuario de pago) que main.py aplica a `router` al registrarlo.
+# Solo depende de X-Admin-Key, igual que los endpoints /admin/* de auth.py
+# y analytics.py. Ver conversación 17/07/2026: al estar en el mismo router
+# que las rutas públicas, heredaba `paid` y expulsaba al admin a la
+# pantalla de login normal en cuanto caducaba su sesión de usuario, aunque
+# tuviera la clave de admin correcta.
+admin_router = APIRouter(prefix="/api/v1/tesis/admin", tags=["tesis-admin"])
+
 
 def _check_admin(x_admin_key: str):
     if not settings.admin_key or x_admin_key != settings.admin_key:
@@ -54,7 +63,7 @@ class CreateTesisRequest(BaseModel):
     status: str = "pending"  # permite crear ya aprobada si se escribe a mano
 
 
-@router.get("/admin/pending")
+@admin_router.get("/pending")
 async def admin_pending_tesis(x_admin_key: str = Header(None)):
     """Bandeja de tesis a la espera de revisión — panel de admin,
     pestaña TESIS PENDIENTES."""
@@ -62,7 +71,7 @@ async def admin_pending_tesis(x_admin_key: str = Header(None)):
     return {"items": get_pending_tesis()}
 
 
-@router.post("/admin/{tesis_id}/approve")
+@admin_router.post("/{tesis_id}/approve")
 async def admin_approve_tesis(tesis_id: int, x_admin_key: str = Header(None)):
     _check_admin(x_admin_key)
     ok = approve_tesis(tesis_id, approved_by="admin")
@@ -71,7 +80,7 @@ async def admin_approve_tesis(tesis_id: int, x_admin_key: str = Header(None)):
     return {"ok": True}
 
 
-@router.post("/admin/{tesis_id}/reject")
+@admin_router.post("/{tesis_id}/reject")
 async def admin_reject_tesis(tesis_id: int, x_admin_key: str = Header(None)):
     _check_admin(x_admin_key)
     ok = reject_tesis(tesis_id, approved_by="admin")
@@ -80,7 +89,7 @@ async def admin_reject_tesis(tesis_id: int, x_admin_key: str = Header(None)):
     return {"ok": True}
 
 
-@router.get("/admin/{tesis_id}")
+@admin_router.get("/{tesis_id}")
 async def admin_get_tesis(tesis_id: int, x_admin_key: str = Header(None)):
     _check_admin(x_admin_key)
     t = get_tesis_by_id(tesis_id)
@@ -89,7 +98,7 @@ async def admin_get_tesis(tesis_id: int, x_admin_key: str = Header(None)):
     return t
 
 
-@router.post("/admin/create")
+@admin_router.post("/create")
 async def admin_create_tesis(req: CreateTesisRequest, x_admin_key: str = Header(None)):
     """Creación manual — sustituye al flujo antiguo de añadir una fila al
     Google Sheet. Por defecto queda 'pending' igual que las del agente,

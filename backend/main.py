@@ -34,50 +34,6 @@ if settings.yfinance_proxy_url:
     print(f"[Startup] Proxy de yfinance activado para toda la terminal (parcheado en yf.Ticker)")
 else:
     print(f"[Startup] Sin proxy configurado para yfinance (yfinance_proxy_url vacío)")
-
-# "Precalentar" el crumb de sesión de yfinance con UNA sola llamada síncrona
-# antes de que arranque nada concurrente (ThreadPoolExecutor en market_service,
-# cartera_service, etc.). yfinance cachea el crumb una vez por proceso, y si dos
-# hilos lo piden a la vez en el primer arranque, uno puede pisar la caché
-# compartida con un crumb inválido (el propio texto de un 429), contaminando
-# TODAS las peticiones del proceso a partir de ahí — ver conversación 16/07/2026
-# sobre el bloqueo de Yahoo/proxy residencial. Esto evita la carrera por completo.
-# Precalentado del crumb CON reintentos y reseteo del singleton interno
-# de yfinance (YfData) — ver conversación 16/07/2026. Si el primer intento
-# recibe un 429 de Yahoo, yfinance cachea ese error como si fuera un crumb
-# válido en YfData()._crumb, y lo reutiliza para SIEMPRE dentro de este
-# proceso — reintentar sin más no sirve de nada, hay que resetear ese
-# atributo a mano antes de cada reintento para que yfinance pida uno nuevo.
-try:
-    import yfinance as _yf_warmup
-    import yfinance.data as _yfdata_warmup
-    import time as _time_warmup
-
-    _YF_WARMUP_MAX_INTENTOS = 5
-    _YF_WARMUP_ESPERA_SEGUNDOS = 5
-
-    for _intento in range(1, _YF_WARMUP_MAX_INTENTOS + 1):
-        try:
-            _h = _yf_warmup.Ticker("SPY").history(period="1d")
-            if _h is not None and len(_h) > 0:
-                print(f"[Startup] Crumb de yfinance precalentado correctamente (intento {_intento}/{_YF_WARMUP_MAX_INTENTOS})")
-                break
-            raise ValueError("history() devolvió vacío")
-        except Exception as _e:
-            print(f"[Startup] Intento {_intento}/{_YF_WARMUP_MAX_INTENTOS} de precalentar crumb falló ({type(_e).__name__}: {_e})")
-            try:
-                _d = _yfdata_warmup.YfData()
-                _d._crumb = None
-                _d._cookie = None
-            except Exception:
-                pass
-            if _intento < _YF_WARMUP_MAX_INTENTOS:
-                _time_warmup.sleep(_YF_WARMUP_ESPERA_SEGUNDOS)
-    else:
-        print(f"[Startup] No se pudo precalentar el crumb tras {_YF_WARMUP_MAX_INTENTOS} intentos — se reintentará en la primera petición real")
-except Exception as _e:
-    print(f"[Startup] Fallo inesperado en el precalentado de yfinance: {type(_e).__name__}: {_e}")
-
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     task1 = asyncio.create_task(ws.broadcast_loop())
@@ -133,6 +89,7 @@ app.include_router(rsu_algoritmo.router,dependencies=rl)
 app.include_router(research.router,     dependencies=rl)
 app.include_router(newsfeed.router,     dependencies=rl)
 app.include_router(tesis.router,        dependencies=paid)
+app.include_router(tesis.admin_router)  # solo X-Admin-Key, ver tesis.py
 app.include_router(spxl.router,         dependencies=rl)
 app.include_router(rsrw.router,         dependencies=rl)
 app.include_router(ws.router)
