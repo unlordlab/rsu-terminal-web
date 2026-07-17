@@ -64,9 +64,14 @@ PCT_FROM_HIGH_MAX = -8
 # ── Límites por proveedor (ajustar si Google/Anthropic cambian sus cuotas) ──
 LIMITS = {
     "gemini": {
-        "max_requests_per_day": 1400,   # margen bajo el límite real (~1500/día)
+        # Las fuentes públicas no coinciden exactamente entre sí sobre la
+        # cuota diaria real de gemini-2.5-flash a fecha de hoy (17/07/2026)
+        # -- varía entre 250 y 1.500/dia segun la fuente. Se deja un valor
+        # conservador; confirma el numero real en ai.google.dev/pricing
+        # antes de asumir que hay mas margen del que realmente hay.
+        "max_requests_per_day": 200,
         "max_output_tokens": 16000,     # informe pide 4.000-6.500 palabras (~9.000 tokens)
-        "pausa_entre_tickers_seg": 8,
+        "pausa_entre_tickers_seg": 10,
     },
     "claude": {
         "max_requests_per_day": 200,    # límite propio, conservador — es de pago
@@ -171,9 +176,13 @@ def _generar_con_gemini(ticker: str) -> str:
         intentos += 1
         try:
             response = client.models.generate_content(
-                model="gemini-2.5-pro",  # el tier "pro", no "flash" — el prompt es
-                                          # largo y exigente, flash pierde fidelidad
-                                          # a instrucciones tan detalladas
+                model="gemini-2.5-flash",  # NO uses "pro" — su tier gratuito es de
+                                            # solo 50-100 peticiones/dia, no sostenible.
+                                            # Flash es el modelo con cuota generosa de
+                                            # verdad (los ~1.500/dia). Se pierde algo de
+                                            # fidelidad a un prompt tan largo y exigente
+                                            # frente a Pro/Claude, es el precio de ser
+                                            # gratis y sostenible.
                 contents=prompt,
                 config=types.GenerateContentConfig(
                     tools=[
