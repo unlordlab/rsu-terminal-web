@@ -1,0 +1,24 @@
+[data-theme="xtal"] {
+  --color-bg:        #0b120c;
+  --color-surface:   #121b13;
+  --color-surface2:  #1a271b;
+  --color-border:    rgba(154, 235, 60, 0.18);
+  --color-accent:    #9BEB3C;
+  --color-secondary: #5FE0A0;
+  --color-text:      #E4F5D8;
+  --color-muted:     #5F7A56;
+
+  --font-mono:  'Share Tech Mono', monospace;
+  --font-size:  14px;
+
+  --scanlines: repeating-linear-gradient(
+    0deg,
+    rgba(0,0,0,0.16) 0px,
+    rgba(0,0,0,0.16) 1px,
+    transparent 1px,
+    transparent 2px
+  );
+
+  --glow-accent: 0 0 10px rgba(155, 235, 60, 0.45);
+  --glow-text:   0 0 6px rgba(155, 235, 60, 0.28);
+}
