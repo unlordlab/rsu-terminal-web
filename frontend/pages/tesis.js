@@ -3,6 +3,47 @@ import { errorMessage } from '/core/ui.js';
 let currentPage  = 1;
 let activeRating = 'Todos';
 let searchQuery  = '';
+
+let _mdStylesInjected = false;
+
+function ensureMarkdownStyles() {
+    if (_mdStylesInjected) return;
+    _mdStylesInjected = true;
+    const style = document.createElement('style');
+    style.textContent = `
+        .tesis-markdown h1, .tesis-markdown h2, .tesis-markdown h3 {
+            color: var(--color-accent); margin: 1.5rem 0 0.75rem; letter-spacing: 0.03em;
+        }
+        .tesis-markdown h1 { font-size: 18px; } .tesis-markdown h2 { font-size: 15px; } .tesis-markdown h3 { font-size: 13px; }
+        .tesis-markdown p { margin: 0.6rem 0; }
+        .tesis-markdown strong { color: var(--color-text); }
+        .tesis-markdown ul, .tesis-markdown ol { padding-left: 1.4rem; margin: 0.5rem 0; }
+        .tesis-markdown table { border-collapse: collapse; width: 100%; margin: 1rem 0; font-size: 12px; }
+        .tesis-markdown th, .tesis-markdown td {
+            border: 1px solid var(--color-border); padding: 6px 10px; text-align: left;
+        }
+        .tesis-markdown th { color: var(--color-accent); background: var(--color-surface2); }
+        .tesis-markdown blockquote {
+            border-left: 2px solid var(--color-accent); margin: 0.75rem 0; padding: 0.4rem 0 0.4rem 0.9rem;
+            color: var(--color-muted); background: var(--color-surface2);
+        }
+        .tesis-markdown code { background: var(--color-surface2); padding: 1px 5px; border-radius: 3px; font-family: var(--font-mono); }
+        .tesis-markdown hr { border: none; border-top: 1px solid var(--color-border); margin: 1.5rem 0; }
+    `;
+    document.head.appendChild(style);
+}
+
+function renderMarkdown(text) {
+    ensureMarkdownStyles();
+    try {
+        if (window.marked) return window.marked.parse(text);
+    } catch (e) {
+        console.error('Error renderizando markdown:', e);
+    }
+    // Fallback si marked.js no cargó por lo que sea: texto plano con saltos de línea
+    const escaped = text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    return '<pre style="white-space:pre-wrap;font-family:var(--font-mono);">' + escaped + '</pre>';
+}
 let allRatings   = ['Todos'];
 
 export async function render(container) {
@@ -265,7 +306,9 @@ function renderDetail(data) {
         + '<div style="color:var(--color-accent);font-size:12px;letter-spacing:0.08em;margin-bottom:0.75rem;">📄 DOCUMENTO COMPLETO</div>'
         + (data.url_doc
             ? '<iframe src="' + data.url_doc + '" style="width:100%;height:820px;border:none;border-radius:var(--radius);" allowfullscreen></iframe>'
-            : '<div style="color:var(--color-muted);font-size:12px;padding:1rem;text-align:center;">⚠ Sin documento disponible.</div>')
+            : data.contenido
+                ? '<div class="tesis-markdown" style="color:var(--color-text);font-size:13px;line-height:1.7;max-width:100%;overflow-x:auto;">' + renderMarkdown(data.contenido) + '</div>'
+                : '<div style="color:var(--color-muted);font-size:12px;padding:1rem;text-align:center;">⚠ Sin documento disponible.</div>')
         + '</div>'
 
         // Footer
