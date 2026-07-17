@@ -27,6 +27,7 @@ async function keyFetch(fullPath, options = {}) {
 const adminFetch     = (path, options) => keyFetch('/api/v1/auth' + path, options);
 const analyticsFetch = (path, options) => keyFetch('/api/v1/analytics' + path, options);
 const communityFetch = (path, options) => keyFetch('/api/v1/community' + path, options);
+const tesisFetch      = (path, options) => keyFetch('/api/v1/tesis' + path, options);
 
 const TIER_LABELS = { free: 'FREE', tier1: 'TIER 1', tiers: 'TIER S' };
 
@@ -64,6 +65,7 @@ export async function render(container) {
                 <button data-tab="usuarios" class="admin-tab-btn">USUARIOS</button>
                 <button data-tab="metricas" class="admin-tab-btn">MÉTRICAS</button>
                 <button data-tab="peticiones" class="admin-tab-btn">PETICIONES</button>
+                <button data-tab="tesis" class="admin-tab-btn">TESIS PENDIENTES</button>
                 <button data-tab="feedback" class="admin-tab-btn">FEEDBACK</button>
                 <button data-tab="temas" class="admin-tab-btn">TEMAS</button>
             </div>
@@ -107,6 +109,8 @@ export async function render(container) {
             await renderThemeMaker(content);
         } else if (activeTab === 'peticiones') {
             await renderHealthPanel(content);
+        } else if (activeTab === 'tesis') {
+            await renderTesisPanel(content);
         } else {
             await renderMetricsPanel(content);
         }
@@ -515,6 +519,96 @@ async function renderHealthPanel(content) {
     content.querySelector('#health-hours').addEventListener('change', (e) => {
         healthHours = parseInt(e.target.value, 10) || 24;
         renderHealthPanel(content);
+    });
+}
+
+async function renderTesisPanel(content) {
+    let data;
+    try {
+        data = await tesisFetch('/admin/pending');
+    } catch (err) {
+        if (err.isAuthError) sessionStorage.removeItem(ADMIN_KEY_STORAGE);
+        renderKeyPrompt(content, () => renderTesisPanel(content));
+        if (err.isAuthError) content.querySelector('#admin-key-error').textContent = '✗ Clave de administrador inválida';
+        return;
+    }
+
+    const items = data.items || [];
+
+    if (!items.length) {
+        content.innerHTML = `
+            <p style="color:var(--color-muted);font-size:13px;">
+                No hay tesis pendientes de revisión ahora mismo. 🎉
+            </p>
+        `;
+        return;
+    }
+
+    content.innerHTML = `
+        <p style="color:var(--color-muted);font-size:11px;margin-bottom:1rem;">
+            ${items.length} tesis a la espera de revisión. Se generan automáticamente (agente Bull) o se crean a mano — ninguna se publica sin tu aprobación explícita.
+        </p>
+        <div id="tesis-pending-list" style="display:flex;flex-direction:column;gap:12px;"></div>
+    `;
+
+    const list = content.querySelector('#tesis-pending-list');
+
+    items.forEach(item => {
+        const card = document.createElement('div');
+        card.style.cssText = `
+            background:var(--color-surface);border:1px solid var(--color-border);
+            border-radius:var(--radius-lg);padding:1rem;
+        `;
+        const fecha = new Date(item.created_at * 1000).toLocaleString('es-ES');
+        const fuenteLabel = item.fuente === 'agente_bull' ? '🐂 Agente Bull' : '✍️ Manual';
+
+        card.innerHTML = `
+            <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px;flex-wrap:wrap;">
+                <div>
+                    <div style="font-size:14px;color:var(--color-text);font-weight:600;">${item.ticker} · ${item.rating}</div>
+                    <div style="font-size:12px;color:var(--color-muted);margin-top:2px;">${item.titulo || '(sin título)'}</div>
+                    <div style="font-size:11px;color:var(--color-muted);margin-top:4px;">${fuenteLabel} · ${fecha}${item.criterio ? ' · ' + item.criterio : ''}</div>
+                </div>
+                <div style="display:flex;gap:6px;flex-shrink:0;">
+                    <button class="tesis-toggle-btn" data-id="${item.id}" style="background:none;border:1px solid var(--color-border);color:var(--color-muted);padding:4px 10px;border-radius:var(--radius);cursor:pointer;font-family:var(--font-mono);font-size:11px;">VER</button>
+                    <button class="tesis-approve-btn" data-id="${item.id}" style="background:none;border:1px solid #3ecf8e;color:#3ecf8e;padding:4px 10px;border-radius:var(--radius);cursor:pointer;font-family:var(--font-mono);font-size:11px;">APROBAR</button>
+                    <button class="tesis-reject-btn" data-id="${item.id}" style="background:none;border:1px solid #e05d5d;color:#e05d5d;padding:4px 10px;border-radius:var(--radius);cursor:pointer;font-family:var(--font-mono);font-size:11px;">RECHAZAR</button>
+                </div>
+            </div>
+            <div class="tesis-full-content" data-id="${item.id}" style="display:none;margin-top:12px;padding-top:12px;border-top:1px solid var(--color-border);white-space:pre-wrap;font-size:12px;line-height:1.6;color:var(--color-text);max-height:500px;overflow-y:auto;"></div>
+        `;
+        list.appendChild(card);
+
+        card.querySelector('.tesis-toggle-btn').addEventListener('click', (e) => {
+            const box = card.querySelector('.tesis-full-content');
+            const isOpen = box.style.display !== 'none';
+            box.style.display = isOpen ? 'none' : 'block';
+            e.target.textContent = isOpen ? 'VER' : 'OCULTAR';
+            if (!isOpen && !box.dataset.loaded) {
+                box.textContent = item.contenido;
+                box.dataset.loaded = '1';
+            }
+        });
+
+        card.querySelector('.tesis-approve-btn').addEventListener('click', async () => {
+            if (!confirm(`¿Aprobar y publicar la tesis de ${item.ticker}?`)) return;
+            try {
+                await tesisFetch(`/admin/${item.id}/approve`, { method: 'POST' });
+                renderTesisPanel(content);
+            } catch (err) {
+                alert('Error al aprobar: ' + err.message);
+            }
+        });
+
+        card.querySelector('.tesis-reject-btn').addEventListener('click', async () => {
+            if (!confirm(`¿Descartar la tesis de ${item.ticker}? No se puede deshacer.`)) return;
+            try {
+                await tesisFetch(`/admin/${item.id}/reject`, { method: 'POST' });
+                renderTesisPanel(content);
+            } catch (err) {
+                alert('Error al rechazar: ' + err.message);
+            }
+        });
     });
 }
 

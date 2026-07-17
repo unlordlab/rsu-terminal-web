@@ -18,6 +18,8 @@ requests==2.32.3
 pandas==2.2.3
 numpy==1.26.4
 yfinance==0.2.66
+anthropic==0.117.0  # agente Bull (tesis) — ver conversacion 17/07/2026
+google-genai==2.12.1  # agente Bull, modo de prueba gratuito (Gemini)
 xlrd==2.0.2  # lectura de .xls antiguo (dataset CAPE de Shiller, Yale)
 
 # Timezone

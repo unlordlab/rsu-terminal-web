@@ -31,6 +31,8 @@ class Settings(BaseSettings):
     alpha_vantage_api_key: str = ""
     groq_api_key: str = ""
     openrouter_api_key: str = ""
+    anthropic_api_key: str = ""  # agente Bull (tesis) — ver conversacion 17/07/2026
+    gemini_api_key: str = ""     # agente Bull, modo de prueba gratuito (Google AI Studio)
     # Proxy para TODAS las llamadas a yfinance (Algoritmo, Cartera, Scanner,
     # Options Flow, Research, Market — cada sitio que use yfinance en toda
     # la terminal) — ver conversación 16/07/2026 sobre bloqueos de Yahoo a
