@@ -30,5 +30,5 @@
    reescribir toda la base de código, se escala la app entera con zoom
    (afecta al renderizado completo, no solo a lo que hereda la variable). */
 [data-theme="isopropophlex"] #app {
-  zoom: 2;
+  zoom: 1.35;
 }
