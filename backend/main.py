@@ -8,7 +8,7 @@ from config import settings
 from auth import verify_token, require_tier
 from middleware.rate_limit import rate_limit
 from middleware.analytics import AnalyticsMiddleware
-from routers import auth, market, cartera, canslim, rsu_algoritmo, research, newsfeed, tesis, spxl, rsrw, ws, options, btc_stratum, insider, scanner, analytics, watchlist, community, chat, academy_review
+from routers import auth, market, cartera, canslim, rsu_algoritmo, research, newsfeed, tesis, spxl, rsrw, ws, options, btc_stratum, insider, scanner, analytics, watchlist, community, chat, academy_review, laia_ethics
 
 # Proxy global para yfinance — se aplica UNA vez aquí y afecta a TODAS las
 # llamadas a yfinance en cualquier archivo del backend (Algoritmo, Cartera,
@@ -91,6 +91,7 @@ app.include_router(newsfeed.router,     dependencies=rl)
 app.include_router(tesis.router,        dependencies=paid)
 app.include_router(tesis.admin_router)  # solo X-Admin-Key, ver tesis.py
 app.include_router(academy_review.router)  # solo X-Admin-Key, agente Elia
+app.include_router(laia_ethics.router)  # solo X-Admin-Key, historico Laia
 app.include_router(spxl.router,         dependencies=rl)
 app.include_router(rsrw.router,         dependencies=rl)
 app.include_router(ws.router)

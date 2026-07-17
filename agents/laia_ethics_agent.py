@@ -36,6 +36,7 @@ from config import settings  # noqa: E402
 from services.tesis_service import get_approved_bull_tesis_last_days  # noqa: E402
 from services.cartera_service import get_cartera  # noqa: E402
 from services.telegram_service import enviar_telegram_foto, enviar_telegram  # noqa: E402
+from services.laia_ethics_service import guardar_veredicto  # noqa: E402
 
 LAIA_PHOTO_PATH = os.path.join(os.path.dirname(__file__), '..', 'frontend', 'assets', 'team', 'laia.jpg')
 
@@ -169,6 +170,12 @@ def main():
     else:
         print(f"[Laia] No se encontró la foto en {LAIA_PHOTO_PATH} — enviando solo texto")
         ok = enviar_telegram(texto)
+
+    try:
+        guardar_veredicto(texto, hype_result, sesgo_result, len(candidatos), ok)
+        print("[Laia] Veredicto guardado en el histórico.")
+    except Exception as e:
+        print(f"[Laia] No se pudo guardar el veredicto en el histórico ({type(e).__name__}: {e})")
 
     print("[Laia] Veredicto enviado a Telegram." if ok else "[Laia] No se pudo enviar el veredicto.")
 

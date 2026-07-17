@@ -29,6 +29,7 @@ const analyticsFetch = (path, options) => keyFetch('/api/v1/analytics' + path, o
 const communityFetch = (path, options) => keyFetch('/api/v1/community' + path, options);
 const tesisFetch      = (path, options) => keyFetch('/api/v1/tesis' + path, options);
 const academyReviewFetch = (path, options) => keyFetch('/api/v1/academy-review' + path, options);
+const laiaFetch = (path, options) => keyFetch('/api/v1/laia' + path, options);
 
 const TIER_LABELS = { free: 'FREE', tier1: 'TIER 1', tiers: 'TIER S' };
 
@@ -68,6 +69,7 @@ export async function render(container) {
                 <button data-tab="peticiones" class="admin-tab-btn">PETICIONES</button>
                 <button data-tab="tesis" class="admin-tab-btn">TESIS PENDIENTES</button>
                 <button data-tab="academy" class="admin-tab-btn">ACADEMY PENDIENTE</button>
+                <button data-tab="laia" class="admin-tab-btn">⚖️ LAIA</button>
                 <button data-tab="feedback" class="admin-tab-btn">FEEDBACK</button>
                 <button data-tab="temas" class="admin-tab-btn">TEMAS</button>
             </div>
@@ -115,6 +117,8 @@ export async function render(container) {
             await renderTesisPanel(content);
         } else if (activeTab === 'academy') {
             await renderAcademyReviewPanel(content);
+        } else if (activeTab === 'laia') {
+            await renderLaiaPanel(content);
         } else {
             await renderMetricsPanel(content);
         }
@@ -861,6 +865,66 @@ function renderAcademyPreview(parsed, tipo) {
     return renderAcademySection(parsed) + (parsed.justificacion
         ? `<p style="color:var(--color-muted);font-size:11px;font-style:italic;margin-top:1rem;">Por qué Elia propone esto: ${parsed.justificacion}</p>`
         : '');
+}
+
+async function renderLaiaPanel(content) {
+    let data;
+    try {
+        data = await laiaFetch('/verdicts?limit=30');
+    } catch (err) {
+        if (err.isAuthError) sessionStorage.removeItem(ADMIN_KEY_STORAGE);
+        renderKeyPrompt(content, () => renderLaiaPanel(content));
+        if (err.isAuthError) content.querySelector('#admin-key-error').textContent = '✗ Clave de administrador inválida';
+        return;
+    }
+
+    const items = data.items || [];
+
+    if (!items.length) {
+        content.innerHTML = `
+            <p style="color:var(--color-muted);font-size:13px;">
+                Laia todavía no ha emitido ningún veredicto. Corre cada domingo — vuelve cuando haya pasado al menos una semana.
+            </p>
+        `;
+        return;
+    }
+
+    content.innerHTML = `
+        <p style="color:var(--color-muted);font-size:11px;margin-bottom:1rem;">
+            Histórico de solo lectura — Laia no pide aprobación, sus veredictos ya se enviaron a Telegram al generarse. Esto es solo el registro para consultar con el tiempo.
+        </p>
+        <div id="laia-verdicts-list" style="display:flex;flex-direction:column;gap:12px;"></div>
+    `;
+
+    const list = content.querySelector('#laia-verdicts-list');
+
+    items.forEach(item => {
+        const card = document.createElement('div');
+        card.style.cssText = `
+            background:var(--color-surface);border:1px solid var(--color-border);
+            border-radius:var(--radius-lg);padding:1rem;
+        `;
+        const fecha = new Date(item.created_at * 1000).toLocaleString('es-ES');
+        const sesgoColor = item.sesgo_detectado ? '#e05d5d' : 'var(--color-muted)';
+        const sesgoLabel = item.sesgo_detectado ? '⚠ Sesgo detectado' : 'Sin sesgo detectado';
+        const envioLabel = item.enviado_ok ? '📤 Enviado a Telegram' : '✗ Fallo al enviar';
+
+        let hallazgos = [];
+        try { hallazgos = JSON.parse(item.hype_hallazgos || '[]'); } catch (e) {}
+
+        card.innerHTML = `
+            <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px;flex-wrap:wrap;margin-bottom:8px;">
+                <div style="font-size:11px;color:var(--color-muted);">${fecha} · ${item.tesis_auditadas} tesis auditadas</div>
+                <div style="display:flex;gap:10px;font-size:10px;">
+                    <span style="color:${sesgoColor};">${sesgoLabel}</span>
+                    <span style="color:var(--color-muted);">${envioLabel}</span>
+                </div>
+            </div>
+            <p style="color:var(--color-text);font-size:13px;line-height:1.6;white-space:pre-wrap;margin:0 0 8px;">${item.texto}</p>
+            ${hallazgos.length ? `<div style="font-size:10px;color:var(--color-muted);">Hype detectado en: ${hallazgos.map(h => h.ticker).join(', ')}</div>` : ''}
+        `;
+        list.appendChild(card);
+    });
 }
 
 function statCard(label, value) {
