@@ -46,6 +46,7 @@ class Settings(BaseSettings):
     # quiera publicar (para un canal, empieza por "-100...").
     telegram_bot_token: str = ""
     telegram_chat_id: str = ""
+    terminal_base_url: str = "http://178.104.148.117"  # ver conversacion 17/07/2026, sin dominio propio todavia
 
     class Config:
         env_file = ".env"

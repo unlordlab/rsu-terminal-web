@@ -34,6 +34,26 @@ def enviar_telegram(mensaje: str) -> bool:
 
 
 GAEL_PHOTO_PATH = os.path.join(os.path.dirname(__file__), "..", "..", "frontend", "assets", "team", "gael.jpg")
+GAEL_PHOTO_SMALL_PATH = os.path.join(os.path.dirname(__file__), "..", "gael_telegram_small.jpg")
+
+
+def _get_gael_photo_small() -> str:
+    """Genera (una sola vez, se cachea en disco) una copia reducida de la
+    foto de Gael para Telegram -- la original es un retrato grande
+    (765x1024) y Telegram la mostraba ocupando toda la pantalla. Devuelve
+    la ruta de la copia pequeña, o la original si Pillow falla por
+    cualquier motivo (mejor una foto grande que ninguna)."""
+    if os.path.exists(GAEL_PHOTO_SMALL_PATH):
+        return GAEL_PHOTO_SMALL_PATH
+    try:
+        from PIL import Image
+        img = Image.open(GAEL_PHOTO_PATH)
+        img.thumbnail((320, 420))  # mantiene proporción, ~1/3 del tamaño original
+        img.save(GAEL_PHOTO_SMALL_PATH, "JPEG", quality=85)
+        return GAEL_PHOTO_SMALL_PATH
+    except Exception as e:
+        print(f"[Telegram] No se pudo redimensionar la foto de Gael ({type(e).__name__}: {e}), usando la original")
+        return GAEL_PHOTO_PATH
 
 
 def enviar_telegram_foto(caption: str, photo_path: str) -> bool:
@@ -122,7 +142,9 @@ def anunciar_mejor_tesis_semana(candidatos: list) -> bool:
         f"has elegido *{elegida['ticker']}* como tu favorita ({justificacion}). Escribe UN mensaje corto "
         f"(3-4 frases máximo) para el grupo de Telegram de la comunidad, con humor, en tu personaje de "
         f"optimista compulsivo, presentando esta como tu 'pick de la semana'. Menciona brevemente el "
-        f"título: '{elegida.get('titulo', '')}'. NO uses hashtags ni emojis en exceso (máximo 1-2). "
+        f"título: '{elegida.get('titulo', '')}'. Invita a la gente a leer el informe completo en la "
+        f"sección Tesis de la terminal, buscando el ticker {elegida['ticker']}. NO uses hashtags ni "
+        f"emojis en exceso (máximo 1-2), NO incluyas ningún enlace ni URL tú mismo (se añade aparte). "
         f"Responde SOLO con el mensaje, sin comillas ni explicación."
     )
     texto = f"🐂 *Pick de la semana de Gael:* {elegida['ticker']} — {elegida.get('titulo', '')}"
@@ -148,29 +170,7 @@ def anunciar_mejor_tesis_semana(candidatos: list) -> bool:
 
     if not os.path.exists(GAEL_PHOTO_PATH):
         print(f"[Telegram] No se encontró la foto de Gael en {GAEL_PHOTO_PATH} — enviando solo texto")
-        return enviar_telegram(texto)
-    return enviar_telegram_foto(texto, GAEL_PHOTO_PATH)
-    """Envía una foto con pie de texto vía la API de bots (sendPhoto) —
-    usado por el agente Bull para anunciar tesis aprobadas con la imagen
-    de Gael. Mismo patrón de configuración que enviar_telegram()."""
-    from config import settings
-    token = getattr(settings, "telegram_bot_token", "")
-    chat_id = getattr(settings, "telegram_chat_id", "")
-    if not token or not chat_id:
-        print("[Telegram] Sin TELEGRAM_BOT_TOKEN/TELEGRAM_CHAT_ID configurados — foto no enviada")
-        return False
-    try:
-        with open(photo_path, "rb") as f:
-            r = requests.post(
-                f"https://api.telegram.org/bot{token}/sendPhoto",
-                data={"chat_id": chat_id, "caption": caption, "parse_mode": "Markdown"},
-                files={"photo": f},
-                timeout=15
-            )
-        if r.status_code != 200:
-            print(f"[Telegram] sendPhoto respondió HTTP {r.status_code}: {r.text[:200]}")
-            return False
-        return True
-    except Exception as e:
-        print(f"[Telegram] Error enviando foto: {type(e).__name__}: {e}")
-        return False
+        texto_final = f"{texto}\n\n📈 Léela entera en la sección Tesis: {settings.terminal_base_url}/tesis"
+        return enviar_telegram(texto_final)
+    texto_final = f"{texto}\n\n📈 Léela entera en la sección Tesis: {settings.terminal_base_url}/tesis"
+    return enviar_telegram_foto(texto_final, _get_gael_photo_small())
