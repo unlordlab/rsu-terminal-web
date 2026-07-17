@@ -36,6 +36,33 @@ def enviar_telegram(mensaje: str) -> bool:
 GAEL_PHOTO_PATH = os.path.join(os.path.dirname(__file__), "..", "..", "frontend", "assets", "team", "gael.jpg")
 
 
+def enviar_telegram_foto(caption: str, photo_path: str) -> bool:
+    """Envía una foto con pie de texto vía la API de bots (sendPhoto) —
+    usado por Gael para anunciar tesis con su imagen. Mismo patrón de
+    configuración que enviar_telegram()."""
+    from config import settings
+    token = getattr(settings, "telegram_bot_token", "")
+    chat_id = getattr(settings, "telegram_chat_id", "")
+    if not token or not chat_id:
+        print("[Telegram] Sin TELEGRAM_BOT_TOKEN/TELEGRAM_CHAT_ID configurados — foto no enviada")
+        return False
+    try:
+        with open(photo_path, "rb") as f:
+            r = requests.post(
+                f"https://api.telegram.org/bot{token}/sendPhoto",
+                data={"chat_id": chat_id, "caption": caption, "parse_mode": "Markdown"},
+                files={"photo": f},
+                timeout=15
+            )
+        if r.status_code != 200:
+            print(f"[Telegram] sendPhoto respondió HTTP {r.status_code}: {r.text[:200]}")
+            return False
+        return True
+    except Exception as e:
+        print(f"[Telegram] Error enviando foto: {type(e).__name__}: {e}")
+        return False
+
+
 def anunciar_mejor_tesis_semana(candidatos: list) -> bool:
     """Elige la mejor tesis de Bull aprobada en la última semana y la
     anuncia en Telegram con la foto de Gael -- pensado para correr una
