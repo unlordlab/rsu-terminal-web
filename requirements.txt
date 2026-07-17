@@ -26,3 +26,4 @@ xlrd==2.0.2  # lectura de .xls antiguo (dataset CAPE de Shiller, Yale)
 
 # Timezone
 pytz==2024.1
+Pillow==12.3.0  # redimensionar la foto de Gael para Telegram
