@@ -28,6 +28,7 @@ const ROUTES = {
     '/academy':    () => import('/pages/academy.js'),
     '/roadmap':    () => import('/pages/roadmap.js'),
     '/tesis':      () => import('/pages/tesis.js'),
+    '/equipo':     () => import('/pages/equipo.js'),
     '/algoritmo':  () => import('/pages/algoritmo.js'),
     '/login':      () => import('/pages/login.js'),
     '/register':   () => import('/pages/register.js'),
@@ -239,7 +240,7 @@ function trackPageView(cleanPath) {
 export function navigate(path, options = {}) {
     const isPopState = !!options.isPopState;
     const cleanPath = path.split('?')[0];
-    const protectedRoutes = ['/', '/manifiesto', '/market', '/cartera', '/rsrw', '/scanner', '/watchlist', '/community', '/newsfeed', '/spxl', '/btc-stratum', '/roadmap', '/academy', '/tesis', '/options', '/research', '/disclaimer', '/canslim', '/algoritmo', '/insider', '/admin', '/mobile'];
+    const protectedRoutes = ['/', '/manifiesto', '/market', '/cartera', '/rsrw', '/scanner', '/watchlist', '/community', '/newsfeed', '/spxl', '/btc-stratum', '/roadmap', '/academy', '/tesis', '/equipo', '/options', '/research', '/disclaimer', '/canslim', '/algoritmo', '/insider', '/admin', '/mobile'];
     const needsAuth = protectedRoutes.includes(cleanPath);
 
     if (needsAuth && isAuthenticated()) trackPageView(cleanPath);
