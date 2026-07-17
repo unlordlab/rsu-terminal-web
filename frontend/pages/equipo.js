@@ -29,11 +29,11 @@ const TEAM = [
     {
         img: '/assets/team/laia.jpg',
         nombre: 'Laia',
-        rol: 'Sin asignar',
-        icon: '🕐',
-        bio: 'La última en llegar al equipo. Todavía no tiene función asignada — de momento observa cómo trabajan Gael y Elia y toma nota. Podría acabar en cualquier sitio: quizás el Abogado del Diablo que le lleve la contraria a Gael, quizás algo completamente distinto.',
-        estado: 'A LA ESPERA',
-        estadoColor: '#e0b13e',
+        rol: 'Comité de Ética — cree en serio en el Manifiesto',
+        icon: '⚖️',
+        bio: 'Activista, utópica, con un punto de mala leche y principios insobornables. No genera nada — cuestiona lo que ya existe, incluido el criterio de unlord. Audita el lenguaje de hype en las tesis de Gael y si las aprobaciones se sesgan hacia la comodidad. No le debe lealtad a nadie del equipo.',
+        estado: 'EN SERVICIO',
+        estadoColor: '#3ecf8e',
     },
 ];
 
