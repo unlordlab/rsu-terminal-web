@@ -214,15 +214,52 @@ def _fetch_sparkline_single(ticker: str, days: int) -> dict | None:
         return None
 
 def fetch_sparklines(tickers: list, days: int = 30) -> dict:
+    now = time.time()
     result = {}
-    futures = {yf_executor.submit(_fetch_sparkline_single, t, days): t for t in tickers}
-    for fut, t in futures.items():
-        try:
-            r = fut.result(timeout=10)
-            if r:
-                result[t] = r
-        except Exception:
-            pass
+    stale = []
+    for t in tickers:
+        key = f"{t}:{days}"
+        cached = _sparkline_cache.get(key)
+        if cached and (now - cached["updated"]) < _SPARKLINE_TTL:
+            result[t] = cached
+        else:
+            stale.append(t)
+
+    if not stale:
+        return result
+
+    def _download_and_extract():
+        import yfinance as yf
+        df = yf.download(tickers=stale, period=f"{days}d", interval="1d",
+                          group_by="ticker", threads=False, progress=False)
+        out = {}
+        for t in stale:
+            try:
+                # Con un solo ticker, yf.download no usa MultiIndex de columnas
+                closes_series = df[t]["Close"] if len(stale) > 1 else df["Close"]
+                closes = [round(float(v), 4) for v in closes_series.dropna().tolist()]
+                if not closes:
+                    continue
+                entry = {"ticker": t, "closes": closes, "updated": now}
+                _sparkline_cache[f"{t}:{days}"] = entry
+                out[t] = entry
+            except Exception:
+                pass
+        return out
+
+    try:
+        result.update(yf_executor.submit(_download_and_extract).result())
+    except Exception as e:
+        print(f"[Cartera] Batch sparklines falló ({type(e).__name__}: {e}) — usando fallback ticker a ticker")
+        futures = {yf_executor.submit(_fetch_sparkline_single, t, days): t for t in stale}
+        for fut, t in futures.items():
+            try:
+                r = fut.result(timeout=10)
+                if r:
+                    result[t] = r
+            except Exception:
+                pass
+
     return result
 
 

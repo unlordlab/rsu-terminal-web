@@ -502,10 +502,31 @@ def get_vix_term_structure():
     from services.cache import cache, TTL
     cached = cache.get("market:vix")
     if cached: return cached
-    results = []
-    futures_map = {yf_executor.submit(_fetch_vix_point, item): item for item in VIX_DIRECT}
-    for future in futures_map:
-        results.append(future.result())
+
+    def _download_and_extract():
+        tickers = [item["ticker"] for item in VIX_DIRECT]
+        df = yf.download(tickers=tickers, period="5d", interval="1d",
+                          group_by="ticker", threads=False, progress=False)
+        out = []
+        for item in VIX_DIRECT:
+            try:
+                if item["ticker"] not in df.columns.get_level_values(0):
+                    raise ValueError("Sin datos en el batch")
+                close = df[item["ticker"]]["Close"].dropna()
+                if len(close) == 0:
+                    raise ValueError("Sin datos")
+                price = round(float(close.iloc[-1]), 2)
+                out.append({"label": item["label"], "value": price, "ok": True})
+            except Exception:
+                out.append({"label": item["label"], "value": None, "ok": False})
+        return out
+
+    try:
+        results = yf_executor.submit(_download_and_extract).result()
+    except Exception as e:
+        print(f"[VIX] Batch download falló ({type(e).__name__}: {e}) — usando fallback ticker a ticker")
+        futures_map = {yf_executor.submit(_fetch_vix_point, item): item for item in VIX_DIRECT}
+        results = [future.result() for future in futures_map]
 
     ordered = []
     for item in VIX_DIRECT:
@@ -514,8 +535,11 @@ def get_vix_term_structure():
             ordered.append(match)
 
     valid = [r for r in ordered if r["ok"] and r["value"] is not None]
+    from services.yf_health import log as _yf_log
     if len(valid) < 2:
+        _yf_log("vix", False, "menos de 2 puntos validos del term structure")
         return {"data": [], "timestamp": get_timestamp(), "ok": False, "error": "Sin datos VIX"}
+    _yf_log("vix", True, None)
 
     spot      = valid[0]["value"]
     last      = valid[-1]["value"]
@@ -1376,6 +1400,35 @@ def _check_sector_above_sma50(etf_sym: str):
         pass
     return None
 
+def _check_sectors_above_sma50_batch(tickers: list) -> list:
+    """Version batcheada de _check_sector_above_sma50 — 1 sola llamada
+    yf.download() para los 11 ETFs en vez de 11 objetos Ticker()
+    separados. Devuelve una lista en el mismo orden que `tickers`, con
+    True/False/None (None = sin datos suficientes, igual que antes)."""
+    try:
+        df = yf.download(tickers=tickers, period="100d", interval="1d",
+                          group_by="ticker", threads=False, progress=False)
+        out = []
+        for sym in tickers:
+            try:
+                if sym not in df.columns.get_level_values(0):
+                    out.append(None)
+                    continue
+                close = df[sym]["Close"].dropna()
+                if len(close) < 50:
+                    out.append(None)
+                    continue
+                price = float(close.iloc[-1])
+                sma50 = float(close.rolling(50).mean().iloc[-1])
+                out.append(price > sma50 if sma50 == sma50 else None)
+            except Exception:
+                out.append(None)
+        return out
+    except Exception as e:
+        print(f"[MarketBreadth] Batch download falló ({type(e).__name__}: {e}) — usando fallback ticker a ticker")
+        return [_check_sector_above_sma50(sym) for sym in tickers]
+
+
 def get_market_breadth():
     """
     Amplitud de Mercado (unificado): SMA50/200, Golden/Death Cross, RSI(14) del
@@ -1554,7 +1607,7 @@ def get_market_breadth():
         # null y el frontend lo muestra como N/D en vez de inventar un número.
         if pct_above_sma50 is None:
             above_count, total_checked = 0, 0
-            results = list(yf_executor.map(_check_sector_above_sma50, SECTOR_ETFS_BREADTH))
+            results = yf_executor.submit(_check_sectors_above_sma50_batch, SECTOR_ETFS_BREADTH).result()
             for r in results:
                 if r is not None:
                     total_checked += 1
@@ -1856,13 +1909,45 @@ def _fetch_crypto(item):
         pass
     return {"ticker": item["symbol"], "name": item["name"], "ok": False}
 
+def _extract_crypto_pct(item, df):
+    try:
+        if item["ticker"] not in df.columns.get_level_values(0):
+            raise ValueError("Sin datos en el batch")
+        close = df[item["ticker"]]["Close"].dropna()
+        if len(close) < 2:
+            raise ValueError("Sin datos")
+        current = float(close.iloc[-1])
+        prev = float(close.iloc[-2])
+        change = current - prev
+        pct = (change / prev * 100) if prev else 0
+        return {
+            "ticker": item["symbol"], "name": item["name"],
+            "price": round(current, 4 if current < 1 else 2),
+            "change": round(change, 4 if current < 1 else 2),
+            "pct": round(pct, 2),
+            "ok": True,
+        }
+    except Exception:
+        return {"ticker": item["symbol"], "name": item["name"], "ok": False}
+
+
 def get_crypto_prices():
     from services.cache import cache, TTL
     cached = cache.get("market:crypto")
     if cached:
         return cached
 
-    results = list(yf_executor.map(_fetch_crypto, CRYPTO_TICKERS))
+    def _download_and_extract():
+        tickers = [item["ticker"] for item in CRYPTO_TICKERS]
+        df = yf.download(tickers=tickers, period="2d", interval="1d",
+                          group_by="ticker", threads=False, progress=False)
+        return [_extract_crypto_pct(item, df) for item in CRYPTO_TICKERS]
+
+    try:
+        results = yf_executor.submit(_download_and_extract).result()
+    except Exception as e:
+        print(f"[Cripto] Batch download falló ({type(e).__name__}: {e}) — usando fallback ticker a ticker")
+        results = list(yf_executor.map(_fetch_crypto, CRYPTO_TICKERS))
 
     result = {"ok": True, "data": results, "timestamp": get_timestamp()}
     result = _sanitize_breadth(result)
