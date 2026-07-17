@@ -97,12 +97,61 @@ def _extraer_json(texto: str) -> dict:
     raise ValueError("JSON no balanceado en la respuesta del modelo")
 
 
+_JS_IDENTIFIER_RE = re.compile(r"^[a-zA-Z_$][a-zA-Z0-9_$]*$")
+
+
+def _js_string(s: str) -> str:
+    """Comillas simples, como el resto de academy_lessons.js -- escapa
+    comillas simples y backslashes dentro del texto."""
+    escaped = s.replace("\\", "\\\\").replace("'", "\\'").replace("\n", "\\n")
+    return f"'{escaped}'"
+
+
+def _to_js_literal(obj, indent: int = 0) -> str:
+    """Convierte un dict/list/valor a texto en el mismo estilo que usa
+    academy_lessons.js de verdad: comillas simples, claves sin comillas
+    cuando son identificadores válidos, 4 espacios de indentación --
+    en vez de JSON.dumps() (comillas dobles, claves siempre citadas), que
+    no es el formato que se pega a mano en el archivo real."""
+    pad = "    " * indent
+    pad_inner = "    " * (indent + 1)
+
+    if isinstance(obj, dict):
+        if not obj:
+            return "{}"
+        lines = ["{"]
+        for k, v in obj.items():
+            key = k if _JS_IDENTIFIER_RE.match(k) else _js_string(k)
+            lines.append(f"{pad_inner}{key}: {_to_js_literal(v, indent + 1)},")
+        lines.append(f"{pad}}}")
+        return "\n".join(lines)
+
+    if isinstance(obj, list):
+        if not obj:
+            return "[]"
+        lines = ["["]
+        for v in obj:
+            lines.append(f"{pad_inner}{_to_js_literal(v, indent + 1)},")
+        lines.append(f"{pad}]")
+        return "\n".join(lines)
+
+    if isinstance(obj, str):
+        return _js_string(obj)
+
+    if isinstance(obj, bool):
+        return "true" if obj else "false"
+
+    if obj is None:
+        return "null"
+
+    return str(obj)
+
+
 def _formatear_bloque_js(leccion: dict) -> str:
-    """Convierte el dict a un texto JS listo para pegar en el objeto
-    LESSONS de academy_lessons.js -- no es JSON puro (comillas simples,
-    sin comillas en las claves), coherente con el estilo del resto del
-    archivo."""
-    return json.dumps(leccion, ensure_ascii=False, indent=4)
+    """Convierte el dict al mismo estilo JS que usa academy_lessons.js de
+    verdad -- listo para pegar tal cual, sin tener que retocar comillas
+    ni claves a mano."""
+    return _to_js_literal(leccion)
 
 
 def proponer_leccion_nueva(existentes: list) -> dict:

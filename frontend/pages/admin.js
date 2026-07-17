@@ -527,32 +527,33 @@ async function renderHealthPanel(content) {
 }
 
 async function renderTesisPanel(content) {
-    let data;
+    let pendingData, approvedData;
     try {
-        data = await tesisFetch('/admin/pending');
+        pendingData = await tesisFetch('/admin/pending');
+        approvedData = await tesisFetch('/admin/approved?limit=20');
     } catch (err) {
         if (err.isAuthError) sessionStorage.removeItem(ADMIN_KEY_STORAGE);
         renderKeyPrompt(content, () => renderTesisPanel(content));
-        if (err.isAuthError) content.querySelector('#admin-key-error').textContent = '✗ Clave de administrador inválida';
+        if (err.isAuthError) content.querySelector('#admin-key-error').textContent = '\u2717 Clave de administrador inv\u00e1lida';
         return;
     }
 
-    const items = data.items || [];
-
-    if (!items.length) {
-        content.innerHTML = `
-            <p style="color:var(--color-muted);font-size:13px;">
-                No hay tesis pendientes de revisión ahora mismo. 🎉
-            </p>
-        `;
-        return;
-    }
+    const items = pendingData.items || [];
+    const approved = approvedData.items || [];
 
     content.innerHTML = `
         <p style="color:var(--color-muted);font-size:11px;margin-bottom:1rem;">
-            ${items.length} tesis a la espera de revisión. Se generan automáticamente (agente Bull) o se crean a mano — ninguna se publica sin tu aprobación explícita.
+            ${items.length} tesis a la espera de revisi\u00f3n. Se generan autom\u00e1ticamente (agente Bull) o se crean a mano \u2014 ninguna se publica sin tu aprobaci\u00f3n expl\u00edcita.
         </p>
-        <div id="tesis-pending-list" style="display:flex;flex-direction:column;gap:12px;"></div>
+        <div id="tesis-pending-list" style="display:flex;flex-direction:column;gap:12px;margin-bottom:2rem;">
+            ${items.length ? '' : '<p style="color:var(--color-muted);font-size:13px;">No hay tesis pendientes de revisi\u00f3n ahora mismo. \ud83c\udf89</p>'}
+        </div>
+        <div style="border-top:1px solid var(--color-border);padding-top:1rem;">
+            <div style="color:var(--color-accent);font-size:12px;letter-spacing:0.08em;margin-bottom:0.75rem;">\u2713 APROBADAS RECIENTEMENTE</div>
+            <div id="tesis-approved-list" style="display:flex;flex-direction:column;gap:8px;">
+                ${approved.length ? '' : '<p style="color:var(--color-muted);font-size:12px;">Ninguna aprobada todav\u00eda.</p>'}
+            </div>
+        </div>
     `;
 
     const list = content.querySelector('#tesis-pending-list');
@@ -564,14 +565,14 @@ async function renderTesisPanel(content) {
             border-radius:var(--radius-lg);padding:1rem;
         `;
         const fecha = new Date(item.created_at * 1000).toLocaleString('es-ES');
-        const fuenteLabel = item.fuente === 'agente_bull' ? '🐂 Agente Bull' : '✍️ Manual';
+        const fuenteLabel = item.fuente === 'agente_bull' ? '\ud83d\udc02 Agente Bull' : '\u270d\ufe0f Manual';
 
         card.innerHTML = `
             <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px;flex-wrap:wrap;">
                 <div>
-                    <div style="font-size:14px;color:var(--color-text);font-weight:600;">${item.ticker} · ${item.rating}</div>
-                    <div style="font-size:12px;color:var(--color-muted);margin-top:2px;">${item.titulo || '(sin título)'}</div>
-                    <div style="font-size:11px;color:var(--color-muted);margin-top:4px;">${fuenteLabel} · ${fecha}${item.criterio ? ' · ' + item.criterio : ''}</div>
+                    <div style="font-size:14px;color:var(--color-text);font-weight:600;">${item.ticker} \u00b7 ${item.rating}</div>
+                    <div style="font-size:12px;color:var(--color-muted);margin-top:2px;">${item.titulo || '(sin t\u00edtulo)'}</div>
+                    <div style="font-size:11px;color:var(--color-muted);margin-top:4px;">${fuenteLabel} \u00b7 ${fecha}${item.criterio ? ' \u00b7 ' + item.criterio : ''}</div>
                 </div>
                 <div style="display:flex;gap:6px;flex-shrink:0;">
                     <button class="tesis-toggle-btn" data-id="${item.id}" style="background:none;border:1px solid var(--color-border);color:var(--color-muted);padding:4px 10px;border-radius:var(--radius);cursor:pointer;font-family:var(--font-mono);font-size:11px;">VER</button>
@@ -595,7 +596,7 @@ async function renderTesisPanel(content) {
         });
 
         card.querySelector('.tesis-approve-btn').addEventListener('click', async () => {
-            if (!confirm(`¿Aprobar y publicar la tesis de ${item.ticker}?`)) return;
+            if (!confirm(`\u00bfAprobar y publicar la tesis de ${item.ticker}?`)) return;
             try {
                 await tesisFetch(`/admin/${item.id}/approve`, { method: 'POST' });
                 renderTesisPanel(content);
@@ -605,7 +606,7 @@ async function renderTesisPanel(content) {
         });
 
         card.querySelector('.tesis-reject-btn').addEventListener('click', async () => {
-            if (!confirm(`¿Descartar la tesis de ${item.ticker}? No se puede deshacer.`)) return;
+            if (!confirm(`\u00bfDescartar la tesis de ${item.ticker}? No se puede deshacer.`)) return;
             try {
                 await tesisFetch(`/admin/${item.id}/reject`, { method: 'POST' });
                 renderTesisPanel(content);
@@ -614,36 +615,68 @@ async function renderTesisPanel(content) {
             }
         });
     });
-}
 
+    const approvedList = content.querySelector('#tesis-approved-list');
+    approved.forEach(item => {
+        const row = document.createElement('div');
+        row.style.cssText = `
+            display:flex;justify-content:space-between;align-items:center;gap:10px;
+            background:var(--color-surface);border:1px solid var(--color-border);
+            border-radius:var(--radius);padding:8px 12px;font-size:12px;
+        `;
+        const fechaAprobado = item.approved_at ? new Date(item.approved_at * 1000).toLocaleDateString('es-ES') : '';
+        row.innerHTML = `
+            <span style="color:var(--color-text);">${item.ticker} \u00b7 ${item.rating} \u2014 <span style="color:var(--color-muted);">${item.titulo || ''}</span></span>
+            <div style="display:flex;align-items:center;gap:8px;flex-shrink:0;">
+                <span style="color:var(--color-muted);font-size:10px;">${fechaAprobado}</span>
+                <button class="tesis-unpublish-btn" style="background:none;border:1px solid #e0b13e;color:#e0b13e;padding:3px 8px;border-radius:var(--radius);cursor:pointer;font-family:var(--font-mono);font-size:10px;">RETIRAR</button>
+            </div>
+        `;
+        approvedList.appendChild(row);
+
+        row.querySelector('.tesis-unpublish-btn').addEventListener('click', async () => {
+            if (!confirm(`\u00bfRetirar la tesis de ${item.ticker}? Deja de verse en la secci\u00f3n p\u00fablica al instante, vuelve a pendiente.`)) return;
+            try {
+                await tesisFetch(`/admin/${item.id}/unpublish`, { method: 'POST' });
+                renderTesisPanel(content);
+            } catch (err) {
+                alert('Error al retirar: ' + err.message);
+            }
+        });
+    });
+}
 async function renderAcademyReviewPanel(content) {
-    let data;
+    let pendingData, approvedData;
     try {
-        data = await academyReviewFetch('/pending');
+        pendingData = await academyReviewFetch('/pending');
+        approvedData = await academyReviewFetch('/approved?limit=20');
     } catch (err) {
         if (err.isAuthError) sessionStorage.removeItem(ADMIN_KEY_STORAGE);
         renderKeyPrompt(content, () => renderAcademyReviewPanel(content));
-        if (err.isAuthError) content.querySelector('#admin-key-error').textContent = '✗ Clave de administrador inválida';
+        if (err.isAuthError) content.querySelector('#admin-key-error').textContent = '\u2717 Clave de administrador inv\u00e1lida';
         return;
     }
 
-    const items = data.items || [];
-
-    if (!items.length) {
-        content.innerHTML = `
-            <p style="color:var(--color-muted);font-size:13px;">
-                No hay propuestas de Academy pendientes de revisión ahora mismo. 🎉
-            </p>
-        `;
-        return;
-    }
+    const items = pendingData.items || [];
+    const approved = approvedData.items || [];
 
     content.innerHTML = `
         <p style="color:var(--color-muted);font-size:11px;margin-bottom:1rem;">
-            ${items.length} propuestas de Elia a la espera de revisión. Al aprobar, copia el bloque con el botón COPIAR
-            y pégalo tú mismo en <code style="background:var(--color-surface2);padding:1px 5px;border-radius:3px;">academy_lessons.js</code> — Elia no edita el código directamente.
+            ${items.length} propuestas de Elia a la espera de revisi\u00f3n. Al aprobar, copia el bloque con el bot\u00f3n COPIAR
+            y p\u00e9galo t\u00fa mismo en <code style="background:var(--color-surface2);padding:1px 5px;border-radius:3px;">academy_lessons.js</code> \u2014 Elia no edita el c\u00f3digo directamente.
         </p>
-        <div id="academy-pending-list" style="display:flex;flex-direction:column;gap:12px;"></div>
+        <div id="academy-pending-list" style="display:flex;flex-direction:column;gap:12px;margin-bottom:2rem;">
+            ${items.length ? '' : '<p style="color:var(--color-muted);font-size:13px;">No hay propuestas pendientes de revisi\u00f3n ahora mismo. \ud83c\udf89</p>'}
+        </div>
+        <div style="border-top:1px solid var(--color-border);padding-top:1rem;">
+            <div style="color:var(--color-accent);font-size:12px;letter-spacing:0.08em;margin-bottom:0.75rem;">\u2713 APROBADAS RECIENTEMENTE</div>
+            <p style="color:var(--color-muted);font-size:11px;margin-bottom:0.75rem;">
+                Retirar aqu\u00ed solo revierte el seguimiento en este panel \u2014 si ya hab\u00edas pegado el bloque en <code style="background:var(--color-surface2);padding:1px 5px;border-radius:3px;">academy_lessons.js</code> y subido el commit, tienes que quitarlo tambi\u00e9n ah\u00ed a mano.
+            </p>
+            <div id="academy-approved-list" style="display:flex;flex-direction:column;gap:8px;">
+                ${approved.length ? '' : '<p style="color:var(--color-muted);font-size:12px;">Ninguna aprobada todav\u00eda.</p>'}
+            </div>
+        </div>
     `;
 
     const list = content.querySelector('#academy-pending-list');
@@ -655,13 +688,13 @@ async function renderAcademyReviewPanel(content) {
             border-radius:var(--radius-lg);padding:1rem;
         `;
         const fecha = new Date(item.created_at * 1000).toLocaleString('es-ES');
-        const tipoLabel = item.tipo === 'nueva_leccion' ? '🆕 Lección nueva' : '✏️ Ampliación de lección existente';
+        const tipoLabel = item.tipo === 'nueva_leccion' ? '\ud83c\udd95 Lecci\u00f3n nueva' : '\u270f\ufe0f Ampliaci\u00f3n de lecci\u00f3n existente';
 
         card.innerHTML = `
             <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px;flex-wrap:wrap;">
                 <div>
                     <div style="font-size:14px;color:var(--color-text);font-weight:600;">${item.titulo}</div>
-                    <div style="font-size:11px;color:var(--color-muted);margin-top:4px;">${tipoLabel}${item.leccion_ref ? ' · leccion ' + item.leccion_ref : ''} · ${fecha}</div>
+                    <div style="font-size:11px;color:var(--color-muted);margin-top:4px;">${tipoLabel}${item.leccion_ref ? ' \u00b7 leccion ' + item.leccion_ref : ''} \u00b7 ${fecha}</div>
                     ${item.resumen ? `<div style="font-size:12px;color:var(--color-muted);margin-top:6px;">${item.resumen}</div>` : ''}
                 </div>
                 <div style="display:flex;gap:6px;flex-shrink:0;">
@@ -686,15 +719,15 @@ async function renderAcademyReviewPanel(content) {
             try {
                 await navigator.clipboard.writeText(item.bloque_js);
                 const original = e.target.textContent;
-                e.target.textContent = '¡COPIADO!';
+                e.target.textContent = '\u00a1COPIADO!';
                 setTimeout(() => { e.target.textContent = original; }, 1500);
             } catch (err) {
-                alert('No se pudo copiar automáticamente — selecciona el texto a mano con VER.');
+                alert('No se pudo copiar autom\u00e1ticamente \u2014 selecciona el texto a mano con VER.');
             }
         });
 
         card.querySelector('.academy-approve-btn').addEventListener('click', async () => {
-            if (!confirm(`¿Marcar como aprobada? Recuerda: esto NO lo publica solo, tienes que copiarlo tú a academy_lessons.js.`)) return;
+            if (!confirm(`\u00bfMarcar como aprobada? Recuerda: esto NO lo publica solo, tienes que copiarlo t\u00fa a academy_lessons.js.`)) return;
             try {
                 await academyReviewFetch(`/${item.id}/approve`, { method: 'POST' });
                 renderAcademyReviewPanel(content);
@@ -704,7 +737,7 @@ async function renderAcademyReviewPanel(content) {
         });
 
         card.querySelector('.academy-reject-btn').addEventListener('click', async () => {
-            if (!confirm(`¿Descartar esta propuesta? No se puede deshacer.`)) return;
+            if (!confirm(`\u00bfDescartar esta propuesta? No se puede deshacer.`)) return;
             try {
                 await academyReviewFetch(`/${item.id}/reject`, { method: 'POST' });
                 renderAcademyReviewPanel(content);
@@ -713,8 +746,36 @@ async function renderAcademyReviewPanel(content) {
             }
         });
     });
-}
 
+    const approvedList = content.querySelector('#academy-approved-list');
+    approved.forEach(item => {
+        const row = document.createElement('div');
+        row.style.cssText = `
+            display:flex;justify-content:space-between;align-items:center;gap:10px;
+            background:var(--color-surface);border:1px solid var(--color-border);
+            border-radius:var(--radius);padding:8px 12px;font-size:12px;
+        `;
+        const fechaAprobado = item.approved_at ? new Date(item.approved_at * 1000).toLocaleDateString('es-ES') : '';
+        row.innerHTML = `
+            <span style="color:var(--color-text);">${item.titulo}</span>
+            <div style="display:flex;align-items:center;gap:8px;flex-shrink:0;">
+                <span style="color:var(--color-muted);font-size:10px;">${fechaAprobado}</span>
+                <button class="academy-unapprove-btn" style="background:none;border:1px solid #e0b13e;color:#e0b13e;padding:3px 8px;border-radius:var(--radius);cursor:pointer;font-family:var(--font-mono);font-size:10px;">RETIRAR</button>
+            </div>
+        `;
+        approvedList.appendChild(row);
+
+        row.querySelector('.academy-unapprove-btn').addEventListener('click', async () => {
+            if (!confirm(`\u00bfRetirar esta aprobaci\u00f3n? Vuelve a pendiente en este panel (no borra nada de academy_lessons.js si ya lo hab\u00edas pegado).`)) return;
+            try {
+                await academyReviewFetch(`/${item.id}/unapprove`, { method: 'POST' });
+                renderAcademyReviewPanel(content);
+            } catch (err) {
+                alert('Error al retirar: ' + err.message);
+            }
+        });
+    });
+}
 function statCard(label, value) {
     return `
         <div style="background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius-lg);padding:0.9rem 1rem;">

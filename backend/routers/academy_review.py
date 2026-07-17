@@ -1,6 +1,8 @@
 from fastapi import APIRouter, Header, HTTPException
 from config import settings
-from services.academy_review_service import get_pending_reviews, approve_review, reject_review
+from services.academy_review_service import (
+    get_pending_reviews, approve_review, reject_review, get_approved_reviews, unapprove_review,
+)
 
 # Router SEPARADO y aislado, SIN dependencia `paid` -- misma lección que
 # con tesis.py (ver conversación 17/07/2026): si esto se registrara junto
@@ -38,4 +40,19 @@ async def reject(review_id: int, x_admin_key: str = Header(None)):
     ok = reject_review(review_id, approved_by="admin")
     if not ok:
         raise HTTPException(status_code=404, detail="Revisión no encontrada o ya gestionada")
+    return {"ok": True}
+
+
+@router.get("/approved")
+async def approved(limit: int = 20, x_admin_key: str = Header(None)):
+    _check_admin(x_admin_key)
+    return {"items": get_approved_reviews(limit=limit)}
+
+
+@router.post("/{review_id}/unapprove")
+async def unapprove(review_id: int, x_admin_key: str = Header(None)):
+    _check_admin(x_admin_key)
+    ok = unapprove_review(review_id)
+    if not ok:
+        raise HTTPException(status_code=404, detail="Revisión no encontrada o no estaba aprobada")
     return {"ok": True}
