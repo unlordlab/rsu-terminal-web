@@ -231,9 +231,18 @@ def run_backtest(df, initial_capital=100_000, debug=False):
         if debug and phase_idx == -1 and dd_from_high <= -10:
             print(f"[DEBUG] {date} price={price:.2f} phase_high={phase_high:.2f} dd_from_high={dd_from_high:.1f}% cash={cash:.2f} cycle_equity={cycle_equity:.2f}")
 
-        # BUY logic
+        # BUY logic -- IMPORTANTE: no debe poder arrancar una fase nueva
+        # mientras el runner del ciclo anterior sigue abierto. Sin esta
+        # comprobación, una caída que cruce el umbral (medido desde el
+        # phase_high viejo, congelado desde que se disparó la fase
+        # original) podía arrancar un ciclo nuevo ENCIMA del runner
+        # todavía activo -- dos posiciones simultáneas compartiendo las
+        # mismas variables de estado (shares, avg_cost, entry_date), lo
+        # que descuadraba la contabilidad de caja por completo aunque
+        # cada operación individual mostrara P&L positivo. Ver
+        # conversación 18/07/2026.
         next_phase = phase_idx + 1
-        if next_phase < len(PHASE_DROPS):
+        if next_phase < len(PHASE_DROPS) and not in_runner:
             threshold = -PHASE_DROPS[next_phase] * 100
             if dd_from_high <= threshold:
                 alloc_frac = PHASE_ALLOC[next_phase]
