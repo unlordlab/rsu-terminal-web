@@ -248,6 +248,8 @@ def run_backtest(df, initial_capital=100_000, debug=False):
                 alloc_frac = PHASE_ALLOC[next_phase]
                 buy_cash   = cycle_equity * alloc_frac
                 if buy_cash > cash: buy_cash = cash
+                if debug:
+                    print(f"[DEBUG BUY] {date} fase={next_phase+1} cycle_equity={cycle_equity:.2f} alloc={alloc_frac:.0%} buy_cash={buy_cash:.2f} cash_antes={cash:.2f}")
                 if buy_cash > 0:
                     new_shares  = buy_cash / price
                     total_cost  = avg_cost * shares + buy_cash
