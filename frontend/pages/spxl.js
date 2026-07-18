@@ -263,7 +263,7 @@ function renderEquityChart(data) {
                 plugins: { legend: { labels: { color: '#666', font: { size: 10 } } } },
                 scales: {
                     x: { ticks: { color: '#555', font: { size: 9 }, maxTicksLimit: 8 }, grid: { color: 'rgba(255,255,255,0.03)' } },
-                    y: { ticks: { color: '#555', font: { size: 9 }, callback: v => '$' + (v/1000).toFixed(0) + 'k' }, grid: { color: 'rgba(255,255,255,0.03)' } }
+                    y: { type: 'logarithmic', ticks: { color: '#555', font: { size: 9 }, callback: v => '$' + (v/1000).toFixed(0) + 'k' }, grid: { color: 'rgba(255,255,255,0.03)' } }
                 }
             }
         });

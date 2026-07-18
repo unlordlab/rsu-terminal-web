@@ -21,3 +21,4 @@ venv/
 Thumbs.db
 agents/.bull_agent_state.json
 backend/gael_telegram_small.jpg
+agents/.spxl_phase_state.json
