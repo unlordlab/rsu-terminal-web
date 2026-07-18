@@ -2,7 +2,7 @@ import pandas as pd
 import unicodedata
 import time
 import math
-from datetime import datetime
+from datetime import datetime, timezone
 from concurrent.futures import ThreadPoolExecutor
 from services.yf_pool import yf_executor
 import pytz
@@ -10,6 +10,52 @@ from config import settings
 
 _price_cache: dict = {}
 _CACHE_TTL = 60
+
+# Barras diarias cacheadas (precio de cierre + cierre anterior juntos, una
+# sola llamada a yfinance) -- ver conversación 18/07/2026 sobre precisión
+# del % diario en Cartera.
+_daily_bars_cache: dict = {}
+_DAILY_BARS_TTL = 6 * 3600
+
+
+def _is_market_open() -> bool:
+    """Mismo patrón que spxl_service.py::_is_market_open() -- sin llamada
+    a ninguna API, solo hora/zona horaria."""
+    try:
+        et     = pytz.timezone("America/New_York")
+        now_et = datetime.now(pytz.utc).astimezone(et)
+        if now_et.weekday() >= 5: return False
+        t = now_et.hour * 60 + now_et.minute
+        return 9*60+30 <= t < 16*60
+    except Exception:
+        now_utc = datetime.now(timezone.utc)
+        if now_utc.weekday() >= 5: return False
+        t = now_utc.hour * 60 + now_utc.minute
+        return 13*60+30 <= t < 20*60
+
+
+def _get_daily_bars(tk_obj, ticker: str) -> tuple[float, float]:
+    """Devuelve (ultimo_cierre, cierre_anterior) de las barras diarias,
+    cacheado 6h -- una sola llamada a yfinance sirve para las dos cosas,
+    y con el mercado cerrado son los dos números que de verdad importan
+    (nada de mezclar con fast_info, que puede quedarse en un snapshot
+    ligeramente distinto al cierre oficial)."""
+    now = time.time()
+    cached = _daily_bars_cache.get(ticker)
+    if cached and (now - cached["updated"]) < _DAILY_BARS_TTL:
+        return cached["last"], cached["prev"]
+    try:
+        hist = tk_obj.history(period="5d", interval="1d")
+        if len(hist) >= 2:
+            last, prev = float(hist["Close"].iloc[-1]), float(hist["Close"].iloc[-2])
+        elif len(hist) == 1:
+            last = prev = float(hist["Close"].iloc[-1])
+        else:
+            return 0.0, 0.0
+        _daily_bars_cache[ticker] = {"last": last, "prev": prev, "updated": now}
+        return last, prev
+    except Exception:
+        return 0.0, 0.0
 
 def norm_col(s):
     return unicodedata.normalize("NFKD", s).encode("ascii", "ignore").decode().lower().strip()
@@ -67,24 +113,33 @@ def _fetch_price_single(ticker: str) -> dict | None:
     try:
         import yfinance as yf
         tk_obj = yf.Ticker(ticker)
-        # fast_info da precio intradiario real + previous_close oficial
-        price = 0.0
-        prev  = 0.0
-        try:
-            fi    = tk_obj.fast_info
-            price = float(fi.last_price or 0)
-            prev  = float(fi.previous_close or 0)
-        except Exception:
-            pass
-        # Fallback a history si fast_info no devuelve datos
-        if not price or not prev:
-            hist = tk_obj.history(period="5d", interval="1d")
-            if len(hist) >= 2:
-                price = float(hist["Close"].iloc[-1])
-                prev  = float(hist["Close"].iloc[-2])
-            elif len(hist) == 1:
-                price = float(hist["Close"].iloc[-1])
-                prev  = price
+
+        if _is_market_open():
+            # Mercado abierto: precio en vivo real de fast_info, cierre
+            # anterior de las barras diarias cacheadas (más fiable que
+            # fast_info.previous_close, que a veces no coincide con el
+            # cierre real de la sesión anterior) — ver conversación
+            # 17/07/2026.
+            price = 0.0
+            try:
+                fi    = tk_obj.fast_info
+                price = float(fi.last_price or 0)
+            except Exception:
+                pass
+            last_bar, prev = _get_daily_bars(tk_obj, ticker)
+            if not price:
+                price = last_bar
+        else:
+            # Mercado cerrado: usar el cierre real de las barras diarias
+            # para AMBOS valores (precio y anterior) — nada de mezclar con
+            # un snapshot de fast_info que puede quedarse ligeramente
+            # desviado del cierre oficial que imprimió el mercado. Esto es
+            # justo lo que corregía el caso de LEU (mostraba +6.59% en vez
+            # de los +6.11% reales de cierre) — ver conversación 18/07/2026.
+            # De propina: cero llamadas extra a fast_info con el mercado
+            # cerrado, solo la de barras diarias (ya cacheada 6h).
+            price, prev = _get_daily_bars(tk_obj, ticker)
+
         if not price:
             return None
         chg   = (price - prev) / prev * 100 if prev else 0.0
