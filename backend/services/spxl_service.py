@@ -179,7 +179,7 @@ def _make_trade(date, exit_price, avg_cost, qty, phases_used, scenario, entry_da
         "scenario": scenario, "hold_days": hold_days,
     }
 
-def run_backtest(df, initial_capital=100_000):
+def run_backtest(df, initial_capital=100_000, debug=False):
     initial_capital = float(initial_capital)
     prices   = df['price'].values
     dates    = df.index
@@ -216,7 +216,20 @@ def run_backtest(df, initial_capital=100_000):
         dd = (peak_equity - cur_equity) / peak_equity * 100
         if dd > max_dd: max_dd = dd
 
+        # Mientras no hay ninguna fase activa (STAND BY), la referencia de
+        # máximo debe seguir el precio real según hace nuevos máximos --
+        # si no, se queda anclada en el precio de la última salida (o en
+        # el primer precio del histórico, en 2008) para siempre, y el
+        # drawdown calculado más adelante se dispara a números absurdos
+        # en cuanto el precio sube por encima de esa referencia vieja.
+        # Ver conversación 18/07/2026.
+        if phase_idx == -1 and price > phase_high:
+            phase_high = price
+
         dd_from_high = (price - phase_high) / phase_high * 100
+
+        if debug and phase_idx == -1 and dd_from_high <= -10:
+            print(f"[DEBUG] {date} price={price:.2f} phase_high={phase_high:.2f} dd_from_high={dd_from_high:.1f}% cash={cash:.2f} cycle_equity={cycle_equity:.2f}")
 
         # BUY logic
         next_phase = phase_idx + 1

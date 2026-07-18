@@ -65,6 +65,12 @@ async function loadLive(container) {
             + '<div style="color:var(--color-muted);font-size:10px;margin-top:4px;">Actualizado: ' + data.timestamp + '</div>'
             + '</div>'
             + '</div>'
+            + '</div>'
+
+            // Gráfico con las 6 fases marcadas
+            + '<div style="background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius);padding:1rem;margin-bottom:1rem;">'
+            + '<div style="color:var(--color-muted);font-size:10px;letter-spacing:0.08em;margin-bottom:8px;">SPXL · ÚLTIMOS 90 DÍAS · NIVELES DE FASE MARCADOS</div>'
+            + '<div style="position:relative;height:280px;"><canvas id="spxl-spark"></canvas></div>'
             + '</div>';
 
         // Fases
@@ -190,18 +196,49 @@ function renderSparkline(data) {
         const ctx = document.getElementById('spxl-spark');
         if (!ctx) return;
         const color = data.chg_pct >= 0 ? '#00ffad' : '#f23645';
+        const labels = data.chart.dates;
+
+        // Líneas horizontales de nivel — una por fase, solo las que caen
+        // dentro del rango visible del gráfico (si no, solo añaden ruido
+        // y aplastan la escala del precio real).
+        const phaseColors = ['#00ffad', '#00ffad', '#ff9800', '#ff9800', '#f23645', '#f23645'];
+        const priceMin = Math.min(...data.chart.closes);
+        const priceMax = Math.max(...data.chart.closes);
+        const visibleRange = [priceMin * 0.85, priceMax * 1.05]; // margen para que se vean fases cercanas aunque no esten exactamente dentro
+
+        const phaseDatasets = (data.phases || [])
+            .filter(p => p.target >= visibleRange[0] && p.target <= visibleRange[1])
+            .map(p => ({
+                label: 'Fase ' + p.phase + (p.active ? ' (activa)' : ''),
+                data: labels.map(() => p.target),
+                borderColor: phaseColors[p.phase - 1] || '#666',
+                borderWidth: p.active ? 2 : 1,
+                borderDash: p.active ? [] : [4, 4],
+                pointRadius: 0,
+                fill: false,
+            }));
+
         new Chart(ctx, {
             type: 'line',
             data: {
-                labels: data.chart.dates,
-                datasets: [{ data: data.chart.closes, borderColor: color, backgroundColor: color + '18', borderWidth: 1.5, pointRadius: 0, fill: true, tension: 0.3 }]
+                labels,
+                datasets: [
+                    { label: 'SPXL', data: data.chart.closes, borderColor: color, backgroundColor: color + '18', borderWidth: 2, pointRadius: 0, fill: true, tension: 0.3 },
+                    ...phaseDatasets,
+                ]
             },
             options: {
                 responsive: true, maintainAspectRatio: false,
-                plugins: { legend: { display: false } },
+                interaction: { mode: 'index', intersect: false },
+                plugins: {
+                    legend: { display: true, position: 'top', labels: { color: '#666', font: { size: 9 }, boxWidth: 10 } },
+                    tooltip: { backgroundColor: '#111', borderColor: '#333', borderWidth: 1, titleColor: '#aaa', bodyColor: '#ccc',
+                        callbacks: { label: item => item.dataset.label + ': $' + Number(item.parsed.y).toLocaleString('en-US') }
+                    }
+                },
                 scales: {
                     x: { ticks: { color: '#444', font: { size: 9 }, maxTicksLimit: 6 }, grid: { color: 'rgba(255,255,255,0.03)' } },
-                    y: { ticks: { color: '#444', font: { size: 9 } }, grid: { color: 'rgba(255,255,255,0.03)' }, min: Math.min(...data.chart.closes) * 0.99, max: Math.max(...data.chart.closes) * 1.01 }
+                    y: { ticks: { color: '#444', font: { size: 9 }, callback: v => '$' + Number(v).toLocaleString('en-US') }, grid: { color: 'rgba(255,255,255,0.03)' } }
                 }
             }
         });
