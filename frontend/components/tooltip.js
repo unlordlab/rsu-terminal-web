@@ -1198,67 +1198,65 @@ NOTA: este concepto se usa en varios módulos de la terminal (CANSLIM, Scanner, 
     // ── SPXL ──────────────────────────────────────────────────────────────────
     "spxl": {
         title: "SPXL — Direxion Daily S&P 500 Bull 3X",
-        short: "ETF apalancado 3x del S&P 500. Triplica las ganancias Y las pérdidas diarias.",
-        long: `SPXL es un ETF de Direxion que replica el 3x del rendimiento DIARIO del S&P 500.
+        short: "ETF apalancado 3 veces sobre el S&P 500. Multiplica tanto las ganancias como las pérdidas diarias.",
+        long: `SPXL es un fondo cotizado (ETF) que replica 3 veces el movimiento diario del índice S&P 500, el indicador que agrupa a las 500 mayores empresas de Estados Unidos.
 
 CÓMO FUNCIONA:
-Si el S&P 500 sube +1% en un día, SPXL sube ~+3%.
-Si el S&P 500 baja -1% en un día, SPXL baja ~-3%.
+- Si el S&P 500 sube un 1% en un día, SPXL sube aproximadamente un 3%.
+- Si el S&P 500 baja un 1% en un día, SPXL baja aproximadamente un 3%.
 
-DECAY POR VOLATILIDAD (el riesgo principal):
-El apalancamiento se aplica DIARIAMENTE, no acumulativamente. En mercados laterales con alta volatilidad, SPXL pierde valor aunque el índice no se mueva. Se llama "volatility decay" o "beta slippage".
+EL RIESGO PRINCIPAL — DESGASTE POR VOLATILIDAD:
+El apalancamiento se aplica cada día por separado, no de forma acumulada a lo largo del tiempo. En mercados que suben y bajan mucho sin una dirección clara, SPXL puede perder valor incluso si el índice original acaba plano. Por ejemplo: si el S&P 500 cae un 10% y luego sube un 11,1% (quedando exactamente igual que al principio), SPXL habría caído un 30% y subido un 33,3% — pero el resultado neto es una pérdida de alrededor del 6%, no cero.
 
-Ejemplo: SPX baja -10% y luego sube +11.1% → SPX breakeven. SPXL baja -30% y sube +33.3% → SPXL pierde ~6%.
+POR QUÉ SE COMPRA EN VARIAS FASES:
+Comprar SPXL de golpe es arriesgado, precisamente por ese desgaste. Entrar de forma escalonada durante las caídas reduce el precio medio de compra y aprovecha mejor la recuperación posterior.
 
-POR QUÉ LA ESTRATEGIA DCA EN 6 FASES:
-Comprar SPXL de golpe es muy arriesgado. La estrategia RSU escala posiciones en caídas progresivas, reduciendo el coste medio y aprovechando el rebote. Al comprar en pánico y vender en recuperación, el decay trabaja A FAVOR.
-
-HORIZONTE TEMPORAL:
-SPXL NO es para mantener indefinidamente. Es una herramienta táctica para ciclos de corrección-recuperación bien definidos.`
+SPXL no está pensado para mantenerse indefinidamente — es una herramienta para ciclos concretos de caída y recuperación, no una inversión a largo plazo sin más.`
     },
 
     "spxl-phases": {
-        title: "Fases DCA — Estrategia SPXL (RSU v0.2)",
-        short: "6 niveles de entrada escalonados, cada uno midiendo la caída desde el precio de la fase anterior, no desde el máximo original.",
-        long: `La estrategia RSU divide el capital disponible en 6 tramos que se despliegan progresivamente a medida que SPXL sigue cayendo.
+        title: "Plan de compras en 6 fases",
+        short: "El capital se invierte de forma escalonada según SPXL va cayendo, no todo de una vez.",
+        long: `En lugar de invertir todo el capital en un único momento, la estrategia lo reparte en 6 tramos, que se van desplegando a medida que el precio de SPXL sigue cayendo.
 
-LÓGICA — IMPORTANTE: cada caída se mide desde el precio de la ÚLTIMA entrada, no desde el máximo histórico original. Es un sistema encadenado: cada vez que se ejecuta una compra, el punto de referencia para la siguiente caída se resetea al precio de esa compra.
+CÓMO SE MIDE CADA CAÍDA:
+Cada nueva fase se activa cuando el precio cae un determinado porcentaje adicional desde el punto en el que se ejecutó la fase anterior — no desde el máximo original. Es decir, cada compra pone una nueva referencia para medir la siguiente caída.
 
-LAS 6 FASES (caída desde la entrada anterior, no acumulada):
-- Fase 1: -15% desde el máximo → 20% del capital
-- Fase 2: -10% adicional desde la Fase 1 → 15% del capital
-- Fase 3: -7% adicional desde la Fase 2 → 20% del capital
-- Fase 4: -10% adicional desde la Fase 3 → 20% del capital
-- Fase 5: -10% adicional desde la Fase 4 → 15% del capital
-- Fase 6: -10% adicional desde la Fase 5 → 10% del capital
+LAS 6 FASES:
+- Fase 1: cae un 15% desde el máximo reciente → se invierte el 20% del capital
+- Fase 2: cae un 10% adicional → 15% del capital
+- Fase 3: cae un 7% adicional → 20% del capital
+- Fase 4: cae un 10% adicional → 20% del capital
+- Fase 5: cae un 10% adicional → 15% del capital
+- Fase 6: cae un 10% adicional → 10% del capital
 
-Nota: el documento original de la estrategia (v0.1) solo describía las 4 primeras fases con un 25% de capital en reserva. Las Fases 5 y 6 son una extensión posterior (v0.2) que despliega ese capital adicional en caídas todavía más profundas, dejando solo el 10% de reserva de emergencia (\`reserve_pct\`) sin invertir nunca.
+Si el precio nunca llega a caer tanto, simplemente no se ejecutan todas las fases — el capital restante se queda disponible.
 
-ESCENARIOS DE SALIDA (según cuántas fases llegaste a usar):
-- Escenario A (≤3 fases): Entrada en caída moderada. Salida rápida en +20% sobre el precio medio.
-- Escenario B (4-5 fases): Caída seria. Venta parcial en +10%, se deja correr un "runner" con stop dinámico.
-- Escenario C (6 fases): Capitulación total. Salida escalonada en 3 tramos (65% / 15% / resto).
+CÓMO SE VENDE, SEGÚN CUÁNTAS FASES SE HAYAN USADO:
+- Si se usaron pocas fases (caída moderada): se vende la mayor parte al recuperar un 20% sobre el precio medio de compra, dejando una pequeña parte para seguir beneficiándose si el precio sigue subiendo.
+- Si se usaron varias fases (caída más seria): se vende una parte mayor al +10% de recuperación, dejando una porción algo más grande corriendo con un stop de protección.
+- Si se usaron las 6 fases (caída muy profunda): la salida se hace en tres tramos escalonados, asegurando beneficios progresivamente en vez de esperar a un único punto de venta.
 
-La disciplina de seguir el plan sin improvisar en el momento es la clave de todo el sistema.`
+En todos los casos, la parte que se deja "corriendo" después de la venta principal tiene un stop de seguimiento: si el precio retrocede un porcentaje determinado desde su punto más alto, esa parte también se vende, protegiendo la ganancia ya conseguida.`
     },
 
     "spxl-cds": {
-        title: "Mecanismo de seguridad — CDS (Credit Default Swaps)",
-        short: "El 'freno de emergencia' de la estrategia: si el riesgo de crédito del sistema financiero se dispara, se deja de comprar aunque el precio siga cayendo.",
-        long: `La mayoría de las caídas de mercado son oportunidades de compra dentro de esta estrategia. Pero existen momentos muy poco frecuentes — crisis financieras graves, como la de 2008 — en los que el mercado puede caer mucho más de lo normal, y seguir el plan de compras a ciegas sería peligroso.
+        title: "Indicador de riesgo de crédito",
+        short: "Una señal de alarma que detiene las compras nuevas si hay riesgo grave en el sistema financiero, aunque el precio siga cayendo.",
+        long: `La mayoría de las caídas del mercado son, dentro de esta estrategia, oportunidades de compra. Pero existen momentos poco frecuentes — crisis financieras graves, como la de 2008 — en los que el mercado puede desplomarse mucho más de lo habitual, y seguir comprando sin más criterio sería peligroso.
 
-QUÉ ES: los Credit Default Swaps (CDS) son, en esencia, un seguro contra el impago de deuda corporativa — su precio sube cuando el mercado teme que las empresas (o los bancos) no puedan pagar sus deudas. Es un termómetro de estrés real en el sistema financiero, no solo de la bolsa.
+QUÉ MIDE:
+Se utiliza un indicador basado en el diferencial de rendimiento entre bonos corporativos de alto riesgo y deuda pública de Estados Unidos. Cuando ese diferencial se dispara, significa que los inversores están exigiendo mucha más compensación por el riesgo de que las empresas no puedan pagar sus deudas — una señal de estrés real en el sistema financiero, no solo en la bolsa.
 
-INDICADOR USADO: BAMLH0A0HYM2 (spread de high yield vs. bonos del Tesoro de EE.UU., serie de FRED).
+CUÁNDO SE CONSIDERA UNA ALERTA:
+Cuando el indicador sube por encima de un nivel determinado, o aumenta de forma muy pronunciada desde sus mínimos recientes.
 
-CÓMO SE ACTIVA: si el indicador sube por encima de 10.7, o aumenta más de un 250% desde sus mínimos recientes, se considera una señal de alarma seria.
+QUÉ PASA CUANDO SE ACTIVA:
+- No se ejecutan nuevas fases de compra, aunque el precio siga bajando lo suficiente para activarlas.
+- Las posiciones que ya estaban abiertas se mantienen, sin venderlas por pánico.
+- No se añade capital nuevo hasta que el indicador vuelve a niveles normales.
 
-QUÉ HACE LA ESTRATEGIA CUANDO SE ACTIVA:
-- Se deja de comprar — ninguna fase nueva se ejecuta, aunque el precio siga cayendo lo suficiente para activarla.
-- Las posiciones ya abiertas se mantienen, no se liquidan por pánico.
-- No se añade más capital hasta que el indicador vuelve a niveles normales.
-
-Es, literalmente, un freno de emergencia: protege de invertir capital nuevo justo en medio de un colapso sistémico, que es distinto de una corrección normal de mercado.`
+Es, en la práctica, un freno de seguridad: evita invertir capital nuevo justo en medio de un colapso financiero generalizado, que es un escenario distinto a una simple corrección de mercado.`
     },
 
     // ── RESEARCH ──────────────────────────────────────────────────────────────
