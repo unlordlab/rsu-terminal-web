@@ -52,6 +52,56 @@ def _get_daily_turnover(ticker: str, days: int = 180) -> pd.Series | None:
         return None
 
 
+def _compute_signal(df) -> dict:
+    """Combina dos señales en un único indicador sencillo:
+    1) ¿Hay actividad de volumen anómala AHORA MISMO? (Z-score del último
+       día de rotación frente a su propia media móvil de 20 días)
+    2) ¿Se ha desconectado del mercado RECIENTEMENTE? (correlación de los
+       últimos 20 días frente a la correlación de todo el periodo)
+
+    Un activo con volumen anómalo Y desconectado del mercado es la señal
+    más interesante -- sugiere algo propio del activo, no un movimiento
+    de mercado general que arrastra a todos por igual."""
+    turnover = df["ticker"]
+    mean20 = turnover.rolling(20).mean()
+    std20  = turnover.rolling(20).std()
+
+    z_series = (turnover - mean20) / std20
+    z_score = z_series.dropna()
+    z_score = float(z_score.iloc[-1]) if len(z_score) else 0.0
+
+    corr_total = df["ticker_norm"].corr(df["bench_norm"])
+    if len(df) >= 20:
+        corr_recent = df["ticker_norm"].tail(20).corr(df["bench_norm"].tail(20))
+    else:
+        corr_recent = corr_total
+
+    volumen_anomalo = z_score >= 2.0
+    desconectado    = (corr_total - corr_recent) >= 0.3  # ha caido bastante respecto a su propia base
+
+    if volumen_anomalo and desconectado:
+        return {"level": "fuerte", "icon": "🔴", "color": "#f23645",
+                "label": "Actividad inusual y desconectada del mercado",
+                "detail": f"El volumen de hoy está {z_score:.1f} desviaciones por encima de lo normal para este activo, "
+                          f"y su correlación con el mercado ha caído de {corr_total:.2f} a {corr_recent:.2f} recientemente. "
+                          f"Sugiere algo propio de este activo, no un movimiento de mercado general."}
+    elif volumen_anomalo:
+        return {"level": "moderada", "icon": "🟡", "color": "#ff9800",
+                "label": "Actividad alta, pero en línea con el mercado",
+                "detail": f"El volumen de hoy está {z_score:.1f} desviaciones por encima de lo normal, "
+                          f"pero la correlación con el mercado se mantiene ({corr_recent:.2f}) — "
+                          f"probablemente forma parte de un movimiento general, no algo específico de este activo."}
+    elif desconectado:
+        return {"level": "moderada", "icon": "🟡", "color": "#ff9800",
+                "label": "Moviéndose por su cuenta, sin volumen extremo",
+                "detail": f"Sin actividad de volumen destacable, pero la correlación con el mercado ha caído "
+                          f"de {corr_total:.2f} a {corr_recent:.2f} en las últimas semanas — señal más suave, a vigilar."}
+    else:
+        return {"level": "ninguna", "icon": "⚪", "color": "var(--color-muted)",
+                "label": "Sin señales relevantes",
+                "detail": "Ni el volumen ni la relación con el mercado muestran nada fuera de lo normal ahora mismo."}
+
+
 def get_turnover_comparison(ticker: str, benchmark: str = "SPY", days: int = 180) -> dict:
     """Compara la rotación del ticker frente a la del mercado (SPY por
     defecto). Si la rotación de un activo se desvía sistemáticamente de
@@ -79,6 +129,7 @@ def get_turnover_comparison(ticker: str, benchmark: str = "SPY", days: int = 180
     correlation = df["ticker_norm"].corr(df["bench_norm"])
     ultimo_ratio = df["ratio_ma20"].dropna()
     ultimo_ratio = float(ultimo_ratio.iloc[-1]) if len(ultimo_ratio) else None
+    signal = _compute_signal(df)
 
     if correlation > 0.5:
         interpretacion = (
@@ -104,6 +155,7 @@ def get_turnover_comparison(ticker: str, benchmark: str = "SPY", days: int = 180
         "correlation":     round(float(correlation), 2),
         "current_ratio":   round(ultimo_ratio, 2) if ultimo_ratio is not None else None,
         "interpretation":  interpretacion,
+        "signal":          signal,
         "chart": {
             "dates":            [d.strftime("%Y-%m-%d") for d in df.index],
             "ticker_turnover":  [round(float(v), 4) for v in df["ticker_norm"]],

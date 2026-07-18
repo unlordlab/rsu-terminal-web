@@ -543,15 +543,23 @@ function earningsSection(data) {
 function turnoverSection(data) {
     const t = data.turnover;
     if (!t || !t.ok) return '';
-    const corrColor = t.correlation > 0.5 ? 'var(--color-muted)' : t.correlation > 0.2 ? '#ff9800' : 'var(--color-accent)';
+    const s = t.signal;
     return '<div style="background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius);padding:1.25rem;margin-bottom:1rem;">'
-        + '<div style="color:var(--color-accent);font-size:12px;letter-spacing:0.08em;margin-bottom:0.75rem;">ROTACIÓN VS. MERCADO (' + t.benchmark + ') ' + tt('research-turnover') + '</div>'
-        + '<div style="display:flex;gap:1.5rem;margin-bottom:0.75rem;flex-wrap:wrap;">'
-        + '<div><span style="color:var(--color-muted);font-size:10px;">CORRELACIÓN</span><br><span style="color:' + corrColor + ';font-size:16px;font-weight:600;">' + t.correlation.toFixed(2) + '</span></div>'
-        + (t.current_ratio != null ? '<div><span style="color:var(--color-muted);font-size:10px;">RATIO ACTUAL (MEDIA 20D)</span><br><span style="color:var(--color-text);font-size:16px;font-weight:600;">' + t.current_ratio.toFixed(2) + 'x</span></div>' : '')
+        + '<div style="color:var(--color-accent);font-size:12px;letter-spacing:0.08em;margin-bottom:0.75rem;">SEÑAL DE ROTACIÓN ' + tt('research-turnover') + '</div>'
+
+        // Indicador único, grande y simple -- lo primero que se ve
+        + '<div style="display:flex;align-items:center;gap:10px;padding:10px 14px;background:var(--color-surface2);border-radius:var(--radius);margin-bottom:0.75rem;">'
+        + '<span style="font-size:22px;">' + s.icon + '</span>'
+        + '<div><div style="color:' + s.color + ';font-size:14px;font-weight:600;">' + s.label + '</div>'
+        + '<div style="color:var(--color-muted);font-size:11px;margin-top:2px;">' + s.detail + '</div></div>'
         + '</div>'
-        + '<div style="position:relative;height:160px;margin-bottom:0.75rem;"><canvas id="turnover-chart"></canvas></div>'
-        + '<p style="color:var(--color-muted);font-size:11px;line-height:1.6;margin:0;">' + t.interpretation + '</p>'
+
+        // Detalle tecnico, para quien quiera profundizar
+        + '<div style="display:flex;gap:1.5rem;margin-bottom:0.75rem;flex-wrap:wrap;">'
+        + '<div><span style="color:var(--color-muted);font-size:10px;">CORRELACIÓN VS. ' + t.benchmark + '</span><br><span style="color:var(--color-text);font-size:14px;">' + t.correlation.toFixed(2) + '</span></div>'
+        + (t.current_ratio != null ? '<div><span style="color:var(--color-muted);font-size:10px;">RATIO ACTUAL (MEDIA 20D)</span><br><span style="color:var(--color-text);font-size:14px;">' + t.current_ratio.toFixed(2) + 'x</span></div>' : '')
+        + '</div>'
+        + '<div style="position:relative;height:160px;"><canvas id="turnover-chart"></canvas></div>'
         + '</div>';
 }
 

@@ -1986,21 +1986,24 @@ Conviene leerlo junto al Win Rate: una estrategia con pocas operaciones pero cad
     },
 
     "research-turnover": {
-        title: "Rotación vs. Mercado",
-        short: "Compara cuántas acciones cambian de manos en este activo frente al mercado general — si se desvía mucho, sugiere que está bajo fuerzas propias, no solo las del mercado amplio.",
-        long: `La rotación (turnover) mide qué proporción de las acciones en circulación de una empresa cambian de dueño cada día — se calcula dividiendo el volumen negociado entre el número total de acciones existentes.
+        title: "Señal de Rotación",
+        short: "Un indicador único que combina dos cosas: si hay volumen fuera de lo normal, y si el activo se está moviendo por su cuenta o junto al mercado.",
+        long: `La rotación (turnover) mide qué proporción de las acciones en circulación de una empresa cambian de dueño cada día. Un estudio académico de referencia (Lo & Wang, 2000, Review of Financial Studies) mostró que la rotación no es aleatoria — tiene estructura real, y las desviaciones de esa estructura son información, no ruido.
 
-Un estudio académico de referencia (Lo & Wang, 2000, publicado en Review of Financial Studies) analizó décadas de datos del mercado y encontró que la rotación no es aleatoria ni uniforme entre distintas acciones — tiene una estructura real, y buena parte de esa estructura está explicada por factores comunes de mercado.
+CÓMO SE CONSTRUYE LA SEÑAL:
+Se combinan dos comprobaciones distintas:
 
-QUÉ MUESTRA ESTE GRÁFICO:
-Se compara la evolución de la rotación de este activo con la del mercado general (representado por SPY, el ETF que replica el S&P 500), ambas normalizadas para poder compararse en la misma escala pese a ser empresas de tamaños muy distintos.
+1. ¿Hay volumen fuera de lo normal HOY? Se compara el volumen de hoy contra la media y la variabilidad propia de este activo en los últimos 20 días (un cálculo estadístico llamado Z-score). Si hoy está muy por encima de lo habitual, se marca como actividad anómala.
 
-CÓMO LEER LA CORRELACIÓN:
-- Alta (por encima de 0,5): la actividad de este activo se mueve básicamente al mismo ritmo que la del mercado general — no hay indicios de nada fuera de lo común.
-- Moderada (0,2 a 0,5): hay una relación con el mercado, pero también un componente de actividad propio.
-- Baja (por debajo de 0,2): la actividad de este activo apenas se explica por lo que pasa en el mercado general — puede deberse a noticias específicas de la empresa, entrada o salida de grandes inversores, o cualquier otro factor propio, no ligado al mercado amplio.
+2. ¿Se ha desconectado del mercado RECIENTEMENTE? Se compara cómo de correlacionado ha estado este activo con el mercado general (SPY) en las últimas semanas, frente a cómo lo ha estado durante los últimos 6 meses. Si esa relación se ha debilitado bastante, es señal de que algo propio del activo está pesando más que el mercado en general.
 
-Ninguno de los tres casos es "bueno" o "malo" por sí solo — es información adicional sobre qué está moviendo realmente el precio de este activo en este momento.`
+LOS 4 NIVELES:
+🔴 Volumen anómalo + desconectado del mercado — la combinación más interesante: sugiere algo específico de este activo (noticia propia, flujo institucional dirigido...), no un movimiento general del mercado.
+🟡 Volumen anómalo pero en línea con el mercado — probablemente parte de un movimiento amplio que afecta a muchos valores a la vez, no algo propio de este en concreto.
+🟡 Desconectado del mercado sin volumen destacable — señal más suave, vale la pena vigilar cómo evoluciona.
+⚪ Sin señales — nada fuera de lo normal ahora mismo.
+
+Debajo del indicador tienes también el detalle técnico (correlación exacta y el gráfico comparativo) por si quieres profundizar más allá del resumen.`
     },
 
     // ── GENERAL ───────────────────────────────────────────────────────────────
