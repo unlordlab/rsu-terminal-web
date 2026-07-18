@@ -28,7 +28,7 @@ function header() {
         + '<div class="manifest-glitch" data-text="REDISTRIBUTION RESEARCH UNIT (RSU)" style="position:relative;display:inline-block;color:var(--color-accent);font-size:28px;letter-spacing:0.06em;text-shadow:var(--glow-text);line-height:1.3;">'
         + 'REDISTRIBUTION RESEARCH UNIT (RSU)'
         + '</div>'
-        + '<div style="color:var(--color-secondary);font-size:13px;letter-spacing:0.2em;margin-top:8px;">PROTOCOLO DE DESPERTAR DE CLASE // CICLO PERMANENTE<span class="manifest-cursor"></span></div>'
+        + '<div style="color:var(--color-secondary);font-size:13px;letter-spacing:0.2em;margin-top:8px;">MANIFIESTO<span class="manifest-cursor"></span></div>'
         + '</div>'
         + divider();
 }
@@ -42,7 +42,7 @@ function body() {
 
         + p('Warren Buffett lo dijo sin necesidad de suavizarlo:')
 
-        + quote('"Hay guerra de clases, y mi clase, la de los ricos, va ganando."', '\u2014 Warren Buffett [TARGET_ACQUIRED]', 'danger')
+        + quote('"Hay guerra de clases, y mi clase, la de los ricos, va ganando."', '', 'danger')
 
         + p('Esa frase es el punto de partida de todo lo dem\u00e1s. No es una met\u00e1fora ni una exageraci\u00f3n ret\u00f3rica: es la confesi\u00f3n, desde dentro, de quien no tiene ning\u00fan incentivo para mentir sobre qui\u00e9n gana y qui\u00e9n pierde. Si la guerra de clases es real \u2014y lo es, dicha por el bando que la libra y la gana\u2014 entonces la pregunta no es si existe, sino qu\u00e9 vamos a hacer al respecto.')
 
@@ -169,7 +169,7 @@ function box(type, content) {
 function tags(items) {
     return '<div style="display:flex;gap:10px;flex-wrap:wrap;justify-content:center;margin:1.75rem 0 0.5rem;">'
         + items.map(t =>
-            '<span style="background:rgba(0,255,173,0.08);color:var(--color-accent);border:1px solid rgba(0,255,173,0.3);border-radius:var(--radius);padding:8px 16px;font-size:12px;letter-spacing:0.08em;">'
+            '<span style="background:rgba(0,255,173,0.08);color:var(--color-accent);border:1px solid rgba(0,255,173,0.3);border-radius:var(--radius);padding:8px 16px;margin:4px;font-size:12px;letter-spacing:0.08em;white-space:nowrap;">'
             + t + '</span>'
         ).join('')
         + '</div>';
