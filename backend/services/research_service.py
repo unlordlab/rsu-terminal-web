@@ -260,57 +260,111 @@ def _get_yfinance(ticker: str) -> dict:
     except Exception as e:
         return {"ok": False, "error": str(e)}
 
+def _get_yfinance_news_fallback(ticker: str) -> list:
+    """Respaldo cuando Finnhub no da noticias (sin clave, cuota agotada, o
+    simplemente sin cobertura esa semana) -- yfinance ya es una dependencia
+    que se usa en toda la terminal, así que no hace falta ninguna clave
+    nueva. El formato de .news ha cambiado entre versiones de yfinance
+    (a veces plano, a veces anidado bajo 'content'), así que se comprueban
+    ambas formas defensivamente. Ver conversación 18/07/2026."""
+    try:
+        stock = yf.Ticker(ticker)
+        raw_items = stock.news or []
+        news = []
+        for item in raw_items[:10]:
+            # yfinance >= 0.2.4x suele anidar los campos bajo 'content'
+            content = item.get("content", item)
+            headline = content.get("title") or item.get("title") or item.get("headline") or ""
+            if not headline:
+                continue
+            url = (
+                (content.get("clickThroughUrl") or {}).get("url")
+                or (content.get("canonicalUrl") or {}).get("url")
+                or item.get("link") or item.get("url") or ""
+            )
+            source = (content.get("provider") or {}).get("displayName") or item.get("publisher") or "Yahoo Finance"
+            ts = content.get("pubDate") or item.get("providerPublishTime") or 0
+            date_str = ""
+            try:
+                if isinstance(ts, str):
+                    date_str = ts[:16].replace("T", " ")
+                elif ts:
+                    date_str = datetime.fromtimestamp(ts).strftime('%d/%m/%Y %H:%M')
+            except Exception:
+                pass
+            news.append({"headline": headline, "source": source, "url": url, "datetime": 0, "date": date_str})
+        return news
+    except Exception as e:
+        print(f"[Research:{ticker}] Fallback de noticias de yfinance falló: {type(e).__name__}: {e}")
+        return []
+
+
 def _get_finnhub(ticker: str) -> dict:
     key = settings.finnhub_api_key
-    if not key:
-        return {}
-    try:
-        session = requests.Session()
-        session.headers.update({"X-Finnhub-Token": key})
+    news, sentiment = [], {}
 
-        news, sentiment = [], {}
+    if key:
         try:
-            today = datetime.now().strftime('%Y-%m-%d')
-            from datetime import timedelta
-            week_ago = (datetime.now() - timedelta(days=7)).strftime('%Y-%m-%d')
-            r = session.get(
-                f"https://finnhub.io/api/v1/company-news",
-                params={"symbol": ticker, "from": week_ago, "to": today},
-                timeout=8
-            )
-            if r.status_code == 200:
-                items = r.json()[:8]
-                news  = []
-                for n in items:
-                    ts = n.get('datetime', 0)
-                    try:
-                        date_str = datetime.fromtimestamp(ts).strftime('%d/%m/%Y %H:%M') if ts else ''
-                    except Exception:
-                        date_str = ''
-                    news.append({
-                        "headline": n.get('headline', ''),
-                        "source":   n.get('source', ''),
-                        "url":      n.get('url', ''),
-                        "datetime": ts,
-                        "date":     date_str,
-                    })
-        except Exception: pass
+            session = requests.Session()
+            session.headers.update({"X-Finnhub-Token": key})
 
-        try:
-            r = session.get(f"https://finnhub.io/api/v1/news-sentiment",
-                            params={"symbol": ticker}, timeout=8)
-            if r.status_code == 200:
-                d = r.json()
-                sentiment = {
-                    "score":    _safe(d.get('companyNewsScore')),
-                    "bullish":  _safe(d.get('sentiment',{}).get('bullishPercent')),
-                    "bearish":  _safe(d.get('sentiment',{}).get('bearishPercent')),
-                }
-        except Exception: pass
+            try:
+                from datetime import timedelta
+                today = datetime.now().strftime('%Y-%m-%d')
+                # Ventana ampliada de 7 a 30 días -- 7 días dejaba la sección
+                # vacía para cualquier ticker sin cobertura mediática esa
+                # semana concreta, aunque sí hubiera noticias recientes de
+                # verdad. Ver conversación 18/07/2026.
+                month_ago = (datetime.now() - timedelta(days=30)).strftime('%Y-%m-%d')
+                r = session.get(
+                    "https://finnhub.io/api/v1/company-news",
+                    params={"symbol": ticker, "from": month_ago, "to": today},
+                    timeout=8
+                )
+                if r.status_code == 200:
+                    items = r.json()[:10]
+                    for n in items:
+                        ts = n.get('datetime', 0)
+                        try:
+                            date_str = datetime.fromtimestamp(ts).strftime('%d/%m/%Y %H:%M') if ts else ''
+                        except Exception:
+                            date_str = ''
+                        news.append({
+                            "headline": n.get('headline', ''),
+                            "source":   n.get('source', ''),
+                            "url":      n.get('url', ''),
+                            "datetime": ts,
+                            "date":     date_str,
+                        })
+                elif r.status_code == 429:
+                    print(f"[Research:{ticker}] Finnhub sin cuota (429) — usando respaldo de yfinance")
+            except Exception:
+                pass
 
-        return {"news": news, "sentiment": sentiment}
-    except Exception:
-        return {}
+            try:
+                r = session.get("https://finnhub.io/api/v1/news-sentiment",
+                                params={"symbol": ticker}, timeout=8)
+                if r.status_code == 200:
+                    d = r.json()
+                    sentiment = {
+                        "score":    _safe(d.get('companyNewsScore')),
+                        "bullish":  _safe(d.get('sentiment', {}).get('bullishPercent')),
+                        "bearish":  _safe(d.get('sentiment', {}).get('bearishPercent')),
+                    }
+            except Exception:
+                pass
+        except Exception:
+            pass
+    else:
+        print(f"[Research:{ticker}] finnhub_api_key no configurado — usando respaldo de yfinance para noticias")
+
+    # Respaldo: si Finnhub no dio ninguna noticia (sin clave, cuota agotada,
+    # o sin cobertura esa ventana), se intenta con yfinance antes de dejar
+    # la sección vacía del todo.
+    if not news:
+        news = _get_yfinance_news_fallback(ticker)
+
+    return {"news": news, "sentiment": sentiment}
 
 def _get_finnhub_analyst_changes(ticker: str) -> list:
     """Antes se llamaba _get_fmp_analyst_changes — nombre engañoso, esto nunca
