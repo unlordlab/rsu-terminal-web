@@ -101,8 +101,6 @@ function body() {
 
         + quote('Nuestra revoluci\u00f3n no comienza tomando el Palacio de Invierno.<br>Comienza leyendo correctamente una vela, entendiendo el flujo del capital y neg\u00e1ndonos a seguir siendo \u00fanicamente la liquidez de otros.', '', 'accent')
 
-        + tags(['SEGUIR EL RASTRO', 'SOLIDARIDAD T\u00c9CNICA', 'REALISMO OPERATIVO', 'EJECUTAR'])
-
         + '</div>';
 }
 
@@ -163,14 +161,5 @@ function box(type, content) {
     };
     return '<div style="' + (styles[type] || styles.warning) + 'border-radius:var(--radius);padding:1rem 1.25rem;margin:1.25rem 0;font-size:13px;line-height:1.8;">'
         + content
-        + '</div>';
-}
-
-function tags(items) {
-    return '<div style="display:flex;gap:10px;flex-wrap:wrap;justify-content:center;margin:1.75rem 0 0.5rem;">'
-        + items.map(t =>
-            '<span style="background:rgba(0,255,173,0.08);color:var(--color-accent);border:1px solid rgba(0,255,173,0.3);border-radius:var(--radius);padding:8px 16px;margin:4px;font-size:12px;letter-spacing:0.08em;white-space:nowrap;">'
-            + t + '</span>'
-        ).join('')
         + '</div>';
 }
