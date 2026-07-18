@@ -1985,6 +1985,24 @@ Sirve para hacerte una idea de "cuánto suele dar" cada acierto de la estrategia
 Conviene leerlo junto al Win Rate: una estrategia con pocas operaciones pero cada una con una ganancia media alta puede ser tan buena (o mejor) que otra con muchas operaciones pequeñas — lo que importa al final es el resultado conjunto (Equity Final), estas dos métricas solo ayudan a entender de dónde viene ese resultado.`
     },
 
+    "research-turnover": {
+        title: "Rotación vs. Mercado",
+        short: "Compara cuántas acciones cambian de manos en este activo frente al mercado general — si se desvía mucho, sugiere que está bajo fuerzas propias, no solo las del mercado amplio.",
+        long: `La rotación (turnover) mide qué proporción de las acciones en circulación de una empresa cambian de dueño cada día — se calcula dividiendo el volumen negociado entre el número total de acciones existentes.
+
+Un estudio académico de referencia (Lo & Wang, 2000, publicado en Review of Financial Studies) analizó décadas de datos del mercado y encontró que la rotación no es aleatoria ni uniforme entre distintas acciones — tiene una estructura real, y buena parte de esa estructura está explicada por factores comunes de mercado.
+
+QUÉ MUESTRA ESTE GRÁFICO:
+Se compara la evolución de la rotación de este activo con la del mercado general (representado por SPY, el ETF que replica el S&P 500), ambas normalizadas para poder compararse en la misma escala pese a ser empresas de tamaños muy distintos.
+
+CÓMO LEER LA CORRELACIÓN:
+- Alta (por encima de 0,5): la actividad de este activo se mueve básicamente al mismo ritmo que la del mercado general — no hay indicios de nada fuera de lo común.
+- Moderada (0,2 a 0,5): hay una relación con el mercado, pero también un componente de actividad propio.
+- Baja (por debajo de 0,2): la actividad de este activo apenas se explica por lo que pasa en el mercado general — puede deberse a noticias específicas de la empresa, entrada o salida de grandes inversores, o cualquier otro factor propio, no ligado al mercado amplio.
+
+Ninguno de los tres casos es "bueno" o "malo" por sí solo — es información adicional sobre qué está moviendo realmente el precio de este activo en este momento.`
+    },
+
     // ── GENERAL ───────────────────────────────────────────────────────────────
     "market-cap": {
         title: "Market Cap — Capitalización bursátil",
