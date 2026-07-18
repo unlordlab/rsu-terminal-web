@@ -16,15 +16,6 @@ CFG = {
     "sell_c_trim1_pct": 0.65, "sell_c_trim1_tp": 0.05,
     "sell_c_trail_be": 0.00, "sell_c_trim2_pct": 0.15,
     "sell_c_trim2_tp": 0.10, "sell_c_final_tp": 0.20,
-    "dd_phase_map": [
-        (15, "STAND BY", "#333"),
-        (24, "FASE 1",   "#00ffad"),
-        (29, "FASE 2",   "#00ffad"),
-        (36, "FASE 3",   "#ff9800"),
-        (43, "FASE 4",   "#ff9800"),
-        (49, "FASE 5",   "#f23645"),
-        (999,"FASE 6",   "#f23645"),
-    ],
 }
 
 PHASE_DROPS = CFG["phase_drops"]
@@ -45,13 +36,6 @@ def _is_market_open() -> bool:
         if now_utc.weekday() >= 5: return False
         t = now_utc.hour * 60 + now_utc.minute
         return 13*60+30 <= t < 20*60
-
-def _phase_state(current_price: float, spxl_high: float) -> tuple:
-    dd = abs((current_price - spxl_high) / spxl_high * 100)
-    for threshold, label, color in CFG["dd_phase_map"]:
-        if dd < threshold:
-            return label, color
-    return "FASE 6", "#f23645"
 
 def _fetch_cds() -> float | None:
     try:
@@ -81,9 +65,31 @@ def get_spxl_live() -> dict:
         current   = float(hist['Close'].iloc[-1])
         prev      = float(hist['Close'].iloc[-2])
         chg_pct   = (current - prev) / prev * 100
-        spxl_high = float(hist['Close'].max())
-        dd_pct    = (current - spxl_high) / spxl_high * 100
-        phase_lbl, phase_color = _phase_state(current, spxl_high)
+
+        # Fase real: se corre el mismo motor que usa el backtest sobre el
+        # histórico completo (no solo 2 años) y se lee su estado final --
+        # así "FASE X" y los precios objetivo de la tabla salen SIEMPRE del
+        # mismo cálculo que usaría el backtest de verdad en este momento,
+        # en vez de dos sistemas de fase distintos que podían no coincidir
+        # entre sí. Ver conversación 18/07/2026.
+        full_hist = spxl.history(start="2008-11-05")[["Close"]].copy()
+        full_hist.index = full_hist.index.tz_localize(None)
+        full_hist.columns = ["price"]
+        full_hist = full_hist[~full_hist.index.duplicated(keep="last")].sort_index().dropna()
+        bt_result  = run_backtest(full_hist, initial_capital=100_000)
+        fstate     = bt_result["final_state"]
+        phase_idx  = fstate["phase_idx"]
+        phase_high = fstate["phase_high"] if fstate["phase_high"] else current
+
+        spxl_high = float(hist['Close'].max())  # se mantiene solo como dato informativo (máx. 2 años)
+        dd_pct    = (current - phase_high) / phase_high * 100
+
+        if phase_idx < 0:
+            phase_lbl, phase_color = "STAND BY", "#333"
+        else:
+            colors = ["#00ffad", "#00ffad", "#ff9800", "#ff9800", "#f23645", "#f23645"]
+            phase_lbl   = f"FASE {phase_idx + 1}"
+            phase_color = colors[min(phase_idx, len(colors) - 1)]
 
         # SPX
         spx_hist  = yf.Ticker("^GSPC").history(period="2d")
@@ -110,9 +116,11 @@ def get_spxl_live() -> dict:
         # CDS
         cds = _fetch_cds()
 
-        # Fases — precio objetivo de entrada por fase
+        # Fases — precio objetivo de entrada por fase, encadenadas desde el
+        # MISMO phase_high real que usa el motor del backtest (no desde el
+        # precio actual, que era el bug anterior).
         phases = []
-        ref    = current
+        ref    = phase_high
         for i, (drop, alloc) in enumerate(zip(PHASE_DROPS, PHASE_ALLOC)):
             target = ref * (1 - drop)
             phases.append({
@@ -120,7 +128,7 @@ def get_spxl_live() -> dict:
                 "drop":   drop * 100,
                 "alloc":  alloc * 100,
                 "target": round(target, 2),
-                "active": phase_lbl == f"FASE {i+1}",
+                "active": phase_idx == i,
             })
             ref = target
 
@@ -136,6 +144,7 @@ def get_spxl_live() -> dict:
             "price":        round(current, 2),
             "chg_pct":      round(chg_pct, 2),
             "spxl_high":    round(spxl_high, 2),
+            "phase_high":   round(phase_high, 2),
             "dd_pct":       round(dd_pct, 2),
             "phase":        phase_lbl,
             "phase_color":  phase_color,
@@ -310,6 +319,22 @@ def run_backtest(df, initial_capital=100_000):
         "equity_curve": equity_curve,
         "bnh_curve":    bnh_curve,
         "max_dd":       round(max_dd, 2),
+        # Estado final al terminar de recorrer los datos -- ver conversación
+        # 18/07/2026: esto es lo que usa get_spxl_live() para saber en qué
+        # fase está la estrategia AHORA MISMO, con el mismo motor exacto
+        # que usa el backtest, en vez de reimplementar el cálculo por
+        # separado (que era la causa de la inconsistencia entre lo que
+        # mostraba la etiqueta "FASE X" y la tabla de precios objetivo).
+        "final_state": {
+            "phase_idx":     phase_idx,       # -1 = STAND BY, 0 = FASE 1, ...
+            "phase_high":    phase_high,       # referencia real desde la que se miden las próximas caídas
+            "shares":        shares,
+            "avg_cost":      avg_cost,
+            "cash":          cash,
+            "cycle_equity":  cycle_equity,
+            "in_runner":     in_runner,
+            "runner_shares": runner_shares,
+        },
     }
 
 def compute_stats(trades, eq_curve, bnh_curve, initial_capital):

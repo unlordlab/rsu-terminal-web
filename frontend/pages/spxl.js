@@ -44,19 +44,19 @@ async function loadLive(container) {
         // Header KPIs
         el.innerHTML = '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:1rem;margin-bottom:1rem;">'
             + kpiCard('SPXL PRECIO', '$' + data.price.toLocaleString('en-US'), (data.chg_pct >= 0 ? '+' : '') + data.chg_pct.toFixed(2) + '% hoy', chgColor)
-            + kpiCard('DRAWDOWN', data.dd_pct.toFixed(1) + '%', 'vs máximo histórico', ddColor)
+            + kpiCard('DRAWDOWN ' + tt('spxl-phases'), data.dd_pct.toFixed(1) + '%', 'vs máximo histórico', ddColor)
             + kpiCard('MÁXIMO', '$' + data.spxl_high.toLocaleString('en-US'), 'Referencia', 'var(--color-muted)')
             + kpiCard('MERCADO', mktLabel, 'NYSE', mktColor)
             + (data.vix     ? kpiCard('VIX', data.vix.toFixed(2), (data.vix_chg >= 0 ? '+' : '') + data.vix_chg.toFixed(2), data.vix_chg >= 0 ? '#f23645' : 'var(--color-accent)') : '')
             + (data.bond10y ? kpiCard('10Y UST', data.bond10y.toFixed(2) + '%', (data.bond10y_chg >= 0 ? '+' : '') + data.bond10y_chg.toFixed(2), 'var(--color-muted)') : '')
-            + (data.cds     ? kpiCard('HY SPREAD', data.cds.toFixed(2) + '%', 'Credit Spreads', data.cds > 5 ? '#f23645' : data.cds > 4 ? '#ff9800' : 'var(--color-accent)') : '')
+            + (data.cds     ? kpiCard('HY SPREAD ' + tt('spxl-cds'), data.cds.toFixed(2) + '%', 'Credit Spreads', data.cds > 5 ? '#f23645' : data.cds > 4 ? '#ff9800' : 'var(--color-accent)') : '')
             + '</div>'
 
             // Fase actual
             + '<div style="background:var(--color-surface);border:1px solid ' + data.phase_color + '44;border-radius:var(--radius);padding:1.25rem;margin-bottom:1rem;">'
             + '<div style="display:flex;justify-content:space-between;align-items:center;">'
             + '<div>'
-            + '<div style="color:var(--color-muted);font-size:11px;letter-spacing:0.1em;margin-bottom:4px;">FASE ACTUAL</div>'
+            + '<div style="color:var(--color-muted);font-size:11px;letter-spacing:0.1em;margin-bottom:4px;">FASE ACTUAL ' + tt('spxl-phases') + '</div>'
             + '<div style="color:' + data.phase_color + ';font-size:28px;font-weight:500;letter-spacing:0.1em;">' + data.phase + '</div>'
             + '</div>'
             + '<div style="text-align:right;">'

@@ -1218,29 +1218,47 @@ SPXL NO es para mantener indefinidamente. Es una herramienta táctica para ciclo
     },
 
     "spxl-phases": {
-        title: "Fases DCA — Estrategia SPXL",
-        short: "6 niveles de entrada escalonados según la caída desde máximos de SPXL.",
-        long: `La estrategia RSU divide el capital disponible en 6 tramos que se despliegan progresivamente según SPXL cae desde su máximo histórico.
+        title: "Fases DCA — Estrategia SPXL (RSU v0.2)",
+        short: "6 niveles de entrada escalonados, cada uno midiendo la caída desde el precio de la fase anterior, no desde el máximo original.",
+        long: `La estrategia RSU divide el capital disponible en 6 tramos que se despliegan progresivamente a medida que SPXL sigue cayendo.
 
-LÓGICA:
-No intentamos adivinar el mínimo. Compramos a medida que cae, reduciendo el coste medio. Si el mercado continúa cayendo, tenemos capital reservado para niveles más bajos.
+LÓGICA — IMPORTANTE: cada caída se mide desde el precio de la ÚLTIMA entrada, no desde el máximo histórico original. Es un sistema encadenado: cada vez que se ejecuta una compra, el punto de referencia para la siguiente caída se resetea al precio de esa compra.
 
-LAS 6 FASES:
-- Fase 1: -15% desde máximo → 20% del capital
-- Fase 2: -24% desde máximo → 15% del capital
-- Fase 3: -29% desde máximo → 20% del capital
-- Fase 4: -36% desde máximo → 20% del capital
-- Fase 5: -43% desde máximo → 15% del capital
-- Fase 6: -49% desde máximo → 10% del capital
+LAS 6 FASES (caída desde la entrada anterior, no acumulada):
+- Fase 1: -15% desde el máximo → 20% del capital
+- Fase 2: -10% adicional desde la Fase 1 → 15% del capital
+- Fase 3: -7% adicional desde la Fase 2 → 20% del capital
+- Fase 4: -10% adicional desde la Fase 3 → 20% del capital
+- Fase 5: -10% adicional desde la Fase 4 → 15% del capital
+- Fase 6: -10% adicional desde la Fase 5 → 10% del capital
 
-RESERVA: 10% del capital nunca se invierte → liquidez de emergencia.
+Nota: el documento original de la estrategia (v0.1) solo describía las 4 primeras fases con un 25% de capital en reserva. Las Fases 5 y 6 son una extensión posterior (v0.2) que despliega ese capital adicional en caídas todavía más profundas, dejando solo el 10% de reserva de emergencia (\`reserve_pct\`) sin invertir nunca.
 
-ESCENARIOS DE SALIDA (A, B, C):
-- Escenario A (≤3 fases): Entrada en caída moderada. Salida rápida en +20%.
-- Escenario B (4-5 fases): Caída seria. Venta parcial en +10%, runner con trailing.
-- Escenario C (6 fases): Capitulación total. Salida escalonada en 3 tramos.
+ESCENARIOS DE SALIDA (según cuántas fases llegaste a usar):
+- Escenario A (≤3 fases): Entrada en caída moderada. Salida rápida en +20% sobre el precio medio.
+- Escenario B (4-5 fases): Caída seria. Venta parcial en +10%, se deja correr un "runner" con stop dinámico.
+- Escenario C (6 fases): Capitulación total. Salida escalonada en 3 tramos (65% / 15% / resto).
 
-La disciplina de seguir el plan sin improvisaciones es la clave del sistema.`
+La disciplina de seguir el plan sin improvisar en el momento es la clave de todo el sistema.`
+    },
+
+    "spxl-cds": {
+        title: "Mecanismo de seguridad — CDS (Credit Default Swaps)",
+        short: "El 'freno de emergencia' de la estrategia: si el riesgo de crédito del sistema financiero se dispara, se deja de comprar aunque el precio siga cayendo.",
+        long: `La mayoría de las caídas de mercado son oportunidades de compra dentro de esta estrategia. Pero existen momentos muy poco frecuentes — crisis financieras graves, como la de 2008 — en los que el mercado puede caer mucho más de lo normal, y seguir el plan de compras a ciegas sería peligroso.
+
+QUÉ ES: los Credit Default Swaps (CDS) son, en esencia, un seguro contra el impago de deuda corporativa — su precio sube cuando el mercado teme que las empresas (o los bancos) no puedan pagar sus deudas. Es un termómetro de estrés real en el sistema financiero, no solo de la bolsa.
+
+INDICADOR USADO: BAMLH0A0HYM2 (spread de high yield vs. bonos del Tesoro de EE.UU., serie de FRED).
+
+CÓMO SE ACTIVA: si el indicador sube por encima de 10.7, o aumenta más de un 250% desde sus mínimos recientes, se considera una señal de alarma seria.
+
+QUÉ HACE LA ESTRATEGIA CUANDO SE ACTIVA:
+- Se deja de comprar — ninguna fase nueva se ejecuta, aunque el precio siga cayendo lo suficiente para activarla.
+- Las posiciones ya abiertas se mantienen, no se liquidan por pánico.
+- No se añade más capital hasta que el indicador vuelve a niveles normales.
+
+Es, literalmente, un freno de emergencia: protege de invertir capital nuevo justo en medio de un colapso sistémico, que es distinto de una corrección normal de mercado.`
     },
 
     // ── RESEARCH ──────────────────────────────────────────────────────────────
