@@ -41,8 +41,8 @@ export function renderSidebar(container, navigate) {
         logoStyle.id = 'sidebar-logo-style';
         logoStyle.textContent = `
         @keyframes logo-pulse {
-            0%, 100% { box-shadow: 0 0 8px rgba(0,255,173,0.4), 0 0 16px rgba(0,255,173,0.2); }
-            50%       { box-shadow: 0 0 14px rgba(0,255,173,0.7), 0 0 28px rgba(0,255,173,0.3), 0 0 40px rgba(0,217,255,0.1); }
+            0%, 100% { filter: drop-shadow(0 0 4px var(--color-accent)) drop-shadow(0 0 8px color-mix(in srgb, var(--color-accent) 50%, transparent)); }
+            50%       { filter: drop-shadow(0 0 8px var(--color-accent)) drop-shadow(0 0 16px color-mix(in srgb, var(--color-accent) 60%, transparent)); }
         }
         .rsu-logo {
             animation: logo-pulse 3s ease-in-out infinite;
@@ -56,7 +56,10 @@ export function renderSidebar(container, navigate) {
     }
 
     header.innerHTML = '<div style="display:flex;align-items:center;gap:12px;margin-bottom:4px;">'
-        + '<img src="/assets/logo.png" class="rsu-logo" style="width:68px;height:68px;border-radius:50%;object-fit:cover;border:2px solid var(--color-accent);" onerror="this.style.display=\'none\'">'
+        + '<div class="rsu-logo" style="width:52px;height:52px;flex-shrink:0;background-color:var(--color-accent);'
+        + '-webkit-mask-image:url(/assets/logo-icon.png);mask-image:url(/assets/logo-icon.png);'
+        + '-webkit-mask-size:contain;mask-size:contain;-webkit-mask-repeat:no-repeat;mask-repeat:no-repeat;'
+        + '-webkit-mask-position:center;mask-position:center;"></div>'
         + '<div>'
         + '<div style="color:var(--color-accent);font-size:15px;letter-spacing:0.12em;text-shadow:var(--glow-text);">RSU TERMINAL</div>'
         + '<div style="color:var(--color-muted);font-size:10px;letter-spacing:0.05em;">v2.0</div>'
