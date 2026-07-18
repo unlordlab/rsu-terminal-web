@@ -346,6 +346,9 @@ def run_backtest(df, initial_capital=100_000, debug=False):
                         phase_high   = price
                         cycle_equity = cash
 
+        if debug and "2009-03-01" <= str(date)[:10] <= "2009-08-01":
+            print(f"[DEBUG STATE] {str(date)[:10]} price={price:.2f} cash={cash:.2f} shares={shares:.2f} avg_cost={avg_cost:.2f} runner_shares={runner_shares:.2f} in_runner={in_runner} phase_idx={phase_idx} cycle_equity={cycle_equity:.2f}")
+
     return {
         "trades":       trades,
         "equity_curve": equity_curve,
