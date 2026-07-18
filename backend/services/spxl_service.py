@@ -278,6 +278,7 @@ def run_backtest(df, initial_capital=100_000, debug=False):
                 if not sold_trim1 and gain >= CFG["sell_c_trim1_tp"]:
                     trim_qty = shares * CFG["sell_c_trim1_pct"]
                     trades.append(_make_trade(date, price, avg_cost, trim_qty, n_phases, "C-trim1", entry_date))
+                    cash     += trim_qty * price  # FALTABA -- ver conversación 18/07/2026
                     shares   -= trim_qty
                     sold_trim1 = True
                     first_sell_px = price
@@ -286,6 +287,7 @@ def run_backtest(df, initial_capital=100_000, debug=False):
                     if rg >= CFG["sell_c_trim2_tp"]:
                         trim2_qty = shares * (CFG["sell_c_trim2_pct"] / (1 - CFG["sell_c_trim1_pct"]))
                         trades.append(_make_trade(date, price, avg_cost, trim2_qty, n_phases, "C-trim2", entry_date))
+                        cash     += trim2_qty * price  # FALTABA -- ver conversación 18/07/2026
                         shares   -= trim2_qty
                         sold_trim2 = True
                 elif sold_trim2:
