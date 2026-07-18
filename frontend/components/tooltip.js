@@ -1915,6 +1915,76 @@ En otras palabras: es cuánto podrías invertir en una posición CORE/HIGH/LOTTE
 El texto pequeño debajo ("Inicial $X, +$Y realiz.") te desglosa de dónde sale ese número: tu capital de partida, más el P&L acumulado de todo lo que ya has cerrado.`
     },
 
+    "spxl-equity-final": {
+        title: "Equity Final",
+        short: "Cuánto tendrías hoy si hubieras seguido la estrategia con el capital inicial indicado, desde 2008 hasta ahora.",
+        long: `Es el resultado de simular la estrategia día a día sobre el histórico real de precios de SPXL, empezando con el capital que hayas puesto en el campo "Capital" y aplicando cada compra y venta exactamente según las reglas de las 6 fases.
+
+No es una proyección ni una estimación — es lo que habría pasado de verdad, operación por operación, si hubieras seguido el plan sin desviarte ni una sola vez durante todo el periodo.
+
+Los beneficios (o pérdidas) de cada ciclo se reinvierten en el siguiente: si un ciclo termina con más capital del que empezó, el ciclo siguiente calcula sus fases sobre ese capital ya crecido, no sobre la cifra original. Por eso el tamaño en dólares de cada fase va aumentando con el tiempo si la estrategia va bien.`
+    },
+
+    "spxl-bnh-final": {
+        title: "B&H Final (Buy & Hold)",
+        short: "Cuánto tendrías si hubieras comprado SPXL una sola vez al principio y no hubieras tocado nada más.",
+        long: `Es el resultado de la comparación más simple posible: invertir todo el capital de golpe al inicio del periodo, y no hacer absolutamente nada más — ni comprar en las caídas, ni vender en las subidas, ni reaccionar a ninguna señal.
+
+Sirve como punto de referencia (benchmark) para saber si la estrategia de compras escalonadas está aportando algo respecto a la opción más sencilla de todas.
+
+Es importante tener en cuenta que Buy & Hold, al estar invertido el 100% del tiempo, se beneficia por completo de cualquier periodo alcista prolongado — mientras que una estrategia que solo compra en caídas pasa parte del tiempo en efectivo, sin participar de esas subidas.`
+    },
+
+    "spxl-cagr": {
+        title: "CAGR — Tasa de Crecimiento Anual Compuesto",
+        short: "El rendimiento anualizado de la estrategia, expresado como si hubiera crecido a un ritmo constante cada año.",
+        long: `CAGR son las siglas de "Compound Annual Growth Rate" — la tasa de crecimiento anual compuesto. Es una forma estándar de expresar el rendimiento de una inversión a lo largo de varios años como si hubiera crecido de forma constante y compuesta cada año, en vez de mostrar solo el resultado final en dólares.
+
+Por qué es útil: permite comparar de forma justa periodos de distinta duración, o distintas estrategias entre sí, sin que el número total en dólares (que depende del capital de partida) distorsione la comparación.
+
+Ejemplo: un CAGR del 10% significa que, en promedio, el capital creció un 10% cada año — aunque en la realidad algunos años suba mucho más y otros baje, el CAGR es el ritmo "equivalente" que habría dado el mismo resultado final si el crecimiento hubiera sido perfectamente uniforme.`
+    },
+
+    "spxl-cagr-bnh": {
+        title: "CAGR B&H (Buy & Hold)",
+        short: "El rendimiento anualizado de simplemente comprar y mantener, para comparar con el de la estrategia.",
+        long: `Mismo cálculo que el CAGR de la estrategia (tasa de crecimiento anual compuesto), pero aplicado al resultado de Buy & Hold — comprar todo el capital de golpe al principio y no tocar nada más.
+
+Comparar este número con el CAGR de la estrategia es la forma más directa de responder a la pregunta "¿ha merecido la pena la gestión activa frente a no hacer nada?"
+
+Un CAGR de estrategia más bajo que el de Buy & Hold no significa automáticamente que la estrategia sea mala — puede significar que está sacrificando parte de la subida a cambio de sufrir caídas menos severas por el camino (ver Max DD). Cuál de las dos cosas te interesa más depende de tu propia tolerancia al riesgo.`
+    },
+
+    "spxl-win-rate": {
+        title: "Win Rate",
+        short: "El porcentaje de operaciones cerradas que terminaron con ganancia, sobre el total de operaciones.",
+        long: `De todas las operaciones que se cerraron (se vendió una posición, total o parcialmente) durante el periodo simulado, este es el porcentaje que terminó con un resultado positivo.
+
+Un Win Rate alto es una buena señal, pero no cuenta toda la historia por sí solo — una estrategia puede tener un Win Rate muy alto y aun así no ser rentable en conjunto, si las pocas operaciones perdedoras son mucho más grandes que las muchas ganadoras. Por eso conviene mirarlo junto al Avg Win (tamaño medio de cada victoria) y al Max DD (el peor bache que hubo que aguantar), no de forma aislada.
+
+El número de operaciones (trades) que aparece debajo indica el tamaño de la muestra — cuantas más operaciones, más fiable es el porcentaje como reflejo del comportamiento real de la estrategia.`
+    },
+
+    "spxl-max-dd": {
+        title: "Max DD — Drawdown Máximo",
+        short: "La mayor caída que sufrió el valor total de la cartera desde un máximo hasta el punto más bajo posterior, en todo el periodo.",
+        long: `El drawdown mide cuánto cae el valor de la cartera desde su punto más alto hasta el punto más bajo que le sigue, antes de volver a recuperarse. El "Máximo" (Max DD) es la peor de todas esas caídas registradas en todo el periodo simulado.
+
+Por qué importa tanto: es, en la práctica, la medida más directa de "cuánto dolor tendrías que haber aguantado" para conseguir el resultado final. Dos estrategias pueden acabar con el mismo capital final y aun así ser muy distintas en la experiencia real de mantenerlas — una con caídas moderadas por el camino, otra con desplomes severos que habrían sido muy difíciles de soportar sin vender por pánico.
+
+Cuanto menor (más cercano a 0%) sea este número, más suave fue el camino hasta el resultado final — aunque eso normalmente venga acompañado de un rendimiento total algo menor.`
+    },
+
+    "spxl-avg-win": {
+        title: "Avg Win — Ganancia Media por Operación",
+        short: "El porcentaje medio de beneficio de las operaciones que terminaron en ganancia.",
+        long: `Es el promedio del porcentaje de ganancia (P&L %) de todas las operaciones que cerraron con resultado positivo — no incluye las que cerraron con pérdida, solo las ganadoras.
+
+Sirve para hacerte una idea de "cuánto suele dar" cada acierto de la estrategia en términos relativos, independientemente de lo grande o pequeña que fuera esa posición concreta en dólares.
+
+Conviene leerlo junto al Win Rate: una estrategia con pocas operaciones pero cada una con una ganancia media alta puede ser tan buena (o mejor) que otra con muchas operaciones pequeñas — lo que importa al final es el resultado conjunto (Equity Final), estas dos métricas solo ayudan a entender de dónde viene ese resultado.`
+    },
+
     // ── GENERAL ───────────────────────────────────────────────────────────────
     "market-cap": {
         title: "Market Cap — Capitalización bursátil",

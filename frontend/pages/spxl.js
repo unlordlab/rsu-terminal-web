@@ -140,13 +140,13 @@ async function loadBacktest(container, capital) {
         const stratColor = s.total_return >= s.bnh_return ? 'var(--color-accent)' : '#ff9800';
 
         el.innerHTML = '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:1rem;margin-bottom:1rem;">'
-            + kpiCard('Equity Final', '$' + s.final_equity.toLocaleString('en-US', {maximumFractionDigits:0}), 'Estrategia RSU', stratColor)
-            + kpiCard('B&H Final',   '$' + s.final_bnh.toLocaleString('en-US', {maximumFractionDigits:0}),   'Buy & Hold',    'var(--color-muted)')
-            + kpiCard('CAGR',        s.cagr.toFixed(1) + '%',      'Estrategia', stratColor)
-            + kpiCard('CAGR B&H',    s.bnh_cagr.toFixed(1) + '%',  'Buy & Hold', 'var(--color-muted)')
-            + kpiCard('Win Rate',    s.win_rate.toFixed(1) + '%',   s.total_trades + ' trades', 'var(--color-accent)')
-            + kpiCard('Max DD',      '-' + s.max_dd.toFixed(1) + '%', 'Drawdown máximo', '#f23645')
-            + kpiCard('Avg Win',     '+' + s.avg_win.toFixed(1) + '%', 'Por trade', 'var(--color-accent)')
+            + kpiCard('Equity Final ' + tt('spxl-equity-final'), '$' + s.final_equity.toLocaleString('en-US', {maximumFractionDigits:0}), 'Estrategia RSU', stratColor)
+            + kpiCard('B&H Final ' + tt('spxl-bnh-final'),   '$' + s.final_bnh.toLocaleString('en-US', {maximumFractionDigits:0}),   'Buy & Hold',    'var(--color-muted)')
+            + kpiCard('CAGR ' + tt('spxl-cagr'),        s.cagr.toFixed(1) + '%',      'Estrategia', stratColor)
+            + kpiCard('CAGR B&H ' + tt('spxl-cagr-bnh'),    s.bnh_cagr.toFixed(1) + '%',  'Buy & Hold', 'var(--color-muted)')
+            + kpiCard('Win Rate ' + tt('spxl-win-rate'),    s.win_rate.toFixed(1) + '%',   s.total_trades + ' trades', 'var(--color-accent)')
+            + kpiCard('Max DD ' + tt('spxl-max-dd'),      '-' + s.max_dd.toFixed(1) + '%', 'Drawdown máximo', '#f23645')
+            + kpiCard('Avg Win ' + tt('spxl-avg-win'),     '+' + s.avg_win.toFixed(1) + '%', 'Por trade', 'var(--color-accent)')
             + kpiCard('Años',        s.years.toFixed(1), '2008 → hoy', 'var(--color-muted)')
             + '</div>'
 
