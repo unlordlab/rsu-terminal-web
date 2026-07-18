@@ -24,8 +24,9 @@ function pageContent() {
 function header() {
     return '<div style="text-align:center;margin-bottom:2rem;">'
         + '<div style="color:var(--color-muted);font-size:11px;letter-spacing:0.15em;margin-bottom:8px;">[SECURE CONNECTION ESTABLISHED // ENCRYPTION: AES-256]</div>'
-        + '<div class="manifest-glitch" data-text=">> MANIFESTO_RSU.exe" style="position:relative;display:inline-block;color:var(--color-accent);font-size:32px;letter-spacing:0.1em;text-shadow:var(--glow-text);">'
-        + '>> MANIFESTO_RSU.exe'
+        + '<div style="color:var(--color-muted);font-size:12px;letter-spacing:0.1em;margin-bottom:10px;">&gt;&gt; MANIFESTO_RSU.exe</div>'
+        + '<div class="manifest-glitch" data-text="REDISTRIBUTION RESEARCH UNIT (RSU)" style="position:relative;display:inline-block;color:var(--color-accent);font-size:28px;letter-spacing:0.06em;text-shadow:var(--glow-text);line-height:1.3;">'
+        + 'REDISTRIBUTION RESEARCH UNIT (RSU)'
         + '</div>'
         + '<div style="color:var(--color-secondary);font-size:13px;letter-spacing:0.2em;margin-top:8px;">PROTOCOLO DE DESPERTAR DE CLASE // CICLO PERMANENTE<span class="manifest-cursor"></span></div>'
         + '</div>'
@@ -37,27 +38,70 @@ function body() {
 
     return '<div style="max-width:760px;margin:0 auto;">'
 
-        + p('Vivimos en el <b style="color:var(--color-accent);">Realismo Capitalista</b>: esa atmósfera mental que nos impide imaginar un final para este sistema que no sea el colapso total. El neoliberalismo no es solo un modelo económico; es una tanatopolítica que nos precariza, nos enferma con ansiedad y luego nos vende el ansiolítico para que sigamos siendo productivos. Nos dijeron que el futuro había muerto, que el <code>"No Future"</code> punk era una profecía cumplida. Pero mientras nosotros nos hundíamos en la nostalgia y la precariedad, las élites seguían operando en una temporalidad distinta.')
+        + p('Vivimos en una atm\u00f3sfera mental que nos impide imaginar un final para este sistema que no sea el colapso total. El neoliberalismo no es solo un modelo econ\u00f3mico; es una tanatopol\u00edtica que nos precariza, nos enferma con ansiedad y luego nos vende el ansiol\u00edtico para que sigamos siendo productivos. Pero mientras nosotros nos hund\u00edamos en la nostalgia y la precariedad, las \u00e9lites segu\u00edan operando en una temporalidad distinta.')
 
         + p('Warren Buffett lo dijo sin necesidad de suavizarlo:')
 
-        + quote('"Hay guerra de clases, y mi clase, la de los ricos, va ganando."', '— Warren Buffett [TARGET_ACQUIRED]', 'danger')
+        + quote('"Hay guerra de clases, y mi clase, la de los ricos, va ganando."', '\u2014 Warren Buffett [TARGET_ACQUIRED]', 'danger')
 
-        + p('Esa frase es el punto de partida de todo lo demás. No es una metáfora ni una exageración retórica: es la confesión, desde dentro, de quien no tiene ningún incentivo para mentir sobre quién gana y quién pierde. Si la guerra de clases es real —y lo es, dicha por el bando que la libra y la gana— entonces la pregunta no es si existe, sino qué vamos a hacer al respecto. <b style="color:var(--color-accent);">RSU nace exactamente de esa pregunta. RSU nace para dejar de perder.</b>')
+        + p('Esa frase es el punto de partida de todo lo dem\u00e1s. No es una met\u00e1fora ni una exageraci\u00f3n ret\u00f3rica: es la confesi\u00f3n, desde dentro, de quien no tiene ning\u00fan incentivo para mentir sobre qui\u00e9n gana y qui\u00e9n pierde. Si la guerra de clases es real \u2014y lo es, dicha por el bando que la libra y la gana\u2014 entonces la pregunta no es si existe, sino qu\u00e9 vamos a hacer al respecto.')
 
-        + p('El mercado financiero no es un templo de libertad; es una picadora de carne diseñada para extraer valor de la base y concentrarlo en la cúspide. Quienes han trabajado desde dentro de las salas de mercado lo repiten sin pudor: la desigualdad no es un error del sistema, es su función principal. Mientras la inflación monetaria devora tus ahorros y tu tiempo de vida, las élites operan con información privilegiada y herramientas que tú no tienes. Es la misma guerra que describía Buffett, solo que librada con datos de flujo, órdenes institucionales y ventaja informativa en lugar de titulares.')
+        + stmt('RSU nace exactamente de esa pregunta.')
+        + stmt('RSU nace para dejar de perder.')
 
-        + p('Pero incluso el bando que va ganando deja huellas. El mercado posee una vulnerabilidad: su propia infraestructura. Los gigantes no pueden moverse sin dejar rastro; sus órdenes alteran el tejido de la realidad gráfica, y ese rastro de liquidez es legible para quien sabe mirarlo. No somos inversores pasivos esperando migajas. Somos <b style="color:var(--color-accent);">hackers del flujo de capital</b>. Buscamos el rastro de las <code>"manos fuertes"</code>, identificamos sus zonas de manipulación y ejecutamos un exploit sobre su propia avaricia. Los análisis más lúcidos sobre el capital nunca partieron de amarlo, sino de diseccionarlo: entender el capital no es rendirle culto, es aprender su anatomía para sobrevivir a él y, si se puede, para dar la vuelta a la frase de Buffett a nuestro favor.')
+        + p('El mercado financiero no es un templo de libertad; es una picadora de carne dise\u00f1ada para extraer valor de la base y concentrarlo en la c\u00faspide. Quienes han trabajado desde dentro de las salas de mercado lo repiten sin pudor: la desigualdad no es un error del sistema, es su funci\u00f3n principal. Mientras la inflaci\u00f3n monetaria devora tus ahorros y consume tu tiempo de vida, las \u00e9lites operan con informaci\u00f3n privilegiada y herramientas que t\u00fa no tienes. Es la misma guerra que describ\u00eda Buffett, solo que librada con datos de flujo, \u00f3rdenes institucionales y ventaja informativa en lugar de titulares.')
 
-        + p('Ahí fuera, tu género, tu raza y tu código postal predeterminan tu techo de cristal. El neoliberalismo privatiza tu malestar y te culpa de tu pobreza. Pero el gráfico no sabe quién eres. El mercado es un entorno hostil, sí, pero es uno de los pocos lugares donde el conocimiento técnico y la disciplina pueden superar a la herencia. Operar no es una terapia, pero la libertad financiera es la única cura real para la ansiedad estructural de la precariedad. Y aun así, operamos con los ricos sin volvernos como ellos: no buscamos la explotación del prójimo, sino la extracción de liquidez de un sistema amañado que lleva décadas robándonos el futuro. Si Buffett admite que su clase libra la guerra, nosotros elegimos no fingir que no existe.')
+        + stmt('Pero incluso el bando que va ganando deja huellas.')
 
-        + p('De ahí el código de RSU. Primero, <b style="color:var(--color-accent);">seguir el rastro</b>: donde hay manipulación, hay oportunidad; no operamos contra el mercado, operamos contra la ilusión que el mercado crea para las masas. Segundo, <b style="color:var(--color-accent);">solidaridad técnica</b>: el conocimiento bursátil ha sido propiedad exclusiva de las clases dominantes, y RSU democratiza el acceso a la <code>"caja negra"</code> del trading profesional. Tercero, <b style="color:var(--color-accent);">realismo operativo</b>: aceptamos que el capitalismo es una estructura impersonal y abstracta, y que para destruirla o escapar de ella primero debemos dominar su lenguaje —el precio y el tiempo—.')
+        + p('El mercado posee una vulnerabilidad: su propia infraestructura. Los gigantes no pueden moverse sin dejar rastro. Sus \u00f3rdenes alteran el tejido de la realidad gr\u00e1fica, modifican la liquidez y crean patrones que pueden ser observados por quien sabe interpretarlos.')
 
-        + p('El neoliberalismo controla tus deseos para que desees rendir. RSU hackea ese deseo. No queremos Lamborghinis; queremos nuestro tiempo de vuelta. Queremos la soberanía que nos fue arrebatada.')
+        + stmt('No somos inversores pasivos esperando migajas.')
+        + stmt('Somos hackers del flujo de capital.', true)
 
-        + quote('Si la guerra de clases es real, el gráfico es nuestro mapa de guerra.<br>Si ellos ganan porque tienen la información —como reconoció el propio Buffett—, nosotros ganaremos porque sabemos leer su rastro.', '', 'accent')
+        + p('Buscamos el rastro de las manos fuertes, identificamos sus zonas de manipulaci\u00f3n, acumulaci\u00f3n y distribuci\u00f3n, y ejecutamos un exploit sobre su propia avaricia. Los an\u00e1lisis m\u00e1s l\u00facidos sobre el capital nunca partieron de amarlo, sino de diseccionarlo. Comprender el capital no significa rendirle culto, significa conocer su anatom\u00eda para sobrevivir dentro de \u00e9l.')
 
-        + tags(['HACKEA EL DESEO', 'RECLAMA EL TIEMPO', 'LEE EL RASTRO', 'EJECUTA'])
+        + p('Ah\u00ed fuera, tu g\u00e9nero, tu raza y tu c\u00f3digo postal predeterminan tu techo de cristal. El neoliberalismo privatiza tu malestar y te culpa de tu pobreza.')
+
+        + stmt('Pero el gr\u00e1fico no sabe qui\u00e9n eres.', true)
+
+        + p('El mercado es un entorno hostil y profundamente desigual, s\u00ed, pero es uno de los pocos lugares donde el conocimiento t\u00e9cnico y la disciplina pueden superar a la herencia.')
+
+        + stmt('Operar no es una terapia.')
+
+        + p('La libertad financiera no resuelve todos los problemas, pero elimina uno de los mayores generadores de ansiedad estructural: la dependencia econ\u00f3mica. Tampoco pretendemos presentarnos como benefactores morales ni negar que toda operaci\u00f3n financiera tiene una contraparte.')
+
+        + stmt('Operamos con los ricos sin volvernos como ellos.', true)
+
+        + p('Nuestro objetivo no consiste en extraer rentas del trabajo ajeno, sino en competir dentro de un mercado que ya existe aprovechando ineficiencias, ventajas probabil\u00edsticas y una mejor interpretaci\u00f3n de la informaci\u00f3n disponible. No buscamos explotar personas; buscamos dejar de ser explotados por nuestra ignorancia financiera.')
+
+        + stmt('Si Buffett admite que su clase libra la guerra, nosotros elegimos no fingir que no existe.')
+
+        + divider()
+
+        + p('De ah\u00ed la metodolog\u00eda de RSU.')
+
+        + methodBlock('01', 'Seguir el rastro', 'All\u00ed donde aparece una gran concentraci\u00f3n de liquidez existe informaci\u00f3n. No operamos contra el mercado; operamos contra la ilusi\u00f3n que el mercado proyecta sobre las masas que confunden ruido con direcci\u00f3n.')
+        + methodBlock('02', 'Solidaridad t\u00e9cnica', 'El conocimiento burs\u00e1til ha sido propiedad exclusiva de las clases dominantes, y RSU democratiza el acceso al conocimiento reservado hist\u00f3ricamente a las \u00e9lites como forma de redistribuci\u00f3n del poder.')
+        + methodBlock('03', 'Realismo operativo', 'Aceptamos que el capitalismo es una estructura abstracta, compleja e impersonal. Precisamente por eso entendemos que, para transformarla o liberarnos parcialmente de sus consecuencias, primero debemos comprender su lenguaje: precio, tiempo, liquidez y probabilidad.')
+
+        + divider()
+
+        + p('El neoliberalismo controla tus deseos para que desees rendir y consumir.')
+        + stmt('RSU hackea ese deseo.', true)
+
+        + '<div style="text-align:center;margin:1.75rem 0;">'
+            + stmtLine('No queremos Lamborghinis.')
+            + stmtLine('Queremos recuperar nuestro tiempo.')
+            + stmtLine('Queremos recuperar nuestra capacidad de decidir.')
+            + stmtLine('Queremos dejar de vender nuestra vida \u00fanicamente para sobrevivir.')
+        + '</div>'
+
+        + stmt('RSU no existe para hacer ricos a unos pocos.')
+        + stmt('Existe para devolver capacidad de decisi\u00f3n a quienes nunca la tuvieron.', true)
+
+        + quote('Nuestra revoluci\u00f3n no comienza tomando el Palacio de Invierno.<br>Comienza leyendo correctamente una vela, entendiendo el flujo del capital y neg\u00e1ndonos a seguir siendo \u00fanicamente la liquidez de otros.', '', 'accent')
+
+        + tags(['SEGUIR EL RASTRO', 'SOLIDARIDAD T\u00c9CNICA', 'REALISMO OPERATIVO', 'EJECUTAR'])
 
         + '</div>';
 }
@@ -79,6 +123,27 @@ function footer() {
 
 function divider() {
     return '<div style="height:1px;background:linear-gradient(90deg,transparent,var(--color-accent),transparent);margin:1.5rem 0;"></div>';
+}
+
+function stmt(text, emphasis) {
+    const size = emphasis ? '17px' : '15px';
+    const color = emphasis ? 'var(--color-accent)' : 'var(--color-secondary)';
+    const glow = emphasis ? 'text-shadow:var(--glow-text);' : '';
+    return '<p style="color:' + color + ';font-size:' + size + ';font-weight:600;letter-spacing:0.02em;text-align:center;margin:1.5rem 0;' + glow + '">' + text + '</p>';
+}
+
+function stmtLine(text) {
+    return '<div style="color:var(--color-text);font-size:15px;line-height:2.1;">' + text + '</div>';
+}
+
+function methodBlock(num, title, text) {
+    return '<div style="display:flex;gap:1rem;margin-bottom:1.5rem;align-items:flex-start;">'
+        + '<div style="color:var(--color-accent);font-size:13px;letter-spacing:0.1em;flex-shrink:0;padding-top:2px;opacity:0.6;">' + num + '</div>'
+        + '<div>'
+        + '<div style="color:var(--color-accent);font-size:15px;letter-spacing:0.05em;margin-bottom:0.4rem;">' + title + '</div>'
+        + '<div style="color:var(--color-text);font-size:13px;line-height:1.8;">' + text + '</div>'
+        + '</div>'
+        + '</div>';
 }
 
 function quote(text, attribution, tone) {
