@@ -250,8 +250,16 @@ def run_backtest(df, initial_capital=100_000, debug=False):
                     if entry_date is None: entry_date = date
                     phase_high = price
 
-        # SELL logic
-        if shares > 0 and avg_cost > 0:
+        # SELL logic -- IMPORTANTE: la condición también deja pasar cuando
+        # in_runner=True aunque shares ya esté en 0, porque una vez se
+        # ejecuta la venta principal (A-main/B-main) el "runner" residual
+        # se gestiona con runner_shares, no con shares. Antes esta
+        # condición se cerraba en cuanto shares llegaba a 0, dejando el
+        # runner huérfano para siempre -- nadie volvía a comprobar si
+        # debía cerrarse. Esto es lo que causaba que la estrategia se
+        # quedara "congelada" desde 2009 en el backtest real. Ver
+        # conversación 18/07/2026.
+        if (shares > 0 and avg_cost > 0) or in_runner:
             gain = (price - avg_cost) / avg_cost
             n_phases = len(phases_spent)
 
