@@ -1,0 +1,4 @@
+# Dependencias SOLO para desarrollo/tests -- NO se instalan en la imagen
+# de producción (el Dockerfile solo usa requirements.txt). Instalar en
+# local con: pip install -r requirements-dev.txt --break-system-packages
+pytest==8.3.4

@@ -19,6 +19,5 @@ venv/
 # OS
 .DS_Store
 Thumbs.db
-backend/*.db
-data/*.db
 agents/.bull_agent_state.json
+backend/gael_telegram_small.jpg

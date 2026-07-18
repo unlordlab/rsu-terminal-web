@@ -260,6 +260,18 @@ def _get_yfinance(ticker: str) -> dict:
     except Exception as e:
         return {"ok": False, "error": str(e)}
 
+# Fuentes de baja sustancia que aparecen a menudo en el agregador de
+# Yahoo -- clips de vídeo sin transcripción útil, o contenido tipo SEO/
+# comentario automatizado. No se bloquean del todo si no hay nada mejor
+# (mejor algo que nada), pero se apartan al final de la lista para que
+# prioricen fuentes con más peso periodístico real.
+_LOW_QUALITY_NEWS_SOURCES = {
+    "yahoo finance video", "trefis", "simply wall st", "24/7 wall st.",
+    "24/7 wall st", "insider monkey", "motley fool", "zacks",
+    "benzinga",  # a veces es agregación automática, a veces no -- ambiguo, se aparta por precaución
+}
+
+
 def _get_yfinance_news_fallback(ticker: str) -> list:
     """Respaldo cuando Finnhub no da noticias (sin clave, cuota agotada, o
     simplemente sin cobertura esa semana) -- yfinance ya es una dependencia
@@ -293,6 +305,9 @@ def _get_yfinance_news_fallback(ticker: str) -> list:
             except Exception:
                 pass
             news.append({"headline": headline, "source": source, "url": url, "datetime": 0, "date": date_str})
+        # Prioriza fuentes con más peso periodístico -- las de baja calidad
+        # no se descartan (mejor algo que nada), solo se van al final.
+        news.sort(key=lambda n: n["source"].strip().lower() in _LOW_QUALITY_NEWS_SOURCES)
         return news
     except Exception as e:
         print(f"[Research:{ticker}] Fallback de noticias de yfinance falló: {type(e).__name__}: {e}")
