@@ -143,7 +143,13 @@ def _trend_template(hist: pd.DataFrame, price: float) -> dict:
         ma200_20ago = float(closes.iloc[-220:-20].tail(200).mean())
         ma200_rising = ma200 > ma200_20ago
     else:
-        ma200_rising = True
+        # Antes: True por defecto -- sesgo optimista, daba por buena una
+        # condición que en realidad no se puede verificar por falta de
+        # histórico (típico en salidas a bolsa recientes). El resto de
+        # condiciones del Trend Template exigen datos reales para pasar;
+        # esta debe tratarse igual: si no se puede comprobar, no se
+        # concede. Ver conversación 19/07/2026.
+        ma200_rising = False
 
     high_52w = float(closes.tail(252).max()) if n >= 252 else float(closes.max())
     low_52w  = float(closes.tail(252).min()) if n >= 252 else float(closes.min())
@@ -427,20 +433,40 @@ def analyze_ticker(ticker: str, universe_perfs: list = None) -> dict:
         tech_score = min(100, tech_score)
 
         # ── Score fundamental ─────────────────────────────────────────────────
-        # Sin dato → no penaliza (tratado como 0 visible pero no resta)
-        eps_has_data   = abs(eps_g)   > 0.1
-        sales_has_data = abs(sales_g) > 0.1
+        # Sin dato → no penaliza (tratado como ausente, no como "0% malo").
+        # ROE y Márgenes antes NO comprobaban esto (a diferencia de EPS y
+        # Sales, que sí) -- un ticker sin dato de ROE en yfinance (frecuente
+        # fuera de EE.UU. o en salidas a bolsa recientes) se puntuaba como
+        # 0% de ROE real, la peor nota posible, en vez de excluirse del
+        # cálculo. Ver conversación 19/07/2026.
+        eps_has_data     = abs(eps_g)   > 0.1
+        sales_has_data   = abs(sales_g) > 0.1
+        roe_has_data     = abs(roe)     > 0.1
+        margins_has_data = abs(margins) > 0.1
 
-        fund_score = sum([
-            30 if (eps_has_data   and eps_g   >= 25) else (15 if (eps_has_data   and eps_g   >= 10) else 0),
-            30 if (sales_has_data and sales_g >= 25) else (15 if (sales_has_data and sales_g >= 10) else 0),
-            20 if roe     >= 15    else (10 if roe >= 8 else 0),
-            20 if margins >= 10    else (10 if margins >= 3 else 0),
-        ])
+        sub_scores  = []
+        max_posible = 0
+        if eps_has_data:
+            sub_scores.append(30 if eps_g >= 25 else (15 if eps_g >= 10 else 0))
+            max_posible += 30
+        if sales_has_data:
+            sub_scores.append(30 if sales_g >= 25 else (15 if sales_g >= 10 else 0))
+            max_posible += 30
+        if roe_has_data:
+            sub_scores.append(20 if roe >= 15 else (10 if roe >= 8 else 0))
+            max_posible += 20
+        if margins_has_data:
+            sub_scores.append(20 if margins >= 10 else (10 if margins >= 3 else 0))
+            max_posible += 20
+
+        # Reescalado a /100 proporcional a las submétricas realmente
+        # disponibles -- mismo patrón que usa el RSU Score de Research
+        # cuando faltan categorías enteras.
+        fund_score = int(sum(sub_scores) / max_posible * 100) if max_posible > 0 else 0
         fund_score = min(100, fund_score)
 
-        # Si no hay datos fundamentales, marcar como sin dato
-        fund_data_available = eps_has_data or sales_has_data
+        # Si no hay NINGÚN dato fundamental, marcar como sin dato
+        fund_data_available = len(sub_scores) > 0
 
         # Score CAN SLIM unificado (60% técnico + 40% fundamental)
         # Si no hay fundamentales, usar solo técnico con disclaimer
