@@ -30,6 +30,7 @@ const communityFetch = (path, options) => keyFetch('/api/v1/community' + path, o
 const tesisFetch      = (path, options) => keyFetch('/api/v1/tesis' + path, options);
 const academyReviewFetch = (path, options) => keyFetch('/api/v1/academy-review' + path, options);
 const laiaFetch = (path, options) => keyFetch('/api/v1/laia' + path, options);
+const meetingRoomFetch = (path, options) => keyFetch('/api/v1/meeting-room' + path, options);
 
 const TIER_LABELS = { free: 'FREE', tier1: 'TIER 1', tiers: 'TIER S' };
 
@@ -70,6 +71,7 @@ export async function render(container) {
                 <button data-tab="tesis" class="admin-tab-btn">TESIS PENDIENTES</button>
                 <button data-tab="academy" class="admin-tab-btn">ACADEMY PENDIENTE</button>
                 <button data-tab="laia" class="admin-tab-btn">⚖️ LAIA</button>
+                <button data-tab="meetingroom" class="admin-tab-btn">🏢 MEETING ROOM</button>
                 <button data-tab="feedback" class="admin-tab-btn">FEEDBACK</button>
                 <button data-tab="temas" class="admin-tab-btn">TEMAS</button>
             </div>
@@ -119,6 +121,8 @@ export async function render(container) {
             await renderAcademyReviewPanel(content);
         } else if (activeTab === 'laia') {
             await renderLaiaPanel(content);
+        } else if (activeTab === 'meetingroom') {
+            await renderMeetingRoomPanel(content);
         } else {
             await renderMetricsPanel(content);
         }
@@ -925,6 +929,100 @@ async function renderLaiaPanel(content) {
         `;
         list.appendChild(card);
     });
+}
+
+const AGENTE_COLOR = {
+    marc: 'var(--color-accent)',
+    gael: '#ff9800',
+    elia: '#00d9ff',
+    laia: '#e05d5d',
+};
+const AGENTE_LABEL = {
+    marc: 'Tú',
+    gael: '🐂 Gael',
+    elia: '🎓 Elia',
+    laia: '⚖️ Laia',
+};
+
+async function renderMeetingRoomPanel(content) {
+    let data;
+    try {
+        data = await meetingRoomFetch('/historial?limit=100');
+    } catch (err) {
+        if (err.isAuthError) sessionStorage.removeItem(ADMIN_KEY_STORAGE);
+        renderKeyPrompt(content, () => renderMeetingRoomPanel(content));
+        if (err.isAuthError) content.querySelector('#admin-key-error').textContent = '✗ Clave de administrador inválida';
+        return;
+    }
+
+    const items = data.items || [];
+
+    content.innerHTML = `
+        <div style="position:relative;border-radius:var(--radius-lg);overflow:hidden;margin-bottom:1rem;height:140px;">
+            <img src="/assets/meeting-room.jpg" style="width:100%;height:100%;object-fit:cover;object-position:center 25%;filter:brightness(0.55);" />
+            <div style="position:absolute;bottom:12px;left:16px;">
+                <div style="color:#fff;font-size:18px;letter-spacing:0.08em;text-shadow:0 2px 6px rgba(0,0,0,0.6);">MEETING ROOM</div>
+                <div style="color:#ddd;font-size:11px;text-shadow:0 1px 4px rgba(0,0,0,0.6);">Deja instrucciones para Gael, Elia o Laia — las recogen en su próxima ejecución, no al instante.</div>
+            </div>
+        </div>
+
+        <div id="meeting-room-chat" style="background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius);padding:1rem;margin-bottom:1rem;max-height:420px;overflow-y:auto;display:flex;flex-direction:column;gap:10px;"></div>
+
+        <div style="display:flex;gap:8px;align-items:flex-start;">
+            <select id="mr-destinatario" style="background:var(--color-surface);border:1px solid var(--color-border);color:var(--color-text);border-radius:var(--radius);padding:8px 10px;font-family:var(--font-mono);font-size:12px;flex-shrink:0;">
+                <option value="gael">🐂 Gael</option>
+                <option value="elia">🎓 Elia</option>
+                <option value="laia">⚖️ Laia</option>
+                <option value="todos">📢 Todos</option>
+            </select>
+            <textarea id="mr-mensaje" placeholder="Ej: 'Gael, analiza NVDA' o 'Elia, añade una lección sobre stop-loss'..." style="flex:1;background:var(--color-surface);border:1px solid var(--color-border);color:var(--color-text);border-radius:var(--radius);padding:8px 10px;font-family:var(--font-mono);font-size:12px;resize:vertical;min-height:38px;"></textarea>
+            <button id="mr-enviar" style="background:var(--color-accent);color:#000;border:none;border-radius:var(--radius);padding:8px 16px;font-family:var(--font-mono);font-size:12px;cursor:pointer;flex-shrink:0;">ENVIAR</button>
+        </div>
+    `;
+
+    const chatBox = content.querySelector('#meeting-room-chat');
+    renderMeetingRoomMessages(chatBox, items);
+
+    content.querySelector('#mr-enviar').addEventListener('click', async () => {
+        const destinatario = content.querySelector('#mr-destinatario').value;
+        const mensajeEl = content.querySelector('#mr-mensaje');
+        const mensaje = mensajeEl.value.trim();
+        if (!mensaje) return;
+        try {
+            await meetingRoomFetch('/enviar', {
+                method: 'POST',
+                body: JSON.stringify({ destinatario, mensaje }),
+            });
+            mensajeEl.value = '';
+            renderMeetingRoomPanel(content);
+        } catch (err) {
+            alert('Error al enviar: ' + err.message);
+        }
+    });
+}
+
+function renderMeetingRoomMessages(chatBox, items) {
+    if (!items.length) {
+        chatBox.innerHTML = '<p style="color:var(--color-muted);font-size:12px;text-align:center;">Todavía no hay ningún mensaje. Escribe el primero abajo.</p>';
+        return;
+    }
+    chatBox.innerHTML = items.map(m => {
+        const color = AGENTE_COLOR[m.autor] || 'var(--color-muted)';
+        const label = AGENTE_LABEL[m.autor] || m.autor;
+        const esMarc = m.autor === 'marc';
+        const fecha = new Date(m.created_at * 1000).toLocaleString('es-ES');
+        const estadoTag = esMarc
+            ? (m.status === 'pending' ? '<span style="color:#ff9800;">· pendiente</span>' : '<span style="color:var(--color-accent);">· recogido</span>')
+            : '';
+        return `<div style="align-self:${esMarc ? 'flex-end' : 'flex-start'};max-width:75%;">
+            <div style="display:flex;gap:6px;align-items:baseline;margin-bottom:2px;${esMarc ? 'justify-content:flex-end;' : ''}">
+                <span style="color:${color};font-size:11px;font-weight:600;">${label}</span>
+                <span style="color:var(--color-muted);font-size:9px;">${fecha} ${estadoTag}</span>
+            </div>
+            <div style="background:${esMarc ? 'var(--color-surface2)' : 'rgba(255,255,255,0.03)'};border:1px solid var(--color-border);border-radius:var(--radius);padding:8px 12px;color:var(--color-text);font-size:12px;line-height:1.5;white-space:pre-wrap;">${m.mensaje}${!esMarc && m.destinatario ? '' : ''}${esMarc && m.destinatario ? '<div style="color:var(--color-muted);font-size:9px;margin-top:4px;">→ ' + (AGENTE_LABEL[m.destinatario] || m.destinatario) + '</div>' : ''}</div>
+        </div>`;
+    }).join('');
+    chatBox.scrollTop = chatBox.scrollHeight;
 }
 
 function statCard(label, value) {

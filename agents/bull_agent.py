@@ -53,6 +53,7 @@ from config import settings  # noqa: E402
 from services.canslim_service import scan_canslim  # noqa: E402
 from services.tesis_service import create_tesis, recent_tickers_with_tesis  # noqa: E402
 from bull_prompt import PROMPT_TEMPLATE  # noqa: E402
+from services.meeting_room_service import get_pendientes_para, marcar_procesado, responder  # noqa: E402
 
 # ── Criterio de selección de candidatos ─────────────────────────────────
 # CANSLIM score >= 40 (ya lo exige scan_canslim) + corrección real desde
@@ -288,6 +289,97 @@ def generar_tesis(ticker: str, provider: str) -> dict:
             "sector": sector, "precio_objetivo": precio_objetivo}
 
 
+def _extraer_ticker_de_instruccion(mensaje: str) -> str | None:
+    """Usa Groq (rápido y barato, no hace falta el modelo caro de Bull
+    solo para esto) para extraer un ticker bursátil de una instrucción en
+    lenguaje natural -- reconoce tanto el ticker directo ('mira NVDA')
+    como el nombre de la empresa ('mira Nvidia')."""
+    if not settings.groq_api_key:
+        return None
+    prompt = (
+        f"Extrae el ticker bursátil (símbolo de cotización en bolsa de EE.UU., ej: AAPL, NVDA, TSLA) "
+        f"mencionado en este mensaje. Si se menciona una empresa por su nombre en vez de su ticker, "
+        f"identifica el ticker correcto.\n\nMensaje: \"{mensaje}\"\n\n"
+        f"Responde EXCLUSIVAMENTE con el ticker en mayúsculas, sin nada más. Si no hay ningún ticker "
+        f"o empresa identificable en el mensaje, responde exactamente: NINGUNO"
+    )
+    try:
+        import requests
+        r = requests.post(
+            "https://api.groq.com/openai/v1/chat/completions",
+            headers={"Authorization": f"Bearer {settings.groq_api_key}", "Content-Type": "application/json"},
+            json={
+                "model": "qwen/qwen3.6-27b",
+                "messages": [{"role": "user", "content": prompt}],
+                "max_tokens": 20,
+                "temperature": 0,
+                "reasoning_effort": "none",
+                "reasoning_format": "hidden",
+            },
+            timeout=20,
+        )
+        if r.status_code == 200:
+            ticker = r.json()["choices"][0]["message"]["content"].strip().upper()
+            ticker = re.sub(r"[^A-Z]", "", ticker)  # por si acaso viene con puntuación de más
+            if ticker and ticker != "NINGUNO" and 1 <= len(ticker) <= 6:
+                return ticker
+    except Exception as e:
+        print(f"[Bull] No se pudo interpretar la instrucción del Meeting Room: {type(e).__name__}: {e}")
+    return None
+
+
+def procesar_meeting_room(provider: str, max_mensajes: int = 3) -> int:
+    """Revisa el buzón del Meeting Room antes del escaneo automático de
+    siempre -- si Marc ha dejado instrucciones para Gael, se procesan
+    con prioridad. Devuelve cuántas tesis se generaron así, para
+    descontarlas del cupo normal de --max."""
+    pendientes = get_pendientes_para("gael")
+    if not pendientes:
+        return 0
+
+    print(f"[Bull] {len(pendientes)} mensaje(s) pendientes en el Meeting Room.")
+    generadas = 0
+
+    for msg in pendientes[:max_mensajes]:
+        ticker = _extraer_ticker_de_instruccion(msg["mensaje"])
+        if not ticker:
+            marcar_procesado(msg["id"])
+            responder("gael", f"No he sabido identificar ningún ticker en: \"{msg['mensaje']}\" — "
+                               f"intenta ser más específico (ej: 'analiza NVDA' o 'mira Nvidia').")
+            continue
+
+        if not _comprobar_y_registrar_peticion(provider):
+            print("[Bull] Límite diario alcanzado — el resto de mensajes del Meeting Room se quedan pendientes para mañana.")
+            break
+
+        print(f"[Bull] Instrucción del Meeting Room: generar tesis de {ticker} (pedido por Marc).")
+        try:
+            resultado = generar_tesis(ticker, provider)
+            tesis_id = create_tesis(
+                ticker=ticker,
+                contenido=resultado["contenido"],
+                rating="BUY",
+                titulo=resultado["titulo"],
+                nombre=resultado["nombre"],
+                sector=resultado["sector"],
+                resumen=resultado["resumen"],
+                precio_objetivo=resultado["precio_objetivo"],
+                autor=f"Agente Bull ({provider}) — a petición",
+                fuente=f"agente_bull_{provider}",
+                criterio=f"Petición directa vía Meeting Room: \"{msg['mensaje']}\"",
+                status="pending",
+            )
+            marcar_procesado(msg["id"])
+            responder("gael", f"Hecho — tesis de {ticker} generada (#{tesis_id}), esperando tu aprobación en TESIS PENDIENTES.")
+            generadas += 1
+        except Exception as e:
+            marcar_procesado(msg["id"])
+            responder("gael", f"No he podido generar la tesis de {ticker}: {type(e).__name__}. Lo intento de nuevo en la próxima ejecución si me lo vuelves a pedir.")
+            print(f"[Bull] ERROR procesando instrucción del Meeting Room ({ticker}): {type(e).__name__}: {e}")
+
+    return generadas
+
+
 def main():
     parser = argparse.ArgumentParser(description="Agente Bull — genera tesis alcistas pendientes de aprobación")
     parser.add_argument("--max", type=int, default=1, help="Número máximo de tesis a generar en esta ejecución")
@@ -304,9 +396,17 @@ def main():
         print("[Bull] Falta ANTHROPIC_API_KEY en el .env — abortando.")
         return
 
-    candidatos = select_candidates(max_candidates=args.max)
+    generadas_meeting_room = procesar_meeting_room(provider)
+    cupo_restante = max(0, args.max - generadas_meeting_room)
+
+    if cupo_restante == 0:
+        print(f"[Bull] Cupo de hoy ({args.max}) ya cubierto con peticiones del Meeting Room. Fin.")
+        return
+
+    candidatos = select_candidates(max_candidates=cupo_restante)
     if not candidatos:
-        print("[Bull] Ningún candidato cumple hoy los criterios (CANSLIM + corrección -8%/-25% desde máximo).")
+        if generadas_meeting_room == 0:
+            print("[Bull] Ningún candidato cumple hoy los criterios (CANSLIM + corrección -8%/-25% desde máximo).")
         return
 
     print(f"[Bull] Proveedor: {provider}. {len(candidatos)} candidatos: {[c['ticker'] for c in candidatos]}")
