@@ -774,8 +774,9 @@ def run_scan() -> dict:
                 amihud_z = (amihud - amihud.rolling(20).mean()) / amihud.rolling(20).std()
                 absorcion_dia = (rvol_z > 0.75) & (amihud_z < -0.75)
                 dias_absorcion = int(absorcion_dia.tail(10).sum())
-            except Exception:
+            except Exception as e:
                 dias_absorcion = 0
+                print(f"⚠️  Absorción falló para {ticker}: {type(e).__name__}: {e}")
 
             rows.append({
                 "ticker":            ticker,
