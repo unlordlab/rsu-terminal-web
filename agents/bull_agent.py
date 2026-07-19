@@ -81,6 +81,16 @@ LIMITS = {
         "max_output_tokens": 32000,
         "pausa_entre_tickers_seg": 3,
     },
+    "groq": {
+        # groq/compound usa GPT-OSS-120B + Llama 4 por dentro, NO el mismo
+        # modelo qwen3.6-27b que usa Elia -- en principio no deberían
+        # competir por la misma cuota (Groq limita por modelo, no por
+        # cuenta entera), pero confírmalo en console.groq.com si ves
+        # fallos de límite en cualquiera de los dos agentes.
+        "max_requests_per_day": 100,    # conservador hasta ver el limite real en la practica
+        "max_output_tokens": 8000,
+        "pausa_entre_tickers_seg": 5,
+    },
 }
 
 STATE_FILE = os.path.join(os.path.dirname(__file__), '.bull_agent_state.json')
@@ -156,21 +166,38 @@ def _extraer_resumen(texto: str) -> str:
     return ""
 
 
-def _extraer_precio_objetivo(texto: str) -> float | None:
+def _extraer_precio_objetivo(texto: str, ticker: str = None) -> float | None:
     """Heurística, no exacta: busca la sección 13 (Precios Objetivo de
     Analistas) y coge la última cifra en dólares mencionada ahí — suele
     ser el target más reciente en la tabla. No es infalible (el informe lo
     escribe un LLM, el formato de tabla puede variar) — revisa el precio
-    objetivo en el panel de admin antes de dar por buena la cifra."""
+    objetivo en el panel de admin antes de dar por buena la cifra.
+
+    Validación añadida: si se pasa el ticker, se compara contra el precio
+    real en vivo -- un precio objetivo por DEBAJO del precio actual no
+    tiene sentido en una tesis alcista (BUY), así que se descarta en vez
+    de mostrar un número que confunda. Ver conversación 18/07/2026."""
     m = re.search(r"\*\*13\. PRECIOS OBJETIVO DE ANALISTAS\*\*(.+?)(?=\n\*\*14\.|\Z)", texto, re.DOTALL)
     bloque = m.group(1) if m else texto
     precios = re.findall(r"\$\s?([0-9]+(?:[.,][0-9]+)?)", bloque)
     if not precios:
         return None
     try:
-        return float(precios[-1].replace(",", "."))
+        objetivo = float(precios[-1].replace(",", "."))
     except Exception:
         return None
+
+    if ticker:
+        try:
+            import yfinance as yf
+            precio_actual = yf.Ticker(ticker).fast_info.last_price
+            if precio_actual and objetivo <= precio_actual:
+                print(f"[Bull] Precio objetivo descartado para {ticker}: ${objetivo} no supera el precio actual (${precio_actual:.2f}) — probable error de extracción del texto.")
+                return None
+        except Exception:
+            pass  # si falla la comprobación en vivo, se deja pasar el valor extraído tal cual
+
+    return objetivo
 
 
 def _obtener_sector(ticker: str) -> str:
@@ -230,6 +257,52 @@ def _generar_con_gemini(ticker: str) -> str:
             raise
 
 
+# ── Llamada a Groq (experimental — estilo Qwen/GPT-OSS, en pruebas) ─────
+# IMPORTANTE: las herramientas de búsqueda web de Groq SOLO funcionan con
+# su sistema "groq/compound", que por dentro usa GPT-OSS-120B y Llama 4
+# -- NO es el mismo modelo qwen/qwen3.6-27b que usa Elia. No se puede
+# tener a la vez el estilo de escritura de Qwen y búsqueda web real en
+# Groq; son dos cosas distintas. Esto usa Compound (con búsqueda),
+# aceptando que el estilo será distinto al de Elia. Ver conversación
+# 18/07/2026.
+
+def _generar_con_groq(ticker: str) -> str:
+    import requests
+
+    prompt = PROMPT_TEMPLATE.format(ticker=ticker)
+
+    intentos = 0
+    while True:
+        intentos += 1
+        try:
+            r = requests.post(
+                "https://api.groq.com/openai/v1/chat/completions",
+                headers={"Authorization": f"Bearer {settings.groq_api_key}", "Content-Type": "application/json"},
+                json={
+                    "model": "groq/compound",
+                    "messages": [{"role": "user", "content": prompt}],
+                    "compound_custom": {"tools": {"enabled_tools": ["web_search", "visit_website"]}},
+                    "max_tokens": LIMITS.get("groq", {}).get("max_output_tokens", 8000),
+                },
+                timeout=120,
+            )
+            if r.status_code == 429 and intentos < 4:
+                espera = 15 * intentos
+                print(f"[Bull] Rate limit de Groq, esperando {espera}s (intento {intentos}/3)...")
+                time.sleep(espera)
+                continue
+            r.raise_for_status()
+            data = r.json()
+            return data["choices"][0]["message"]["content"]
+        except requests.HTTPError:
+            raise
+        except Exception as e:
+            if intentos < 4:
+                time.sleep(10)
+                continue
+            raise
+
+
 # ── Llamada a Claude (producción real) ──────────────────────────────────
 
 def _generar_con_claude(ticker: str) -> str:
@@ -265,25 +338,26 @@ def _generar_con_claude(ticker: str) -> str:
 def generar_tesis(ticker: str, provider: str) -> dict:
     if provider == "gemini":
         texto = _generar_con_gemini(ticker)
+    elif provider == "groq":
+        texto = _generar_con_groq(ticker)
     else:
         texto = _generar_con_claude(ticker)
 
     if not texto or not texto.strip():
         raise ValueError("Respuesta vacía de la API (revisa si los tools fallaron)")
 
-    if provider == "gemini":
-        aviso = (
-            "> ⚠️ **TESIS DE PRUEBA (generada con Gemini, no Claude).** "
-            "El tool de lectura de páginas de Gemini puede devolver datos de precio "
-            "desactualizados sin avisar — **verifica el precio actual a mano antes "
-            "de aprobar esta tesis para publicación.**\n\n"
-        )
-        texto = aviso + texto
+    # El aviso de "tesis de prueba" ya NO se mete dentro del contenido --
+    # se quedaba pegado para siempre en el texto, visible también para los
+    # usuarios una vez aprobada y publicada. Ahora el campo `fuente`
+    # (agente_bull_gemini vs agente_bull_claude) ya distingue el origen,
+    # y es el panel de administración el que muestra el aviso de forma
+    # condicional SOLO en la revisión pendiente, nunca en lo publicado.
+    # Ver conversación 18/07/2026.
 
     titulo, nombre = _extraer_titulo_y_nombre(texto)
     resumen = _extraer_resumen(texto)
     sector = _obtener_sector(ticker)
-    precio_objetivo = _extraer_precio_objetivo(texto)
+    precio_objetivo = _extraer_precio_objetivo(texto, ticker)
 
     return {"contenido": texto, "titulo": titulo, "nombre": nombre, "resumen": resumen,
             "sector": sector, "precio_objetivo": precio_objetivo}
@@ -383,8 +457,8 @@ def procesar_meeting_room(provider: str, max_mensajes: int = 3) -> int:
 def main():
     parser = argparse.ArgumentParser(description="Agente Bull — genera tesis alcistas pendientes de aprobación")
     parser.add_argument("--max", type=int, default=1, help="Número máximo de tesis a generar en esta ejecución")
-    parser.add_argument("--provider", choices=["gemini", "claude"], default="gemini",
-                         help="gemini = prueba gratuita (por defecto), claude = producción real")
+    parser.add_argument("--provider", choices=["gemini", "claude", "groq"], default="gemini",
+                         help="gemini = prueba gratuita (por defecto), claude = producción real, groq = experimental (groq/compound, con búsqueda web)")
     args = parser.parse_args()
 
     provider = args.provider
@@ -394,6 +468,9 @@ def main():
         return
     if provider == "claude" and not settings.anthropic_api_key:
         print("[Bull] Falta ANTHROPIC_API_KEY en el .env — abortando.")
+        return
+    if provider == "groq" and not settings.groq_api_key:
+        print("[Bull] Falta GROQ_API_KEY en el .env — abortando.")
         return
 
     generadas_meeting_room = procesar_meeting_room(provider)

@@ -62,7 +62,6 @@ Identificar:
 - Cada sección empieza con un **veredicto de una línea en negrita** antes de los detalles.
 - Límite: **4.000-6.500 palabras**; prioriza profundidad en Catalysts, Tesis, Valoración y Conclusión Táctica, resume el resto.
 - Puedes ilustrar con imágenes o gráficos si es oportuno.
-- Al final del informe, da un enlace de descarga en formato **.pdf** (una sola vez, no hace falta repetirlo sección por sección).
 - Cierra con una frase corta sobre si entrarías o no en la operación.
 
 **NORMA ANTI-ALUCINACIÓN:** No inventes datos. Para cada dato de precio, market cap o ratio, indica el día y la fuente (ej: Yahoo Finance, 12/05/2026).

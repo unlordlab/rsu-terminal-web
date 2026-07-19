@@ -573,7 +573,15 @@ async function renderTesisPanel(content) {
             border-radius:var(--radius-lg);padding:1rem;
         `;
         const fecha = new Date(item.created_at * 1000).toLocaleString('es-ES');
-        const fuenteLabel = item.fuente === 'agente_bull' ? '\ud83d\udc02 Agente Bull' : '\u270d\ufe0f Manual';
+        const esGemini = (item.fuente || '').includes('gemini');
+        const fuenteLabel = (item.fuente || '').includes('agente_bull')
+            ? (esGemini ? '\ud83d\udc02 Agente Bull (Gemini)' : '\ud83d\udc02 Agente Bull (Claude)')
+            : '\u270d\ufe0f Manual';
+        const avisoGemini = esGemini
+            ? '<div style="background:rgba(255,152,0,0.08);border:1px solid rgba(255,152,0,0.3);border-radius:var(--radius);padding:8px 12px;margin-top:8px;color:#ff9800;font-size:11px;">'
+              + '\u26a0\ufe0f Generada con Gemini (modo de prueba gratuito) \u2014 el tool de lectura de p\u00e1ginas puede devolver datos de precio desactualizados sin avisar. Verifica el precio actual a mano antes de aprobar. <strong>Este aviso es solo para ti, no se publica con la tesis.</strong>'
+              + '</div>'
+            : '';
 
         card.innerHTML = `
             <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px;flex-wrap:wrap;">
@@ -581,6 +589,7 @@ async function renderTesisPanel(content) {
                     <div style="font-size:14px;color:var(--color-text);font-weight:600;">${item.ticker} \u00b7 ${item.rating}</div>
                     <div style="font-size:12px;color:var(--color-muted);margin-top:2px;">${item.titulo || '(sin t\u00edtulo)'}</div>
                     <div style="font-size:11px;color:var(--color-muted);margin-top:4px;">${fuenteLabel} \u00b7 ${fecha}${item.criterio ? ' \u00b7 ' + item.criterio : ''}</div>
+                    ${avisoGemini}
                 </div>
                 <div style="display:flex;gap:6px;flex-shrink:0;">
                     <button class="tesis-toggle-btn" data-id="${item.id}" style="background:none;border:1px solid var(--color-border);color:var(--color-muted);padding:4px 10px;border-radius:var(--radius);cursor:pointer;font-family:var(--font-mono);font-size:11px;">VER</button>
