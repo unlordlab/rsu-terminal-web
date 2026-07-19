@@ -52,6 +52,102 @@ def _get_daily_turnover(ticker: str, days: int = 180) -> pd.Series | None:
         return None
 
 
+def _get_price_volume_data(ticker: str, days: int = 180) -> pd.DataFrame | None:
+    """DataFrame con precio, volumen, retorno diario, rotación e impacto de
+    precio (Amihud) -- una sola descarga reutilizada tanto para el
+    indicador de Rotación como para el de Absorción."""
+    try:
+        tk = yf.Ticker(ticker)
+        hist = tk.history(period=f"{days}d")
+        if hist.empty or len(hist) < 30:
+            return None
+        shares = _get_shares_outstanding(tk)
+        if not shares:
+            return None
+        df = pd.DataFrame(index=hist.index.tz_localize(None))
+        df["close"]         = hist["Close"].values
+        df["volume"]        = hist["Volume"].values
+        df["turnover"]      = df["volume"] / shares
+        df["return"]        = df["close"].pct_change()
+        df["dollar_volume"] = df["close"] * df["volume"]
+        # Amihud (2002): |retorno| / volumen en dólares (en millones, para
+        # que el número resultante sea legible) -- proxy estándar de la
+        # Lambda de Kyle (1985), impacto de precio por unidad de volumen.
+        df["amihud"] = df["return"].abs() / (df["dollar_volume"] / 1_000_000)
+        df["amihud"] = df["amihud"].replace([float("inf"), float("-inf")], None)
+        return df.dropna(subset=["turnover"])
+    except Exception:
+        return None
+
+
+def get_absorption_signal(ticker: str, days: int = 180) -> dict:
+    """Detecta indicios de absorción silenciosa: rotación por encima de lo
+    normal PARA ESTE ACTIVO, combinada con impacto de precio (Amihud) por
+    DEBAJO de lo normal -- la firma característica de una orden grande
+    ejecutándose poco a poco sin delatar su propia posición (Kyle, 1985;
+    Bouchaud, Farmer & Lillo, 2008). Un pico de volumen que SÍ mueve el
+    precio con fuerza es más compatible con actividad especulativa/ruido
+    que con absorción institucional cuidadosa."""
+    df = _get_price_volume_data(ticker, days)
+    if df is None or len(df) < 30:
+        return {"ok": False, "error": "Datos insuficientes para calcular absorción"}
+
+    df["turnover_z"] = (df["turnover"] - df["turnover"].rolling(20).mean()) / df["turnover"].rolling(20).std()
+    df["amihud_z"]   = (df["amihud"]   - df["amihud"].rolling(20).mean())   / df["amihud"].rolling(20).std()
+
+    # Día de "posible absorción": rotación por encima de su media reciente
+    # Y, a la vez, impacto de precio por debajo de la suya -- ambas cosas
+    # a la vez, no una sola. Umbral de 0.75 desviaciones en cada dirección
+    # -- punto intermedio provisional; la ventana móvil de 20 días se ve
+    # "contaminada" por los propios días anómalos que intenta detectar
+    # (efecto normal de medias móviles cortas), así que este umbral
+    # conviene recalibrarlo con casos reales una vez en producción, no
+    # solo con datos sintéticos. Ver conversación 18/07/2026.
+    df["absorcion_dia"] = (df["turnover_z"] > 0.75) & (df["amihud_z"] < -0.75)
+
+    dias_absorcion = int(df["absorcion_dia"].tail(10).sum())
+
+    tz_series = df["turnover_z"].dropna()
+    az_series = df["amihud_z"].dropna()
+    turnover_z_actual = float(tz_series.iloc[-1]) if len(tz_series) else 0.0
+    amihud_z_actual   = float(az_series.iloc[-1]) if len(az_series) else 0.0
+
+    if dias_absorcion >= 5:
+        signal = {
+            "level": "fuerte", "icon": "🟢", "color": "#00ffad",
+            "label": "Posible absorción sostenida",
+            "detail": f"{dias_absorcion} de los últimos 10 días muestran rotación alta con impacto de precio bajo — "
+                      f"la combinación característica de una orden grande ejecutándose con cuidado, sin delatar la posición.",
+        }
+    elif dias_absorcion >= 2:
+        signal = {
+            "level": "moderada", "icon": "🟡", "color": "#ff9800",
+            "label": "Indicios leves de absorción",
+            "detail": f"{dias_absorcion} de los últimos 10 días con esa combinación — todavía pronto para hablar de una tendencia sostenida.",
+        }
+    else:
+        signal = {
+            "level": "ninguna", "icon": "⚪", "color": "var(--color-muted)",
+            "label": "Sin señales de absorción",
+            "detail": "El comportamiento reciente de volumen e impacto en precio no muestra ese patrón sostenido.",
+        }
+
+    return {
+        "ok": True,
+        "ticker": ticker,
+        "dias_absorcion_10d": dias_absorcion,
+        "turnover_z": round(turnover_z_actual, 2),
+        "amihud_z": round(amihud_z_actual, 2),
+        "signal": signal,
+        "chart": {
+            "dates":         [d.strftime("%Y-%m-%d") for d in df.index],
+            "turnover_z":    [round(float(v), 2) if pd.notna(v) else None for v in df["turnover_z"]],
+            "amihud_z":      [round(float(v), 2) if pd.notna(v) else None for v in df["amihud_z"]],
+            "absorcion_dia": [bool(v) for v in df["absorcion_dia"]],
+        },
+    }
+
+
 def _compute_signal(df) -> dict:
     """Combina dos señales en un único indicador sencillo:
     1) ¿Hay actividad de volumen anómala AHORA MISMO? (Z-score del último

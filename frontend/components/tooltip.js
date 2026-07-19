@@ -2006,6 +2006,24 @@ LOS 4 NIVELES:
 Debajo del indicador tienes también el detalle técnico (correlación exacta y el gráfico comparativo) por si quieres profundizar más allá del resumen.`
     },
 
+    "research-absorption": {
+        title: "Señal de Absorción",
+        short: "Detecta si hay volumen alto que apenas mueve el precio — la huella característica de una orden grande ejecutándose con cuidado, sin delatar su propia posición.",
+        long: `Cuando alguien quiere comprar (o vender) una posición muy grande, hacerlo de golpe dispararía el precio en su contra — así que la trocean en piezas pequeñas y las van soltando poco a poco, a veces durante semanas.
+
+Esto deja una firma estadística reconocible: volumen por encima de lo normal, pero con un impacto en el precio menor de lo que le correspondería a ese volumen. Un pico de volumen que SÍ mueve el precio con fuerza es más compatible con actividad especulativa (mucha gente persiguiendo la misma dirección) que con una posición grande ejecutándose en silencio.
+
+CÓMO SE CALCULA:
+Se combinan dos mediciones, cada una comparada contra la media propia de los últimos 20 días de este mismo activo:
+
+1. Rotación — ¿hay más actividad de la habitual?
+2. Impacto en precio — se mide cuánto se mueve el precio por cada unidad de volumen negociado (un cálculo estándar en microestructura de mercado, conocido como ratio de Amihud). Si ese impacto está por debajo de lo normal pese a haber más volumen del habitual, es la señal.
+
+Un día cuenta como "de absorción" solo si las dos condiciones se cumplen a la vez. Se muestran cuántos de los últimos 10 días cumplen ese patrón — cuantos más días seguidos, más sostenida (y por tanto más creíble) es la señal.
+
+IMPORTANTE: esto es una estimación estadística, no una certeza. Te dice "este comportamiento tiene la firma característica de absorción", no "esto es un fondo concreto comprando". Es información adicional a valorar junto con el resto del análisis, no una señal de compra o venta por sí sola.`
+    },
+
     // ── GENERAL ───────────────────────────────────────────────────────────────
     "market-cap": {
         title: "Market Cap — Capitalización bursátil",

@@ -230,6 +230,7 @@ function renderResearch(data) {
         + insiderSection(data)
         + earningsSection(data)
         + turnoverSection(data)
+        + absorptionSection(data)
         + suggestionsSection(data)
         + newsSection(data);
 }
@@ -882,6 +883,25 @@ function renderSparkline(data) {
             }
         });
     });
+}
+
+function absorptionSection(data) {
+    const a = data.absorption;
+    if (!a || !a.ok) return '';
+    const s = a.signal;
+    return '<div style="background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius);padding:1.25rem;margin-bottom:1rem;">'
+        + '<div style="color:var(--color-accent);font-size:12px;letter-spacing:0.08em;margin-bottom:0.75rem;">SEÑAL DE ABSORCIÓN ' + tt('research-absorption') + '</div>'
+        + '<div style="display:flex;align-items:center;gap:10px;padding:10px 14px;background:var(--color-surface2);border-radius:var(--radius);margin-bottom:0.75rem;">'
+        + '<span style="font-size:22px;">' + s.icon + '</span>'
+        + '<div><div style="color:' + s.color + ';font-size:14px;font-weight:600;">' + s.label + '</div>'
+        + '<div style="color:var(--color-muted);font-size:11px;margin-top:2px;">' + s.detail + '</div></div>'
+        + '</div>'
+        + '<div style="display:flex;gap:1.5rem;font-size:11px;color:var(--color-muted);">'
+        + '<div>Rotación (Z-score): <span style="color:var(--color-text);">' + a.turnover_z.toFixed(2) + '</span></div>'
+        + '<div>Impacto en precio (Z-score): <span style="color:var(--color-text);">' + a.amihud_z.toFixed(2) + '</span></div>'
+        + '<div>Días de absorción (últimos 10): <span style="color:var(--color-text);">' + a.dias_absorcion_10d + '</span></div>'
+        + '</div>'
+        + '</div>';
 }
 
 function renderTurnoverChart(data) {
