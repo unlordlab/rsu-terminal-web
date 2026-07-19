@@ -200,6 +200,60 @@ def _extraer_precio_objetivo(texto: str, ticker: str = None) -> float | None:
     return objetivo
 
 
+def _obtener_datos_verificados(ticker: str) -> str:
+    """Recopila los datos numéricos básicos directamente de yfinance (la
+    misma fuente que usa el resto de la terminal, fiable) y los formatea
+    como bloque de contexto para inyectar al principio del prompt. Así el
+    modelo NO tiene que "encontrar" estos números por su cuenta vía
+    búsqueda web -- que es precisamente donde más falla (datos que no
+    llega a recuperar, o que mezcla con su conocimiento desactualizado de
+    entrenamiento). La búsqueda web se reserva para lo que sí necesita
+    investigar de verdad: noticias, catalizadores, contexto cualitativo.
+    Ver conversación 18/07/2026."""
+    try:
+        import yfinance as yf
+        tk = yf.Ticker(ticker)
+        info = tk.info
+        fi = tk.fast_info
+
+        precio_actual = fi.last_price if hasattr(fi, "last_price") else info.get("currentPrice")
+        campos = {
+            "Precio actual":              f"${precio_actual:.2f}" if precio_actual else None,
+            "Máximo 52 semanas":          f"${info.get('fiftyTwoWeekHigh')}" if info.get("fiftyTwoWeekHigh") else None,
+            "Mínimo 52 semanas":          f"${info.get('fiftyTwoWeekLow')}" if info.get("fiftyTwoWeekLow") else None,
+            "Market Cap":                 f"${info.get('marketCap'):,}" if info.get("marketCap") else None,
+            "P/E (trailing)":             info.get("trailingPE"),
+            "P/E (forward)":              info.get("forwardPE"),
+            "PEG ratio":                  info.get("pegRatio"),
+            "Margen bruto":               f"{info.get('grossMargins')*100:.1f}%" if info.get("grossMargins") else None,
+            "Margen operativo":           f"{info.get('operatingMargins')*100:.1f}%" if info.get("operatingMargins") else None,
+            "Crecimiento ingresos (YoY)": f"{info.get('revenueGrowth')*100:.1f}%" if info.get("revenueGrowth") else None,
+            "Deuda/Equity":               info.get("debtToEquity"),
+            "Beta":                       info.get("beta"),
+            "Volumen medio":              f"{info.get('averageVolume'):,}" if info.get("averageVolume") else None,
+            "Sector":                     info.get("sector"),
+            "Industria":                  info.get("industry"),
+        }
+        lineas = [f"- {k}: {v}" for k, v in campos.items() if v is not None]
+        if not lineas:
+            return ""
+
+        fecha_hoy = datetime.now().strftime("%d/%m/%Y")
+        return (
+            f"**DATOS VERIFICADOS (Yahoo Finance, a fecha de hoy {fecha_hoy}) — úsalos como base, "
+            f"NO los sustituyas por otra cifra que encuentres en la búsqueda ni por tu conocimiento "
+            f"de entrenamiento, que puede estar desactualizado:**\n\n"
+            + "\n".join(lineas) +
+            f"\n\nPara contexto cualitativo adicional (catalizadores recientes, sentimiento, ratios "
+            f"complementarios), puedes consultar también https://finviz.com/quote.ashx?t={ticker} "
+            f"y fuentes de noticias recientes -- pero los datos numéricos de arriba ya están verificados, "
+            f"no hace falta que los vuelvas a buscar.\n\n---\n\n"
+        )
+    except Exception as e:
+        print(f"[Bull] No se pudieron obtener datos verificados de yfinance para {ticker}: {type(e).__name__}: {e}")
+        return ""
+
+
 def _obtener_sector(ticker: str) -> str:
     try:
         import yfinance as yf
@@ -216,7 +270,7 @@ def _generar_con_gemini(ticker: str) -> str:
     from google.genai import types
 
     client = genai.Client(api_key=settings.gemini_api_key)
-    prompt = PROMPT_TEMPLATE.format(ticker=ticker)
+    prompt = _obtener_datos_verificados(ticker) + PROMPT_TEMPLATE.format(ticker=ticker)
 
     intentos = 0
     while True:
@@ -269,7 +323,7 @@ def _generar_con_gemini(ticker: str) -> str:
 def _generar_con_groq(ticker: str) -> str:
     import requests
 
-    prompt = PROMPT_TEMPLATE.format(ticker=ticker)
+    prompt = _obtener_datos_verificados(ticker) + PROMPT_TEMPLATE.format(ticker=ticker)
 
     intentos = 0
     while True:
@@ -309,7 +363,7 @@ def _generar_con_claude(ticker: str) -> str:
     import anthropic
 
     client = anthropic.Anthropic(api_key=settings.anthropic_api_key)
-    prompt = PROMPT_TEMPLATE.format(ticker=ticker)
+    prompt = _obtener_datos_verificados(ticker) + PROMPT_TEMPLATE.format(ticker=ticker)
 
     intentos = 0
     while True:
