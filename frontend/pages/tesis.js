@@ -1,4 +1,5 @@
 import { errorMessage } from '/core/ui.js';
+import { getToken } from '/core/api.js';
 
 let currentPage  = 1;
 let activeRating = 'Todos';
@@ -254,6 +255,34 @@ async function loadDetail(container, ticker, fecha) {
             render(container);
         });
 
+        mainEl.querySelector('#btn-descargar-pdf')?.addEventListener('click', async (e) => {
+            const btn = e.target;
+            const tesisId = btn.dataset.tesisId;
+            const textoOriginal = btn.textContent;
+            btn.textContent = '⏳ Generando...';
+            btn.disabled = true;
+            try {
+                const res = await fetch('/api/v1/tesis/id/' + tesisId + '/pdf', {
+                    headers: { 'Authorization': 'Bearer ' + getToken() }
+                });
+                if (!res.ok) throw new Error('No se pudo generar el PDF');
+                const blob = await res.blob();
+                const blobUrl = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = blobUrl;
+                a.download = 'RSU_' + (data.ticker || 'tesis') + '.pdf';
+                document.body.appendChild(a);
+                a.click();
+                a.remove();
+                URL.revokeObjectURL(blobUrl);
+            } catch (err) {
+                alert('Error al descargar el PDF: ' + err.message);
+            } finally {
+                btn.textContent = textoOriginal;
+                btn.disabled = false;
+            }
+        });
+
     } catch(e) {
         mainEl.innerHTML = errorMessage(e.message);
     }
@@ -303,7 +332,10 @@ function renderDetail(data) {
 
         // Documento
         + '<div style="background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius);padding:1.25rem;margin-bottom:1rem;">'
-        + '<div style="color:var(--color-accent);font-size:12px;letter-spacing:0.08em;margin-bottom:0.75rem;">📄 DOCUMENTO COMPLETO</div>'
+        + '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.75rem;flex-wrap:wrap;gap:8px;">'
+        + '<div style="color:var(--color-accent);font-size:12px;letter-spacing:0.08em;">📄 DOCUMENTO COMPLETO</div>'
+        + (data.id ? '<button id="btn-descargar-pdf" data-tesis-id="' + data.id + '" style="background:transparent;border:1px solid var(--color-accent);color:var(--color-accent);border-radius:var(--radius);padding:5px 12px;font-family:var(--font-mono);font-size:11px;cursor:pointer;">⬇ DESCARGAR PDF</button>' : '')
+        + '</div>'
         + (data.url_doc
             ? '<iframe src="' + data.url_doc + '" style="width:100%;height:820px;border:none;border-radius:var(--radius);" allowfullscreen></iframe>'
             : data.contenido

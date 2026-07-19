@@ -1,10 +1,11 @@
-from fastapi import APIRouter, Depends, Query, Header, HTTPException
+from fastapi import APIRouter, Depends, Query, Header, HTTPException, Response
 from pydantic import BaseModel
 from auth import verify_token
 from config import settings
 from services.tesis_service import (
     get_tesis_list, get_tesis_detail, get_pending_tesis, get_tesis_by_id,
     approve_tesis, reject_tesis, create_tesis, get_approved_tesis, unpublish_tesis,
+    generar_pdf_tesis,
 )
 
 router = APIRouter(prefix="/api/v1/tesis", tags=["tesis"])
@@ -44,6 +45,25 @@ async def tesis_detail(
     user=Depends(verify_token)
 ):
     return get_tesis_detail(ticker=ticker, fecha=fecha)
+
+
+@router.get("/id/{tesis_id}/pdf")
+async def tesis_pdf(tesis_id: int, user=Depends(verify_token)):
+    """Descarga en PDF de una tesis ya aprobada y publicada -- ver
+    conversación 18/07/2026. Ruta bajo /id/ para no chocar con /{ticker}."""
+    t = get_tesis_by_id(tesis_id)
+    if not t or t.get("status") != "approved":
+        raise HTTPException(status_code=404, detail="Tesis no encontrada")
+    try:
+        pdf_bytes = generar_pdf_tesis(t)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"No se pudo generar el PDF: {e}")
+    filename = f"RSU_{t['ticker']}_{t.get('fecha', '')}.pdf".replace(" ", "_")
+    return Response(
+        content=pdf_bytes,
+        media_type="application/pdf",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
 
 
 # ── Administración (X-Admin-Key) ────────────────────────────────────────

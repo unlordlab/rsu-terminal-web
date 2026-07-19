@@ -166,17 +166,37 @@ def _extraer_resumen(texto: str) -> str:
     return ""
 
 
-def _extraer_precio_objetivo(texto: str, ticker: str = None) -> float | None:
-    """Heurística, no exacta: busca la sección 13 (Precios Objetivo de
-    Analistas) y coge la última cifra en dólares mencionada ahí — suele
-    ser el target más reciente en la tabla. No es infalible (el informe lo
-    escribe un LLM, el formato de tabla puede variar) — revisa el precio
+def _yf_con_reintentos(fn, intentos=3, espera_base=8):
+    """Ejecuta una llamada a yfinance con reintentos si salta rate limit
+    -- hoy hemos visto que un escaneo grande justo antes deja la cuota
+    apurada, y una unica llamada fallida no deberia tirar la validacion
+    entera por la borda. Ver conversacion 18/07/2026."""
+    for intento in range(1, intentos + 1):
+        try:
+            return fn()
+        except Exception as e:
+            es_rate_limit = "rate limit" in str(e).lower() or "too many requests" in str(e).lower()
+            if es_rate_limit and intento < intentos:
+                espera = espera_base * intento
+                print(f"[Bull] Rate limit de yfinance, esperando {espera}s (intento {intento}/{intentos - 1})...")
+                time.sleep(espera)
+                continue
+            raise
+
+
+def _extraer_precio_objetivo(texto: str, ticker: str = None, precio_actual_conocido: float = None) -> float | None:
+    """Heuristica, no exacta: busca la seccion 13 (Precios Objetivo de
+    Analistas) y coge la ultima cifra en dolares mencionada ahi -- suele
+    ser el target mas reciente en la tabla. No es infalible (el informe lo
+    escribe un LLM, el formato de tabla puede variar) -- revisa el precio
     objetivo en el panel de admin antes de dar por buena la cifra.
 
-    Validación añadida: si se pasa el ticker, se compara contra el precio
-    real en vivo -- un precio objetivo por DEBAJO del precio actual no
-    tiene sentido en una tesis alcista (BUY), así que se descarta en vez
-    de mostrar un número que confunda. Ver conversación 18/07/2026."""
+    Validacion: se compara contra el precio real -- un precio objetivo por
+    DEBAJO del precio actual no tiene sentido en una tesis alcista (BUY),
+    asi que se descarta en vez de mostrar un numero que confunda. Si ya
+    se conoce el precio actual (reutilizado de _obtener_datos_verificados,
+    en la misma ejecucion) se usa ese, sin gastar otra llamada a la API.
+    Ver conversacion 18/07/2026."""
     m = re.search(r"\*\*13\. PRECIOS OBJETIVO DE ANALISTAS\*\*(.+?)(?=\n\*\*14\.|\Z)", texto, re.DOTALL)
     bloque = m.group(1) if m else texto
     precios = re.findall(r"\$\s?([0-9]+(?:[.,][0-9]+)?)", bloque)
@@ -187,40 +207,45 @@ def _extraer_precio_objetivo(texto: str, ticker: str = None) -> float | None:
     except Exception:
         return None
 
-    if ticker:
+    precio_actual = precio_actual_conocido
+    if not precio_actual and ticker:
         try:
             import yfinance as yf
-            precio_actual = yf.Ticker(ticker).fast_info.last_price
-            if precio_actual and objetivo <= precio_actual:
-                print(f"[Bull] Precio objetivo descartado para {ticker}: ${objetivo} no supera el precio actual (${precio_actual:.2f}) — probable error de extracción del texto.")
-                return None
-        except Exception:
-            pass  # si falla la comprobación en vivo, se deja pasar el valor extraído tal cual
+            precio_actual = _yf_con_reintentos(lambda: yf.Ticker(ticker).fast_info.last_price)
+        except Exception as e:
+            print(f"[Bull] No se pudo validar el precio objetivo de {ticker} en vivo ({type(e).__name__}) -- "
+                  f"se deja pasar el valor extraido SIN VERIFICAR, revisalo a mano en el panel de admin.")
+
+    if precio_actual and objetivo <= precio_actual:
+        print(f"[Bull] Precio objetivo descartado para {ticker}: ${objetivo} no supera el precio actual (${precio_actual:.2f}) -- probable error de extraccion del texto.")
+        return None
 
     return objetivo
 
 
-def _obtener_datos_verificados(ticker: str) -> str:
-    """Recopila los datos numéricos básicos directamente de yfinance (la
+def _obtener_datos_verificados(ticker: str) -> tuple:
+    """Recopila los datos numericos basicos directamente de yfinance (la
     misma fuente que usa el resto de la terminal, fiable) y los formatea
-    como bloque de contexto para inyectar al principio del prompt. Así el
-    modelo NO tiene que "encontrar" estos números por su cuenta vía
-    búsqueda web -- que es precisamente donde más falla (datos que no
-    llega a recuperar, o que mezcla con su conocimiento desactualizado de
-    entrenamiento). La búsqueda web se reserva para lo que sí necesita
-    investigar de verdad: noticias, catalizadores, contexto cualitativo.
-    Ver conversación 18/07/2026."""
+    como bloque de contexto para inyectar al principio del prompt. Asi el
+    modelo NO tiene que "encontrar" estos numeros por su cuenta via
+    busqueda web -- que es precisamente donde mas falla. La busqueda web
+    se reserva para lo que si necesita investigar de verdad: noticias,
+    catalizadores, contexto cualitativo.
+
+    Devuelve (bloque_de_texto, precio_actual) -- el precio se reutiliza
+    despues para validar el precio objetivo, sin gastar otra llamada.
+    Ver conversacion 18/07/2026."""
     try:
         import yfinance as yf
         tk = yf.Ticker(ticker)
-        info = tk.info
+        info = _yf_con_reintentos(lambda: tk.info)
         fi = tk.fast_info
 
         precio_actual = fi.last_price if hasattr(fi, "last_price") else info.get("currentPrice")
         campos = {
             "Precio actual":              f"${precio_actual:.2f}" if precio_actual else None,
-            "Máximo 52 semanas":          f"${info.get('fiftyTwoWeekHigh')}" if info.get("fiftyTwoWeekHigh") else None,
-            "Mínimo 52 semanas":          f"${info.get('fiftyTwoWeekLow')}" if info.get("fiftyTwoWeekLow") else None,
+            "Maximo 52 semanas":          f"${info.get('fiftyTwoWeekHigh')}" if info.get("fiftyTwoWeekHigh") else None,
+            "Minimo 52 semanas":          f"${info.get('fiftyTwoWeekLow')}" if info.get("fiftyTwoWeekLow") else None,
             "Market Cap":                 f"${info.get('marketCap'):,}" if info.get("marketCap") else None,
             "P/E (trailing)":             info.get("trailingPE"),
             "P/E (forward)":              info.get("forwardPE"),
@@ -236,22 +261,24 @@ def _obtener_datos_verificados(ticker: str) -> str:
         }
         lineas = [f"- {k}: {v}" for k, v in campos.items() if v is not None]
         if not lineas:
-            return ""
+            return "", precio_actual
 
         fecha_hoy = datetime.now().strftime("%d/%m/%Y")
-        return (
-            f"**DATOS VERIFICADOS (Yahoo Finance, a fecha de hoy {fecha_hoy}) — úsalos como base, "
-            f"NO los sustituyas por otra cifra que encuentres en la búsqueda ni por tu conocimiento "
+        bloque = (
+            f"**DATOS VERIFICADOS (Yahoo Finance, a fecha de hoy {fecha_hoy}) -- usalos como base, "
+            f"NO los sustituyas por otra cifra que encuentres en la busqueda ni por tu conocimiento "
             f"de entrenamiento, que puede estar desactualizado:**\n\n"
             + "\n".join(lineas) +
             f"\n\nPara contexto cualitativo adicional (catalizadores recientes, sentimiento, ratios "
-            f"complementarios), puedes consultar también https://finviz.com/quote.ashx?t={ticker} "
-            f"y fuentes de noticias recientes -- pero los datos numéricos de arriba ya están verificados, "
+            f"complementarios), puedes consultar tambien https://finviz.com/quote.ashx?t={ticker} "
+            f"y fuentes de noticias recientes -- pero los datos numericos de arriba ya estan verificados, "
             f"no hace falta que los vuelvas a buscar.\n\n---\n\n"
         )
+        return bloque, precio_actual
     except Exception as e:
         print(f"[Bull] No se pudieron obtener datos verificados de yfinance para {ticker}: {type(e).__name__}: {e}")
-        return ""
+        return "", None
+
 
 
 def _obtener_sector(ticker: str) -> str:
@@ -265,12 +292,12 @@ def _obtener_sector(ticker: str) -> str:
 
 # ── Llamada a Gemini (prueba gratuita) ──────────────────────────────────
 
-def _generar_con_gemini(ticker: str) -> str:
+def _generar_con_gemini(ticker: str, datos_verificados: str = "") -> str:
     from google import genai
     from google.genai import types
 
     client = genai.Client(api_key=settings.gemini_api_key)
-    prompt = _obtener_datos_verificados(ticker) + PROMPT_TEMPLATE.format(ticker=ticker)
+    prompt = datos_verificados + PROMPT_TEMPLATE.format(ticker=ticker)
 
     intentos = 0
     while True:
@@ -320,10 +347,10 @@ def _generar_con_gemini(ticker: str) -> str:
 # aceptando que el estilo será distinto al de Elia. Ver conversación
 # 18/07/2026.
 
-def _generar_con_groq(ticker: str) -> str:
+def _generar_con_groq(ticker: str, datos_verificados: str = "") -> str:
     import requests
 
-    prompt = _obtener_datos_verificados(ticker) + PROMPT_TEMPLATE.format(ticker=ticker)
+    prompt = datos_verificados + PROMPT_TEMPLATE.format(ticker=ticker)
 
     intentos = 0
     while True:
@@ -359,11 +386,11 @@ def _generar_con_groq(ticker: str) -> str:
 
 # ── Llamada a Claude (producción real) ──────────────────────────────────
 
-def _generar_con_claude(ticker: str) -> str:
+def _generar_con_claude(ticker: str, datos_verificados: str = "") -> str:
     import anthropic
 
     client = anthropic.Anthropic(api_key=settings.anthropic_api_key)
-    prompt = _obtener_datos_verificados(ticker) + PROMPT_TEMPLATE.format(ticker=ticker)
+    prompt = datos_verificados + PROMPT_TEMPLATE.format(ticker=ticker)
 
     intentos = 0
     while True:
@@ -390,12 +417,14 @@ def _generar_con_claude(ticker: str) -> str:
 
 
 def generar_tesis(ticker: str, provider: str) -> dict:
+    datos_verificados, precio_actual = _obtener_datos_verificados(ticker)
+
     if provider == "gemini":
-        texto = _generar_con_gemini(ticker)
+        texto = _generar_con_gemini(ticker, datos_verificados)
     elif provider == "groq":
-        texto = _generar_con_groq(ticker)
+        texto = _generar_con_groq(ticker, datos_verificados)
     else:
-        texto = _generar_con_claude(ticker)
+        texto = _generar_con_claude(ticker, datos_verificados)
 
     if not texto or not texto.strip():
         raise ValueError("Respuesta vacía de la API (revisa si los tools fallaron)")
@@ -411,7 +440,7 @@ def generar_tesis(ticker: str, provider: str) -> dict:
     titulo, nombre = _extraer_titulo_y_nombre(texto)
     resumen = _extraer_resumen(texto)
     sector = _obtener_sector(ticker)
-    precio_objetivo = _extraer_precio_objetivo(texto, ticker)
+    precio_objetivo = _extraer_precio_objetivo(texto, ticker, precio_actual_conocido=precio_actual)
 
     return {"contenido": texto, "titulo": titulo, "nombre": nombre, "resumen": resumen,
             "sector": sector, "precio_objetivo": precio_objetivo}
@@ -492,7 +521,7 @@ def procesar_meeting_room(provider: str, max_mensajes: int = 3) -> int:
                 sector=resultado["sector"],
                 resumen=resultado["resumen"],
                 precio_objetivo=resultado["precio_objetivo"],
-                autor=f"Agente Bull ({provider}) — a petición",
+                autor=f"Gael ({provider}) — a petición",
                 fuente=f"agente_bull_{provider}",
                 criterio=f"Petición directa vía Meeting Room: \"{msg['mensaje']}\"",
                 status="pending",
@@ -561,7 +590,7 @@ def main():
                 sector=resultado["sector"],
                 resumen=resultado["resumen"],
                 precio_objetivo=resultado["precio_objetivo"],
-                autor=f"Agente Bull ({provider})",
+                autor=f"Gael ({provider})",
                 fuente=f"agente_bull_{provider}",
                 criterio=criterio,
                 status="pending",

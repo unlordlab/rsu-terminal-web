@@ -204,6 +204,7 @@ def get_tesis_detail(ticker: str, fecha: str = "") -> dict:
 
     return {
         "ok": True,
+        "id": row["id"],
         "ticker": ticker_up,
         "nombre": row["nombre"] or "",
         "fecha": row["fecha"],
@@ -344,3 +345,47 @@ def recent_tickers_with_tesis(days: int = 60) -> set:
     ).fetchall()
     conn.close()
     return {r["ticker"] for r in rows}
+
+
+def generar_pdf_tesis(tesis: dict) -> bytes:
+    """Convierte el contenido markdown de una tesis en un PDF descargable.
+    markdown -> HTML -> PDF, las dos librerías son puro Python (sin
+    dependencias de sistema), para no complicar el Dockerfile. Ver
+    conversación 18/07/2026."""
+    import markdown as md
+    from xhtml2pdf import pisa
+    import io
+
+    fecha_str = tesis.get("fecha", "")
+    html_body = md.markdown(tesis.get("contenido", ""), extensions=["tables", "fenced_code"])
+
+    html_full = f"""<html>
+<head>
+<style>
+    @page {{ size: A4; margin: 2cm 1.8cm; }}
+    body {{ font-family: Helvetica, Arial, sans-serif; font-size: 10px; color: #1a1a1a; line-height: 1.5; }}
+    h1 {{ font-size: 19px; color: #0a5c36; margin-bottom: 4px; }}
+    h2 {{ font-size: 14px; color: #0a5c36; border-bottom: 1px solid #ccc; padding-bottom: 3px; margin-top: 18px; }}
+    h3 {{ font-size: 12px; color: #333; margin-top: 12px; }}
+    p {{ margin: 6px 0; }}
+    table {{ border-collapse: collapse; width: 100%; margin: 8px 0; }}
+    th, td {{ border: 1px solid #ccc; padding: 4px 8px; font-size: 9px; text-align: left; }}
+    th {{ background: #f0f0f0; font-weight: bold; }}
+    .cabecera {{ color: #666; font-size: 9px; margin-bottom: 14px; }}
+    .disclaimer {{ margin-top: 24px; padding-top: 10px; border-top: 1px solid #ccc; font-size: 8px; color: #999; }}
+</style>
+</head>
+<body>
+    <h1>{tesis.get('ticker', '')} — {tesis.get('titulo', '')}</h1>
+    <div class="cabecera">RSU Terminal &middot; {tesis.get('autor', '')} &middot; {fecha_str}</div>
+    {html_body}
+    <div class="disclaimer">Este informe tiene finalidad exclusivamente educativa e informativa. No constituye
+    recomendación de inversión, asesoramiento financiero ni invitación a comprar o vender ningún activo.
+    RSU Terminal &middot; rsuterminal.com</div>
+</body>
+</html>"""
+
+    buffer = io.BytesIO()
+    pisa.CreatePDF(html_full, dest=buffer)
+    buffer.seek(0)
+    return buffer.getvalue()

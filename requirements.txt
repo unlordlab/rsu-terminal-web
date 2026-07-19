@@ -22,8 +22,10 @@ numpy==1.26.4
 yfinance==0.2.66
 anthropic==0.117.0  # agente Bull (tesis) — ver conversacion 17/07/2026
 google-genai==2.12.1  # agente Bull, modo de prueba gratuito (Gemini)
+Pillow==12.3.0  # redimensionar la foto de Gael para Telegram
 xlrd==2.0.2  # lectura de .xls antiguo (dataset CAPE de Shiller, Yale)
 
 # Timezone
 pytz==2024.1
-Pillow==12.3.0  # redimensionar la foto de Gael para Telegram
+markdown==3.7
+xhtml2pdf==0.2.16
