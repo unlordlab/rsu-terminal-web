@@ -163,6 +163,7 @@ TTL = {
     "calendar":    1800,  # 30 min — calendario económico
     "earnings":    1800,  # 30 min — earnings calendar
     "canslim":     600,   # 10 min — CANSLIM screener
+    "bull_info":   3600,  # 1 hora — .info crudo cacheado para Gael, ver conversación 18/07/2026
     "rsrw":        300,   # 5 min  — RS/RW scanner
     "options":     300,   # 5 min (antes 120s) — options flow
 }

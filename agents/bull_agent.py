@@ -54,6 +54,7 @@ from services.canslim_service import scan_canslim  # noqa: E402
 from services.tesis_service import create_tesis, recent_tickers_with_tesis  # noqa: E402
 from bull_prompt import PROMPT_TEMPLATE  # noqa: E402
 from services.meeting_room_service import get_pendientes_para, marcar_procesado, responder  # noqa: E402
+from services.cache import cache, TTL  # noqa: E402
 
 # ── Criterio de selección de candidatos ─────────────────────────────────
 # CANSLIM score >= 40 (ya lo exige scan_canslim) + corrección real desde
@@ -238,7 +239,19 @@ def _obtener_datos_verificados(ticker: str) -> tuple:
     try:
         import yfinance as yf
         tk = yf.Ticker(ticker)
-        info = _yf_con_reintentos(lambda: tk.info)
+        # .info es, de todas las llamadas de yfinance, la más pesada y
+        # propensa a bloqueo -- raspa una página distinta a .history()/
+        # fast_info (las que usa el resto de la terminal, y que hoy
+        # mismo siguen con 100% de éxito según el panel de salud). Gael
+        # no es una página en vivo esperando respuesta, puede permitirse
+        # más paciencia aquí que el resto de la app. También se cachea
+        # 1h, para no volver a pedirla si el mismo ticker sale otra vez
+        # en la misma hora (petición manual repetida, Meeting Room, etc.)
+        # Ver conversación 18/07/2026.
+        info = cache.get(f"bull_info:{ticker}")
+        if info is None:
+            info = _yf_con_reintentos(lambda: tk.info, intentos=5, espera_base=15)
+            cache.set(f"bull_info:{ticker}", info, TTL["bull_info"])
         fi = tk.fast_info
 
         precio_actual = fi.last_price if hasattr(fi, "last_price") else info.get("currentPrice")
