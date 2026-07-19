@@ -774,6 +774,12 @@ def run_scan() -> dict:
                 amihud_z = (amihud - amihud.rolling(20).mean()) / amihud.rolling(20).std()
                 absorcion_dia = (rvol_z > 0.75) & (amihud_z < -0.75)
                 dias_absorcion = int(absorcion_dia.tail(10).sum())
+                if ticker == "AAPL":
+                    print(f"[DIAG AAPL] len(prices)={len(prices)} len(vols)={len(vols)}")
+                    print(f"[DIAG AAPL] dollar_vol tail: {dollar_vol.tail(5).tolist()}")
+                    print(f"[DIAG AAPL] amihud tail: {amihud.tail(5).tolist()}")
+                    print(f"[DIAG AAPL] rvol_z tail: {rvol_z.tail(5).tolist()}")
+                    print(f"[DIAG AAPL] amihud_z tail: {amihud_z.tail(5).tolist()}")
             except Exception as e:
                 dias_absorcion = 0
                 print(f"⚠️  Absorción falló para {ticker}: {type(e).__name__}: {e}")
