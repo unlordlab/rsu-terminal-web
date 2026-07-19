@@ -91,6 +91,9 @@ def _passes_filters(row: dict, criteria: dict) -> bool:
     if criteria.get("new_high_only"):
         if not row.get("new_high"):
             return False
+    if criteria.get("absorcion_min") is not None:
+        if (row.get("dias_absorcion") or 0) < criteria["absorcion_min"]:
+            return False
     return True
 
 
@@ -163,6 +166,7 @@ def run_filter(
     phase: int = None,
     sector: str = None,
     new_high_only: bool = None,
+    absorcion_min: int = None,
     limit: int = 100,
 ) -> dict:
     cached = cache.get(CACHE_KEY)
@@ -183,6 +187,7 @@ def run_filter(
         "phase":         phase,
         "sector":        sector,
         "new_high_only": new_high_only,
+        "absorcion_min": absorcion_min,
     }
     active_criteria = {k: v for k, v in criteria.items() if v is not None}
 
@@ -202,6 +207,7 @@ def run_filter(
                 "score_tecnico": row.get("score_tecnico"),
                 "new_high":      bool(row.get("new_high")),
                 "above_sma50":   row.get("above_sma50"),
+                "dias_absorcion": row.get("dias_absorcion", 0),
             })
 
     matches.sort(key=lambda r: r.get("score_tecnico") or 0, reverse=True)

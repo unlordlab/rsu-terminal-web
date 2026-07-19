@@ -759,6 +759,24 @@ def run_scan() -> dict:
             new_high = bool(price >= float(window_252.max()))
             new_low  = bool(price <= float(window_252.min()))
 
+            # Señal de absorción: RVOL alto + impacto en precio bajo (proxy
+            # de Amihud/Lambda de Kyle), sostenido en los últimos 10 días.
+            # Reutiliza prices/vols ya descargados -- cero llamadas nuevas
+            # a la API. Ver conversación 18/07/2026 (Kyle 1985; Bouchaud,
+            # Farmer & Lillo 2008).
+            dias_absorcion = 0
+            try:
+                returns    = prices.pct_change()
+                dollar_vol = prices * vols.reindex(prices.index).fillna(0)
+                amihud     = (returns.abs() / (dollar_vol / 1_000_000)).replace([float("inf"), float("-inf")], None)
+                rvol_series = vols / vols.rolling(RVOL_WINDOW).mean()
+                rvol_z   = (rvol_series - rvol_series.rolling(20).mean()) / rvol_series.rolling(20).std()
+                amihud_z = (amihud - amihud.rolling(20).mean()) / amihud.rolling(20).std()
+                absorcion_dia = (rvol_z > 0.75) & (amihud_z < -0.75)
+                dias_absorcion = int(absorcion_dia.tail(10).sum())
+            except Exception:
+                dias_absorcion = 0
+
             rows.append({
                 "ticker":            ticker,
                 "sector":            sector_raw,
@@ -774,6 +792,7 @@ def run_scan() -> dict:
                 "above_sma50":       above_sma50,
                 "new_high":          new_high,
                 "new_low":           new_low,
+                "dias_absorcion":    dias_absorcion,
             })
         except Exception:
             continue

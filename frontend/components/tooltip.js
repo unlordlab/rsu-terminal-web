@@ -2024,6 +2024,16 @@ Un día cuenta como "de absorción" solo si las dos condiciones se cumplen a la 
 IMPORTANTE: esto es una estimación estadística, no una certeza. Te dice "este comportamiento tiene la firma característica de absorción", no "esto es un fondo concreto comprando". Es información adicional a valorar junto con el resto del análisis, no una señal de compra o venta por sí sola.`
     },
 
+    "scanner-absorcion": {
+        title: "Días de Absorción",
+        short: "Cuántos de los últimos 10 días muestran volumen alto con impacto de precio bajo — la huella de una orden grande ejecutándose con cuidado.",
+        long: `Misma señal que tienes en Research, aplicada a los 500 valores del S&P 500 a la vez, calculada en el escaneo nocturno (no en vivo, para no sobrecargar la cuota de datos).
+
+Cada día se marca como "de absorción" si coinciden dos cosas: actividad de volumen (RVOL) por encima de lo normal para ese valor concreto, Y un impacto en el precio menor de lo que le correspondería a ese volumen (un pico de volumen que apenas mueve el precio). Se cuentan cuántos de los últimos 10 días cumplen ambas condiciones a la vez.
+
+Cuantos más días, más sostenida (y más creíble) es la señal — 1 o 2 días puede ser ruido, 5 o más empieza a ser un patrón real digno de mirar con calma en Research, donde puedes ver el detalle completo de ese valor en concreto.`
+    },
+
     // ── GENERAL ───────────────────────────────────────────────────────────────
     "market-cap": {
         title: "Market Cap — Capitalización bursátil",
