@@ -28,9 +28,12 @@ class Settings(BaseSettings):
     xai_api_key: str = ""
     fmp_api_key: str = ""
     finnhub_api_key: str = ""
-    alpha_vantage_api_key: str = ""
+    alpha_vantage_api_key: str = ""  # uso marginal (1 función en Research) -- se mantiene, es funcional, no muerta
     groq_api_key: str = ""
-    openrouter_api_key: str = ""
+    # openrouter_api_key ELIMINADA 20/07/2026 (Fase 2.5, Plan Maestro): estaba
+    # definida pero con CERO usos en todo el código (confirmado con grep
+    # exhaustivo). Si algún día se retoma la idea de Perplexity Sonar vía
+    # OpenRouter, volver a añadirla entonces con su integración real.
     anthropic_api_key: str = ""  # agente Bull (tesis) — ver conversacion 17/07/2026
     gemini_api_key: str = ""     # agente Bull, modo de prueba gratuito (Google AI Studio)
     # Proxy para TODAS las llamadas a yfinance (Algoritmo, Cartera, Scanner,

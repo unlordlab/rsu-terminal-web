@@ -1,7 +1,6 @@
-from fastapi import APIRouter, Depends, Query, Header, HTTPException, Response
+from fastapi import APIRouter, Depends, Query, HTTPException, Response
 from pydantic import BaseModel
-from auth import verify_token
-from config import settings
+from auth import verify_token, verify_admin_key
 from services.tesis_service import (
     get_tesis_list, get_tesis_detail, get_pending_tesis, get_tesis_by_id,
     approve_tesis, reject_tesis, create_tesis, get_approved_tesis, unpublish_tesis,
@@ -17,12 +16,10 @@ router = APIRouter(prefix="/api/v1/tesis", tags=["tesis"])
 # que las rutas públicas, heredaba `paid` y expulsaba al admin a la
 # pantalla de login normal en cuanto caducaba su sesión de usuario, aunque
 # tuviera la clave de admin correcta.
+#
+# La comprobación de la clave ya no vive aquí -- deduplicada en
+# auth.verify_admin_key (Fase 2.4 del Plan Maestro, 20/07/2026).
 admin_router = APIRouter(prefix="/api/v1/tesis/admin", tags=["tesis-admin"])
-
-
-def _check_admin(x_admin_key: str):
-    if not settings.admin_key or x_admin_key != settings.admin_key:
-        raise HTTPException(status_code=401, detail="Clave de administrador inválida")
 
 
 # ── Público (requiere sesión de usuario normal) ─────────────────────────
@@ -84,25 +81,22 @@ class CreateTesisRequest(BaseModel):
 
 
 @admin_router.get("/pending")
-async def admin_pending_tesis(x_admin_key: str = Header(None)):
+async def admin_pending_tesis(_admin: None = Depends(verify_admin_key)):
     """Bandeja de tesis a la espera de revisión — panel de admin,
     pestaña TESIS PENDIENTES."""
-    _check_admin(x_admin_key)
     return {"items": get_pending_tesis()}
 
 
 @admin_router.get("/approved")
-async def admin_approved_tesis(limit: int = 20, x_admin_key: str = Header(None)):
+async def admin_approved_tesis(limit: int = 20, _admin: None = Depends(verify_admin_key)):
     """Últimas tesis aprobadas, para poder retirarlas si hace falta."""
-    _check_admin(x_admin_key)
     return {"items": get_approved_tesis(limit=limit)}
 
 
 @admin_router.post("/{tesis_id}/unpublish")
-async def admin_unpublish_tesis(tesis_id: int, x_admin_key: str = Header(None)):
+async def admin_unpublish_tesis(tesis_id: int, _admin: None = Depends(verify_admin_key)):
     """Retira una tesis ya aprobada -- vuelve a pendiente, desaparece de
     la sección pública al instante."""
-    _check_admin(x_admin_key)
     ok = unpublish_tesis(tesis_id)
     if not ok:
         raise HTTPException(status_code=404, detail="Tesis no encontrada o no estaba aprobada")
@@ -110,8 +104,7 @@ async def admin_unpublish_tesis(tesis_id: int, x_admin_key: str = Header(None)):
 
 
 @admin_router.post("/{tesis_id}/approve")
-async def admin_approve_tesis(tesis_id: int, x_admin_key: str = Header(None)):
-    _check_admin(x_admin_key)
+async def admin_approve_tesis(tesis_id: int, _admin: None = Depends(verify_admin_key)):
     ok = approve_tesis(tesis_id, approved_by="admin")
     if not ok:
         raise HTTPException(status_code=404, detail="Tesis no encontrada o ya revisada")
@@ -119,8 +112,7 @@ async def admin_approve_tesis(tesis_id: int, x_admin_key: str = Header(None)):
 
 
 @admin_router.post("/{tesis_id}/reject")
-async def admin_reject_tesis(tesis_id: int, x_admin_key: str = Header(None)):
-    _check_admin(x_admin_key)
+async def admin_reject_tesis(tesis_id: int, _admin: None = Depends(verify_admin_key)):
     ok = reject_tesis(tesis_id, approved_by="admin")
     if not ok:
         raise HTTPException(status_code=404, detail="Tesis no encontrada o ya revisada")
@@ -128,8 +120,7 @@ async def admin_reject_tesis(tesis_id: int, x_admin_key: str = Header(None)):
 
 
 @admin_router.get("/{tesis_id}")
-async def admin_get_tesis(tesis_id: int, x_admin_key: str = Header(None)):
-    _check_admin(x_admin_key)
+async def admin_get_tesis(tesis_id: int, _admin: None = Depends(verify_admin_key)):
     t = get_tesis_by_id(tesis_id)
     if not t:
         raise HTTPException(status_code=404, detail="Tesis no encontrada")
@@ -137,11 +128,10 @@ async def admin_get_tesis(tesis_id: int, x_admin_key: str = Header(None)):
 
 
 @admin_router.post("/create")
-async def admin_create_tesis(req: CreateTesisRequest, x_admin_key: str = Header(None)):
+async def admin_create_tesis(req: CreateTesisRequest, _admin: None = Depends(verify_admin_key)):
     """Creación manual — sustituye al flujo antiguo de añadir una fila al
     Google Sheet. Por defecto queda 'pending' igual que las del agente,
     salvo que se indique status='approved' explícitamente."""
-    _check_admin(x_admin_key)
     new_id = create_tesis(
         ticker=req.ticker, contenido=req.contenido, rating=req.rating,
         titulo=req.titulo, nombre=req.nombre, sector=req.sector, autor=req.autor,

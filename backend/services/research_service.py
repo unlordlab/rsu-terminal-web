@@ -770,6 +770,12 @@ def _translate_description(text: str) -> str:
     if not text: return text
     try:
         import requests as _req
+        # xai_api_key (Grok) casi seguro nunca se ha configurado -- si no
+        # tiene valor, esta línea usa Groq en su lugar de forma silenciosa.
+        # No es un bug: es la forma más simple de dejar la puerta abierta a
+        # Grok sin que rompa nada mientras no se configure. Revisado en la
+        # auditoría de herramientas 19/07/2026 -- se deja tal cual, es
+        # código funcional, no muerto.
         key = getattr(settings, 'xai_api_key', '') or getattr(settings, 'groq_api_key', '')
         if not key: return text
         

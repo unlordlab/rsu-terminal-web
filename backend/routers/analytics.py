@@ -1,7 +1,6 @@
-from fastapi import APIRouter, HTTPException, Header, Request
+from fastapi import APIRouter, Depends, Request
 from pydantic import BaseModel
-from config import settings
-from auth import decode_token
+from auth import decode_token, verify_admin_key
 from services import analytics_service
 
 router = APIRouter(prefix="/api/v1/analytics", tags=["analytics"])
@@ -35,27 +34,21 @@ async def track(req: TrackRequest, request: Request):
 
 
 @router.get("/summary")
-async def summary(days: int = 30, x_admin_key: str = Header(None)):
+async def summary(days: int = 30, _admin: None = Depends(verify_admin_key)):
     """Resumen agregado para el panel de administración: secciones más
     visitadas, tickers y tesis más consultados, actividad diaria.
 
     Protegido con la misma X-Admin-Key que el resto de endpoints /admin/*
-    de auth.py (no con el login de usuario normal).
+    (comprobación deduplicada en auth.verify_admin_key, Fase 2.4).
     """
-    if not settings.admin_key or x_admin_key != settings.admin_key:
-        raise HTTPException(status_code=401, detail="Clave de administrador inválida")
     return analytics_service.get_summary(days=days)
 
 
 @router.get("/yfinance-health")
-async def yfinance_health(hours: int = 24, x_admin_key: str = Header(None)):
+async def yfinance_health(hours: int = 24, _admin: None = Depends(verify_admin_key)):
     """Salud de las llamadas a yfinance por módulo (Índices, Sectores,
     Forex, Commodities...) en las últimas N horas — panel de admin,
     pestaña PETICIONES. Ver conversación 16/07/2026.
-
-    Protegido con la misma X-Admin-Key que el resto de endpoints /admin/*.
     """
-    if not settings.admin_key or x_admin_key != settings.admin_key:
-        raise HTTPException(status_code=401, detail="Clave de administrador inválida")
     from services import yf_health
     return yf_health.summary(hours=hours)

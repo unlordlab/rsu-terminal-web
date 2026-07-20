@@ -10,10 +10,14 @@ GENERAL_LIMIT = 60
 HEAVY_LIMIT   = 10
 WINDOW        = 60
 
-# Límite específico para /api/v1/auth/login: es la única puerta de entrada
-# de toda la app (una sola contraseña de comunidad), así que necesita un
-# límite mucho más estricto que el general para dificultar la fuerza bruta.
-# Se cuenta solo por IP (todavía no hay token en el momento de hacer login).
+# Límite específico para /api/v1/auth/login: cuentas individuales con
+# contraseña propia (bcrypt) por usuario -- este límite dificulta la
+# fuerza bruta contra cualquier cuenta concreta. Se cuenta por IP (todavía
+# no hay token en el momento de hacer login); desde la Fase 0/1 del Plan
+# Maestro, esa IP ya es la real del cliente gracias a --proxy-headers +
+# X-Forwarded-For, no la de Nginx compartida entre todos. Comentario
+# actualizado 20/07/2026 -- describía la arquitectura antigua de
+# contraseña única de comunidad, que ya no existe.
 LOGIN_LIMIT  = 5
 LOGIN_WINDOW = 900  # 15 minutos
 

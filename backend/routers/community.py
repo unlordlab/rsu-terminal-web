@@ -1,7 +1,6 @@
-from fastapi import APIRouter, Depends, HTTPException, Header
+from fastapi import APIRouter, Depends
 from pydantic import BaseModel, Field
-from auth import verify_token
-from config import settings
+from auth import verify_token, verify_admin_key
 from services import users_service, community_service
 
 router = APIRouter(prefix="/api/v1/community", tags=["community"])
@@ -22,15 +21,12 @@ async def create_feedback(body: FeedbackCreate, user=Depends(verify_token)):
 
 
 @router.get("/feedback")
-async def list_feedback(x_admin_key: str = Header(None)):
-    """Panel de Admin — mismo patrón X-Admin-Key que auth.py/analytics.py."""
-    if not settings.admin_key or x_admin_key != settings.admin_key:
-        raise HTTPException(status_code=401, detail="Clave de administrador inválida")
+async def list_feedback(_admin: None = Depends(verify_admin_key)):
+    """Panel de Admin — mismo patrón X-Admin-Key que auth.py/analytics.py
+    (comprobación deduplicada en auth.verify_admin_key, Fase 2.4)."""
     return community_service.get_all_feedback()
 
 
 @router.post("/feedback/{feedback_id}/read")
-async def mark_read(feedback_id: int, x_admin_key: str = Header(None)):
-    if not settings.admin_key or x_admin_key != settings.admin_key:
-        raise HTTPException(status_code=401, detail="Clave de administrador inválida")
+async def mark_read(feedback_id: int, _admin: None = Depends(verify_admin_key)):
     return community_service.mark_feedback_read(feedback_id)

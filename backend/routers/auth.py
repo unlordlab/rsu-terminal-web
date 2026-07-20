@@ -1,7 +1,6 @@
-from fastapi import APIRouter, HTTPException, Depends, Header
+from fastapi import APIRouter, HTTPException, Depends
 from pydantic import BaseModel, field_validator
-from auth import create_token, verify_token
-from config import settings
+from auth import create_token, verify_token, verify_admin_key
 from middleware.rate_limit import login_rate_limit
 from services import users_service
 
@@ -123,7 +122,7 @@ async def accept_disclaimer(payload: dict = Depends(verify_token)):
 
 
 @router.post("/admin/set-tier")
-async def admin_set_tier(req: SetTierRequest, x_admin_key: str = Header(None)):
+async def admin_set_tier(req: SetTierRequest, _admin: None = Depends(verify_admin_key)):
     """Sube (o baja) manualmente el tier de un usuario.
 
     De momento no hay pasarela de pago integrada: esto es lo que usa Marc
@@ -132,8 +131,6 @@ async def admin_set_tier(req: SetTierRequest, x_admin_key: str = Header(None)):
     Protegido con una clave de administrador (ADMIN_KEY en .env), no con el
     login de usuario normal.
     """
-    if not settings.admin_key or x_admin_key != settings.admin_key:
-        raise HTTPException(status_code=401, detail="Clave de administrador inválida")
     if req.tier not in users_service.VALID_TIERS:
         raise HTTPException(
             status_code=400,
@@ -146,20 +143,16 @@ async def admin_set_tier(req: SetTierRequest, x_admin_key: str = Header(None)):
 
 
 @router.get("/admin/users")
-async def admin_list_users(x_admin_key: str = Header(None)):
-    if not settings.admin_key or x_admin_key != settings.admin_key:
-        raise HTTPException(status_code=401, detail="Clave de administrador inválida")
+async def admin_list_users(_admin: None = Depends(verify_admin_key)):
     return {"users": users_service.list_users()}
 
 
 @router.post("/admin/reset-password")
-async def admin_reset_password(req: ResetPasswordRequest, x_admin_key: str = Header(None)):
+async def admin_reset_password(req: ResetPasswordRequest, _admin: None = Depends(verify_admin_key)):
     """Stopgap manual mientras no haya email de recuperación: Marc fija una
     contraseña nueva (p.ej. una temporal) y se la pasa a la persona por otro
     canal (WhatsApp, etc.). No requiere conocer la contraseña anterior.
     """
-    if not settings.admin_key or x_admin_key != settings.admin_key:
-        raise HTTPException(status_code=401, detail="Clave de administrador inválida")
     ok = users_service.reset_password(req.email, req.new_password)
     if not ok:
         raise HTTPException(status_code=404, detail="Usuario no encontrado")
@@ -167,12 +160,10 @@ async def admin_reset_password(req: ResetPasswordRequest, x_admin_key: str = Hea
 
 
 @router.post("/admin/revoke-sessions")
-async def admin_revoke_sessions(req: RevokeSessionsRequest, x_admin_key: str = Header(None)):
+async def admin_revoke_sessions(req: RevokeSessionsRequest, _admin: None = Depends(verify_admin_key)):
     """Cierra todas las sesiones activas de un usuario sin tocar su
     contraseña -- p.ej. si sospechas que compartió su token sin querer, o
     quieres forzar un re-login tras cambiar algo de su cuenta a mano."""
-    if not settings.admin_key or x_admin_key != settings.admin_key:
-        raise HTTPException(status_code=401, detail="Clave de administrador inválida")
     ok = users_service.revoke_sessions(req.email)
     if not ok:
         raise HTTPException(status_code=404, detail="Usuario no encontrado")
