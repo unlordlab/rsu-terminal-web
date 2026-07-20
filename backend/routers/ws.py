@@ -39,6 +39,25 @@ PRICE_TICKERS = {
 # de la aplicación) y no se acepta el socket.
 
 async def _authenticate(websocket: WebSocket, min_tier: str | None = None) -> bool:
+    # ── Validación de Origin (contra Cross-Site WebSocket Hijacking) ──────
+    # Un navegador siempre envía la cabecera Origin en un handshake de WS.
+    # Si viene y su host NO coincide con el host al que se conecta (mismo
+    # origen), es una página de terceros intentando abrir un WS con la
+    # sesión del usuario -- se rechaza. Si NO viene Origin, es un cliente
+    # no-navegador (curl, script propio): se permite, porque el vector de
+    # ataque CSWSH existe solo desde navegadores. Comparar contra el Host
+    # de la propia petición (en vez de una lista configurada) hace que
+    # esto funcione igual hoy con la IP y mañana con el dominio, sin tocar
+    # nada. Ver auditoría 19/07/2026, hallazgo #8.
+    origin = websocket.headers.get("origin")
+    if origin:
+        from urllib.parse import urlparse
+        origin_host = (urlparse(origin).hostname or "").lower()
+        request_host = (websocket.headers.get("host") or "").split(":")[0].lower()
+        if not origin_host or origin_host != request_host:
+            await websocket.close(code=4403)
+            return False
+
     token = websocket.query_params.get("token")
     if not token:
         await websocket.close(code=4401)
