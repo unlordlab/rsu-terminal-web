@@ -66,6 +66,16 @@ async def _authenticate(websocket: WebSocket, min_tier: str | None = None) -> bo
     if payload is None:
         await websocket.close(code=4401)
         return False
+    # Misma comprobación de token_version que verify_token() en auth.py --
+    # sin esto, una sesión revocada por HTTP seguiría viva indefinidamente
+    # en el WebSocket (Cartera en vivo, etc.), ya que aquí no se pasa por
+    # verify_token. Ver conversación 20/07/2026.
+    from services import users_service
+    email = payload.get("sub")
+    ws_user = users_service.get_user_by_email(email) if email else None
+    if ws_user is None or ws_user.get("token_version", 0) != payload.get("tv", 0):
+        await websocket.close(code=4401)
+        return False
     if min_tier:
         # Igual que en require_tier (auth.py): se consulta el tier ACTUAL en
         # base de datos, no el que quedó grabado en el JWT al hacer login,

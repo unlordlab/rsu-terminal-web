@@ -40,6 +40,17 @@ def init_db():
         conn.execute("ALTER TABLE users ADD COLUMN disclaimer_accepted_at TEXT")
     except sqlite3.OperationalError:
         pass  # la columna ya existe
+    # token_version -- permite revocar TODAS las sesiones activas de un
+    # usuario (JWT de hasta 30 días, sin esto no había forma de invalidar
+    # uno filtrado antes de que caducara solo). Se incluye en el payload
+    # del JWT al hacer login; en cada petición se compara contra este
+    # valor en BD -- si no coincide, el token se rechaza aunque su firma
+    # sea válida y no haya caducado. Incrementar este número invalida de
+    # golpe todas las sesiones anteriores. Ver auditoría 19/07/2026 #7.
+    try:
+        conn.execute("ALTER TABLE users ADD COLUMN token_version INTEGER NOT NULL DEFAULT 0")
+    except sqlite3.OperationalError:
+        pass  # la columna ya existe
     conn.commit()
     conn.close()
 
@@ -69,7 +80,7 @@ def create_user(email: str, password: str) -> dict | None:
             (email, password_hash, datetime.now(timezone.utc).isoformat())
         )
         conn.commit()
-        row = conn.execute("SELECT id, email, tier FROM users WHERE email = ?", (email,)).fetchone()
+        row = conn.execute("SELECT id, email, tier, token_version FROM users WHERE email = ?", (email,)).fetchone()
         return dict(row)
     finally:
         conn.close()
@@ -81,11 +92,11 @@ def authenticate(email: str, password: str) -> dict | None:
     conn = _conn()
     try:
         row = conn.execute(
-            "SELECT id, email, password_hash, tier FROM users WHERE email = ?", (email,)
+            "SELECT id, email, password_hash, tier, token_version FROM users WHERE email = ?", (email,)
         ).fetchone()
         if not row or not _verify_password(password, row["password_hash"]):
             return None
-        return {"id": row["id"], "email": row["email"], "tier": row["tier"]}
+        return {"id": row["id"], "email": row["email"], "tier": row["tier"], "token_version": row["token_version"]}
     finally:
         conn.close()
 
@@ -95,9 +106,25 @@ def get_user_by_email(email: str) -> dict | None:
     conn = _conn()
     try:
         row = conn.execute(
-            "SELECT id, email, tier, disclaimer_accepted_at FROM users WHERE email = ?", (email,)
+            "SELECT id, email, tier, disclaimer_accepted_at, token_version FROM users WHERE email = ?", (email,)
         ).fetchone()
         return dict(row) if row else None
+    finally:
+        conn.close()
+
+
+def revoke_sessions(email: str) -> bool:
+    """Invalida TODAS las sesiones activas de un usuario (incrementa
+    token_version) -- cualquier JWT emitido antes de este momento deja de
+    ser válido en el siguiente request, aunque no haya caducado. Útil tras
+    un cambio de contraseña o si se sospecha que un token se filtró.
+    Devuelve False si el email no existe."""
+    email = email.strip().lower()
+    conn = _conn()
+    try:
+        cur = conn.execute("UPDATE users SET token_version = token_version + 1 WHERE email = ?", (email,))
+        conn.commit()
+        return cur.rowcount > 0
     finally:
         conn.close()
 
@@ -128,8 +155,14 @@ def reset_password(email: str, new_password: str) -> bool:
     conn = _conn()
     try:
         password_hash = _hash_password(new_password)
+        # Cambiar la contraseña también revoca todas las sesiones activas
+        # -- si el motivo del reset era una cuenta comprometida, un token
+        # ya filtrado seguiría siendo válido tras el cambio si no se hace
+        # esto. Ver conversación 20/07/2026 (mismo mecanismo que
+        # revoke_sessions()).
         cur = conn.execute(
-            "UPDATE users SET password_hash = ? WHERE email = ?", (password_hash, email)
+            "UPDATE users SET password_hash = ?, token_version = token_version + 1 WHERE email = ?",
+            (password_hash, email)
         )
         conn.commit()
         return cur.rowcount > 0
