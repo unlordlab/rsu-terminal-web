@@ -1,12 +1,31 @@
-
 services:
   app:
     build: .
     ports:
-      - "8000:8000"
+      # 127.0.0.1: el puerto SOLO es accesible desde el propio servidor (Nginx).
+      # Antes era "8000:8000" (0.0.0.0) — Docker manipula iptables directamente
+      # y PUENTEA las reglas de UFW, así que el puerto quedaba expuesto a
+      # internet aunque el firewall dijera lo contrario. Ver auditoría
+      # 19/07/2026, hallazgo crítico #2.
+      - "127.0.0.1:8000:8000"
     volumes:
       - .:/app
     env_file:
       - .env
     working_dir: /app/backend
-    command: uvicorn main:app --host 0.0.0.0 --port 8000 --reload
+    # Sin --reload: era modo desarrollo corriendo en producción (reinicios en
+    # caliente a mitad de peticiones con cada git pull, WatchFiles vigilando
+    # el disco constantemente). Ver auditoría 19/07/2026, crítico #4.
+    #
+    # --workers se queda en 1 A PROPÓSITO: main.py arranca tareas de fondo
+    # en el propio proceso (bucle nocturno de Options en ws.py, entre otras)
+    # — con 2+ workers correrían DUPLICADAS (escaneos dobles, posibles
+    # avisos dobles). Antes de subir workers hay que mover esas tareas a
+    # cron/procesos aparte. Ver conversación 19/07/2026.
+    #
+    # --proxy-headers: uvicorn confía en X-Forwarded-For de Nginx para ver
+    # la IP real del cliente — sin esto, el rate limiting veía la IP de
+    # Nginx para todos los usuarios (contador compartido, auditoría #5).
+    # Es seguro confiar en la cabecera porque el puerto ya solo escucha en
+    # localhost: únicamente Nginx puede conectar.
+    command: uvicorn main:app --host 0.0.0.0 --port 8000 --proxy-headers --forwarded-allow-ips "*"
