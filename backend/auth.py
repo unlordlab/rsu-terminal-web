@@ -40,6 +40,20 @@ def verify_token(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Token inválido"
         )
+    # Comprobar token_version contra la BD -- permite revocar TODAS las
+    # sesiones de un usuario (tokens de hasta 30 días) sin esperar a que
+    # caduquen solos. Si el usuario no existe ya (cuenta borrada) o la
+    # versión no coincide (se llamó a revoke_sessions después de emitir
+    # este token), se rechaza aunque la firma sea válida. Ver auditoría
+    # 19/07/2026, hallazgo #7.
+    from services import users_service
+    email = payload.get("sub")
+    user = users_service.get_user_by_email(email) if email else None
+    if user is None or user.get("token_version", 0) != payload.get("tv", 0):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Sesión revocada, inicia sesión de nuevo"
+        )
     return payload
 
 # ── Tiers ──────────────────────────────────────────────────────────────────
