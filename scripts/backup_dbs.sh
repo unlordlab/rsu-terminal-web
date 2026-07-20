@@ -26,7 +26,11 @@ cd "$(dirname "$0")/.."
 
 mkdir -p backups
 
-docker exec rsu-terminal-web-app-1 python3 - <<'PY'
+# El flag -i es IMPRESCINDIBLE: sin él, docker exec no conecta stdin y el
+# bloque Python de abajo nunca llega al intérprete (python arranca, lee
+# entrada vacía y sale sin error y sin hacer nada — fallo silencioso
+# detectado en la primera ejecución real, 20/07/2026).
+docker exec -i rsu-terminal-web-app-1 python3 - <<'PY'
 import sqlite3, glob, os, datetime
 
 os.makedirs('/app/backups', exist_ok=True)
