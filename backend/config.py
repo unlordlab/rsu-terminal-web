@@ -30,10 +30,16 @@ class Settings(BaseSettings):
     finnhub_api_key: str = ""
     alpha_vantage_api_key: str = ""  # uso marginal (1 función en Research) -- se mantiene, es funcional, no muerta
     groq_api_key: str = ""
-    # openrouter_api_key ELIMINADA 20/07/2026 (Fase 2.5, Plan Maestro): estaba
-    # definida pero con CERO usos en todo el código (confirmado con grep
-    # exhaustivo). Si algún día se retoma la idea de Perplexity Sonar vía
-    # OpenRouter, volver a añadirla entonces con su integración real.
+    # openrouter_api_key: SÍ está configurada en el .env real (con clave
+    # válida) aunque el código no la lea todavía en ningún sitio -- se
+    # había quitado por error el 20/07/2026 (Fase 2.5) asumiendo que "sin
+    # uso en código" significaba "segura de borrar", sin contar con que
+    # Settings usa validación estricta (extra_forbidden): cualquier
+    # variable en .env sin campo correspondiente tira abajo el arranque
+    # entero. Restaurada tras causar un 502 en producción. Lección: antes
+    # de quitar un campo de Settings, comprobar el .env real, no solo el
+    # código.
+    openrouter_api_key: str = ""
     anthropic_api_key: str = ""  # agente Bull (tesis) — ver conversacion 17/07/2026
     gemini_api_key: str = ""     # agente Bull, modo de prueba gratuito (Google AI Studio)
     # Proxy para TODAS las llamadas a yfinance (Algoritmo, Cartera, Scanner,
