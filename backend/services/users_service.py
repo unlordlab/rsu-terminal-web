@@ -51,6 +51,15 @@ def init_db():
         conn.execute("ALTER TABLE users ADD COLUMN token_version INTEGER NOT NULL DEFAULT 0")
     except sqlite3.OperationalError:
         pass  # la columna ya existe
+    # Mensaje de transparencia de costes, mostrado una sola vez tras el
+    # registro (mismo patrón que disclaimer_accepted_at) -- explica que la
+    # terminal gestiona/representa datos de mercado reales (no los crea),
+    # que esos datos cuestan dinero, y por qué existen los tiers de pago.
+    # Ver conversación 20/07/2026.
+    try:
+        conn.execute("ALTER TABLE users ADD COLUMN pricing_message_seen_at TEXT")
+    except sqlite3.OperationalError:
+        pass  # la columna ya existe
     conn.commit()
     conn.close()
 
@@ -106,7 +115,7 @@ def get_user_by_email(email: str) -> dict | None:
     conn = _conn()
     try:
         row = conn.execute(
-            "SELECT id, email, tier, disclaimer_accepted_at, token_version FROM users WHERE email = ?", (email,)
+            "SELECT id, email, tier, disclaimer_accepted_at, pricing_message_seen_at, token_version FROM users WHERE email = ?", (email,)
         ).fetchone()
         return dict(row) if row else None
     finally:
@@ -134,6 +143,22 @@ def accept_disclaimer(user_id: int) -> dict:
     try:
         conn.execute(
             "UPDATE users SET disclaimer_accepted_at = ? WHERE id = ?",
+            (datetime.now(timezone.utc).isoformat(), user_id)
+        )
+        conn.commit()
+        return {"ok": True}
+    finally:
+        conn.close()
+
+
+def acknowledge_pricing_message(user_id: int) -> dict:
+    """Marca como visto el mensaje de transparencia de costes -- se
+    muestra una sola vez, justo después del disclaimer, en el mismo flujo
+    de bienvenida. Mismo patrón que accept_disclaimer."""
+    conn = _conn()
+    try:
+        conn.execute(
+            "UPDATE users SET pricing_message_seen_at = ? WHERE id = ?",
             (datetime.now(timezone.utc).isoformat(), user_id)
         )
         conn.commit()

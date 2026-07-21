@@ -6,6 +6,7 @@ import { initWebSocket } from '/core/websocket.js';
 import { api, setSession, getToken } from '/core/api.js';
 import { initCommandPalette } from '/components/command_palette.js';
 import { showDisclaimerModal } from '/components/disclaimer_modal.js';
+import { showPricingModal } from '/components/pricing_modal.js';
 import { initChatWidget } from '/components/chat_widget.js';
 import { initInstallPrompt } from '/components/install_prompt.js';
 
@@ -285,8 +286,20 @@ if (token) {
             renderTopbar(document.getElementById('topbar'), navigate);
             setActiveNavItem(location.pathname);
         }
+        // Encadenados: si falta aceptar el disclaimer, se muestra primero, y
+        // solo al aceptarlo se comprueba el mensaje de transparencia de
+        // costes. Si el disclaimer ya estaba aceptado (usuarios existentes
+        // antes de que este segundo mensaje existiera), se comprueba
+        // directamente -- así también lo ven, no solo los registros nuevos.
+        const mostrarPricingSiHaceFalta = () => {
+            if (me && me.pricing_message_seen === false) {
+                showPricingModal();
+            }
+        };
         if (me && me.disclaimer_accepted === false) {
-            showDisclaimerModal();
+            showDisclaimerModal(mostrarPricingSiHaceFalta);
+        } else {
+            mostrarPricingSiHaceFalta();
         }
     }).catch(() => {});
 }

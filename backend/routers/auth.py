@@ -95,7 +95,8 @@ async def me(payload: dict = Depends(verify_token)):
     user  = users_service.get_user_by_email(email) if email else None
     tier  = user["tier"] if user else payload.get("tier", "free")
     disclaimer_accepted = bool(user and user.get("disclaimer_accepted_at"))
-    return {"email": email, "tier": tier, "disclaimer_accepted": disclaimer_accepted}
+    pricing_message_seen = bool(user and user.get("pricing_message_seen_at"))
+    return {"email": email, "tier": tier, "disclaimer_accepted": disclaimer_accepted, "pricing_message_seen": pricing_message_seen}
 
 
 @router.post("/logout-all-sessions")
@@ -119,6 +120,18 @@ async def accept_disclaimer(payload: dict = Depends(verify_token)):
     if not user:
         raise HTTPException(status_code=401, detail="Usuario no encontrado")
     return users_service.accept_disclaimer(user["id"])
+
+
+@router.post("/acknowledge-pricing")
+async def acknowledge_pricing(payload: dict = Depends(verify_token)):
+    """Marca como visto el mensaje de transparencia de costes -- se
+    muestra una sola vez, justo después del disclaimer, en el mismo flujo
+    de bienvenida para usuarios nuevos."""
+    email = payload.get("sub")
+    user  = users_service.get_user_by_email(email) if email else None
+    if not user:
+        raise HTTPException(status_code=401, detail="Usuario no encontrado")
+    return users_service.acknowledge_pricing_message(user["id"])
 
 
 @router.post("/admin/set-tier")
