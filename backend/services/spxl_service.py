@@ -436,3 +436,179 @@ def get_backtest(initial_capital: float = 100_000) -> dict:
         }
     except Exception as e:
         return {"ok": False, "error": str(e)}
+
+# ── Validación fuera de muestra (walk-forward por sub-periodos) ──────────
+# Ver Plan Maestro 3.7 / auditoría SPXL 19-20/07/2026: el backtest normal es
+# UNA sola pasada sobre UN solo camino histórico (2008→hoy). Eso no distingue
+# entre "estrategia robusta" y "estrategia a la que le sentó bien este
+# mercado concreto". Partir el histórico en tramos independientes y ver si el
+# comportamiento se mantiene coherente entre ellos es la comprobación mínima
+# antes de publicar los números como definitivos.
+#
+# IMPORTANTE sobre la interpretación: cada sub-periodo arranca con el capital
+# inicial completo y su propio estado limpio, así que los resultados NO se
+# encadenan (no es "qué pasó realmente en ese tramo dentro del backtest
+# completo"). Son escenarios independientes: "si hubiera empezado justo aquí
+# con 100k, ¿qué habría pasado?".
+
+SUBPERIODOS = [
+    ("2008-11-05", "2015-01-01", "Crisis y recuperación (2008-2014)"),
+    ("2015-01-01", "2020-01-01", "Mercado alcista maduro (2015-2019)"),
+    ("2020-01-01", "2026-12-31", "Covid, inflación y post (2020-hoy)"),
+]
+
+
+def get_backtest_validation(initial_capital: float = 100_000) -> dict:
+    """Corre el backtest por separado en cada sub-periodo, con capital
+    inicial completo y estado limpio en cada uno. Permite ver si la
+    estrategia se comporta de forma parecida en regímenes de mercado
+    distintos, o si su resultado global depende de un único tramo."""
+    try:
+        spxl   = yf.Ticker("SPXL")
+        df_raw = spxl.history(start="2008-11-05")[["Close"]].copy()
+        df_raw.index   = df_raw.index.tz_localize(None)
+        df_raw.columns = ["price"]
+        df_raw = df_raw[~df_raw.index.duplicated(keep="last")].sort_index().dropna()
+
+        periodos = []
+        for desde, hasta, etiqueta in SUBPERIODOS:
+            sub = df_raw.loc[desde:hasta]
+            if len(sub) < 250:  # menos de ~1 año de sesiones, no vale la pena
+                continue
+            resultado = run_backtest(sub, initial_capital)
+            stats = compute_stats(
+                resultado["trades"], resultado["equity_curve"],
+                resultado["bnh_curve"], initial_capital
+            )
+            if not stats:
+                # Sin operaciones en ese tramo -- dato informativo en sí
+                # mismo (la estrategia no encontró ninguna entrada válida),
+                # no un error que haya que ocultar.
+                periodos.append({
+                    "etiqueta":   etiqueta,
+                    "desde":      str(sub.index[0].date()),
+                    "hasta":      str(sub.index[-1].date()),
+                    "sin_trades": True,
+                })
+                continue
+            periodos.append({
+                "etiqueta":     etiqueta,
+                "desde":        str(sub.index[0].date()),
+                "hasta":        str(sub.index[-1].date()),
+                "sin_trades":   False,
+                "final_equity": stats.get("final_equity"),
+                "final_bnh":    stats.get("final_bnh"),
+                "cagr":         stats.get("cagr"),
+                "bnh_cagr":     stats.get("bnh_cagr"),
+                "max_dd":       stats.get("max_dd"),
+                "win_rate":     stats.get("win_rate"),
+                "total_trades": stats.get("total_trades"),
+            })
+
+        # Coherencia: ¿el CAGR se mantiene en el mismo orden de magnitud
+        # entre tramos, o hay uno que sostiene todo el resultado?
+        cagrs = [p["cagr"] for p in periodos if not p["sin_trades"] and p.get("cagr") is not None]
+        if len(cagrs) >= 2:
+            peor, mejor = min(cagrs), max(cagrs)
+            todos_positivos = all(c > 0 for c in cagrs)
+            if todos_positivos and peor > mejor * 0.35:
+                veredicto = "consistente"
+                detalle = ("El rendimiento se mantiene en un rango parecido en los distintos "
+                           "regímenes de mercado analizados — no depende de un solo tramo favorable.")
+            elif todos_positivos:
+                veredicto = "desigual"
+                detalle = ("Positivo en todos los tramos, pero con diferencias grandes entre ellos — "
+                           "el resultado global depende bastante de los periodos más favorables.")
+            else:
+                veredicto = "inconsistente"
+                detalle = ("Hay al menos un tramo con rendimiento negativo — el resultado global "
+                           "se sostiene sobre los tramos buenos, conviene no extrapolarlo sin más.")
+        else:
+            veredicto = "insuficiente"
+            detalle = "No hay suficientes tramos con operaciones para valorar la consistencia."
+
+        return {
+            "ok":        True,
+            "periodos":  periodos,
+            "veredicto": veredicto,
+            "detalle":   detalle,
+            "timestamp": datetime.now().strftime('%H:%M:%S'),
+        }
+    except Exception as e:
+        return {"ok": False, "error": str(e)}
+
+
+# ── Estimación de slippage / coste de ejecución ─────────────────────────
+# Ver Plan Maestro 3.8 / auditoría SPXL 19-20/07/2026: el backtest ejecuta
+# todas las operaciones al precio de CIERRE del día de la señal, sin spread
+# ni deslizamiento. En un ETF apalancado 3x, operando precisamente en los
+# días de mayor volatilidad (que es cuando esta estrategia actúa), la
+# ejecución real sería peor que el cierre teórico.
+#
+# En vez de "ensuciar" el backtest principal con un supuesto discutible, se
+# calcula aparte: cuánto cambiaría el resultado con distintos niveles de
+# coste por operación. Así el número limpio sigue siendo el número limpio, y
+# el impacto del coste real se ve de forma explícita.
+
+SLIPPAGE_ESCENARIOS = [
+    (0.0000, "Sin coste (el backtest tal cual, ejecución perfecta al cierre)"),
+    (0.0010, "Optimista — 0,10% por operación"),
+    (0.0020, "Realista — 0,20% por operación"),
+    (0.0050, "Conservador — 0,50% por operación"),
+]
+
+
+def get_backtest_con_slippage(initial_capital: float = 100_000) -> dict:
+    """Recalcula el resultado final aplicando distintos niveles de coste de
+    ejecución por operación, para dar un RANGO honesto en vez de un número
+    puntual. No modifica el backtest en sí -- aplica el coste sobre las
+    operaciones que ese backtest ya generó."""
+    try:
+        spxl   = yf.Ticker("SPXL")
+        df_raw = spxl.history(start="2008-11-05")[["Close"]].copy()
+        df_raw.index   = df_raw.index.tz_localize(None)
+        df_raw.columns = ["price"]
+        df_raw = df_raw[~df_raw.index.duplicated(keep="last")].sort_index().dropna()
+
+        resultado = run_backtest(df_raw, initial_capital)
+        trades = resultado["trades"]
+        eq_final_limpio = resultado["equity_curve"][-1]["equity"] if resultado["equity_curve"] else initial_capital
+
+        # Cada operación registrada es una VENTA (el backtest solo genera
+        # trades al vender), pero cada venta implica también su compra
+        # correspondiente en algún momento -- así que el coste se cuenta dos
+        # veces por operación cerrada (entrada + salida), que es lo que
+        # pasaría en la realidad.
+        n_operaciones = len(trades) * 2
+
+        escenarios = []
+        for coste, etiqueta in SLIPPAGE_ESCENARIOS:
+            # Aproximación: cada operación pierde `coste` sobre el capital
+            # movido. Como el capital se recicla ciclo a ciclo, el efecto se
+            # compone -- de ahí el (1-coste)^n en vez de una resta simple.
+            factor = (1 - coste) ** n_operaciones
+            equity_ajustado = eq_final_limpio * factor
+            años = 17.7  # periodo del backtest completo, ver stats
+            cagr_ajustado = ((equity_ajustado / initial_capital) ** (1 / años) - 1) * 100
+            escenarios.append({
+                "coste_pct":     round(coste * 100, 2),
+                "etiqueta":      etiqueta,
+                "equity_final":  round(equity_ajustado, 2),
+                "cagr":          round(cagr_ajustado, 2),
+                "diferencia_vs_limpio": round(equity_ajustado - eq_final_limpio, 2),
+            })
+
+        return {
+            "ok":              True,
+            "n_operaciones":   n_operaciones,
+            "equity_limpio":   round(eq_final_limpio, 2),
+            "escenarios":      escenarios,
+            "nota": ("El backtest ejecuta al precio de cierre del día de la señal. En la práctica, "
+                     "operar un ETF apalancado en días de alta volatilidad tiene un coste real "
+                     "(diferencia entre precio de compra y venta, y deslizamiento respecto al precio "
+                     "objetivo). Estos escenarios muestran cómo cambiaría el resultado final según "
+                     "ese coste — el escenario realista suele estar entre el 0,10% y el 0,20%."),
+            "timestamp":       datetime.now().strftime('%H:%M:%S'),
+        }
+    except Exception as e:
+        return {"ok": False, "error": str(e)}
