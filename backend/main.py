@@ -5,7 +5,7 @@ from fastapi.responses import FileResponse
 from contextlib import asynccontextmanager
 import asyncio
 from config import settings
-from auth import verify_token, require_tier
+from auth import verify_token, require_tier, verify_admin_key
 from middleware.rate_limit import rate_limit
 from middleware.analytics import AnalyticsMiddleware
 from routers import auth, market, cartera, canslim, rsu_algoritmo, research, newsfeed, tesis, spxl, rsrw, ws, options, btc_stratum, insider, scanner, analytics, watchlist, community, chat, academy_review, laia_ethics, meeting_room
@@ -89,10 +89,10 @@ app.include_router(rsu_algoritmo.router,dependencies=rl)
 app.include_router(research.router,     dependencies=rl)
 app.include_router(newsfeed.router,     dependencies=rl)
 app.include_router(tesis.router,        dependencies=paid)
-app.include_router(tesis.admin_router)  # solo X-Admin-Key, ver tesis.py
-app.include_router(academy_review.router)  # solo X-Admin-Key, agente Elia
-app.include_router(laia_ethics.router)  # solo X-Admin-Key, historico Laia
-app.include_router(meeting_room.router)  # solo X-Admin-Key, buzon a los agentes
+app.include_router(tesis.admin_router,     dependencies=rl)  # + X-Admin-Key, ver tesis.py
+app.include_router(academy_review.router,  dependencies=rl)  # + X-Admin-Key, agente Elia
+app.include_router(laia_ethics.router,     dependencies=rl)  # + X-Admin-Key, historico Laia
+app.include_router(meeting_room.router,    dependencies=rl)  # + X-Admin-Key, buzon a los agentes
 app.include_router(spxl.router,         dependencies=rl)
 app.include_router(rsrw.router,         dependencies=rl)
 app.include_router(ws.router)
@@ -128,17 +128,17 @@ async def health():
     return {"status": "ok", "app": settings.app_name}
 
 @app.get("/api/v1/rate-limit/stats")
-async def rate_limit_stats(user=Depends(verify_token)):
+async def rate_limit_stats(_=Depends(verify_admin_key)):
     from middleware.rate_limit import _store
     return {"message": "Rate limiting activo", "active_keys": len(_store), "general_limit": "60/min", "heavy_limit": "10/min"}
 
 @app.get("/api/v1/cache/stats")
-async def cache_stats(user=Depends(verify_token)):
+async def cache_stats(_=Depends(verify_admin_key)):
     from services.cache import cache
     return {"ok": True, "cache": cache.stats()}
 
 @app.delete("/api/v1/cache/{prefix}")
-async def clear_cache(prefix: str, user=Depends(verify_token)):
+async def clear_cache(prefix: str, _=Depends(verify_admin_key)):
     from services.cache import cache
     cache.clear_prefix(prefix)
     return {"ok": True, "cleared": prefix}

@@ -60,8 +60,10 @@ async def rate_limit(request: Request):
     if not path.startswith("/api/"):
         return
 
-    # El login tiene su propio límite, mucho más estricto (ver login_rate_limit).
-    if path.startswith("/api/v1/auth/"):
+    # Login y registro tienen su propio límite, más estricto (ver
+    # login_rate_limit). El resto de /api/v1/auth/ -- incluido /auth/admin/*,
+    # donde vive la clave maestra -- pasa por el límite general de aquí abajo.
+    if path in ("/api/v1/auth/login", "/api/v1/auth/register"):
         return
 
     key   = _get_key(request)

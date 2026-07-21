@@ -29,9 +29,9 @@ HEADERS     = {
 # de partir de cero en cada refresco.
 DB_PATH = os.path.join(os.path.dirname(__file__), '..', 'insider_history.db')
 FEED_WINDOW_DAYS = 10   # cuántos días se muestran en el feed por defecto
-RETENTION_DAYS   = 90   # cuánto tiempo se conserva el dato guardado antes de purgarse
-                        # (más que el feed visible, para permitir análisis de más
-                        # recorrido en el futuro sin tener que rehacer el histórico)
+RETENTION_DAYS   = 3650  # ~10 años -- el feed getcurrent de EDGAR es efímero e
+                        # irreproducible, y el volumen es minúsculo (unas decenas
+                        # de filas/día), así que no hay motivo para purgarlo pronto
 
 
 def _conn():

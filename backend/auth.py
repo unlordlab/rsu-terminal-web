@@ -1,7 +1,7 @@
 from datetime import datetime, timedelta, timezone
 import secrets
 from jose import JWTError, jwt
-from fastapi import HTTPException, status, Depends, Header
+from fastapi import HTTPException, status, Depends, Header, Request
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from config import settings
 
@@ -100,6 +100,17 @@ def require_tier(min_tier: str):
 # constante (secrets.compare_digest en vez de !=) para no ser vulnerable a
 # un ataque de temporización, aunque el riesgo real por red sea bajo. Ver
 # auditoría 19/07/2026, hallazgos #15 y #17 (Fase 2.4 del Plan Maestro).
-def verify_admin_key(x_admin_key: str = Header(None)) -> None:
+ADMIN_KEY_FAIL_LIMIT  = 20    # intentos fallidos permitidos
+ADMIN_KEY_FAIL_WINDOW = 3600  # por hora, por IP
+
+def verify_admin_key(request: Request, x_admin_key: str = Header(None)) -> None:
     if not settings.admin_key or not x_admin_key or not secrets.compare_digest(x_admin_key, settings.admin_key):
+        # Solo los fallos cuentan contra este límite -- el uso legítimo con la
+        # clave correcta (todo el panel /admin) no se ve afectado nunca.
+        from middleware.rate_limit import _check_limit, _get_ip
+        ip = _get_ip(request)
+        allowed, retry_in = _check_limit(f"adminkey_fail:{ip}", ADMIN_KEY_FAIL_LIMIT, ADMIN_KEY_FAIL_WINDOW)
+        print(f"[SECURITY] Intento fallido de X-Admin-Key desde {ip}")
+        if not allowed:
+            raise HTTPException(status_code=429, detail=f"Demasiados intentos fallidos. Espera {retry_in}s.")
         raise HTTPException(status_code=401, detail="Clave de administrador inválida")
