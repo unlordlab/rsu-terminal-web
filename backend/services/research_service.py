@@ -1,5 +1,6 @@
 import yfinance as yf
 import requests
+import json
 import numpy as np
 import os
 import sys
@@ -1842,6 +1843,50 @@ def get_research(ticker: str) -> dict:
 # mercado US por sector (categorías tal como las devuelve yfinance en info['sector']).
 # Se usan como benchmark relativo, no como datos de un proveedor en tiempo real,
 # para poder colorear cada métrica como favorable/desfavorable frente a su sector.
+# Gist con las medianas sectoriales REALES, calculadas semanalmente por
+# scripts/sector_medians.py (Fase 3.1 del Plan Maestro, 20/07/2026). Igual
+# que scanner_service.py, el ID es público (solo el token de escritura es
+# secreto) -- rellenar tras crear el Gist la primera vez.
+SECTOR_MEDIANS_GIST_ID = "d8019801c660f8186d5a3bd99952d44c"  # ← rellenar con el ID del Gist tras el primer despliegue
+SECTOR_MEDIANS_GIST_FILE = "sector_medians.json"
+
+
+def _get_sector_medians_reales(sector: str) -> dict | None:
+    """Lee las medianas reales del sector desde el Gist semanal, con caché
+    de 12h local (el dato en sí solo cambia una vez por semana, no hace
+    falta pedirlo en cada research). Devuelve None si el Gist no está
+    configurado, no responde, o no tiene datos fiables para este sector
+    concreto -- en cualquiera de esos casos, el llamador cae al valor
+    estático de SECTOR_BENCHMARKS sin que el usuario note la diferencia."""
+    if not SECTOR_MEDIANS_GIST_ID:
+        return None
+
+    from services.cache import cache
+    cache_key = "sector_medians:all"
+    data = cache.get(cache_key)
+    if data is None:
+        try:
+            r = requests.get(
+                f"https://api.github.com/gists/{SECTOR_MEDIANS_GIST_ID}",
+                timeout=10,
+                headers={"Accept": "application/vnd.github.v3+json"},
+            )
+            r.raise_for_status()
+            content = r.json()["files"][SECTOR_MEDIANS_GIST_FILE]["content"]
+            data = json.loads(content)
+            if not data.get("ok") or not data.get("sectores"):
+                data = {}
+        except Exception as e:
+            print(f"[Research] No se pudo leer el Gist de medianas sectoriales: {e}")
+            data = {}
+        cache.set(cache_key, data, 43200)  # 12h
+
+    sector_data = (data.get("sectores") or {}).get(sector)
+    if not sector_data or not sector_data.get("medianas"):
+        return None
+    return sector_data["medianas"]
+
+
 SECTOR_BENCHMARKS = {
     "Technology": {
         "trailing_pe": 28.0, "forward_pe": 24.0, "price_to_sales": 6.5, "ev_ebitda": 18.0,
@@ -1936,8 +1981,17 @@ def _get_sector_comparison(sector: str, metrics: dict, profitability: dict) -> d
     mediana de referencia de su sector. Devuelve, por métrica, el valor del
     benchmark y si la empresa está por encima o por debajo (favorable/desfavorable).
     No sustituye ningún dato existente — es información adicional.
+
+    El benchmark se intenta obtener PRIMERO de las medianas reales calculadas
+    semanalmente por scripts/sector_medians.py (Fase 3.1 del Plan Maestro,
+    20/07/2026) -- si el Gist no responde, no tiene datos para este sector
+    concreto, o no hay suficientes tickers con muestra fiable, se cae al
+    diccionario estático SECTOR_BENCHMARKS (valores de referencia
+    aproximados, sin fecha, mejor que nada pero no ideales). El usuario no
+    necesita saber cuál de las dos fuentes se usó -- el formato de salida
+    es idéntico en ambos casos.
     """
-    bench = SECTOR_BENCHMARKS.get(sector)
+    bench = _get_sector_medians_reales(sector) or SECTOR_BENCHMARKS.get(sector)
     if not bench:
         return {"ok": False, "sector": sector, "items": {}}
 

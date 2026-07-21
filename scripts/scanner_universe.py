@@ -505,11 +505,20 @@ def run_scan() -> dict:
             "rs_pct":        r["rs_pct"],
             "phase":         None if pd.isna(r["phase"]) else int(r["phase"]),
             "phase_label":   r["phase_label"],
+            "phase_confirmed": None if pd.isna(r.get("phase_confirmed")) else bool(r.get("phase_confirmed")),
+            "phase_weekly":       None if pd.isna(r.get("phase_weekly")) else int(r.get("phase_weekly")),
+            "phase_weekly_label": None if pd.isna(r.get("phase_weekly_label")) else r.get("phase_weekly_label"),
             "trend":         r["trend"],
             "score_tecnico": r["score_tecnico"],
             "above_sma50":   None if pd.isna(r["above_sma50"]) else bool(r["above_sma50"]),
             "new_high":      bool(r["new_high"]),
             "new_low":       bool(r["new_low"]),
+            # FALTABAN estos 4 campos -- se calculaban en `rows` pero nunca
+            # llegaban a este diccionario final, así que nunca salían del
+            # Gist. Explica por qué "dias_absorcion" llevaba días en 0 para
+            # todos los tickers (no solo era el umbral, el dato ni siquiera
+            # se guardaba). Ver conversación 20/07/2026.
+            "dias_absorcion": int(r.get("dias_absorcion", 0)),
         }
 
     return {

@@ -1,0 +1,37 @@
+name: Medianas Sectoriales (semanal)
+
+on:
+  schedule:
+    # Domingos a las 11:00 CET (10:00 UTC) -- horario tranquilo, sin
+    # competir con los 4 scans diarios (22:00-22:30 UTC entre semana) ni
+    # con el resumen semanal de Gael/Laia (09:00-09:30 UTC domingos).
+    - cron: '0 10 * * 0'
+  workflow_dispatch:  # Permite ejecutar manualmente desde la pestaña Actions
+
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    # Más margen que scanner_scan.yml (20 min) -- este job pide .info de
+    # ~513 tickers, la llamada más lenta/propensa a reintentos de
+    # yfinance, no solo precio/volumen.
+    timeout-minutes: 60
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          pip install requests yfinance
+
+      - name: Run Medianas Sectoriales
+        env:
+          GIST_TOKEN:            ${{ secrets.GIST_TOKEN }}
+          SECTOR_MEDIANS_GIST_ID: ${{ secrets.SECTOR_MEDIANS_GIST_ID }}
+        run: |
+          python scripts/sector_medians.py
