@@ -202,7 +202,19 @@ def run_scan(max_tickers: int = 525) -> dict:
 
     for t, s in stocks.items():
         s["rs_percentile"] = pct_by_ticker[t]
-        s["rs_momentum"]   = 1 if s["rs_21d"] > s["rs_63d"] else 0
+        # rs_momentum: ¿el ritmo de outperformance RECIENTE es más rápido que
+        # el de medio plazo? Antes comparaba rs_21d > rs_63d directamente —
+        # pero son diferenciales ACUMULADOS de ventanas de distinta longitud
+        # (21 días vs 63 días), así que un ticker con outperformance ESTABLE
+        # y constante tenía rs_63d > rs_21d casi siempre solo por acumular
+        # más tiempo, no porque estuviera desacelerando -- el indicador
+        # medía sobre todo el sesgo de longitud de ventana, no aceleración
+        # real. Arreglo: normalizar cada diferencial por su nº de días
+        # (ritmo diario equivalente) antes de comparar. Ver Plan Maestro
+        # 3.3, auditoría RS/RW 19-20/07/2026.
+        ritmo_21d = s["rs_21d"] / 21
+        ritmo_63d = s["rs_63d"] / 63
+        s["rs_momentum"]   = 1 if ritmo_21d > ritmo_63d else 0
         s["rs_vs_sector"]  = round(pct_by_ticker[t] - sector_avg_pct.get(s["sector"], 50), 1)
 
     # Rotación sectorial — blend de 3 ventanas (21/63/126, mismos pesos que
