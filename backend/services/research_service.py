@@ -1333,19 +1333,44 @@ def _get_next_earnings(ticker: str) -> dict:
 def _get_seasonality(ticker: str) -> list:
     try:
         import yfinance as yf
+        from datetime import datetime, timezone
         stock = yf.Ticker(ticker)
         hist  = stock.history(period="5y", interval="1mo")
         if hist.empty or len(hist) < 12: return []
+
+        # Excluir el mes en curso si está a medias -- si el último dato es
+        # del mes calendario actual, su retorno es PARCIAL (normalmente
+        # menor en magnitud que uno completo) y contamina la media de ese
+        # mes justo cuando alguien lo está consultando. El sesgo se
+        # "autocorrige" a fin de mes y vuelve a aparecer el día 1 del
+        # siguiente -- un bug intermitente difícil de detectar sin buscarlo
+        # a propósito. Ver Plan Maestro 3.2, auditoría Research 19-20/07/2026.
+        ahora = datetime.now(timezone.utc)
+        ultimo_idx = hist.index[-1]
+        if ultimo_idx.year == ahora.year and ultimo_idx.month == ahora.month:
+            hist = hist.iloc[:-1]
+        if hist.empty or len(hist) < 12: return []
+
         hist['month']  = hist.index.month
         hist['return'] = hist['Close'].pct_change() * 100
-        monthly = hist.groupby('month')['return'].mean()
+        monthly_mean  = hist.groupby('month')['return'].mean()
+        # Nº de años con dato REAL (no NaN) por mes -- con 5 años de
+        # histórico, cada mes tiene como mucho 5 muestras; menos si el
+        # ticker es reciente. Antes un mes sin ninguna muestra salía como
+        # "0.0%" indistinguible de un mes genuinamente plano.
+        monthly_count = hist.groupby('month')['return'].count()
         months  = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic']
         results = []
         for m in range(1, 13):
-            val = round(float(monthly.get(m, 0)), 2)
+            n = int(monthly_count.get(m, 0))
+            if n == 0:
+                results.append({"month": months[m-1], "avg": None, "years": 0, "color": None})
+                continue
+            val = round(float(monthly_mean[m]), 2)
             results.append({
                 "month": months[m-1],
                 "avg":   val,
+                "years": n,
                 "color": '#00ffad' if val > 1 else '#90ee90' if val > 0 else '#f23645' if val < -1 else '#ff8c00',
             })
         return results
@@ -1847,7 +1872,7 @@ def get_research(ticker: str) -> dict:
 # scripts/sector_medians.py (Fase 3.1 del Plan Maestro, 20/07/2026). Igual
 # que scanner_service.py, el ID es público (solo el token de escritura es
 # secreto) -- rellenar tras crear el Gist la primera vez.
-SECTOR_MEDIANS_GIST_ID = "d8019801c660f8186d5a3bd99952d44c"  # ← rellenar con el ID del Gist tras el primer despliegue
+SECTOR_MEDIANS_GIST_ID = ""  # ← rellenar con el ID del Gist tras el primer despliegue
 SECTOR_MEDIANS_GIST_FILE = "sector_medians.json"
 
 

@@ -762,18 +762,23 @@ function techRow(label, price, vs) {
 function seasonalitySection(data) {
     const season = data.seasonality;
     if (!season || !season.length) return '';
-    const max = Math.max(...season.map(s => Math.abs(s.avg)));
+    const valoresValidos = season.filter(s => s.avg !== null).map(s => Math.abs(s.avg));
+    const max = valoresValidos.length ? Math.max(...valoresValidos) : 0;
     return '<div style="background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius);padding:1.25rem;margin-bottom:1rem;">'
         + '<div style="color:var(--color-accent);font-size:12px;letter-spacing:0.08em;margin-bottom:1rem;">ESTACIONALIDAD · RENDIMIENTO MEDIO MENSUAL (5 AÑOS)</div>'
         + '<div style="display:grid;grid-template-columns:repeat(12,1fr);gap:4px;">'
         + season.map(s => {
-            const h = max > 0 ? Math.round(Math.abs(s.avg) / max * 60) : 0;
-            return '<div style="text-align:center;">'
+            const sinDato = s.avg === null;
+            const h = (!sinDato && max > 0) ? Math.round(Math.abs(s.avg) / max * 60) : 0;
+            const color = sinDato ? 'var(--color-muted)' : s.color;
+            const texto = sinDato ? '—' : ((s.avg > 0 ? '+' : '') + s.avg + '%');
+            const titulo = sinDato ? 'Sin histórico suficiente para este mes' : (s.years + (s.years === 1 ? ' año' : ' años') + ' de histórico');
+            return '<div style="text-align:center;" title="' + titulo + '">'
                 + '<div style="font-size:9px;color:var(--color-muted);margin-bottom:4px;">' + s.month + '</div>'
                 + '<div style="display:flex;flex-direction:column;align-items:center;justify-content:flex-end;height:70px;">'
-                + '<div style="width:100%;background:' + s.color + ';height:' + h + 'px;border-radius:2px;min-height:3px;"></div>'
+                + (sinDato ? '' : '<div style="width:100%;background:' + color + ';height:' + h + 'px;border-radius:2px;min-height:3px;"></div>')
                 + '</div>'
-                + '<div style="font-size:9px;color:' + s.color + ';margin-top:4px;">' + (s.avg > 0 ? '+' : '') + s.avg + '%</div>'
+                + '<div style="font-size:9px;color:' + color + ';margin-top:4px;">' + texto + '</div>'
                 + '</div>';
         }).join('')
         + '</div>'
