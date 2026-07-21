@@ -232,6 +232,16 @@ def get_earnings_calendar() -> dict:
     merged = {}
     for item in finnhub_data + fmp_data:
         key = item['ticker'] + '_' + item['date']
+        # FMP se procesa despues (pisa a Finnhub por defecto -- suele traer
+        # estimaciones mas completas), pero FMP casi nunca trae el horario
+        # BMO/AMC mientras que Finnhub sí lo trae para algunos tickers.
+        # Antes, cuando ambas fuentes reportaban el mismo ticker+fecha, se
+        # perdía el horario de Finnhub sin necesidad -- FMP lo sustituía
+        # por un campo vacío. Ahora se conserva el horario de la entrada
+        # anterior si la nueva no trae uno propio. Ver conversación
+        # 20/07/2026.
+        if key in merged and not item.get('time') and merged[key].get('time'):
+            item = {**item, 'time': merged[key]['time']}
         merged[key] = item
 
     items = list(merged.values())
