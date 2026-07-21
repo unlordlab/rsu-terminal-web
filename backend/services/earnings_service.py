@@ -16,8 +16,8 @@ load_dotenv()
 # Eastern (el que manda para el mercado de EE.UU.) todavía era mañana.
 EASTERN = ZoneInfo("America/New_York")
 
-FMP_KEY     = os.getenv("fmp_api_key", "")
-FINNHUB_KEY = os.getenv("finnhub_api_key", "")
+FMP_KEY     = os.getenv("FMP_API_KEY", "")
+FINNHUB_KEY = os.getenv("FINNHUB_API_KEY", "")
 
 def _get_timestamp():
     from services.market_service import get_timestamp
