@@ -114,15 +114,41 @@ def _smr_rating(sales_g: float, roe: float, margins: float) -> str:
     return 'E'
 
 def _acc_dis_rating(hist: pd.DataFrame) -> str:
+    """Rating de Acumulación/Distribución (A-E) sobre los últimos 20 días.
+
+    Usa el multiplicador de flujo de dinero de Chaikin -- ((Close-Low) -
+    (High-Close)) / (High-Low) -- que pondera CADA día según dónde cierra
+    el precio DENTRO de su propio rango de la sesión (High-Low), no solo
+    si cierra por encima o por debajo de la apertura.
+
+    Antes se clasificaba cada día como "volumen alcista" o "volumen
+    bajista" solo mirando Close vs Open -- eso clasifica mal los días de
+    reversión: un día que abre bajo, cae más durante la sesión, pero
+    CIERRA cerca del máximo del día (alguien compró fuerte en la caída,
+    acumulación real) se contaba como "bajista" solo por cerrar por
+    debajo de la apertura, aunque la acción del precio dentro del día
+    dijera lo contrario -- justo los días más informativos para detectar
+    acumulación/distribución real. Ver Plan Maestro 3.5, auditoría
+    CANSLIM 19-20/07/2026.
+    """
     if len(hist) < 20:
         return 'C'
     recent = hist.tail(20)
-    up_vol   = recent.loc[recent['Close'] > recent['Open'], 'Volume'].sum()
-    down_vol = recent.loc[recent['Close'] < recent['Open'], 'Volume'].sum()
-    total    = up_vol + down_vol
-    if total == 0:
+    rango = recent['High'] - recent['Low']
+    # Multiplicador -1 (cierre en el mínimo del día) a +1 (cierre en el
+    # máximo). Días sin rango (High==Low, rarísimo con datos reales) se
+    # tratan como neutros en vez de dividir por cero.
+    multiplicador = ((recent['Close'] - recent['Low']) - (recent['High'] - recent['Close'])) / rango
+    multiplicador = multiplicador.replace([float('inf'), float('-inf')], 0).fillna(0)
+    flujo_ponderado = (multiplicador * recent['Volume']).sum()
+    volumen_total   = recent['Volume'].sum()
+    if volumen_total == 0:
         return 'C'
-    ratio = up_vol / total
+    # flujo_ponderado/volumen_total va de -1 (distribución pura) a +1
+    # (acumulación pura) -- reescalado a 0-1 para reutilizar los mismos
+    # umbrales de siempre (antes "ratio" era up_vol/total, con el mismo
+    # rango 0-1).
+    ratio = (flujo_ponderado / volumen_total + 1) / 2
     if ratio >= 0.70: return 'A'
     if ratio >= 0.58: return 'B'
     if ratio >= 0.45: return 'C'
