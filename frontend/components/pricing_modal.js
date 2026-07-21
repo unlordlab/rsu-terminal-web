@@ -7,7 +7,8 @@
 // no bloquea con checkbox obligatorio -- es informativo, no legal, así que
 // un solo botón de "Entendido" basta.
 
-export function showPricingModal(onAcknowledged) {
+export function showPricingModal(onAcknowledged, opciones = {}) {
+    const esConsulta = opciones.esConsulta === true;  // reabierto desde la cabecera, no el flujo de bienvenida
     if (document.getElementById('pricing-modal-overlay')) return;
 
     const overlay = document.createElement('div');
@@ -55,17 +56,27 @@ export function showPricingModal(onAcknowledged) {
 
         + '</div>'
         + '<div style="padding:14px 20px;border-top:1px solid var(--color-border);">'
-        + '<button id="pricing-ack-btn" style="width:100%;background:var(--color-accent);color:#000;border:none;border-radius:var(--radius);padding:10px;font-family:var(--font-mono);font-size:12px;letter-spacing:0.05em;cursor:pointer;">ENTENDIDO, GRACIAS</button>'
+        + '<button id="pricing-ack-btn" style="width:100%;background:var(--color-accent);color:#000;border:none;border-radius:var(--radius);padding:10px;font-family:var(--font-mono);font-size:12px;letter-spacing:0.05em;cursor:pointer;">' + (esConsulta ? 'CERRAR' : 'ENTENDIDO, GRACIAS') + '</button>'
         + '<span id="pricing-error" style="display:block;color:#f23645;font-size:11px;margin-top:8px;text-align:center;"></span>'
         + '</div>'
         + '</div>';
 
     document.body.appendChild(overlay);
 
+    if (esConsulta) {
+        overlay.addEventListener('click', (e) => {
+            if (e.target === overlay) overlay.remove();
+        });
+    }
+
     const btn     = overlay.querySelector('#pricing-ack-btn');
     const errorEl = overlay.querySelector('#pricing-error');
 
     btn.addEventListener('click', async () => {
+        if (esConsulta) {
+            overlay.remove();
+            return;
+        }
         btn.disabled = true;
         btn.textContent = 'Guardando...';
         errorEl.textContent = '';

@@ -1,6 +1,7 @@
 import { cycleTheme, getCurrentTheme } from '/core/theme.js';
 import { initWebSocket, onMarketUpdate } from '/core/websocket.js';
 import { clearToken, getTier } from '/core/api.js';
+import { showPricingModal } from '/components/pricing_modal.js';
 
 const TIER_LABELS = { free: 'FREE', tier1: 'TIER 1', tiers: 'TIER S' };
 const TIER_COLORS = { free: 'var(--color-muted)', tier1: 'var(--color-accent)', tiers: '#ffd700' };
@@ -28,6 +29,10 @@ export function renderTopbar(container, navigate) {
                 padding:2px 8px;border-radius:var(--radius);
                 border:1px solid var(--color-border);
             "></span>
+            <span id="pricing-info-btn" title="Por qué RSU Terminal no es gratis del todo" style="
+                cursor:pointer;color:var(--color-muted);font-size:12px;
+                flex-shrink:0;line-height:1;user-select:none;
+            ">ⓘ</span>
             <span id="ws-indicator" style="
                 width:6px;height:6px;border-radius:50%;
                 background:#555;transition:background 0.3s;
@@ -81,6 +86,16 @@ export function renderTopbar(container, navigate) {
     const badge = container.querySelector('#tier-badge');
     badge.textContent = TIER_LABELS[tier] || 'FREE';
     badge.style.color = TIER_COLORS[tier] || 'var(--color-muted)';
+
+    // Info de transparencia de costes -- reabre el mismo mensaje que se ve
+    // al registrarse, siempre disponible por si alguien quiere volver a
+    // leerlo. Ver conversación 20/07/2026.
+    const pricingBtn = container.querySelector('#pricing-info-btn');
+    pricingBtn.addEventListener('mouseenter', () => { pricingBtn.style.color = 'var(--color-accent)'; });
+    pricingBtn.addEventListener('mouseleave', () => { pricingBtn.style.color = 'var(--color-muted)'; });
+    pricingBtn.addEventListener('click', () => {
+        showPricingModal(null, { esConsulta: true });
+    });
 
     // Logout
     container.querySelector('#logout-btn').addEventListener('click', () => {
