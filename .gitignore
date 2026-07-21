@@ -31,3 +31,13 @@ backups/
 # Patron amplio en vez de listar cada .db suelta -- cubre tambien las que
 # se creen en el futuro sin tener que acordarse de añadirlas aqui.
 backend/*.db
+backend/*.db-shm
+backend/*.db-wal
+
+# Copias de seguridad de .env (las genera scripts/merge_env.sh) -- contienen
+# claves reales en texto plano, nunca deben ir a git.
+.env.bak.*
+backend/.env.bak.*
+
+# Carpeta de datos varios (backups locales, exports, etc.)
+data/
