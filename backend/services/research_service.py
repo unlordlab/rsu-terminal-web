@@ -16,6 +16,7 @@ from services.turnover_service import get_turnover_comparison, get_absorption_si
 # antes de unificar). shared/ es sibling de backend/, se llega con "..".
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "..", "shared"))
 from weinstein_phases import _ema_slope, classify_phase_debounced, classify_phase_weekly  # noqa: E402
+from time_utils import get_timestamp  # noqa: E402
 
 def _safe(val, default=None):
     try:
@@ -1750,7 +1751,7 @@ def _get_research_crypto(ticker: str) -> dict:
         "description":    crypto_profile.get('description', '') if crypto_profile.get('ok') else '',
         "crypto_profile": crypto_profile,
         "crypto_chart":   crypto_chart,
-        "timestamp":      datetime.now().strftime('%H:%M:%S'),
+        "timestamp":      get_timestamp(),
     }
     cache.set(f"research:{ticker}", result, TTL["research"])
     return result
@@ -1858,7 +1859,7 @@ def get_research(ticker: str) -> dict:
         "technical_levels":   technical,
         "sector_comparison":  sector_comparison,
         "relative_strength":  relative_strength,
-        "timestamp":          datetime.now().strftime('%H:%M:%S'),
+        "timestamp":          get_timestamp(),
     }
     cache.set(f"research:{ticker}", result, TTL["research"])
     return result

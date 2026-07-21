@@ -2,10 +2,13 @@ import re
 import html as _html
 import requests
 import xml.etree.ElementTree as ET
+import sys, os
 from datetime import datetime, timezone
 from concurrent.futures import ThreadPoolExecutor, as_completed
 import yfinance as yf
 from config import settings
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "..", "shared"))
+from time_utils import get_timestamp  # noqa: E402
 
 # ── SOURCES ───────────────────────────────────────────────────────────────────
 
@@ -405,7 +408,7 @@ def get_trump_feed(limit: int = 15) -> dict:
             "posts":     posts,
             "total":     len(posts),
             "source":    "trumpstruth.org (archivo público de Truth Social)",
-            "timestamp": datetime.now().strftime('%H:%M:%S'),
+            "timestamp": get_timestamp(),
         }
         cache.set("newsfeed:trump", result, 300)  # cache 5 min
         return result
@@ -516,7 +519,7 @@ def get_newsfeed(sources: list = None, impact: str = None, sector: str = None, l
         "sources": [{"id": s['id'], "label": s['label'],
                      "ok": source_status.get(s['id'], False),
                      "url": SOURCE_URLS.get(s['id'], '')} for s in all_source_defs],
-        "timestamp": datetime.now().strftime('%H:%M:%S'),
+        "timestamp": get_timestamp(),
     }
 
 def get_newsfeed_prices() -> list:

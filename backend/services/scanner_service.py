@@ -29,8 +29,11 @@ completo.
 """
 import json
 import requests
+import sys, os
 from datetime import datetime, timezone
 from services.cache import cache
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "..", "shared"))
+from time_utils import get_timestamp  # noqa: E402
 
 GIST_ID   = "cb9d69cbf6ca741b4fd86765a41813a7"  # ← rellenar con el ID del Gist nuevo (ver instrucciones de configuración)
 GIST_FILE = "scanner_scan.json"
@@ -219,5 +222,5 @@ def run_filter(
         "matched":          len(matches),
         "active_criteria":  active_criteria,
         "results":          matches[:limit],
-        "timestamp":        datetime.now().strftime("%H:%M:%S"),
+        "timestamp":        get_timestamp(),
     }

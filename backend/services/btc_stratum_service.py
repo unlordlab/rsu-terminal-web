@@ -2,15 +2,13 @@ import numpy as np
 import pandas as pd
 import yfinance as yf
 import requests
+import sys, os
 from datetime import datetime, timedelta
 from concurrent.futures import ThreadPoolExecutor
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "..", "shared"))
+from time_utils import get_timestamp  # noqa: E402
 
 # ── HELPERS ───────────────────────────────────────────────────────────────────
-
-def _get_timestamp():
-    from datetime import timezone
-    cet = timezone(timedelta(hours=1))
-    return datetime.now(cet).strftime('%H:%M:%S')
 
 def _flatten(df):
     if df.empty: return df
@@ -513,7 +511,7 @@ def get_btc_backtest() -> dict:
             "results":      results,
             "rsu_series":   rsu_series,
             "price_series": price_series,
-            "timestamp":    _get_timestamp(),
+            "timestamp":    get_timestamp(),
         }
         cache.set("btc:backtest", result, 3600)
         return result
@@ -669,7 +667,7 @@ def get_btc_dashboard() -> dict:
             "hash_data":   hash_data,
             "mvrv_data":   mvrv_data,
             "sources":     sources,
-            "timestamp":   _get_timestamp(),
+            "timestamp":   get_timestamp(),
         }
         cache.set("btc:dashboard", result, TTL.get("market", 300))
         return result

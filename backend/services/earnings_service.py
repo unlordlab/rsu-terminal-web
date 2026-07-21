@@ -4,8 +4,11 @@ from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 from concurrent.futures import ThreadPoolExecutor
 import os
+import sys
 from dotenv import load_dotenv
 load_dotenv()
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "..", "shared"))
+from time_utils import get_timestamp  # noqa: E402
 
 # Los earnings de FMP/Finnhub vienen en fecha de calendario de EE.UU. (hora
 # del Este) -- el contenedor corre en UTC (sin zona horaria configurada en
@@ -18,10 +21,6 @@ EASTERN = ZoneInfo("America/New_York")
 
 FMP_KEY     = os.getenv("FMP_API_KEY", "")
 FINNHUB_KEY = os.getenv("FINNHUB_API_KEY", "")
-
-def _get_timestamp():
-    from services.market_service import get_timestamp
-    return get_timestamp()
 
 # ── FUENTE 1: FMP ─────────────────────────────────────────────────────────────
 
@@ -306,7 +305,7 @@ def get_earnings_calendar() -> dict:
         "total":     len(formatted),
         "from_date": from_date,
         "to_date":   to_date,
-        "timestamp": datetime.now().strftime('%H:%M:%S'),
+        "timestamp": get_timestamp(),
     }
     cache.set(cache_key, resultado, 86400)  # 24h
     return resultado
@@ -333,5 +332,5 @@ def get_earnings_ticker(ticker: str) -> dict:
         "next_date":        next_date,
         "eps_est":          eps_est,
         "surprise_history": surprise,
-        "timestamp":        datetime.now().strftime('%H:%M:%S'),
+        "timestamp":        get_timestamp(),
     }

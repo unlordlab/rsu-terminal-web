@@ -17,9 +17,12 @@ producción, o las tesis antiguas desaparecerán de la sección pública).
 """
 import sqlite3
 import os
+import sys
 import re
 import time
 from datetime import datetime
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "..", "shared"))
+from time_utils import get_timestamp  # noqa: E402
 
 DB_PATH = os.path.join(os.path.dirname(__file__), '..', 'tesis.db')
 
@@ -161,7 +164,7 @@ def get_tesis_list(search: str = "", rating: str = "", page: int = 1, per_page: 
         "per_page": per_page,
         "total_pages": total_pages,
         "ratings": ["Todos"] + [r["rating"] for r in ratings_rows],
-        "timestamp": datetime.now().strftime("%H:%M:%S"),
+        "timestamp": get_timestamp(),
     }
 
 
@@ -222,7 +225,7 @@ def get_tesis_detail(ticker: str, fecha: str = "") -> dict:
         "contenido": row["contenido"],
         "url_doc": _normalize_doc_url(row["doc_url"]) if row["doc_url"] else None,
         "es_nuevo": _es_nuevo(row["fecha"]),
-        "timestamp": datetime.now().strftime("%H:%M:%S"),
+        "timestamp": get_timestamp(),
     }
 
 

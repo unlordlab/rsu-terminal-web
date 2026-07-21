@@ -1,8 +1,11 @@
 import pandas as pd
 import numpy as np
 import yfinance as yf
+import sys, os
 from datetime import datetime
 from concurrent.futures import ThreadPoolExecutor
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "..", "shared"))
+from time_utils import get_timestamp  # noqa: E402
 
 VENTANA = 10
 
@@ -772,6 +775,20 @@ def _fetch_breadth_real():
     return get_breadth_history()
 
 def get_rsu_algoritmo():
+    # Caché de 10 min sobre el resultado completo: antes cada carga del
+    # Dashboard/Algoritmo disparaba 6 descargas en paralelo Y ejecutaba
+    # procesar_resultado_algoritmo() (escritura en SQLite + posible aviso
+    # Telegram) para cada usuario que entraba -- con esto, ambas cosas pasan
+    # como mucho 1 vez cada 10 min, lo que además elimina de facto la
+    # condición de carrera de notificaciones duplicadas entre usuarios
+    # concurrentes (el semáforo no cambia en cuestión de segundos, así que
+    # no se pierde nada de inmediatez real). Mismo patrón que ya usa el
+    # backtest de esta misma función más abajo.
+    from services.cache import cache
+    cache_key = "algoritmo:live:v1"
+    cached = cache.get(cache_key)
+    if cached:
+        return cached
     try:
         # SPY ahora se descarga a 5 años (no 6 meses) porque la EMA200 semanal
         # necesita ~200 semanas (~4 años) de histórico para ser fiable. El resto
@@ -835,12 +852,14 @@ def get_rsu_algoritmo():
             "closes": [round(float(c), 2) for c in closes_clean.values],
         }
 
-        return {
+        result = {
             "ok":        True,
             **resultado,
             "chart":     chart,
-            "timestamp": datetime.now().strftime('%H:%M:%S'),
+            "timestamp": get_timestamp(),
         }
+        cache.set(cache_key, result, 600)  # 10 min
+        return result
 
     except Exception as e:
         return {"ok": False, "error": str(e)}
@@ -1240,7 +1259,7 @@ def get_rsu_algoritmo_backtest(years: int = 10) -> dict:
             "credit_spread_cobertura_completa": credit_cobertura_completa,
             "credit_spread_desde": _fmt_fecha(hy_spread_full.index.min()) if credit_ok else None,
             "metodologia":     "Sistema reformulado: sin Divergencia, FTD como confirmación posterior (no input del score), RSI diario+semanal, VIX con curva VIX/VIX3M, McClellan con giro al alza, RVOL en el día del mínimo, EMA200 semanal, régimen de mercado, gatekeepers obligatorios, filtro de estrés de crédito (BAA10Y) · McClellan vía proxy SPY (consistente en todo el periodo) · Señal = transición a estado VERDE puro (no VERDE-VOL, que cubre casos de cautela)",
-            "timestamp":       datetime.now().strftime('%H:%M:%S'),
+            "timestamp":       get_timestamp(),
         }
         # Si el fetch de BAA10Y falló ESTE cálculo en concreto, o si tiene
         # datos pero no cubre todo el rango del backtest (ver

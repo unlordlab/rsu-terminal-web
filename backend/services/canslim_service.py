@@ -10,6 +10,9 @@ import math
 from datetime import datetime, timedelta
 from concurrent.futures import ThreadPoolExecutor
 import warnings
+import sys, os
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "..", "shared"))
+from time_utils import get_timestamp  # noqa: E402
 warnings.filterwarnings('ignore')
 
 # ── S&P 500 UNIVERSE ──────────────────────────────────────────────────────────
@@ -75,9 +78,6 @@ def _safe(val, default=0.0):
         return v if not math.isnan(v) and not math.isinf(v) else default
     except Exception:
         return default
-
-def _get_timestamp():
-    return datetime.now().strftime('%H:%M:%S')
 
 # ── IBD RATINGS ───────────────────────────────────────────────────────────────
 
@@ -316,7 +316,7 @@ def get_market_status() -> dict:
             },
             "vix":           round(vix_level, 2),
             "vix_risk":      "ALTO" if vix_level >= 30 else "MEDIO" if vix_level >= 20 else "BAJO",
-            "timestamp":     _get_timestamp(),
+            "timestamp":     get_timestamp(),
         })
 
     except Exception as e:
@@ -570,7 +570,7 @@ def analyze_ticker(ticker: str, universe_perfs: list = None) -> dict:
                 "ma50":    ma50_line,
                 "ma200":   ma200_line,
             },
-            "timestamp": _get_timestamp(),
+            "timestamp": get_timestamp(),
         })
 
     except Exception as e:
@@ -680,5 +680,5 @@ def scan_canslim(min_score: int = 40, max_results: int = 50) -> dict:
         "total":      len(candidates),
         "scanned":    len(tickers),
         "universe_perfs": perfs[:10],   # muestra de percentiles para debug
-        "timestamp":  _get_timestamp(),
+        "timestamp":  get_timestamp(),
     })

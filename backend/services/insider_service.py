@@ -2,9 +2,12 @@ import requests
 import xml.etree.ElementTree as ET
 import sqlite3
 import os
+import sys
 from datetime import datetime, timedelta
 from concurrent.futures import ThreadPoolExecutor
 import time
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "..", "shared"))
+from time_utils import get_timestamp  # noqa: E402
 
 EDGAR_BASE  = "https://efts.sec.gov/LATEST/search-index"
 EDGAR_FULL  = "https://www.sec.gov"
@@ -174,11 +177,6 @@ def _last_ingest_log() -> dict:
         conn.close()
 
 # ── HELPERS ───────────────────────────────────────────────────────────────────
-
-def _get_timestamp():
-    from datetime import timezone
-    cet = timezone(timedelta(hours=1))
-    return datetime.now(cet).strftime('%H:%M:%S')
 
 _ENTITY_MARKERS = (
     "LLC", "L.L.C", "L.P.", " LP", "LP)", "CORP", "INC", "INC.", "FUND", "HOLDINGS",
@@ -438,7 +436,7 @@ def get_insider_feed() -> dict:
         "window_days":     FEED_WINDOW_DAYS,
         "last_ingest":     info["last_ingest"],
         "last_ingest_log": _last_ingest_log(),
-        "timestamp":       _get_timestamp(),
+        "timestamp":       get_timestamp(),
         "source":          "SEC EDGAR Form 4 (histórico acumulado)",
     }
 
@@ -544,7 +542,7 @@ def get_insider_ticker(ticker: str) -> dict:
             "transactions": transactions[:20],
             "buys":         len([t for t in transactions if t['type_code'] == 'P']),
             "sells":        len([t for t in transactions if t['type_code'] == 'S']),
-            "timestamp":    _get_timestamp(),
+            "timestamp":    get_timestamp(),
             "source":       "SEC EDGAR Form 4",
         }
         cache.set(f"insider:ticker:{ticker}", result, 3600)
@@ -595,7 +593,7 @@ def get_insider_clusters() -> dict:
         result = {
             "ok":        True,
             "clusters":  clusters[:10],
-            "timestamp": _get_timestamp(),
+            "timestamp": get_timestamp(),
         }
         cache.set("insider:clusters", result, 1800)
         return result

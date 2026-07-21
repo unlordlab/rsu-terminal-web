@@ -4,8 +4,11 @@ import pandas as pd
 import numpy as np
 import sqlite3
 import os
+import sys
 from datetime import datetime, timedelta
 from concurrent.futures import ThreadPoolExecutor
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "..", "shared"))
+from time_utils import get_timestamp  # noqa: E402
 
 MASSIVE_KEY  = ""   # unused — placeholder for future provider
 MASSIVE_BASE = "https://api.massive.com"
@@ -1023,7 +1026,7 @@ def get_options_flow(min_premium: float = 100_000, min_score: int = 4, tickers: 
                           "premium_fmt": _fmt_premium(r['bear_prem']),
                           "net_prem_score": r['net_prem_score']} for r in top_bearish],
         "sector_heat":  sector_heat,
-        "timestamp":    datetime.now().strftime('%H:%M:%S'),
+        "timestamp":    get_timestamp(),
         "data_note":    "EOD Data · yfinance · Delayed",
     }
 
@@ -1116,7 +1119,7 @@ def get_options_ticker(ticker: str) -> dict:
             "next_earnings":   result.get('next_earnings'),
             "total_call_prem": _fmt_premium(result['total_call_prem']),
             "total_put_prem":  _fmt_premium(result['total_put_prem']),
-            "timestamp":       datetime.now().strftime('%H:%M:%S'),
+            "timestamp":       get_timestamp(),
         }
     except Exception as e:
         return {"ok": False, "error": str(e)}

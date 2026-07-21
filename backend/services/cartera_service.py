@@ -3,6 +3,7 @@ import unicodedata
 import time
 import math
 from datetime import datetime, timezone
+from zoneinfo import ZoneInfo
 from concurrent.futures import ThreadPoolExecutor
 from services.yf_pool import yf_executor
 import pytz
@@ -693,7 +694,7 @@ def get_cartera():
             "history":      history,
             "mkt_status":   mkt_status,
             "mkt_color":    mkt_color,
-            "last_update":  datetime.now().strftime("%d/%m/%Y %H:%M:%S"),
+            "last_update":  datetime.now(ZoneInfo("Europe/Madrid")).strftime("%d/%m/%Y %H:%M:%S"),
         })
 
     except Exception as e:

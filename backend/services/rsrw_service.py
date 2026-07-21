@@ -16,6 +16,7 @@ import yfinance as yf
 # así que se llega con "..".
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "..", "shared"))
 from sp500_universe import SP500_SECTOR_MAP  # noqa: E402
+from time_utils import get_timestamp  # noqa: E402
 
 GIST_ID     = "36afc4bd0f8e376b0f6354889bda4d52"
 GIST_FILE   = "rsrw_scan.json"
@@ -337,7 +338,7 @@ def get_rsrw_from_gist() -> dict:
             "leaders":   _df_to_records(leaders, 50),
             "laggards":  _df_to_records(laggards, 30),
             "sectors":   _df_to_records(sdf) if not sdf.empty else [],
-            "timestamp": datetime.now().strftime('%H:%M:%S'),
+            "timestamp": get_timestamp(),
         }
     except Exception as e:
         return {"ok": False, "error": str(e), "mode": "gist"}
@@ -359,7 +360,7 @@ def get_rsrw_scan(max_tickers: int = 500) -> dict:
             "leaders":  _df_to_records(leaders, 50),
             "laggards": _df_to_records(laggards, 30),
             "sectors":  _df_to_records(sdf) if not sdf.empty else [],
-            "timestamp": datetime.now().strftime('%H:%M:%S'),
+            "timestamp": get_timestamp(),
         }
     except Exception as e:
         return {"ok": False, "error": str(e)}
@@ -404,7 +405,7 @@ def get_rsrw_ticker(ticker: str) -> dict:
             "rs_126d":  round(rs_vals_raw[126] * 100, 2),
             "rs_trend": rs_trend,
             "chart":    chart,
-            "timestamp": datetime.now().strftime('%H:%M:%S'),
+            "timestamp": get_timestamp(),
         }
     except Exception as e:
         return {"ok": False, "error": str(e)}

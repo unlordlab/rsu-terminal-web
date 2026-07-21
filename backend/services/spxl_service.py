@@ -3,6 +3,9 @@ import numpy as np
 import pandas as pd
 from datetime import datetime, timezone, timedelta
 import requests
+import sys, os
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "..", "shared"))
+from time_utils import get_timestamp  # noqa: E402
 
 CFG = {
     "phase_drops": [0.15, 0.10, 0.07, 0.10, 0.10, 0.10],
@@ -158,7 +161,7 @@ def get_spxl_live() -> dict:
             "cds":          round(cds, 2) if cds else None,
             "phases":       phases,
             "chart":        chart,
-            "timestamp":    datetime.now().strftime('%H:%M:%S'),
+            "timestamp":    get_timestamp(),
         }
     except Exception as e:
         return {"ok": False, "error": str(e)}
@@ -432,7 +435,7 @@ def get_backtest(initial_capital: float = 100_000) -> dict:
             "trades":       result['trades'][-50:],
             "equity_chart": eq_chart,
             "bnh_chart":    bnh_chart,
-            "timestamp":    datetime.now().strftime('%H:%M:%S'),
+            "timestamp":    get_timestamp(),
         }
     except Exception as e:
         return {"ok": False, "error": str(e)}
@@ -532,7 +535,7 @@ def get_backtest_validation(initial_capital: float = 100_000) -> dict:
             "periodos":  periodos,
             "veredicto": veredicto,
             "detalle":   detalle,
-            "timestamp": datetime.now().strftime('%H:%M:%S'),
+            "timestamp": get_timestamp(),
         }
     except Exception as e:
         return {"ok": False, "error": str(e)}
@@ -608,7 +611,7 @@ def get_backtest_con_slippage(initial_capital: float = 100_000) -> dict:
                      "(diferencia entre precio de compra y venta, y deslizamiento respecto al precio "
                      "objetivo). Estos escenarios muestran cómo cambiaría el resultado final según "
                      "ese coste — el escenario realista suele estar entre el 0,10% y el 0,20%."),
-            "timestamp":       datetime.now().strftime('%H:%M:%S'),
+            "timestamp":       get_timestamp(),
         }
     except Exception as e:
         return {"ok": False, "error": str(e)}

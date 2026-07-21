@@ -2,12 +2,11 @@ from datetime import datetime, timedelta, timezone
 import yfinance as yf
 import pandas as pd
 import requests
+import sys, os
 from concurrent.futures import ThreadPoolExecutor
 from services.yf_pool import yf_executor
-
-def get_timestamp():
-    cet = timezone(timedelta(hours=1))
-    return datetime.now(cet).strftime('%H:%M:%S')
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "..", "shared"))
+from time_utils import get_timestamp  # noqa: E402
 
 # ── ÍNDICES ───────────────────────────────────────────────────────────────────
 
