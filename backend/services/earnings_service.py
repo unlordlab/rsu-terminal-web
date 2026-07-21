@@ -1,10 +1,20 @@
 import yfinance as yf
 import requests
 from datetime import datetime, timedelta
+from zoneinfo import ZoneInfo
 from concurrent.futures import ThreadPoolExecutor
 import os
 from dotenv import load_dotenv
 load_dotenv()
+
+# Los earnings de FMP/Finnhub vienen en fecha de calendario de EE.UU. (hora
+# del Este) -- el contenedor corre en UTC (sin zona horaria configurada en
+# el Dockerfile) y antes se comparaba con datetime.now() sin ajustar, lo
+# que desplazaba "hoy"/"mañana" en la franja horaria en la que UTC y
+# Eastern caen en días de calendario distintos (aprox. 18:00-00:00 ET).
+# Caso real detectado 20/07/2026: Google marcado como "HOY" cuando en
+# Eastern (el que manda para el mercado de EE.UU.) todavía era mañana.
+EASTERN = ZoneInfo("America/New_York")
 
 FMP_KEY     = os.getenv("fmp_api_key", "")
 FINNHUB_KEY = os.getenv("finnhub_api_key", "")
@@ -192,7 +202,7 @@ def _get_surprise(ticker: str) -> list:
 # ── MAIN ──────────────────────────────────────────────────────────────────────
 
 def get_earnings_calendar() -> dict:
-    now     = datetime.now()
+    now     = datetime.now(EASTERN)
     weekday = now.weekday()  # 0=lunes, 5=sábado, 6=domingo
     if weekday == 5:
         start = now + timedelta(days=2)
@@ -247,12 +257,16 @@ def get_earnings_calendar() -> dict:
         return t.upper() or '—'
 
     formatted = []
-    today = now.strftime('%Y-%m-%d')
+    today = now.strftime('%Y-%m-%d')  # now ya está en hora de Nueva York (ver arriba)
     for item in items[:30]:
         date     = item.get('date', '')
         is_today = date == today
         try:
-            days_out = (datetime.strptime(date, '%Y-%m-%d') - now).days
+            # days_out también debe compararse contra la fecha de HOY en
+            # Eastern (now.date()), no contra un datetime con hora — evita
+            # que un earnings de "hoy" salga con days_out=0 unas horas y
+            # -1/1 otras según la hora exacta de la petición.
+            days_out = (datetime.strptime(date, '%Y-%m-%d').date() - now.date()).days
         except Exception:
             days_out = 99
         formatted.append({
