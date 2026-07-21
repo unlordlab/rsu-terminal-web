@@ -22,5 +22,12 @@ Thumbs.db
 agents/.bull_agent_state.json
 backend/gael_telegram_small.jpg
 agents/.spxl_phase_state.json
-backend/meeting_room.db
 backups/
+
+# Bases de datos SQLite -- NUNCA deben ir a git, cambian con cada peticion/
+# cron y solo sirven para romper despliegues (visto 20/07/2026:
+# algoritmo_history.db y community.db llevaban rastreados por error,
+# bloqueando ./deploy.sh cada vez que el algoritmo escribia una fila nueva).
+# Patron amplio en vez de listar cada .db suelta -- cubre tambien las que
+# se creen en el futuro sin tener que acordarse de añadirlas aqui.
+backend/*.db
