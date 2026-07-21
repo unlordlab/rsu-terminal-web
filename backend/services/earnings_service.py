@@ -258,7 +258,7 @@ def get_earnings_calendar() -> dict:
         return item
 
     with ThreadPoolExecutor(max_workers=8) as ex:
-        items[:20] = list(ex.map(enrich, items[:20]))
+        items[:50] = list(ex.map(enrich, items[:50]))
 
     def fmt_time(t):
         t = (t or '').lower()
@@ -268,7 +268,14 @@ def get_earnings_calendar() -> dict:
 
     formatted = []
     today = now.strftime('%Y-%m-%d')  # now ya está en hora de Nueva York (ver arriba)
-    for item in items[:30]:
+    # Antes se cortaba en los primeros 30 -- con ~120 earnings tipicos en una
+    # ventana de 14 dias, eso solo cubria unos 3-4 dias de calendario. Los
+    # dias con mas empresas reportando a la vez (ej. el primer dia grande de
+    # temporada de resultados) se quedaban fuera de la vista por completo --
+    # confirmado el 20/07/2026: el unico dia con horarios BMO/AMC fiables
+    # (2026-08-04) nunca llegaba a mostrarse. Ampliado a 100, cubre la
+    # ventana completa de 14 dias sin cortar dias enteros.
+    for item in items[:100]:
         date     = item.get('date', '')
         is_today = date == today
         try:
