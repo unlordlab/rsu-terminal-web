@@ -78,7 +78,7 @@ function body() {
 
         + divider()
 
-        + p('De ah\u00ed la metodolog\u00eda de RSU.')
+        + p('De ah\u00ed los principios de RSU.')
 
         + methodBlock('01', 'Seguir el rastro', 'All\u00ed donde aparece una gran concentraci\u00f3n de liquidez existe informaci\u00f3n. No operamos contra el mercado; operamos contra la ilusi\u00f3n que el mercado proyecta sobre las masas que confunden ruido con direcci\u00f3n.')
         + methodBlock('02', 'Solidaridad t\u00e9cnica', 'El conocimiento burs\u00e1til ha sido propiedad exclusiva de las clases dominantes, y RSU democratiza el acceso al conocimiento reservado hist\u00f3ricamente a las \u00e9lites como forma de redistribuci\u00f3n del poder.')

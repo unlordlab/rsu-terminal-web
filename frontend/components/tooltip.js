@@ -1813,7 +1813,7 @@ El scan se calcula 1x/día, con el dato de la última sesión cerrada — no es 
 
     "score-tecnico": {
         title: "Score Técnico (Scanner)",
-        short: "Score 0-100 exclusivo del Scanner: RS Percentile (50%) + Fase Weinstein (30%) + RVOL (20%, satura en 3x). No es el RSU Score de Research.",
+        short: "Score 0-100 exclusivo del Scanner: RS Percentile (50%) + Fase Weinstein (30%) + RVOL (20%, satura en 3x). El RS pesa más en la práctica de lo que sugiere el 50% (es uniforme, los otros dos se agrupan). No es el RSU Score de Research.",
         long: `El Score Técnico es la métrica que usa el Scanner para ordenar los resultados que pasan el filtro de criterios activados. Se calcula únicamente con datos de precio y volumen que ya se descargan en el mismo scan nocturno, sin llamadas adicionales por ticker.
 
 CÁLCULO:
@@ -1823,6 +1823,9 @@ CÁLCULO:
 
 POR QUÉ NO ES EL RSU SCORE:
 El RSU Score de Research (ver tooltip propio) incorpora 5 dimensiones incluyendo fundamentales — calidad, Piotroski, valoración vs sector y sentimiento de analistas — que requieren varias llamadas de datos POR TICKER. Ejecutar eso sobre las ~500 acciones del S&P 500 cada noche multiplicaría el riesgo de rate-limit y el tiempo del scan de forma desproporcionada. El Score Técnico es intencionadamente una versión "solo precio/volumen" del mismo espíritu (gatekeeper + score), pensada para rankear rápido un universo grande, no para sustituir el análisis fundamental completo.
+
+UN MATIZ IMPORTANTE — EL "50%" DEL RS PESA MÁS DE LO QUE PARECE:
+El RS Percentile es, por definición, un percentil: se reparte de forma perfectamente uniforme entre 0 y 100 en todo el universo (la mitad de los tickers está siempre por encima de 50, un cuarto por encima de 75, etc.). Los otros dos componentes no se comportan igual — la Fase solo puede dar 4 valores distintos (0/10/18/30), y el RVOL satura rápido en 3x, así que muchos tickers acaban agrupados cerca del máximo de esa parte. En la práctica, esto hace que el ranking final del Score Técnico esté bastante más influido por dónde queda cada ticker en fuerza relativa que por su fase o su volumen — no es un error de cálculo, es una consecuencia natural de mezclar una escala continua y uniforme con dos escalas mucho más agrupadas. Si buscas específicamente fase o volumen por encima de todo, mejor usa esos criterios como filtro aparte en vez de fiarte solo del orden del Score Técnico.
 
 CÓMO USARLO EN LA PRÁCTICA:
 Un Score Técnico alto (70+) te dice que el ticker combina fuerza relativa alta, buena fase técnica y volumen por encima de lo normal — es una señal de "vale la pena mirarlo de cerca", no una recomendación de compra. El paso lógico siguiente para un candidato que destaque aquí es abrirlo en Research y revisar su RSU Score completo antes de tomar cualquier decisión.`
