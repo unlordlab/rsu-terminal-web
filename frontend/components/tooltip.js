@@ -1192,7 +1192,13 @@ La línea de RS (precio relativo vs SPX) es igual de importante que el RS Rating
 
 LAS MEJORES ACCIONES tienen RS > 90 y la línea de RS marcando máximos históricos justo antes de la gran ruptura.
 
-NOTA: este concepto se usa en varios módulos de la terminal (CANSLIM, Scanner, RS/RW) — el percentil final es comparable, pero cada módulo calcula el rendimiento subyacente con su propia combinación de ventanas temporales. Para el detalle exacto de RS/RW, consulta su propio tooltip.`
+POR QUÉ EL NÚMERO NO COINCIDE ENTRE MÓDULOS:
+Es normal ver un RS distinto para el mismo ticker según dónde lo mires — no es un error, miden cosas ligeramente distintas a propósito:
+
+▸ CANSLIM usa el rendimiento de los últimos 12 meses, sin más — una foto simple y directa del año completo, fiel al método original de O'Neil.
+▸ RS/RW combina tres ventanas (21, 63 y 126 días) con más peso en la más larga, y además suaviza la serie antes de calcular el percentil para que un salto puntual (por ejemplo, el día de resultados) no distorsione el resultado.
+
+Consecuencia práctica: para un ticker que lleva un año excelente pero se ha enfriado en los últimos meses, CANSLIM tenderá a darle un número más alto (premia el año completo) y RS/RW uno más bajo (pesa más lo reciente). Al revés con un ticker que arrancó flojo y lleva unos meses fuerte. Ninguno de los dos "acierta más" — son dos horizontes distintos, y verlos juntos da más información que cualquiera de los dos por separado.`
     },
 
     // ── SPXL ──────────────────────────────────────────────────────────────────
