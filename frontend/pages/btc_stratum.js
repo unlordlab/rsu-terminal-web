@@ -318,6 +318,12 @@ function renderBacktest(data) {
         }).join('')
         + '</div>'
         + '<div style="margin-top:1rem;padding-top:1rem;border-top:1px solid var(--color-border);font-size:11px;color:var(--color-muted);">BTC Buy & Hold: <span style="color:var(--color-text);">+' + bh + '%</span> · El backtest asume ejecución perfecta sin slippage ni fees</div>'
+        // El periodo evaluado empieza donde la MA200W (200 semanas) ya
+        // tiene histórico real -- antes de esa fecha no hay buffer previo
+        // como sí tiene el RSU Algoritmo, así que se recorta la serie
+        // entera en vez de usar un valor inmaduro (ver backend, sesión
+        // "min_periods mal etiquetado", 22/07/2026).
+        + (data.period_start ? '<div style="font-size:10px;color:var(--color-muted);margin-top:4px;">Periodo evaluado: desde ' + data.period_start + ' (' + (data.period_days / 365).toFixed(1) + ' años) — antes de esa fecha la MA200W no tenía histórico suficiente</div>' : '')
         + '</div>';
 
     const chartHtml = '<div style="background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius);padding:1.25rem;margin-bottom:1rem;">'

@@ -347,9 +347,9 @@ def _ema200_semanal(df_spy):
     Devuelve (valor_ema, pendiente_reciente) o (None, None) si no hay histórico suficiente.
     """
     weekly = _resample_semanal(df_spy)
-    if weekly is None or len(weekly) < 20:
+    if weekly is None or len(weekly) < 200:
         return None, None
-    ema200w = weekly['Close'].ewm(span=200, min_periods=20).mean()
+    ema200w = weekly['Close'].ewm(span=200, min_periods=200).mean()
     valor   = _safe_float(ema200w.iloc[-1])
     # Pendiente: comparar el valor actual contra el de 4 semanas atrás
     if len(ema200w) >= 5:

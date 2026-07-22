@@ -177,7 +177,11 @@ def _get_difficulty_mempool() -> dict:
 # ── INDICADORES ON-CHAIN MEJORADOS ────────────────────────────────────────────
 
 def _calc_ma200w(close: pd.Series) -> pd.Series:
-    return close.rolling(window=1400, min_periods=200).mean()
+    # 200 semanas = 1400 días -- antes min_periods=200 dejaba calcular la
+    # media con solo el 14% de la ventana prometida, y ese valor inmaduro
+    # se usaba igual que un MA200W completo (ver sesión "fallbacks
+    # fabricados", 22/07/2026, mismo patrón que DXY/Yield2Y/RS CANSLIM).
+    return close.rolling(window=1400, min_periods=1400).mean()
 
 def _calc_mvrv_z_improved(df: pd.DataFrame) -> dict:
     """
@@ -424,6 +428,17 @@ def get_btc_backtest() -> dict:
         close  = df["price"].squeeze()
         ma200  = _calc_ma200w(close)
 
+        # El backtest solo es válido desde el primer día con MA200W madura
+        # (1400 días reales) -- sin buffer previo como el que sí tiene el
+        # RSU Algoritmo, así que se recorta la serie entera (trading +
+        # baseline B&H + gráfico) al mismo punto de partida, para no
+        # comparar un total_return calculado solo sobre el tramo maduro
+        # contra un bh_return calculado sobre todo el histórico descargado.
+        first_valid = ma200.first_valid_index()
+        if first_valid is None:
+            return {"ok": False, "error": "Histórico insuficiente para calcular MA200W (hacen falta 1400 días)"}
+        start_pos = close.index.get_loc(first_valid)
+
         # Calcular MVRV si tenemos market_cap
         if "market_cap" in df.columns:
             realized_cap = df["market_cap"].ewm(span=365).mean()
@@ -456,7 +471,7 @@ def get_btc_backtest() -> dict:
 
         thresholds = [20, 40, 60]
         results    = []
-        bh_return  = (float(close.iloc[-1]) - float(close.dropna().iloc[0])) / float(close.dropna().iloc[0]) * 100
+        bh_return  = (float(close.iloc[-1]) - float(close.iloc[start_pos])) / float(close.iloc[start_pos]) * 100
 
         for threshold in thresholds:
             capital     = 10000.0
@@ -464,7 +479,7 @@ def get_btc_backtest() -> dict:
             trades      = []
             in_position = False
 
-            for i in range(len(close)):
+            for i in range(start_pos, len(close)):
                 score = rsu_point(i)
                 if score is None: continue
                 price = float(close.iloc[i])
@@ -502,8 +517,8 @@ def get_btc_backtest() -> dict:
         # Series para gráfico
         rsu_series   = []
         price_series = []
-        step = max(1, len(close) // 200)
-        for i in range(0, len(close), step):
+        step = max(1, (len(close) - start_pos) // 200)
+        for i in range(start_pos, len(close), step):
             sc = rsu_point(i)
             if sc is None: continue
             d = close.index[i].strftime("%Y-%m-%d")
@@ -515,6 +530,8 @@ def get_btc_backtest() -> dict:
             "results":      results,
             "rsu_series":   rsu_series,
             "price_series": price_series,
+            "period_start": close.index[start_pos].strftime("%Y-%m-%d"),
+            "period_days":  len(close) - start_pos,
             "timestamp":    get_timestamp(),
         }
         cache.set("btc:backtest", result, 3600)
@@ -565,6 +582,8 @@ def get_btc_dashboard() -> dict:
 
         ma200 = _calc_ma200w(close)
         ma_val = float(ma200.iloc[-1])
+        if np.isnan(ma_val):
+            return {"ok": False, "error": "Histórico insuficiente para calcular MA200W (hacen falta 1400 días)"}
 
         # MVRV mejorado
         mvrv_data = _calc_mvrv_z_improved(hist_df)
