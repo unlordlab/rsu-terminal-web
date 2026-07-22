@@ -1,5 +1,5 @@
 import { tt } from '/components/tooltip.js';
-import { isRateLimitMessage, errorMessage } from '/core/ui.js';
+import { isRateLimitMessage, errorMessage, esc } from '/core/ui.js';
 
 export async function render(container) {
     container.innerHTML = pageHeader()
@@ -86,7 +86,7 @@ function renderSectors(el, sectors) {
             const tColor = trend === '▲' ? 'var(--color-accent)' : trend === '▼' ? '#f23645' : 'var(--color-muted)';
             const ret63  = s.return_63d != null ? ((s.return_63d >= 0 ? '+' : '') + s.return_63d.toFixed(1) + '%') : '';
             return '<div style="display:grid;grid-template-columns:140px 1fr 50px 20px 60px;gap:8px;align-items:center;">'
-                + '<div style="font-size:11px;color:var(--color-muted);">' + name + '</div>'
+                + '<div style="font-size:11px;color:var(--color-muted);">' + esc(name) + '</div>'
                 + '<div style="background:var(--color-bg,#0a0a0a);border-radius:2px;height:5px;">'
                 + '<div style="height:100%;width:' + w.toFixed(1) + '%;background:' + color + ';border-radius:2px;"></div>'
                 + '</div>'
@@ -168,22 +168,22 @@ function renderTable(el, title, rows, isLeaders, freshness, total, tableId) {
         const rvolClr   = (r.rvol || 0) >= 1.5 ? 'var(--color-accent)' : 'var(--color-muted)';
 
         return '<div style="display:grid;grid-template-columns:70px 60px 60px 60px 60px 60px 60px 1fr;gap:6px;padding:8px 12px;border-bottom:1px solid var(--color-border);font-size:11px;align-items:center;">'
-            + '<div onclick="goToResearch(\'' + (r.ticker || '') + '\')" class="ticker-link" style="color:var(--color-accent);font-weight:500;">' + (r.ticker || '') + '</div>'
+            + '<div onclick="goToResearch(\'' + esc(r.ticker || '') + '\')" class="ticker-link" style="color:var(--color-accent);font-weight:500;">' + esc(r.ticker || '') + '</div>'
             + '<div style="color:' + pctColor + ';font-weight:500;">' + pct.toFixed(0) + '</div>'
             + '<div style="color:var(--color-muted);">' + (r.rs_21d || 0).toFixed(1) + '</div>'
             + '<div style="color:var(--color-muted);">' + (r.rs_63d || 0).toFixed(1) + '</div>'
             + '<div style="color:var(--color-muted);">' + (r.rs_126d || 0).toFixed(1) + '</div>'
             + '<div style="color:' + trendClr + ';">' + trendIcon + '</div>'
             + '<div style="color:' + rvolClr + ';">' + (r.rvol || 0).toFixed(1) + 'x</div>'
-            + '<div style="color:var(--color-muted);font-size:10px;">' + (r.sector || '') + '</div>'
+            + '<div style="color:var(--color-muted);font-size:10px;">' + esc(r.sector || '') + '</div>'
             + '</div>';
     }).join('');
 
     el.innerHTML = '<div style="background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius);overflow:hidden;">'
         + '<div style="display:flex;justify-content:space-between;align-items:center;padding:10px 12px;border-bottom:1px solid var(--color-border);">'
-        + '<div style="color:' + color + ';font-size:13px;letter-spacing:0.08em;">' + title + '</div>'
+        + '<div style="color:' + color + ';font-size:13px;letter-spacing:0.08em;">' + esc(title) + '</div>'
         + '<div style="color:var(--color-muted);font-size:10px;">'
-        + (freshness ? freshness + ' · ' : '') + (rows ? rows.length : 0) + ' de ' + (total || 0)
+        + (freshness ? esc(freshness) + ' · ' : '') + (rows ? rows.length : 0) + ' de ' + (total || 0)
         + '</div>'
         + '</div>'
         + header
@@ -201,7 +201,7 @@ function setupTicker(container) {
         if (!ticker) return;
         btn.textContent   = 'ANALIZANDO...';
         btn.style.opacity = '0.7';
-        result.innerHTML  = '<div style="color:var(--color-muted);font-size:12px;padding:0.5rem;">Calculando RS/RW para ' + ticker + '...</div>';
+        result.innerHTML  = '<div style="color:var(--color-muted);font-size:12px;padding:0.5rem;">Calculando RS/RW para ' + esc(ticker) + '...</div>';
 
         try {
             const token = sessionStorage.getItem('rsu_token');
@@ -231,8 +231,8 @@ function renderTickerResult(data) {
 
     return '<div style="background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius);padding:1.25rem;margin-bottom:1rem;">'
         + '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem;">'
-        + '<div style="color:var(--color-accent);font-size:18px;letter-spacing:0.1em;">' + data.ticker + '</div>'
-        + '<div style="color:var(--color-muted);font-size:11px;">Actualizado: ' + data.timestamp + '</div>'
+        + '<div style="color:var(--color-accent);font-size:18px;letter-spacing:0.1em;">' + esc(data.ticker) + '</div>'
+        + '<div style="color:var(--color-muted);font-size:11px;">Actualizado: ' + esc(data.timestamp) + '</div>'
         + '</div>'
         + '<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:1rem;margin-bottom:1rem;">'
         + kpiCard('RS SCORE ' + tt('rsrw'), score.toFixed(1), 'vs SPY', color)
@@ -308,7 +308,7 @@ function errorCard(title, msg) {
     const color = rateLimited ? '#ffb800' : '#f23645';
     const icon  = rateLimited ? '⏱' : '✗';
     return '<div style="background:var(--color-surface);border:1px solid ' + color + '44;border-radius:var(--radius);padding:1.25rem;">'
-        + '<div style="color:' + color + ';font-size:13px;margin-bottom:0.5rem;">' + title + '</div>'
-        + '<div style="color:' + color + ';font-size:12px;">' + icon + ' ' + (msg || 'Error') + '</div>'
+        + '<div style="color:' + color + ';font-size:13px;margin-bottom:0.5rem;">' + esc(title) + '</div>'
+        + '<div style="color:' + color + ';font-size:12px;">' + icon + ' ' + esc(msg || 'Error') + '</div>'
         + '</div>';
 }

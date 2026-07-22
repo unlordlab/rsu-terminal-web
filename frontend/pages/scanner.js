@@ -1,4 +1,4 @@
-import { isRateLimitMessage, errorMessage } from '/core/ui.js';
+import { isRateLimitMessage, errorMessage, esc } from '/core/ui.js';
 import { tt } from '/components/tooltip.js';
 
 const PHASE_OPTIONS = [
@@ -190,17 +190,18 @@ async function loadUniverseMeta(container) {
         const res   = await fetch('/api/v1/scanner/universe', { headers: token ? { 'Authorization': 'Bearer ' + token } : {} });
         const data  = await res.json();
         if (!data.ok) {
-            if (metaEl) metaEl.innerHTML = '<span style="color:#f23645;">' + (data.error || 'Error') + '</span>';
+            if (metaEl) metaEl.innerHTML = '<span style="color:#f23645;">' + esc(data.error || 'Error') + '</span>';
             return;
         }
         if (metaEl) {
+            // textContent, no innerHTML -- no necesita esc()
             metaEl.textContent = 'Universo: ' + data.universe_size + ' tickers · Actualizado: ' + data.freshness;
         }
         if (sectorEl && data.sectors) {
-            sectorEl.innerHTML = data.sectors.map(s => '<option value="' + s + '">' + s + '</option>').join('');
+            sectorEl.innerHTML = data.sectors.map(s => '<option value="' + esc(s) + '">' + esc(s) + '</option>').join('');
         }
     } catch (e) {
-        if (metaEl) metaEl.innerHTML = '<span style="color:#f23645;">' + e.message + '</span>';
+        if (metaEl) metaEl.innerHTML = '<span style="color:#f23645;">' + esc(e.message) + '</span>';
     }
 }
 
@@ -268,13 +269,13 @@ async function runFilter(container) {
 
 function renderResults(el, data) {
     _scannerData = data;
-    const activeLabels = Object.entries(data.active_criteria || {}).map(([k, v]) => k + '=' + v);
+    const activeLabels = Object.entries(data.active_criteria || {}).map(([k, v]) => k + '=' + esc(v));
     const criteriaLine = activeLabels.length
         ? activeLabels.join(' · ')
         : 'Sin criterios activos — mostrando universo completo ordenado por Score Técnico';
 
     const header = '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.5rem;">'
-        + '<div style="color:var(--color-accent);font-size:13px;">' + data.matched + ' / ' + data.universe_size + ' tickers cumplen</div>'
+        + '<div style="color:var(--color-accent);font-size:13px;">' + esc(data.matched) + ' / ' + esc(data.universe_size) + ' tickers cumplen</div>'
         + '<div style="color:var(--color-muted);font-size:11px;">' + criteriaLine + '</div>'
         + '</div>';
 
@@ -307,15 +308,15 @@ function renderResults(el, data) {
         const absorcClr = (r.dias_absorcion || 0) >= 5 ? '#00ffad' : (r.dias_absorcion || 0) >= 2 ? '#ff9800' : 'var(--color-muted)';
 
         return '<div style="display:grid;grid-template-columns:70px 90px 60px 60px 70px 60px 1fr 1fr 34px;gap:6px;padding:8px 12px;border-bottom:1px solid var(--color-border);font-size:11px;align-items:center;' + (r.new_high ? 'background:rgba(255,152,0,0.04);' : '') + '">'
-            + '<div onclick="goToResearch(\'' + (r.ticker || '') + '\')" class="ticker-link" style="color:var(--color-accent);font-weight:500;cursor:pointer;">' + (r.ticker || '') + athTag + '</div>'
+            + '<div onclick="goToResearch(\'' + esc(r.ticker || '') + '\')" class="ticker-link" style="color:var(--color-accent);font-weight:500;cursor:pointer;">' + esc(r.ticker || '') + athTag + '</div>'
             + '<div style="color:var(--color-muted);">' + (r.precio != null ? '$' + r.precio.toFixed(2) : '—') + '</div>'
             + '<div style="color:' + rvolClr + ';">' + (r.rvol != null ? r.rvol.toFixed(2) + 'x' : '—') + '</div>'
             + '<div style="color:' + rsClr + ';font-weight:500;">' + (r.rs_pct != null ? r.rs_pct.toFixed(0) : '—') + '</div>'
             + '<div style="color:' + scoreClr + ';font-weight:500;">' + (r.score_tecnico != null ? r.score_tecnico.toFixed(0) : '—') + '</div>'
-            + '<div style="color:' + absorcClr + ';font-weight:500;">' + (r.dias_absorcion || 0) + '/10</div>'
-            + '<div style="color:' + phaseClr + ';font-size:10px;">' + (r.phase_label || '—') + '</div>'
-            + '<div style="color:var(--color-muted);font-size:10px;">' + (r.sector || '—') + '</div>'
-            + '<div style="text-align:center;"><button onclick="window.__quickAddWatchlist(\'' + (r.ticker || '') + '\', this)" title="Añadir a watchlist" style="background:transparent;border:1px solid var(--color-border);color:var(--color-muted);border-radius:3px;padding:2px 6px;font-size:11px;cursor:pointer;">＋</button></div>'
+            + '<div style="color:' + absorcClr + ';font-weight:500;">' + esc(r.dias_absorcion || 0) + '/10</div>'
+            + '<div style="color:' + phaseClr + ';font-size:10px;">' + esc(r.phase_label || '—') + '</div>'
+            + '<div style="color:var(--color-muted);font-size:10px;">' + esc(r.sector || '—') + '</div>'
+            + '<div style="text-align:center;"><button onclick="window.__quickAddWatchlist(\'' + esc(r.ticker || '') + '\', this)" title="Añadir a watchlist" style="background:transparent;border:1px solid var(--color-border);color:var(--color-muted);border-radius:3px;padding:2px 6px;font-size:11px;cursor:pointer;">＋</button></div>'
             + '</div>';
     }).join('');
 

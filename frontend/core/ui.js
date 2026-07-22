@@ -21,12 +21,13 @@ export function errorMessage(msg, opts = {}) {
     const padding = opts.padding || '1rem';
     const fontSize = opts.fontSize || '12px';
     const extraStyle = opts.extraStyle || '';
+    const safeMsg = esc(msg);
 
     if (isRateLimitMessage(msg)) {
         return '<div style="padding:' + padding + ';color:#ffb800;font-size:' + fontSize + ';display:flex;align-items:center;gap:6px;' + extraStyle + '">'
-            + '<span style="font-size:14px;">⏱</span><span>' + msg + '</span></div>';
+            + '<span style="font-size:14px;">⏱</span><span>' + safeMsg + '</span></div>';
     }
-    return '<div style="padding:' + padding + ';color:#f23645;font-size:' + fontSize + ';' + extraStyle + '">✗ ' + msg + '</div>';
+    return '<div style="padding:' + padding + ';color:#f23645;font-size:' + fontSize + ';' + extraStyle + '">✗ ' + safeMsg + '</div>';
 }
 
 /**

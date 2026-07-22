@@ -1,5 +1,5 @@
 import { tt } from '/components/tooltip.js';
-import { errorMessage } from '/core/ui.js';
+import { errorMessage, esc } from '/core/ui.js';
 
 function authHeader() {
     const token = sessionStorage.getItem('rsu_token') || localStorage.getItem('rsu_token');
@@ -82,8 +82,8 @@ function pageShell() {
 function shell(title, content, subtitle) {
     return '<div style="background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius);overflow:hidden;margin-bottom:1rem;">'
         + '<div style="display:flex;justify-content:space-between;align-items:center;padding:10px 14px;border-bottom:1px solid var(--color-border);">'
-        + '<div style="color:var(--color-accent);font-size:12px;letter-spacing:0.08em;text-shadow:var(--glow-text);">' + title + '</div>'
-        + (subtitle ? '<div style="color:var(--color-muted);font-size:10px;">' + subtitle + '</div>' : '')
+        + '<div style="color:var(--color-accent);font-size:12px;letter-spacing:0.08em;text-shadow:var(--glow-text);">' + esc(title) + '</div>'
+        + (subtitle ? '<div style="color:var(--color-muted);font-size:10px;">' + esc(subtitle) + '</div>' : '')
         + '</div>'
         + content
         + '</div>';
@@ -112,11 +112,11 @@ async function loadWatchlist(container) {
             const color = w.ok ? (up ? 'var(--color-accent)' : '#f23645') : 'var(--color-muted)';
             const arrow = up ? '▲' : '▼';
             return '<div style="display:grid;grid-template-columns:1fr 100px 90px 90px 40px;gap:8px;padding:8px 14px;border-bottom:1px solid var(--color-border);font-size:12px;align-items:center;">'
-                + '<div class="ticker-link" style="color:var(--color-accent);cursor:pointer;font-weight:500;" onclick="goToResearch(\'' + w.ticker + '\')">' + w.ticker + '</div>'
+                + '<div class="ticker-link" style="color:var(--color-accent);cursor:pointer;font-weight:500;" onclick="goToResearch(\'' + esc(w.ticker) + '\')">' + esc(w.ticker) + '</div>'
                 + '<div style="text-align:right;color:var(--color-text);">' + (w.ok ? '$' + w.price.toFixed(2) : '—') + '</div>'
                 + '<div style="text-align:right;color:' + color + ';">' + (w.ok ? arrow + ' ' + Math.abs(w.chg).toFixed(2) + '%' : '—') + '</div>'
-                + '<div style="text-align:center;"><button class="wl-alert-btn" data-ticker="' + w.ticker + '" style="background:transparent;border:1px solid var(--color-border);color:var(--color-muted);border-radius:3px;padding:3px 8px;font-size:10px;cursor:pointer;">＋ alerta</button></div>'
-                + '<div style="text-align:center;"><button class="wl-remove-btn" data-ticker="' + w.ticker + '" style="background:transparent;border:none;color:var(--color-muted);cursor:pointer;font-size:14px;" title="Quitar de watchlist">✕</button></div>'
+                + '<div style="text-align:center;"><button class="wl-alert-btn" data-ticker="' + esc(w.ticker) + '" style="background:transparent;border:1px solid var(--color-border);color:var(--color-muted);border-radius:3px;padding:3px 8px;font-size:10px;cursor:pointer;">＋ alerta</button></div>'
+                + '<div style="text-align:center;"><button class="wl-remove-btn" data-ticker="' + esc(w.ticker) + '" style="background:transparent;border:none;color:var(--color-muted);cursor:pointer;font-size:14px;" title="Quitar de watchlist">✕</button></div>'
                 + '</div>';
         }).join('');
         el.innerHTML = shell('TICKERS SEGUIDOS', header + rows);
@@ -190,22 +190,22 @@ async function loadAlerts(container) {
                 const isRvol = a.metric === 'rvol';
                 const isEma  = a.metric === 'ema_touch';
                 const condLabel = isEma
-                    ? ('Toque de EMA' + a.ema_period)
+                    ? ('Toque de EMA' + esc(a.ema_period))
                     : (a.condition === 'above' ? 'Por encima de ' : 'Por debajo de ') + (isRvol ? 'RVOL' : 'precio');
                 const targetFmt = isEma ? '±0,5%' : (isRvol ? Number(a.target_price).toFixed(2) + 'x' : '$' + Number(a.target_price).toFixed(2));
                 const stColor   = IMPACT_COLOR[a.status] || 'var(--color-muted)';
                 const bg        = a.status === 'triggered' && !a.seen ? 'rgba(0,255,173,0.05)' : 'transparent';
                 const fmtTriggerPrice = (v) => isRvol ? v.toFixed(2) + 'x' : '$' + v.toFixed(2);
                 const detail    = a.status === 'triggered'
-                    ? ('Disparada a ' + (a.triggered_price != null ? fmtTriggerPrice(a.triggered_price) : '?') + ' el ' + (a.triggered_at || '').substring(0, 10))
-                    : ('Creada el ' + (a.created_at || '').substring(0, 10));
+                    ? ('Disparada a ' + (a.triggered_price != null ? fmtTriggerPrice(a.triggered_price) : '?') + ' el ' + esc((a.triggered_at || '').substring(0, 10)))
+                    : ('Creada el ' + esc((a.created_at || '').substring(0, 10)));
                 return '<div style="display:grid;grid-template-columns:90px 130px 110px 100px 1fr 40px;gap:8px;padding:8px 14px;border-bottom:1px solid var(--color-border);font-size:12px;align-items:center;background:' + bg + ';">'
-                    + '<div class="ticker-link" style="color:var(--color-accent);cursor:pointer;font-weight:500;" onclick="goToResearch(\'' + a.ticker + '\')">' + a.ticker + '</div>'
+                    + '<div class="ticker-link" style="color:var(--color-accent);cursor:pointer;font-weight:500;" onclick="goToResearch(\'' + esc(a.ticker) + '\')">' + esc(a.ticker) + '</div>'
                     + '<div style="color:var(--color-muted);">' + condLabel + '</div>'
                     + '<div style="text-align:right;color:var(--color-text);">' + targetFmt + '</div>'
-                    + '<div style="color:' + stColor + ';font-size:10px;font-weight:600;">' + (IMPACT_LABEL[a.status] || a.status) + '</div>'
+                    + '<div style="color:' + stColor + ';font-size:10px;font-weight:600;">' + esc(IMPACT_LABEL[a.status] || a.status) + '</div>'
                     + '<div style="color:var(--color-muted);font-size:10px;">' + detail + '</div>'
-                    + '<div style="text-align:center;"><button class="alert-remove-btn" data-id="' + a.id + '" style="background:transparent;border:none;color:var(--color-muted);cursor:pointer;font-size:14px;" title="Eliminar alerta">✕</button></div>'
+                    + '<div style="text-align:center;"><button class="alert-remove-btn" data-id="' + esc(a.id) + '" style="background:transparent;border:none;color:var(--color-muted);cursor:pointer;font-size:14px;" title="Eliminar alerta">✕</button></div>'
                     + '</div>';
             }).join('');
             el.innerHTML = shell('MIS ALERTAS', header + rows);

@@ -1,10 +1,24 @@
+import re
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 from typing import Optional
 from auth import verify_token
 from services import users_service, watchlist_service
 
 router = APIRouter(prefix="/api/v1/watchlist", tags=["watchlist"])
+
+# Mismo patrón que routers/research.py -- limita el ticker a lo que un
+# símbolo real puede contener. Antes solo se validaba longitud, así que un
+# ticker con comillas/HTML se guardaba tal cual y se reflejaba sin escapar
+# en watchlist.js (onclick/data-ticker) -- esto cierra el vector en origen.
+_TICKER_RE = re.compile(r"^[A-Z0-9.\-^=]{1,12}$")
+
+
+def _validar_ticker(v: str) -> str:
+    v = v.strip().upper()
+    if not _TICKER_RE.match(v):
+        raise ValueError("Ticker inválido")
+    return v
 
 
 def _user_id(payload: dict) -> int:
@@ -18,6 +32,11 @@ def _user_id(payload: dict) -> int:
 class WatchlistAdd(BaseModel):
     ticker: str = Field(..., min_length=1, max_length=15)
 
+    @field_validator("ticker")
+    @classmethod
+    def _ticker(cls, v):
+        return _validar_ticker(v)
+
 
 class AlertCreate(BaseModel):
     ticker: str = Field(..., min_length=1, max_length=15)
@@ -25,6 +44,11 @@ class AlertCreate(BaseModel):
     target_price: float = 0        # ignorado si metric='ema_touch'
     metric: str = "price"          # 'price' | 'rvol' | 'ema_touch'
     ema_period: Optional[int] = None   # 10 | 20 | 50 | 200 — obligatorio si metric='ema_touch'
+
+    @field_validator("ticker")
+    @classmethod
+    def _ticker(cls, v):
+        return _validar_ticker(v)
 
 
 # ── WATCHLIST ────────────────────────────────────────────────────────────────

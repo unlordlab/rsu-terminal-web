@@ -1,5 +1,5 @@
 import { tt } from '/components/tooltip.js';
-import { errorMessage } from '/core/ui.js';
+import { errorMessage, esc } from '/core/ui.js';
 
 export async function render(container) {
     container.innerHTML = pageShell();
@@ -78,6 +78,8 @@ async function loadAll(container) {
 }
 
 async function loadTicker(ticker, el) {
+    // Nota: shell() ya escapa `title` internamente -- no escapar `ticker` aquí
+    // también, o se doble-escaparía (p.ej. "&" -> "&amp;" -> "&amp;amp;").
     el.innerHTML = shell('INSIDER TRANSACTIONS · ' + ticker, loading());
     try {
         const token = sessionStorage.getItem('rsu_token');
@@ -102,10 +104,10 @@ function renderBuys(buys, coverage) {
         + '</div>';
 
     const rows = buys.map(b => '<div style="display:grid;grid-template-columns:80px 70px 1fr 120px 90px 80px;gap:8px;padding:8px 14px;border-bottom:1px solid var(--color-border);font-size:11px;align-items:center;">'
-        + '<div style="color:var(--color-muted);">' + (b.date || '—') + '</div>'
-        + '<div onclick="goToResearch(\'' + b.ticker + '\')" class="ticker-link" style="color:var(--color-accent);font-weight:500;">' + b.ticker + '</div>'
-        + '<div style="color:var(--color-text);">' + (b.insider_name || '—') + '</div>'
-        + '<div style="color:var(--color-muted);font-size:10px;">' + (b.title || '—').substring(0, 20) + '</div>'
+        + '<div style="color:var(--color-muted);">' + esc(b.date || '—') + '</div>'
+        + '<div onclick="goToResearch(\'' + esc(b.ticker) + '\')" class="ticker-link" style="color:var(--color-accent);font-weight:500;">' + esc(b.ticker) + '</div>'
+        + '<div style="color:var(--color-text);">' + esc(b.insider_name || '—') + '</div>'
+        + '<div style="color:var(--color-muted);font-size:10px;">' + esc((b.title || '—').substring(0, 20)) + '</div>'
         + '<div style="color:var(--color-text);">' + Number(b.shares || 0).toLocaleString('en-US') + '</div>'
         + '<div style="color:var(--color-accent);font-weight:500;">' + fmtVal(b.value) + '</div>'
         + '</div>'
@@ -122,9 +124,9 @@ function renderSells(sells, coverage) {
         + '</div>';
 
     const rows = sells.map(s => '<div style="display:grid;grid-template-columns:80px 70px 1fr 90px 80px;gap:8px;padding:8px 14px;border-bottom:1px solid var(--color-border);font-size:11px;align-items:center;">'
-        + '<div style="color:var(--color-muted);">' + (s.date || '—') + '</div>'
-        + '<div onclick="goToResearch(\'' + s.ticker + '\')" class="ticker-link" style="color:var(--color-accent);font-weight:500;">' + s.ticker + '</div>'
-        + '<div style="color:var(--color-text);">' + (s.insider_name || '—') + '</div>'
+        + '<div style="color:var(--color-muted);">' + esc(s.date || '—') + '</div>'
+        + '<div onclick="goToResearch(\'' + esc(s.ticker) + '\')" class="ticker-link" style="color:var(--color-accent);font-weight:500;">' + esc(s.ticker) + '</div>'
+        + '<div style="color:var(--color-text);">' + esc(s.insider_name || '—') + '</div>'
         + '<div style="color:var(--color-text);">' + Number(s.shares || 0).toLocaleString('en-US') + '</div>'
         + '<div style="color:#f23645;font-weight:500;">' + fmtVal(s.value) + '</div>'
         + '</div>'
@@ -139,17 +141,17 @@ function renderClusters(clusters) {
     const rows = clusters.map(c => '<div style="padding:12px 14px;border-bottom:1px solid var(--color-border);">'
         + '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">'
         + '<div style="display:flex;align-items:center;gap:10px;">'
-        + '<span onclick="goToResearch(\'' + c.ticker + '\')" class="ticker-link" style="color:var(--color-accent);font-size:16px;font-weight:500;">' + c.ticker + '</span>'
-        + '<span style="color:var(--color-muted);font-size:11px;">' + c.company + '</span>'
+        + '<span onclick="goToResearch(\'' + esc(c.ticker) + '\')" class="ticker-link" style="color:var(--color-accent);font-size:16px;font-weight:500;">' + esc(c.ticker) + '</span>'
+        + '<span style="color:var(--color-muted);font-size:11px;">' + esc(c.company) + '</span>'
         + '</div>'
-        + '<span style="background:' + c.signal_color + '22;color:' + c.signal_color + ';border:1px solid ' + c.signal_color + '44;border-radius:3px;padding:2px 8px;font-size:10px;">' + c.signal + '</span>'
+        + '<span style="background:' + esc(c.signal_color) + '22;color:' + esc(c.signal_color) + ';border:1px solid ' + esc(c.signal_color) + '44;border-radius:3px;padding:2px 8px;font-size:10px;">' + esc(c.signal) + '</span>'
         + '</div>'
         + '<div style="display:flex;gap:2rem;font-size:11px;margin-bottom:6px;">'
-        + '<span style="color:var(--color-muted);">' + c.n_insiders + ' insiders · <span style="color:var(--color-accent);">' + fmtVal(c.total_value) + ' total</span></span>'
+        + '<span style="color:var(--color-muted);">' + esc(c.n_insiders) + ' insiders · <span style="color:var(--color-accent);">' + esc(fmtVal(c.total_value)) + ' total</span></span>'
         + '<span style="color:var(--color-muted);">' + Number(c.total_shares).toLocaleString('en-US') + ' acciones</span>'
         + '</div>'
         + '<div style="display:flex;gap:8px;flex-wrap:wrap;">'
-        + c.insiders.map(i => '<span style="background:var(--color-surface2);border-radius:3px;padding:2px 8px;font-size:10px;color:var(--color-muted);">' + i.name + ' · ' + fmtVal(i.value) + '</span>').join('')
+        + c.insiders.map(i => '<span style="background:var(--color-surface2);border-radius:3px;padding:2px 8px;font-size:10px;color:var(--color-muted);">' + esc(i.name) + ' · ' + esc(fmtVal(i.value)) + '</span>').join('')
         + '</div>'
         + '</div>'
     ).join('');
@@ -163,8 +165,8 @@ function renderTickerResult(ticker, data) {
     }
 
     const summary = '<div style="display:flex;gap:2rem;padding:10px 14px;border-bottom:1px solid var(--color-border);font-size:11px;">'
-        + '<span style="color:var(--color-muted);">Compras: <span style="color:var(--color-accent);">' + data.buys + '</span></span>'
-        + '<span style="color:var(--color-muted);">Ventas: <span style="color:#f23645;">' + data.sells + '</span></span>'
+        + '<span style="color:var(--color-muted);">Compras: <span style="color:var(--color-accent);">' + esc(data.buys) + '</span></span>'
+        + '<span style="color:var(--color-muted);">Ventas: <span style="color:#f23645;">' + esc(data.sells) + '</span></span>'
         + '<span style="color:var(--color-muted);">Total: ' + data.transactions.length + ' transacciones</span>'
         + '</div>';
 
@@ -175,10 +177,10 @@ function renderTickerResult(ticker, data) {
     const rows = data.transactions.map(t => {
         const isBuy = t.type_code === 'P';
         return '<div style="display:grid;grid-template-columns:90px 1fr 120px 70px 70px 80px;gap:8px;padding:8px 14px;border-bottom:1px solid var(--color-border);font-size:11px;align-items:center;">'
-            + '<div style="color:var(--color-muted);">' + (t.date || '—') + '</div>'
-            + '<div style="color:var(--color-text);">' + (t.insider_name || '—') + '</div>'
-            + '<div style="color:var(--color-muted);font-size:10px;">' + (t.title || '—').substring(0, 20) + '</div>'
-            + '<div style="background:' + (isBuy ? 'rgba(0,255,173,0.1)' : 'rgba(242,54,69,0.1)') + ';color:' + (isBuy ? 'var(--color-accent)' : '#f23645') + ';border-radius:3px;padding:2px 6px;font-size:10px;text-align:center;">' + t.type + '</div>'
+            + '<div style="color:var(--color-muted);">' + esc(t.date || '—') + '</div>'
+            + '<div style="color:var(--color-text);">' + esc(t.insider_name || '—') + '</div>'
+            + '<div style="color:var(--color-muted);font-size:10px;">' + esc((t.title || '—').substring(0, 20)) + '</div>'
+            + '<div style="background:' + (isBuy ? 'rgba(0,255,173,0.1)' : 'rgba(242,54,69,0.1)') + ';color:' + (isBuy ? 'var(--color-accent)' : '#f23645') + ';border-radius:3px;padding:2px 6px;font-size:10px;text-align:center;">' + esc(t.type) + '</div>'
             + '<div style="color:var(--color-text);">' + Number(t.shares || 0).toLocaleString('en-US') + '</div>'
             + '<div style="color:' + (isBuy ? 'var(--color-accent)' : '#f23645') + ';font-weight:500;">' + fmtVal(t.value) + '</div>'
             + '</div>';
@@ -199,7 +201,7 @@ function renderDiagnostic(log) {
     } else {
         text = 'La última ingesta (' + when + ') falló: ' + (log.error || 'error desconocido');
     }
-    return '<div style="font-size:10px;color:' + color + ';padding:4px 2px;">' + icon + ' ' + text + '</div>';
+    return '<div style="font-size:10px;color:' + color + ';padding:4px 2px;">' + icon + ' ' + esc(text) + '</div>';
 }
 
 // ── HELPERS ───────────────────────────────────────────────────────────────────
@@ -207,8 +209,8 @@ function renderDiagnostic(log) {
 function shell(title, content, subtitle) {
     return '<div style="background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius);overflow:hidden;margin-bottom:1rem;">'
         + '<div style="display:flex;justify-content:space-between;align-items:center;padding:10px 14px;border-bottom:1px solid var(--color-border);">'
-        + '<div style="color:var(--color-accent);font-size:12px;letter-spacing:0.08em;text-shadow:var(--glow-text);">' + title + '</div>'
-        + (subtitle ? '<div style="color:var(--color-muted);font-size:10px;">' + subtitle + '</div>' : '')
+        + '<div style="color:var(--color-accent);font-size:12px;letter-spacing:0.08em;text-shadow:var(--glow-text);">' + esc(title) + '</div>'
+        + (subtitle ? '<div style="color:var(--color-muted);font-size:10px;">' + esc(subtitle) + '</div>' : '')
         + '</div>'
         + content
         + '</div>';

@@ -1,5 +1,5 @@
 import { tt } from '/components/tooltip.js';
-import { errorMessage } from '/core/ui.js';
+import { errorMessage, esc } from '/core/ui.js';
 
 let _lastScanData = null;
 
@@ -61,18 +61,18 @@ function renderMarket(data) {
 
     // Score bar
     const scoreBar = '<div style="height:6px;background:var(--color-border);border-radius:3px;overflow:hidden;margin-top:6px;">'
-        + '<div style="height:100%;width:' + data.score + '%;background:' + color + ';border-radius:3px;"></div>'
+        + '<div style="height:100%;width:' + esc(data.score) + '%;background:' + color + ';border-radius:3px;"></div>'
         + '</div>';
 
     // Indicators row
     const indicators = [
-        { label: 'SPY', val: '$' + s.price, sub: (s.chg_pct >= 0 ? '+' : '') + s.chg_pct + '% hoy', color: chgC },
-        { label: 'SPY vs MA50', val: s.above_ma50 ? '▲ SOBRE' : '▼ BAJO', sub: 'MA50: $' + s.ma50, color: s.above_ma50 ? 'var(--color-accent)' : '#f23645' },
-        { label: 'SPY vs MA200', val: s.above_ma200 ? '▲ SOBRE' : '▼ BAJO', sub: 'MA200: $' + s.ma200, color: s.above_ma200 ? 'var(--color-accent)' : '#f23645' },
-        { label: 'VIX', val: data.vix.toFixed(1), sub: 'Riesgo: ' + data.vix_risk, color: vixC },
-        { label: 'SPY 1M', val: (s.perf_1m >= 0 ? '+' : '') + s.perf_1m + '%', sub: 'Rendimiento', color: s.perf_1m >= 0 ? 'var(--color-accent)' : '#f23645' },
-        { label: 'SPY 3M', val: (s.perf_3m >= 0 ? '+' : '') + s.perf_3m + '%', sub: 'Rendimiento', color: s.perf_3m >= 0 ? 'var(--color-accent)' : '#f23645' },
-        { label: 'Del máximo', val: s.pct_from_high + '%', sub: 'vs máximo 52s', color: s.pct_from_high >= -5 ? 'var(--color-accent)' : s.pct_from_high >= -15 ? '#ffb800' : '#f23645' },
+        { label: 'SPY', val: '$' + esc(s.price), sub: (s.chg_pct >= 0 ? '+' : '') + esc(s.chg_pct) + '% hoy', color: chgC },
+        { label: 'SPY vs MA50', val: s.above_ma50 ? '▲ SOBRE' : '▼ BAJO', sub: 'MA50: $' + esc(s.ma50), color: s.above_ma50 ? 'var(--color-accent)' : '#f23645' },
+        { label: 'SPY vs MA200', val: s.above_ma200 ? '▲ SOBRE' : '▼ BAJO', sub: 'MA200: $' + esc(s.ma200), color: s.above_ma200 ? 'var(--color-accent)' : '#f23645' },
+        { label: 'VIX', val: data.vix.toFixed(1), sub: 'Riesgo: ' + esc(data.vix_risk), color: vixC },
+        { label: 'SPY 1M', val: (s.perf_1m >= 0 ? '+' : '') + esc(s.perf_1m) + '%', sub: 'Rendimiento', color: s.perf_1m >= 0 ? 'var(--color-accent)' : '#f23645' },
+        { label: 'SPY 3M', val: (s.perf_3m >= 0 ? '+' : '') + esc(s.perf_3m) + '%', sub: 'Rendimiento', color: s.perf_3m >= 0 ? 'var(--color-accent)' : '#f23645' },
+        { label: 'Del máximo', val: esc(s.pct_from_high) + '%', sub: 'vs máximo 52s', color: s.pct_from_high >= -5 ? 'var(--color-accent)' : s.pct_from_high >= -15 ? '#ffb800' : '#f23645' },
     ].map(i =>
         '<div style="background:var(--color-surface2,#111);border:1px solid var(--color-border);border-radius:var(--radius);padding:10px 14px;text-align:center;">'
         + '<div style="color:var(--color-muted);font-size:10px;letter-spacing:.08em;margin-bottom:4px;">' + i.label + '</div>'
@@ -86,8 +86,8 @@ function renderMarket(data) {
         + '<div>'
         + '<div style="color:var(--color-muted);font-size:10px;letter-spacing:.1em;margin-bottom:4px;">M — MARKET DIRECTION (CAN SLIM)</div>'
         + '<div style="display:flex;align-items:center;gap:12px;">'
-        + '<span style="color:' + color + ';font-size:15px;letter-spacing:.06em;font-weight:500;">► ' + data.status_es + '</span>'
-        + '<span style="background:' + color + '22;color:' + color + ';border:1px solid ' + color + '44;border-radius:3px;padding:2px 10px;font-size:11px;">' + data.score + '/100</span>'
+        + '<span style="color:' + color + ';font-size:15px;letter-spacing:.06em;font-weight:500;">► ' + esc(data.status_es) + '</span>'
+        + '<span style="background:' + color + '22;color:' + color + ';border:1px solid ' + color + '44;border-radius:3px;padding:2px 10px;font-size:11px;">' + esc(data.score) + '/100</span>'
         + '</div>'
         + scoreBar
         + '</div>'
@@ -95,7 +95,7 @@ function renderMarket(data) {
         + '<div style="color:' + (data.can_buy ? 'var(--color-accent)' : '#f23645') + ';font-size:13px;font-weight:500;">'
         + (data.can_buy ? '✓ MERCADO OPERATIVO' : '✗ EVITAR NUEVAS ENTRADAS')
         + '</div>'
-        + '<div style="color:var(--color-muted);font-size:10px;margin-top:4px;">Actualizado: ' + data.timestamp + '</div>'
+        + '<div style="color:var(--color-muted);font-size:10px;margin-top:4px;">Actualizado: ' + esc(data.timestamp) + '</div>'
         + '</div>'
         + '</div>'
         + '<div style="display:grid;grid-template-columns:repeat(7,1fr);gap:8px;">' + indicators + '</div>'
@@ -143,7 +143,7 @@ function setupAnalyzer(container) {
         if (!ticker) return;
         btn.textContent   = 'ANALIZANDO...';
         btn.style.opacity = '0.7';
-        result.innerHTML  = '<div style="padding:1rem;color:var(--color-muted);font-size:12px;">Analizando ' + ticker + '...</div>';
+        result.innerHTML  = '<div style="padding:1rem;color:var(--color-muted);font-size:12px;">Analizando ' + esc(ticker) + '...</div>';
         try {
             const token = sessionStorage.getItem('rsu_token');
             const res   = await fetch('/api/v1/canslim/analyze/' + ticker, {
@@ -226,7 +226,7 @@ function renderAnalysis(data) {
         const border = ok ? 'var(--color-accent)' : noData ? '#555' : '#f23645';
         const color  = ok ? '#000' : noData ? '#888' : '#f23645';
         const title  = entry ? entry[0] : l;
-        return '<div style="width:32px;height:32px;border-radius:4px;background:' + bg + ';border:2px solid ' + border + ';display:flex;align-items:center;justify-content:center;font-family:var(--font-mono);font-size:13px;font-weight:bold;color:' + color + ';" title="' + title + '">' + l + '</div>';
+        return '<div style="width:32px;height:32px;border-radius:4px;background:' + bg + ';border:2px solid ' + border + ';display:flex;align-items:center;justify-content:center;font-family:var(--font-mono);font-size:13px;font-weight:bold;color:' + color + ';" title="' + esc(title) + '">' + l + '</div>';
     }).join('');
 
     const ibdRows = [
@@ -238,13 +238,13 @@ function renderAnalysis(data) {
     ].map(([label, val, color]) =>
         '<div style="display:flex;justify-content:space-between;padding:7px 0;border-bottom:1px solid var(--color-border);font-size:12px;">'
         + '<span style="color:var(--color-muted);">' + label + '</span>'
-        + '<span style="color:' + color + ';font-weight:500;">' + val + '</span>'
+        + '<span style="color:' + color + ';font-weight:500;">' + esc(val) + '</span>'
         + '</div>'
     ).join('');
 
     const trendRows = Object.entries(data.trend.conditions || {}).map(([label, ok]) =>
         '<div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--color-border);font-size:11px;">'
-        + '<span style="color:var(--color-muted);">' + label + '</span>'
+        + '<span style="color:var(--color-muted);">' + esc(label) + '</span>'
         + '<span style="color:' + (ok ? 'var(--color-accent)' : '#f23645') + ';">' + (ok ? '✓' : '✗') + '</span>'
         + '</div>'
     ).join('');
@@ -276,7 +276,7 @@ function renderAnalysis(data) {
           + '<div style="color:var(--color-muted);font-size:10px;letter-spacing:.06em;margin-bottom:6px;">TOP HOLDERS INSTITUCIONALES ' + (instSource === 'major_holders' ? '✓' : '≈') + '</div>'
           + holders.map(h =>
               '<div style="display:flex;justify-content:space-between;font-size:10px;padding:3px 0;color:var(--color-muted);">'
-              + '<span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:65%;">' + h.name + '</span>'
+              + '<span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:65%;">' + esc(h.name) + '</span>'
               + '<span style="color:var(--color-text);">' + (h.pct_out > 0 ? h.pct_out.toFixed(2) + '%' : (h.shares/1e6).toFixed(1) + 'M sh') + '</span>'
               + '</div>'
           ).join('')
@@ -319,18 +319,18 @@ function renderAnalysis(data) {
         + '<div style="display:flex;justify-content:space-between;align-items:flex-start;">'
         + '<div>'
         + '<div style="display:flex;align-items:center;gap:12px;margin-bottom:6px;">'
-        + '<span style="color:var(--color-accent);font-size:22px;letter-spacing:0.1em;cursor:pointer;" onmouseover="this.style.textDecoration=\'underline\'" onmouseout="this.style.textDecoration=\'none\'" onclick="window.__navigate(\'/research?ticker=' + data.ticker + '\')">' + data.ticker + '</span>'
-        + '<span style="color:var(--color-muted);font-size:13px;">' + data.name + '</span>'
+        + '<span style="color:var(--color-accent);font-size:22px;letter-spacing:0.1em;cursor:pointer;" onmouseover="this.style.textDecoration=\'underline\'" onmouseout="this.style.textDecoration=\'none\'" onclick="window.__navigate(\'/research?ticker=' + esc(data.ticker) + '\')">' + esc(data.ticker) + '</span>'
+        + '<span style="color:var(--color-muted);font-size:13px;">' + esc(data.name) + '</span>'
         + '</div>'
-        + '<div style="color:var(--color-muted);font-size:11px;margin-bottom:10px;">' + data.sector + ' · ' + data.industry + '</div>'
+        + '<div style="color:var(--color-muted);font-size:11px;margin-bottom:10px;">' + esc(data.sector) + ' · ' + esc(data.industry) + '</div>'
         + '<div style="display:flex;gap:6px;align-items:center;">'
         + badges
-        + '<span style="color:var(--color-muted);font-size:11px;margin-left:4px;">IBD: <span style="color:' + ratingColor(data.ibd.composite, 80, 60) + ';">' + data.ibd.composite + '</span></span>'
+        + '<span style="color:var(--color-muted);font-size:11px;margin-left:4px;">IBD: <span style="color:' + ratingColor(data.ibd.composite, 80, 60) + ';">' + esc(data.ibd.composite) + '</span></span>'
         + tt('ibd-composite')
         + '</div>'
         + '<div style="margin-top:6px;display:flex;gap:12px;">'
-        + '<span style="color:var(--color-muted);font-size:11px;">Stage: <span style="color:' + (data.trend.passed ? 'var(--color-accent)' : '#f23645') + ';">' + (data.trend.passed ? '✅ ' + data.trend.score + '/7' : '✗ ' + data.trend.score + '/7') + '</span></span>'
-        + '<span style="color:var(--color-muted);font-size:11px;">Del máx: <span style="color:' + nearHighColor + ';">' + (data.pct_from_high || 0) + '%</span></span>'
+        + '<span style="color:var(--color-muted);font-size:11px;">Stage: <span style="color:' + (data.trend.passed ? 'var(--color-accent)' : '#f23645') + ';">' + (data.trend.passed ? '✅ ' + esc(data.trend.score) + '/7' : '✗ ' + esc(data.trend.score) + '/7') + '</span></span>'
+        + '<span style="color:var(--color-muted);font-size:11px;">Del máx: <span style="color:' + nearHighColor + ';">' + esc(data.pct_from_high || 0) + '%</span></span>'
         + '<span style="color:var(--color-muted);font-size:11px;">Inst: <span style="color:' + instColor + ';">' + instVal + '</span></span>'
         + '</div>'
         + '</div>'
@@ -489,24 +489,24 @@ function renderScanResults(data) {
         const perfColor  = c.perf_12m >= 0 ? 'var(--color-accent)' : '#f23645';
         const scoreColor = c.score >= 70 ? 'var(--color-accent)' : c.score >= 50 ? '#ffb800' : '#f23645';
         const nearColor  = c.near_new_high ? 'var(--color-accent)' : '#ffb800';
-        return '<div style="display:grid;' + cols + ';gap:8px;padding:9px 14px;border-bottom:1px solid var(--color-border);font-size:12px;align-items:center;cursor:pointer;" class="scan-row" data-ticker="' + c.ticker + '">'
-            + '<div style="color:var(--color-accent);font-weight:500;">' + c.ticker + '</div>'
+        return '<div style="display:grid;' + cols + ';gap:8px;padding:9px 14px;border-bottom:1px solid var(--color-border);font-size:12px;align-items:center;cursor:pointer;" class="scan-row" data-ticker="' + esc(c.ticker) + '">'
+            + '<div style="color:var(--color-accent);font-weight:500;">' + esc(c.ticker) + '</div>'
             + '<div style="color:var(--color-text);">$' + c.price.toLocaleString('en-US') + '</div>'
             + '<div style="color:' + perfColor + ';">' + (c.perf_12m >= 0 ? '+' : '') + c.perf_12m.toFixed(1) + '%</div>'
-            + '<div style="color:' + ratingColor(c.rs, 80, 60) + ';">' + c.rs + '</div>'
-            + '<div style="color:' + gradeColor(c.acc_dis) + ';">' + c.acc_dis + '</div>'
-            + '<div style="color:' + nearColor + ';">' + (c.near_new_high ? '✓' : c.pct_from_high + '%') + '</div>'
+            + '<div style="color:' + ratingColor(c.rs, 80, 60) + ';">' + esc(c.rs) + '</div>'
+            + '<div style="color:' + gradeColor(c.acc_dis) + ';">' + esc(c.acc_dis) + '</div>'
+            + '<div style="color:' + nearColor + ';">' + (c.near_new_high ? '✓' : esc(c.pct_from_high) + '%') + '</div>'
             + '<div style="color:' + (c.vol_ratio >= 1.5 ? 'var(--color-accent)' : 'var(--color-muted)') + ';">' + c.vol_ratio.toFixed(1) + 'x</div>'
             + '<div style="color:' + (c.trend ? 'var(--color-accent)' : '#f23645') + ';">' + (c.trend ? '✓' : '✗') + '</div>'
-            + '<div style="color:' + scoreColor + ';font-weight:500;">' + c.score + '</div>'
+            + '<div style="color:' + scoreColor + ';font-weight:500;">' + esc(c.score) + '</div>'
             + '</div>';
     }).join('');
 
     const summary = '<div style="display:flex;gap:1.5rem;padding:8px 14px;font-size:11px;color:var(--color-muted);border-bottom:1px solid var(--color-border);">'
-        + '<span>Escaneados: <b style="color:var(--color-text);">' + data.scanned + '</b></span>'
-        + '<span>Candidatos: <b style="color:var(--color-accent);">' + data.total + '</b></span>'
+        + '<span>Escaneados: <b style="color:var(--color-text);">' + esc(data.scanned) + '</b></span>'
+        + '<span>Candidatos: <b style="color:var(--color-accent);">' + esc(data.total) + '</b></span>'
         + '<span>Mostrando: <b style="color:var(--color-text);">' + data.candidates.length + '</b></span>'
-        + '<span style="margin-left:auto;">' + data.timestamp + '</span>'
+        + '<span style="margin-left:auto;">' + esc(data.timestamp) + '</span>'
         + '</div>';
 
     const html = '<div style="margin-top:1.5rem;background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius);overflow:hidden;">'
