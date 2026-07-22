@@ -18,10 +18,17 @@ scanner_universe.py libremente para todo lo demás), pero NO debe depender de
 nada de backend/ (fastapi, pydantic, servicios) -- scripts/ corre en el
 runner de GitHub Actions sin ese entorno instalado.
 
-Pendiente (ver TODO, sección "Detector de Fases"): esta metodología tiene
-limitaciones conocidas de diseño (Fases 1/3 sin memoria de procedencia, sin
-uso de volumen, sin la SMA150/30-semanas del método original) -- las mejoras
-propuestas se implementarán AQUÍ, una sola vez, cuando se aborden.
+Rediseño 22/07/2026 (sesión 9, tras validar empíricamente en la sesión 8 que
+la Fase 2 NO rendía mejor que la Fase 4 con la versión anterior basada solo
+en apilamiento de EMAs): la SMA150 (≈30 semanas, la media móvil original del
+método) es ahora el discriminador principal de tendencia; cuando no hay
+tendencia clara, la Fase 1 vs Fase 3 se decide por la procedencia (retorno de
+los últimos ~6 meses) en vez de por la posición actual frente a una EMA200
+sin memoria del pasado; y sin histórico suficiente para la SMA150/30-semanas
+se devuelve phase=None en vez de asumir condiciones favorables por defecto.
+
+Pendiente: falta usar volumen como confirmación de las transiciones a Fase 2
+(mejora C, no implementada aún -- ver memoria del proyecto).
 """
 import pandas as pd
 
@@ -42,40 +49,33 @@ def _ema_slope(series: pd.Series, lookback: int, threshold: float):
 
 
 def classify_phase(close: pd.Series) -> dict:
-    """Fase Weinstein (1-4) diaria, a partir de una serie de cierres."""
-    if len(close) < 50:
-        return {"phase": None, "phase_label": "Sin datos suficientes", "trend": None}
+    """Fase Weinstein (1-4) diaria, a partir de una serie de cierres.
+
+    La SMA150 (≈30 semanas, la media móvil original del método) es el
+    discriminador principal: Fase 2 si sube y el precio está por encima,
+    Fase 4 si baja y el precio está por debajo. Sin tendencia clara (RANGO),
+    la Fase 1 vs Fase 3 se decide por la procedencia -- el retorno de los
+    últimos ~6 meses -- en vez de por la posición actual frente a una media
+    sin memoria del pasado. Las EMA10/20 solo aportan un matiz táctico
+    ("posible giro") dentro de Fase 1/3, no cambian el número de fase."""
+    if len(close) < 150:
+        return {"phase": None, "phase_label": "Sin datos suficientes (hace falta SMA150)", "trend": None}
 
     price    = float(close.iloc[-1])
-    ema10_s  = close.ewm(span=10,  adjust=False).mean()
-    ema20_s  = close.ewm(span=20,  adjust=False).mean()
-    ema50_s  = close.ewm(span=50,  adjust=False).mean()
-    ema200_s = close.ewm(span=200, adjust=False).mean() if len(close) >= 200 else None
+    sma150_s = close.rolling(150, min_periods=150).mean()
+    ema10_s  = close.ewm(span=10, adjust=False).mean()
+    ema20_s  = close.ewm(span=20, adjust=False).mean()
 
+    sma150 = float(sma150_s.iloc[-1])
     ema20  = float(ema20_s.iloc[-1])
-    ema50  = float(ema50_s.iloc[-1])
-    ema200 = float(ema200_s.iloc[-1]) if ema200_s is not None else None
 
+    slope150_dir, _ = _ema_slope(sma150_s, 15, 0.4)
     slope10_dir,  _ = _ema_slope(ema10_s,  3,  0.4)
     slope20_dir,  _ = _ema_slope(ema20_s,  5,  0.4)
-    slope50_dir,  _ = _ema_slope(ema50_s,  10, 0.6)
-    slope200_dir, _ = _ema_slope(ema200_s, 20, 0.8) if ema200_s is not None else (None, None)
 
-    bull_conditions = [
-        price > ema20,
-        ema20 > ema50,
-        (ema50 > ema200) if ema200 else True,
-        slope50_dir == "alcista",
-        (slope200_dir in ("alcista", "plana")) if slope200_dir else True,
-    ]
-    bull_score = sum(1 for c in bull_conditions if c)
-
-    early_reversal  = (slope10_dir == "alcista" and slope20_dir == "alcista" and price > ema20)
-    early_breakdown = (slope10_dir == "bajista" and slope20_dir == "bajista" and price < ema20)
-
-    if bull_score >= 4:
+    if slope150_dir == "alcista" and price > sma150:
         trend = "ALCISTA"
-    elif bull_score <= 1 and not early_reversal:
+    elif slope150_dir == "bajista" and price < sma150:
         trend = "BAJISTA"
     else:
         trend = "RANGO"
@@ -84,14 +84,21 @@ def classify_phase(close: pd.Series) -> dict:
         phase, label = 2, "Fase 2 · Avance (Markup)"
     elif trend == "BAJISTA":
         phase, label = 4, "Fase 4 · Declive / Corrección"
-    elif early_reversal and bull_score <= 1:
-        phase, label = 1, "Fase 1 · Posible Giro Temprano"
-    elif early_breakdown:
-        phase, label = 3, "Fase 3 · Posible Giro Bajista Temprano"
-    elif ema200 and price >= ema200:
-        phase, label = 3, "Fase 3 · Distribución"
     else:
-        phase, label = 1, "Fase 1 · Acumulación"
+        lookback = 126  # ~6 meses de sesiones
+        if len(close) > lookback:
+            ref = float(close.iloc[-lookback - 1])
+            retorno_6m = (price - ref) / ref if ref else 0.0
+        else:
+            retorno_6m = 0.0
+
+        early_reversal  = (slope10_dir == "alcista" and slope20_dir == "alcista" and price > ema20)
+        early_breakdown = (slope10_dir == "bajista" and slope20_dir == "bajista" and price < ema20)
+
+        if retorno_6m <= 0:
+            phase, label = 1, "Fase 1 · Acumulación" + (" (posible giro)" if early_reversal else "")
+        else:
+            phase, label = 3, "Fase 3 · Distribución" + (" (posible giro bajista)" if early_breakdown else "")
 
     return {"phase": phase, "phase_label": label, "trend": trend}
 
@@ -153,46 +160,30 @@ def classify_phase_weekly(close_daily: pd.Series) -> dict:
     menos ruido — pensada como CONFIRMACIÓN estructural junto a la fase
     diaria (más rápida y táctica), no como sustituta.
 
-    Los lookbacks de pendiente se reescalan de sesiones diarias a semanas
-    (÷5 aprox.) manteniendo los mismos umbrales porcentuales. La EMA200
-    semanal necesita 200 semanas (~4 años) para estar "completa" — con 2
-    años de histórico diario disponibles (~104 semanas) se queda corta, así
-    que se usa min_periods=20 para que dé un valor utilizable antes,
-    aceptando que está menos "asentada" que con histórico completo."""
+    Usa la SMA30 semanal (la media móvil original del método -- 30 semanas)
+    como discriminador principal, igual que la versión diaria con SMA150;
+    antes de este rediseño se usaba una EMA200 semanal como sustituto forzado
+    (documentado como inadecuado: con ~104 semanas de histórico disponible se
+    quedaba corta para una media de 200), lo cual ya no aplica."""
     weekly = resample_weekly_close(close_daily)
     if weekly is None or len(weekly) < 30:
-        return {"phase": None, "phase_label": "Sin histórico semanal suficiente", "trend": None}
+        return {"phase": None, "phase_label": "Sin histórico semanal suficiente (hace falta SMA30)", "trend": None}
 
-    price    = float(weekly.iloc[-1])
-    ema10_s  = weekly.ewm(span=10,  adjust=False, min_periods=5).mean()
-    ema20_s  = weekly.ewm(span=20,  adjust=False, min_periods=10).mean()
-    ema50_s  = weekly.ewm(span=50,  adjust=False, min_periods=20).mean()
-    ema200_s = weekly.ewm(span=200, adjust=False, min_periods=20).mean() if len(weekly) >= 20 else None
+    price   = float(weekly.iloc[-1])
+    sma30_s = weekly.rolling(30, min_periods=30).mean()
+    ema10_s = weekly.ewm(span=10, adjust=False, min_periods=5).mean()
+    ema20_s = weekly.ewm(span=20, adjust=False, min_periods=10).mean()
 
-    ema20  = float(ema20_s.iloc[-1])
-    ema50  = float(ema50_s.iloc[-1])
-    ema200 = float(ema200_s.iloc[-1]) if ema200_s is not None else None
+    sma30 = float(sma30_s.iloc[-1])
+    ema20 = float(ema20_s.iloc[-1])
 
-    slope10_dir,  _ = _ema_slope(ema10_s,  1, 0.4)
-    slope20_dir,  _ = _ema_slope(ema20_s,  2, 0.4)
-    slope50_dir,  _ = _ema_slope(ema50_s,  3, 0.6)
-    slope200_dir, _ = _ema_slope(ema200_s, 4, 0.8) if ema200_s is not None else (None, None)
+    slope30_dir, _ = _ema_slope(sma30_s, 3, 0.5)
+    slope10_dir, _ = _ema_slope(ema10_s, 1, 0.4)
+    slope20_dir, _ = _ema_slope(ema20_s, 2, 0.4)
 
-    bull_conditions = [
-        price > ema20,
-        ema20 > ema50,
-        (ema50 > ema200) if ema200 else True,
-        slope50_dir == "alcista",
-        (slope200_dir in ("alcista", "plana")) if slope200_dir else True,
-    ]
-    bull_score = sum(1 for c in bull_conditions if c)
-
-    early_reversal  = (slope10_dir == "alcista" and slope20_dir == "alcista" and price > ema20)
-    early_breakdown = (slope10_dir == "bajista" and slope20_dir == "bajista" and price < ema20)
-
-    if bull_score >= 4:
+    if slope30_dir == "alcista" and price > sma30:
         trend = "ALCISTA"
-    elif bull_score <= 1 and not early_reversal:
+    elif slope30_dir == "bajista" and price < sma30:
         trend = "BAJISTA"
     else:
         trend = "RANGO"
@@ -201,13 +192,20 @@ def classify_phase_weekly(close_daily: pd.Series) -> dict:
         phase, label = 2, "Fase 2 · Avance (Markup)"
     elif trend == "BAJISTA":
         phase, label = 4, "Fase 4 · Declive / Corrección"
-    elif early_reversal and bull_score <= 1:
-        phase, label = 1, "Fase 1 · Posible Giro Temprano"
-    elif early_breakdown:
-        phase, label = 3, "Fase 3 · Posible Giro Bajista Temprano"
-    elif ema200 and price >= ema200:
-        phase, label = 3, "Fase 3 · Distribución"
     else:
-        phase, label = 1, "Fase 1 · Acumulación"
+        lookback = 26  # ~6 meses en semanas
+        if len(weekly) > lookback:
+            ref = float(weekly.iloc[-lookback - 1])
+            retorno_6m = (price - ref) / ref if ref else 0.0
+        else:
+            retorno_6m = 0.0
+
+        early_reversal  = (slope10_dir == "alcista" and slope20_dir == "alcista" and price > ema20)
+        early_breakdown = (slope10_dir == "bajista" and slope20_dir == "bajista" and price < ema20)
+
+        if retorno_6m <= 0:
+            phase, label = 1, "Fase 1 · Acumulación" + (" (posible giro)" if early_reversal else "")
+        else:
+            phase, label = 3, "Fase 3 · Distribución" + (" (posible giro bajista)" if early_breakdown else "")
 
     return {"phase": phase, "phase_label": label, "trend": trend}
