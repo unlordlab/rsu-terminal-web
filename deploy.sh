@@ -52,7 +52,12 @@ if ! python3 -m pip --version > /dev/null 2>&1; then
     echo "  y vuelve a correr ./deploy.sh. Abortando ANTES de tocar el contenedor."
     exit 1
 fi
-python3 -m pip show pytest > /dev/null 2>&1 || python3 -m pip install -q -r requirements-dev.txt
+# --break-system-packages: mismo flag que ya usan los docstrings de
+# backend/tests/*.py para este entorno -- Debian/Ubuntu recientes marcan
+# el python3 del sistema como "externally-managed" (PEP 668) y rechazan
+# pip install sin él. pytest es una dependencia hoja sin conflicto real
+# con paquetes del sistema, así que instalarla aquí es seguro.
+python3 -m pip show pytest > /dev/null 2>&1 || python3 -m pip install -q --break-system-packages -r requirements-dev.txt
 if ! (cd backend && python3 -m pytest tests/ -q); then
     echo "✗ La suite de tests ha fallado con el código ya en disco (commit $AFTER_COMMIT)."
     echo "  Abortando ANTES de reconstruir o recrear el contenedor -- el contenedor"
