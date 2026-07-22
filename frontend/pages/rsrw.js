@@ -166,9 +166,11 @@ function renderTable(el, title, rows, isLeaders, freshness, total, tableId) {
         const trendIcon = trendVal > 0.01 ? '▲' : trendVal < -0.01 ? '▼' : '→';
         const trendClr  = trendVal > 0.01 ? 'var(--color-accent)' : trendVal < -0.01 ? '#f23645' : 'var(--color-muted)';
         const rvolClr   = (r.rvol || 0) >= 1.5 ? 'var(--color-accent)' : 'var(--color-muted)';
+        const carteraTag   = r.en_cartera   ? ' <span title="Ya tienes esta acción en Cartera">💼</span>' : '';
+        const watchlistTag = r.in_watchlist ? ' <span title="En tu Watchlist">⭐</span>' : '';
 
         return '<div style="display:grid;grid-template-columns:70px 60px 60px 60px 60px 60px 60px 1fr;gap:6px;padding:8px 12px;border-bottom:1px solid var(--color-border);font-size:11px;align-items:center;">'
-            + '<div onclick="goToResearch(\'' + esc(r.ticker || '') + '\')" class="ticker-link" style="color:var(--color-accent);font-weight:500;">' + esc(r.ticker || '') + '</div>'
+            + '<div onclick="goToResearch(\'' + esc(r.ticker || '') + '\')" class="ticker-link" style="color:var(--color-accent);font-weight:500;">' + esc(r.ticker || '') + carteraTag + watchlistTag + '</div>'
             + '<div style="color:' + pctColor + ';font-weight:500;">' + pct.toFixed(0) + '</div>'
             + '<div style="color:var(--color-muted);">' + (r.rs_21d || 0).toFixed(1) + '</div>'
             + '<div style="color:var(--color-muted);">' + (r.rs_63d || 0).toFixed(1) + '</div>'
@@ -220,6 +222,13 @@ function setupTicker(container) {
 
     btn.addEventListener('click', doAnalyze);
     input.addEventListener('keydown', e => { if (e.key === 'Enter') doAnalyze(); });
+
+    // Deep-link ?ticker= -- mismo patrón que research.js
+    const urlTicker = new URLSearchParams(window.location.search).get('ticker');
+    if (urlTicker) {
+        input.value = urlTicker.toUpperCase();
+        doAnalyze();
+    }
 }
 
 function renderTickerResult(data) {

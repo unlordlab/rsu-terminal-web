@@ -14,6 +14,15 @@ function authHeader() {
     return token ? { 'Authorization': 'Bearer ' + token } : {};
 }
 
+// Badges de cruce -- Fase 3 del roadmap: ⭐ si está en la Watchlist del
+// usuario, ⚡ si además hay señal de compra insider simultánea en el mismo
+// ticker (confluencia "dinero inteligente"). 💼 (Cartera) ya se pintaba a
+// mano donde hacía falta antes de esta sesión, se deja igual.
+function badges(row) {
+    return (row.in_watchlist ? ' <span title="En tu Watchlist">⭐</span>' : '')
+        + (row.is_confluence ? ' <span title="Señal alcista simultánea en Insider Flow">⚡</span>' : '');
+}
+
 let currentTicker = null;
 let currentPeriod = '1w';
 
@@ -86,7 +95,7 @@ function renderDashboard(data) {
         <div style="background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius);padding:14px;flex:1;min-width:220px;">
             <div style="color:var(--color-muted);font-size:11px;letter-spacing:0.06em;margin-bottom:10px;">${title}</div>
             <div style="display:flex;flex-wrap:wrap;gap:8px;">
-                ${items.length ? items.map(t => `<span onclick="window.__optionsSearchTicker('${esc(t.ticker)}')" style="cursor:pointer;color:var(--color-accent);font-size:12px;font-weight:600;padding:3px 8px;background:var(--color-bg,#0a0a0a);border-radius:3px;border:1px solid var(--color-border);">${esc(t.ticker)}${t.premium_fmt ? ' <span style="color:var(--color-muted);font-weight:400;">' + esc(t.premium_fmt) + '</span>' : ''}</span>`).join('') : '<span style="color:var(--color-muted);font-size:11px;">Sin datos todavía</span>'}
+                ${items.length ? items.map(t => `<span onclick="window.__optionsSearchTicker('${esc(t.ticker)}')" style="cursor:pointer;color:var(--color-accent);font-size:12px;font-weight:600;padding:3px 8px;background:var(--color-bg,#0a0a0a);border-radius:3px;border:1px solid var(--color-border);">${esc(t.ticker)}${badges(t)}${t.premium_fmt ? ' <span style="color:var(--color-muted);font-weight:400;">' + esc(t.premium_fmt) + '</span>' : ''}</span>`).join('') : '<span style="color:var(--color-muted);font-size:11px;">Sin datos todavía</span>'}
             </div>
         </div>`;
 
@@ -128,7 +137,7 @@ function flowTable(title, rows, color) {
         <div style="max-height:340px;overflow-y:auto;">
             ${rows.length ? rows.map(r => `
             <div style="display:grid;grid-template-columns:70px 1fr 90px 70px;gap:8px;padding:7px 14px;border-bottom:1px solid var(--color-border);font-size:11px;align-items:center;">
-                <span onclick="window.__optionsSearchTicker('${esc(r.ticker)}')" style="cursor:pointer;color:${color};font-weight:600;">${esc(r.ticker)}${r.near_earnings ? ' <span title="Vencimiento cerca de la fecha de earnings">📅</span>' : ''}${r.en_cartera ? ' <span title="Ya tienes esta acción en Cartera">💼</span>' : ''}${r.es_repetida ? ' <span title="Mismo contrato repetido en días anteriores">🔁</span>' : ''}</span>
+                <span onclick="window.__optionsSearchTicker('${esc(r.ticker)}')" style="cursor:pointer;color:${color};font-weight:600;">${esc(r.ticker)}${r.near_earnings ? ' <span title="Vencimiento cerca de la fecha de earnings">📅</span>' : ''}${badges(r)}${r.es_repetida ? ' <span title="Mismo contrato repetido en días anteriores">🔁</span>' : ''}</span>
                 <span style="color:var(--color-text);">$${esc(r.strike)} <span style="color:var(--color-muted);">(${esc(r.strike_pct)})</span></span>
                 <span style="color:var(--color-muted);">${esc(_fmtFecha(r.exp))}</span>
                 <span style="color:var(--color-text);text-align:right;">${esc(r.premium_fmt)}</span>
@@ -206,7 +215,7 @@ function renderTicker(data) {
     return `
     <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:1rem;flex-wrap:wrap;gap:12px;">
         <div>
-            <div style="color:var(--color-text);font-size:24px;font-weight:700;margin-bottom:10px;">${esc(data.ticker)} <span onclick="window.__navigate('/research?ticker=${esc(data.ticker)}')" style="cursor:pointer;color:var(--color-accent);font-size:12px;font-weight:400;text-decoration:underline;vertical-align:middle;" title="Ver análisis completo en Research">→ Research</span>${data.en_cartera ? ' <span style="font-size:12px;background:var(--color-accent);color:var(--color-bg,#0a0a0a);padding:3px 8px;border-radius:3px;vertical-align:middle;">💼 EN CARTERA</span>' : ''}</div>
+            <div style="color:var(--color-text);font-size:24px;font-weight:700;margin-bottom:10px;">${esc(data.ticker)} <span onclick="window.__navigate('/research?ticker=${esc(data.ticker)}')" style="cursor:pointer;color:var(--color-accent);font-size:12px;font-weight:400;text-decoration:underline;vertical-align:middle;" title="Ver análisis completo en Research">→ Research</span>${data.en_cartera ? ' <span style="font-size:12px;background:var(--color-accent);color:var(--color-bg,#0a0a0a);padding:3px 8px;border-radius:3px;vertical-align:middle;">💼 EN CARTERA</span>' : ''}${data.in_watchlist ? ' <span title="En tu Watchlist">⭐</span>' : ''}${data.is_confluence ? ' <span title="Señal alcista simultánea en Insider Flow">⚡</span>' : ''}</div>
             <div style="display:flex;gap:6px;">${periodBtns}</div>
         </div>
         <div style="background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius);min-width:180px;overflow:hidden;">

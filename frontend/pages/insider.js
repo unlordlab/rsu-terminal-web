@@ -48,6 +48,13 @@ async function loadAll(container) {
         }
     });
 
+    // Deep-link ?ticker= -- mismo patrón que research.js
+    const urlTicker = new URLSearchParams(window.location.search).get('ticker');
+    if (urlTicker) {
+        searchInput.value = urlTicker.toUpperCase();
+        loadTicker(urlTicker.toUpperCase(), tickerEl);
+    }
+
     // Cargar feed y clusters en paralelo
     const token = sessionStorage.getItem('rsu_token');
     const headers = token ? { 'Authorization': 'Bearer ' + token } : {};
@@ -105,7 +112,7 @@ function renderBuys(buys, coverage) {
 
     const rows = buys.map(b => '<div style="display:grid;grid-template-columns:80px 70px 1fr 120px 90px 80px;gap:8px;padding:8px 14px;border-bottom:1px solid var(--color-border);font-size:11px;align-items:center;">'
         + '<div style="color:var(--color-muted);">' + esc(b.date || '—') + '</div>'
-        + '<div onclick="goToResearch(\'' + esc(b.ticker) + '\')" class="ticker-link" style="color:var(--color-accent);font-weight:500;">' + esc(b.ticker) + '</div>'
+        + '<div onclick="goToResearch(\'' + esc(b.ticker) + '\')" class="ticker-link" style="color:var(--color-accent);font-weight:500;">' + esc(b.ticker) + badges(b) + '</div>'
         + '<div style="color:var(--color-text);">' + esc(b.insider_name || '—') + '</div>'
         + '<div style="color:var(--color-muted);font-size:10px;">' + esc((b.title || '—').substring(0, 20)) + '</div>'
         + '<div style="color:var(--color-text);">' + Number(b.shares || 0).toLocaleString('en-US') + '</div>'
@@ -125,7 +132,7 @@ function renderSells(sells, coverage) {
 
     const rows = sells.map(s => '<div style="display:grid;grid-template-columns:80px 70px 1fr 90px 80px;gap:8px;padding:8px 14px;border-bottom:1px solid var(--color-border);font-size:11px;align-items:center;">'
         + '<div style="color:var(--color-muted);">' + esc(s.date || '—') + '</div>'
-        + '<div onclick="goToResearch(\'' + esc(s.ticker) + '\')" class="ticker-link" style="color:var(--color-accent);font-weight:500;">' + esc(s.ticker) + '</div>'
+        + '<div onclick="goToResearch(\'' + esc(s.ticker) + '\')" class="ticker-link" style="color:var(--color-accent);font-weight:500;">' + esc(s.ticker) + badges(s) + '</div>'
         + '<div style="color:var(--color-text);">' + esc(s.insider_name || '—') + '</div>'
         + '<div style="color:var(--color-text);">' + Number(s.shares || 0).toLocaleString('en-US') + '</div>'
         + '<div style="color:#f23645;font-weight:500;">' + fmtVal(s.value) + '</div>'
@@ -141,7 +148,7 @@ function renderClusters(clusters) {
     const rows = clusters.map(c => '<div style="padding:12px 14px;border-bottom:1px solid var(--color-border);">'
         + '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">'
         + '<div style="display:flex;align-items:center;gap:10px;">'
-        + '<span onclick="goToResearch(\'' + esc(c.ticker) + '\')" class="ticker-link" style="color:var(--color-accent);font-size:16px;font-weight:500;">' + esc(c.ticker) + '</span>'
+        + '<span onclick="goToResearch(\'' + esc(c.ticker) + '\')" class="ticker-link" style="color:var(--color-accent);font-size:16px;font-weight:500;">' + esc(c.ticker) + badges(c) + '</span>'
         + '<span style="color:var(--color-muted);font-size:11px;">' + esc(c.company) + '</span>'
         + '</div>'
         + '<span style="background:' + esc(c.signal_color) + '22;color:' + esc(c.signal_color) + ';border:1px solid ' + esc(c.signal_color) + '44;border-radius:3px;padding:2px 8px;font-size:10px;">' + esc(c.signal) + '</span>'
@@ -164,10 +171,11 @@ function renderTickerResult(ticker, data) {
         return shell('INSIDER · ' + ticker, '<div style="padding:1rem;color:var(--color-muted);font-size:12px;">Sin transacciones recientes (últimos 6 meses)</div>');
     }
 
-    const summary = '<div style="display:flex;gap:2rem;padding:10px 14px;border-bottom:1px solid var(--color-border);font-size:11px;">'
+    const summary = '<div style="display:flex;gap:2rem;padding:10px 14px;border-bottom:1px solid var(--color-border);font-size:11px;align-items:center;">'
         + '<span style="color:var(--color-muted);">Compras: <span style="color:var(--color-accent);">' + esc(data.buys) + '</span></span>'
         + '<span style="color:var(--color-muted);">Ventas: <span style="color:#f23645;">' + esc(data.sells) + '</span></span>'
         + '<span style="color:var(--color-muted);">Total: ' + data.transactions.length + ' transacciones</span>'
+        + badges(data)
         + '</div>';
 
     const header = '<div style="display:grid;grid-template-columns:90px 1fr 120px 70px 70px 80px;gap:8px;padding:6px 14px;border-bottom:1px solid var(--color-border);font-size:10px;color:var(--color-muted);">'
@@ -223,6 +231,15 @@ function fmtVal(val) {
     if (v >= 1e6)  return '$' + (v/1e6).toFixed(1) + 'M';
     if (v >= 1e3)  return '$' + (v/1e3).toFixed(0) + 'K';
     return '$' + v.toLocaleString('en-US');
+}
+
+// Badges de cruce -- Fase 3 del roadmap: 💼 si el ticker ya está en
+// Cartera, ⭐ si está en la Watchlist del usuario, ⚡ si además tiene señal
+// alcista simultánea en Options Flow (confluencia "dinero inteligente").
+function badges(row) {
+    return (row.en_cartera ? ' <span title="Ya tienes esta acción en Cartera">💼</span>' : '')
+        + (row.in_watchlist ? ' <span title="En tu Watchlist">⭐</span>' : '')
+        + (row.is_confluence ? ' <span title="Señal alcista simultánea en Options Flow">⚡</span>' : '');
 }
 
 function loading() { return '<div style="padding:1rem;color:var(--color-muted);font-size:12px;">Cargando datos SEC EDGAR...</div>'; }

@@ -194,6 +194,9 @@ def run_filter(
     }
     active_criteria = {k: v for k, v in criteria.items() if v is not None}
 
+    from services.cartera_service import get_cartera_tickers
+    cartera_tickers = get_cartera_tickers()
+
     stocks  = data.get("stocks", {})
     matches = []
     for ticker, row in stocks.items():
@@ -211,6 +214,7 @@ def run_filter(
                 "new_high":      bool(row.get("new_high")),
                 "above_sma50":   row.get("above_sma50"),
                 "dias_absorcion": row.get("dias_absorcion", 0),
+                "en_cartera":    ticker in cartera_tickers,
             })
 
     matches.sort(key=lambda r: r.get("score_tecnico") or 0, reverse=True)

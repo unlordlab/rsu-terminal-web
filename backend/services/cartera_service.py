@@ -449,6 +449,25 @@ def simulate_tier_capital(df, col_fecha, col_estado, col_compra, col_actual, col
     }
 
 
+def get_cartera_tickers() -> set:
+    """Tickers actualmente en posición abierta en Cartera -- para los
+    badges de cruce 💼 en Scanner/RS-RW/Insider/Research/Options Flow
+    (Fase 3 del roadmap). Cartera es única/global en esta app (no por
+    usuario), así que este set es seguro de usar dentro de cachés
+    compartidas entre usuarios -- a diferencia de Watchlist, que sí es por
+    usuario. Falla en silencio a conjunto vacío si Cartera no está
+    disponible por lo que sea; no debe tumbar otro módulo por un problema
+    puntual de Cartera. (Antes vivía como _obtener_tickers_cartera() solo
+    dentro de options_service.py -- promovido aquí para que los demás
+    módulos no dupliquen la misma lógica.)"""
+    try:
+        data = get_cartera()
+        return {r["ticker"] for r in data.get("abiertas", [])}
+    except Exception as e:
+        print(f"[Cartera] No se pudo leer Cartera para un cruce de tickers: {e}")
+        return set()
+
+
 def get_cartera():
     try:
         url = settings.url_cartera

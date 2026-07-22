@@ -1753,6 +1753,8 @@ def _get_research_crypto(ticker: str) -> dict:
         "crypto_chart":   crypto_chart,
         "timestamp":      get_timestamp(),
     }
+    from services.cartera_service import get_cartera_tickers
+    result["en_cartera"] = ticker in get_cartera_tickers()
     cache.set(f"research:{ticker}", result, TTL["research"])
     return result
 
@@ -1861,6 +1863,8 @@ def get_research(ticker: str) -> dict:
         "relative_strength":  relative_strength,
         "timestamp":          get_timestamp(),
     }
+    from services.cartera_service import get_cartera_tickers
+    result["en_cartera"] = ticker in get_cartera_tickers()
     cache.set(f"research:{ticker}", result, TTL["research"])
     return result
 # ── COMPARATIVA SECTORIAL (valoración, rentabilidad, crecimiento vs sector) ────

@@ -22,11 +22,10 @@ def _validar_ticker(v: str) -> str:
 
 
 def _user_id(payload: dict) -> int:
-    email = payload.get("sub")
-    user  = users_service.get_user_by_email(email) if email else None
-    if not user:
+    uid = users_service.get_user_id(payload)
+    if uid is None:
         raise HTTPException(status_code=401, detail="Usuario no encontrado")
-    return user["id"]
+    return uid
 
 
 class WatchlistAdd(BaseModel):

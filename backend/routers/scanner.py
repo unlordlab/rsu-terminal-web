@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Depends, Query
 from typing import Optional
 from auth import verify_token
+from services import users_service, watchlist_service
 from services.scanner_service import get_scanner_data, run_filter
 
 router = APIRouter(prefix="/api/v1/scanner", tags=["scanner"])
@@ -21,8 +22,18 @@ async def scanner_filter(
     limit: int = Query(100, ge=1, le=500),
     user=Depends(verify_token),
 ):
-    return run_filter(
+    result = run_filter(
         rvol_min=rvol_min, rs_min=rs_min, score_min=score_min,
         phase=phase, sector=sector, new_high_only=new_high_only,
         absorcion_min=absorcion_min, limit=limit,
     )
+    # in_watchlist se añade aquí, fuera de cualquier caché compartida --
+    # es por usuario, a diferencia de en_cartera (Cartera es única/global,
+    # ver cartera_service.get_cartera_tickers()).
+    user_id = users_service.get_user_id(user)
+    watchlist_tickers = (
+        {w["ticker"] for w in watchlist_service.get_watchlist_tickers(user_id)} if user_id else set()
+    )
+    for row in result.get("results", []):
+        row["in_watchlist"] = row.get("ticker") in watchlist_tickers
+    return result

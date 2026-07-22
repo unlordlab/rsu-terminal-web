@@ -241,6 +241,15 @@ def _df_to_records(df: pd.DataFrame, limit: int = 500) -> list:
         records.append(r)
     return records[:limit]
 
+def _tag_cartera(records: list) -> list:
+    """Añade en_cartera a una lista de records de ticker (leaders/laggards,
+    nunca a sectors, que no son tickers) -- badge 💼, Fase 3 del roadmap."""
+    from services.cartera_service import get_cartera_tickers
+    cartera_tickers = get_cartera_tickers()
+    for r in records:
+        r["en_cartera"] = r.get("ticker") in cartera_tickers
+    return records
+
 def get_universe_dataframe():
     """
     Devuelve (df, meta) con el DataFrame COMPLETO del universo (todas las
@@ -277,8 +286,8 @@ def get_rsrw_from_gist() -> dict:
             "freshness": _freshness(meta),
             "meta":      meta,
             "total":     len(df),
-            "leaders":   _df_to_records(leaders, 50),
-            "laggards":  _df_to_records(laggards, 30),
+            "leaders":   _tag_cartera(_df_to_records(leaders, 50)),
+            "laggards":  _tag_cartera(_df_to_records(laggards, 30)),
             "sectors":   _df_to_records(sdf) if not sdf.empty else [],
             "timestamp": get_timestamp(),
         }
@@ -299,8 +308,8 @@ def get_rsrw_scan(max_tickers: int = 500) -> dict:
             "mode":     "on_demand",
             "meta":     meta,
             "total":    len(df),
-            "leaders":  _df_to_records(leaders, 50),
-            "laggards": _df_to_records(laggards, 30),
+            "leaders":  _tag_cartera(_df_to_records(leaders, 50)),
+            "laggards": _tag_cartera(_df_to_records(laggards, 30)),
             "sectors":  _df_to_records(sdf) if not sdf.empty else [],
             "timestamp": get_timestamp(),
         }

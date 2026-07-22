@@ -1,6 +1,7 @@
 import re
 from fastapi import APIRouter, Depends
 from auth import verify_token
+from services import users_service, watchlist_service
 from services.research_service import get_research
 
 router = APIRouter(prefix="/api/v1/research", tags=["research"])
@@ -14,4 +15,16 @@ _TICKER_RE = re.compile(r"^[A-Z0-9.\-^=]{1,12}$")
 async def research(ticker: str, user=Depends(verify_token)):
     if not _TICKER_RE.match(ticker.upper()):
         return {"ok": False, "error": "Ticker inválido"}
-    return get_research(ticker)
+    result = get_research(ticker)
+    # get_research() cachea el dict devuelto (services/cache.py L1 guarda
+    # la MISMA referencia, no una copia) -- copiar antes de mutar, o
+    # in_watchlist de un usuario se filtraría a la respuesta cacheada que
+    # ve el siguiente usuario que pida el mismo ticker.
+    if result.get("ok"):
+        result = {**result}
+    user_id = users_service.get_user_id(user)
+    watchlist_tickers = (
+        {w["ticker"] for w in watchlist_service.get_watchlist_tickers(user_id)} if user_id else set()
+    )
+    result["in_watchlist"] = ticker.upper() in watchlist_tickers
+    return result

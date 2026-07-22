@@ -305,10 +305,12 @@ function renderResults(el, data) {
         const scoreClr = (r.score_tecnico || 0) >= 70 ? 'var(--color-accent)' : (r.score_tecnico || 0) >= 40 ? '#ffb800' : '#f23645';
         const phaseClr = r.phase === 2 ? 'var(--color-accent)' : r.phase === 4 ? '#f23645' : '#ffb800';
         const athTag   = r.new_high ? ' <span title="Máximo de 52 semanas" style="font-size:9px;">🔥</span>' : '';
+        const carteraTag   = r.en_cartera   ? ' <span title="Ya tienes esta acción en Cartera">💼</span>' : '';
+        const watchlistTag = r.in_watchlist ? ' <span title="En tu Watchlist">⭐</span>' : '';
         const absorcClr = (r.dias_absorcion || 0) >= 5 ? '#00ffad' : (r.dias_absorcion || 0) >= 2 ? '#ff9800' : 'var(--color-muted)';
 
         return '<div style="display:grid;grid-template-columns:70px 90px 60px 60px 70px 60px 1fr 1fr 34px;gap:6px;padding:8px 12px;border-bottom:1px solid var(--color-border);font-size:11px;align-items:center;' + (r.new_high ? 'background:rgba(255,152,0,0.04);' : '') + '">'
-            + '<div onclick="goToResearch(\'' + esc(r.ticker || '') + '\')" class="ticker-link" style="color:var(--color-accent);font-weight:500;cursor:pointer;">' + esc(r.ticker || '') + athTag + '</div>'
+            + '<div onclick="goToResearch(\'' + esc(r.ticker || '') + '\')" class="ticker-link" style="color:var(--color-accent);font-weight:500;cursor:pointer;">' + esc(r.ticker || '') + athTag + carteraTag + watchlistTag + '</div>'
             + '<div style="color:var(--color-muted);">' + (r.precio != null ? '$' + r.precio.toFixed(2) : '—') + '</div>'
             + '<div style="color:' + rvolClr + ';">' + (r.rvol != null ? r.rvol.toFixed(2) + 'x' : '—') + '</div>'
             + '<div style="color:' + rsClr + ';font-weight:500;">' + (r.rs_pct != null ? r.rs_pct.toFixed(0) : '—') + '</div>'

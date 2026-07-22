@@ -1,5 +1,7 @@
 from fastapi import APIRouter, Depends, Query
 from auth import verify_token
+from services import users_service, watchlist_service
+from services.insider_service import get_confluence_tickers
 from services.options_service import (
     get_options_flow, get_options_ticker,
     save_current_scan, get_history_from_db,
@@ -13,13 +15,34 @@ init_db()
 
 # ── VERSIÓN SIMPLE — la que usa el frontend rediseñado (sin ruido) ─────────────
 
+
+def _watchlist_tickers(user) -> set:
+    """in_watchlist es por usuario -- mismo criterio que scanner.py/rsrw.py/
+    insider.py. Ninguna función de options_service.py cachea su resultado
+    (leen SQLite directo en cada llamada), así que aquí no hace falta
+    copiar antes de mutar como sí hizo falta en insider.py/research.py."""
+    user_id = users_service.get_user_id(user)
+    return {w["ticker"] for w in watchlist_service.get_watchlist_tickers(user_id)} if user_id else set()
+
 @router.get("/flow-simple")
 async def flow_simple(user=Depends(verify_token)):
-    return get_options_flow_simple()
+    result = get_options_flow_simple()
+    watchlist_tickers  = _watchlist_tickers(user)
+    confluence_tickers = get_confluence_tickers()
+    for key in ("calls_bought", "puts_sold", "puts_bought", "calls_sold",
+                "top_premium", "top_bullish", "top_bearish"):
+        for row in result.get(key, []):
+            row["in_watchlist"]  = row.get("ticker") in watchlist_tickers
+            row["is_confluence"] = row.get("ticker") in confluence_tickers
+    return result
 
 @router.get("/ticker-flow/{ticker}")
 async def ticker_flow(ticker: str, period: str = Query("1w"), user=Depends(verify_token)):
-    return get_ticker_flow_simple(ticker, period)
+    result = get_ticker_flow_simple(ticker, period)
+    if result.get("ok"):
+        result["in_watchlist"]  = ticker.upper() in _watchlist_tickers(user)
+        result["is_confluence"] = ticker.upper() in get_confluence_tickers()
+    return result
 
 @router.get("/oi-changes")
 async def oi_changes(user=Depends(verify_token)):

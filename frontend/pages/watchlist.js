@@ -32,6 +32,17 @@ export async function render(container) {
     wireForm(container);
     loadWatchlist(container);
     loadAlerts(container);
+
+    // Deep-link ?ticker= -- a diferencia de research.js/rsrw.js/insider.js/
+    // canslim.js, aquí SOLO se rellena el campo, sin enviar automáticamente:
+    // auto-añadir un ticker a la watchlist solo por visitar una URL sería
+    // un efecto secundario no deseado (a diferencia de "buscar", que no
+    // cambia ningún dato).
+    const urlTicker = new URLSearchParams(window.location.search).get('ticker');
+    if (urlTicker) {
+        const addInput = container.querySelector('#wl-add-input');
+        if (addInput) addInput.value = urlTicker.toUpperCase();
+    }
 }
 
 function pageShell() {

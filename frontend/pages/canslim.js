@@ -163,6 +163,13 @@ function setupAnalyzer(container) {
 
     btn.addEventListener('click', doAnalyze);
     input.addEventListener('keydown', e => { if (e.key === 'Enter') doAnalyze(); });
+
+    // Deep-link ?ticker= -- mismo patrón que research.js
+    const urlTicker = new URLSearchParams(window.location.search).get('ticker');
+    if (urlTicker) {
+        input.value = urlTicker.toUpperCase();
+        doAnalyze();
+    }
 }
 
 function setupScanner(container) {

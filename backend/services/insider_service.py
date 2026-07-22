@@ -427,6 +427,11 @@ def get_insider_feed() -> dict:
     buys  = [t for t in deduped if t['type_code'] == 'P']
     sells = [t for t in deduped if t['type_code'] == 'S']
 
+    from services.cartera_service import get_cartera_tickers
+    cartera_tickers = get_cartera_tickers()
+    for t in buys[:15] + sells[:10]:
+        t["en_cartera"] = t.get("ticker") in cartera_tickers
+
     info = _last_ingest_info()
     return {
         "ok":              True,
@@ -536,12 +541,14 @@ def get_insider_ticker(ticker: str) -> dict:
 
         transactions.sort(key=lambda x: x.get('date', ''), reverse=True)
 
+        from services.cartera_service import get_cartera_tickers
         result = {
             "ok":           True,
             "ticker":       ticker,
             "transactions": transactions[:20],
             "buys":         len([t for t in transactions if t['type_code'] == 'P']),
             "sells":        len([t for t in transactions if t['type_code'] == 'S']),
+            "en_cartera":   ticker.upper() in get_cartera_tickers(),
             "timestamp":    get_timestamp(),
             "source":       "SEC EDGAR Form 4",
         }
@@ -550,6 +557,29 @@ def get_insider_ticker(ticker: str) -> dict:
 
     except Exception as e:
         return {"ok": False, "error": str(e), "ticker": ticker}
+
+# ── CONFLUENCIA CON OPTIONS FLOW ─────────────────────────────────────────────
+
+def get_confluence_tickers() -> set:
+    """Tickers con señal de compra en Insider (compras recientes o cluster)
+    Y señal alcista en Options Flow (top_bullish del mismo scan reciente) --
+    dos módulos midiendo "dinero inteligente" desde ángulos distintos
+    coincidiendo en el mismo ticker (badge ⚡, Fase 3 del roadmap). No
+    descarga nada nuevo, reutiliza lo que ambos módulos ya calculan. Falla
+    en silencio a conjunto vacío si cualquiera de los dos no está
+    disponible -- no debe tumbar Insider ni Options Flow por un problema
+    puntual del otro módulo."""
+    try:
+        from services.options_service import get_options_flow_simple
+        feed     = get_insider_feed()
+        clusters = get_insider_clusters()
+        insider_tickers = {t["ticker"] for t in feed.get("buys", []) if t.get("ticker")} \
+                        | {c["ticker"] for c in clusters.get("clusters", []) if c.get("ticker")}
+        options_tickers = {t["ticker"] for t in get_options_flow_simple().get("top_bullish", []) if t.get("ticker")}
+        return insider_tickers & options_tickers
+    except Exception as e:
+        print(f"[Insider] No se pudo calcular la confluencia con Options Flow: {e}")
+        return set()
 
 # ── CLUSTER BUYING ────────────────────────────────────────────────────────────
 
@@ -572,6 +602,8 @@ def get_insider_clusters() -> dict:
                 ticker_buys[buy['ticker']].append(buy)
 
         # Clusters = tickers con 2+ insiders comprando
+        from services.cartera_service import get_cartera_tickers
+        cartera_tickers = get_cartera_tickers()
         clusters = []
         for ticker, buys in ticker_buys.items():
             if len(buys) >= 2:
@@ -586,6 +618,7 @@ def get_insider_clusters() -> dict:
                     "insiders":     [{"name": b['insider_name'], "title": b['title'], "value": b['value']} for b in buys],
                     "signal":       "FUERTE" if len(buys) >= 3 else "MODERADA",
                     "signal_color": "#00ffad" if len(buys) >= 3 else "#ffb800",
+                    "en_cartera":   ticker in cartera_tickers,
                 })
 
         clusters.sort(key=lambda x: x['total_value'], reverse=True)

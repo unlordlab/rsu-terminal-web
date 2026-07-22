@@ -122,6 +122,19 @@ def get_user_by_email(email: str) -> dict | None:
         conn.close()
 
 
+def get_user_id(payload: dict) -> int | None:
+    """Resuelve el id numérico del usuario a partir del payload del JWT
+    (email en 'sub'). None si no se encuentra -- cada router decide si eso
+    es un error (Watchlist, que siempre necesita usuario) o simplemente
+    "sin badge de watchlist" (scanner/rsrw/insider/research/options, donde
+    el usuario ya está autenticado por tier pero el cruce con Watchlist es
+    opcional). Centraliza la resolución que antes solo hacía
+    routers/watchlist.py::_user_id() a mano."""
+    email = payload.get("sub")
+    user  = get_user_by_email(email) if email else None
+    return user["id"] if user else None
+
+
 def revoke_sessions(email: str) -> bool:
     """Invalida TODAS las sesiones activas de un usuario (incrementa
     token_version) -- cualquier JWT emitido antes de este momento deja de

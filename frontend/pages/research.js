@@ -72,6 +72,8 @@ function cryptoHeaderSection(data, chgColor, chgStr) {
         + '<div style="display:flex;align-items:baseline;gap:12px;margin-bottom:4px;">'
         + '<span class="ticker-link" style="color:var(--color-accent);font-size:24px;letter-spacing:0.1em;">' + esc(data.ticker) + '</span>'
         + '<span style="color:var(--color-muted);font-size:14px;">' + esc(data.name) + '</span>'
+        + (data.en_cartera   ? ' <span title="Ya tienes esta acción en Cartera">💼</span>' : '')
+        + (data.in_watchlist ? ' <span title="En tu Watchlist">⭐</span>' : '')
         + '<span style="background:#a855f722;color:#a855f7;border:1px solid #a855f755;border-radius:3px;padding:1px 8px;font-size:9px;letter-spacing:0.05em;">CRIPTO</span>'
         + '</div>'
         + '</div>'
@@ -246,6 +248,8 @@ function headerSection(data, chgColor, chgStr) {
         + '<div style="display:flex;align-items:baseline;gap:12px;margin-bottom:4px;">'
         + '<span onclick="goToResearch(\'' + esc(data.ticker) + '\')" class="ticker-link" style="color:var(--color-accent);font-size:24px;letter-spacing:0.1em;">' + esc(data.ticker) + '</span>'
         + '<span style="color:var(--color-muted);font-size:14px;">' + esc(data.name) + '</span>'
+        + (data.en_cartera   ? ' <span title="Ya tienes esta acción en Cartera">💼</span>' : '')
+        + (data.in_watchlist ? ' <span title="En tu Watchlist">⭐</span>' : '')
         + '</div>'
         + '<div style="color:var(--color-muted);font-size:12px;margin-bottom:4px;">' + esc(data.sector) + ' · ' + esc(data.industry) + ' · ' + esc(data.country) + '</div>'
         + (data.website ? '<a href="' + safeUrl(data.website) + '" target="_blank" style="color:var(--color-secondary);font-size:11px;">' + esc(data.website) + '</a>' : '')

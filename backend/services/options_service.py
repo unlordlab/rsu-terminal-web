@@ -246,19 +246,6 @@ def _entrada_simple(item: dict, order_type: str, cartera_tickers: set = None, re
         "es_repetida":   clave in repetidos if repetidos is not None else False,
     }
 
-def _obtener_tickers_cartera() -> set:
-    """Tickers actualmente en posición abierta en Cartera — para el icono de
-    cruce en Options Flow (#4 de las mejoras pedidas). Falla en silencio a
-    conjunto vacío si Cartera no está disponible por lo que sea; no debe
-    tumbar Options Flow si Cartera tiene un problema puntual."""
-    try:
-        from services.cartera_service import get_cartera
-        data = get_cartera()
-        return {r["ticker"] for r in data.get("abiertas", [])}
-    except Exception as e:
-        print(f"[OptionsFlow] No se pudo leer Cartera para el cruce de tickers: {e}")
-        return set()
-
 def get_options_flow_simple() -> dict:
     """Lee del último escaneo GUARDADO en la base de datos — no hace un
     escaneo en vivo de ~150 tickers en cada carga de página. Antes esta
@@ -314,7 +301,8 @@ def get_options_flow_simple() -> dict:
     top_bearish = sorted(bear_por_ticker.items(), key=lambda x: -x[1])[:6]
 
     oi_changes      = get_oi_changes(limit=15)
-    cartera_tickers = _obtener_tickers_cartera()
+    from services.cartera_service import get_cartera_tickers
+    cartera_tickers = get_cartera_tickers()
     repetidos       = _obtener_contratos_repetidos()
 
     # Sesgo del día — un único número, sin gráficos ni heatmaps (mejora #3):
@@ -417,7 +405,8 @@ def get_ticker_flow_simple(ticker: str, period: str = "1w") -> dict:
             return {"ok": False, "error": "Todavía no se ha guardado ningún escaneo — usa POST /api/v1/options/scan-now para forzar el primero, o espera al escaneo automático diario."}
         return {"ok": False, "error": f"Sin señales de {ticker.upper()} en este periodo (no significa que no haya operado opciones, solo que no hubo actividad lo bastante inusual para registrarse). Prueba un periodo más largo."}
 
-    en_cartera = ticker.upper() in _obtener_tickers_cartera()
+    from services.cartera_service import get_cartera_tickers
+    en_cartera = ticker.upper() in get_cartera_tickers()
     repetidos  = _obtener_contratos_repetidos()
     ORDER_TYPE = {("call","buy"): "Buy Call", ("put","sell"): "Sell Put",
                   ("put","buy"): "Buy Put", ("call","sell"): "Sell Call"}
