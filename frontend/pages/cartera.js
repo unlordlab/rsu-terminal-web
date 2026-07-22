@@ -245,6 +245,39 @@ function applyLivePrices(prices, abiertas) {
             subEl.textContent   = (pnlDiaPct >= 0 ? '+' : '') + fix(pnlDiaPct) + '% hoy';
         }
     }
+
+    // Valor de Mercado y P&L Neto: mismo priceMap de arriba, pero contra el
+    // coste de compra (total_inv/total_comis de la carga inicial, que no
+    // cambian con el precio) en vez de contra el cierre de ayer -- antes
+    // estas dos tarjetas se quedaban congeladas tras la carga inicial
+    // mientras la tabla sí se movía en vivo.
+    if (_carteraData && _carteraData.metrics && _carteraData.metrics.total_inv > 0) {
+        const totalInv   = _carteraData.metrics.total_inv;
+        const totalComis = _carteraData.metrics.total_comis || 0;
+
+        let totalValLive = 0;
+        abiertas.forEach(pos => {
+            const live = priceMap[pos.ticker] ?? pos.actual;
+            if (live && pos.shares) totalValLive += pos.shares * live;
+        });
+        totalValLive = Math.round(totalValLive * 100) / 100;
+
+        const valPct  = Math.round((totalValLive - totalInv) / totalInv * 100 * 100) / 100;
+        const pnlNeto = Math.round(((totalValLive - totalInv) - totalComis) * 100) / 100;
+        const pnlPct  = Math.round(pnlNeto / totalInv * 100 * 100) / 100;
+
+        const valColor = valPct >= 0 ? 'var(--color-accent)' : '#f23645';
+        const valValueEl = document.getElementById('cartera-valor-mercado-value');
+        const valSubEl   = document.getElementById('cartera-valor-mercado-sub');
+        if (valValueEl) { valValueEl.style.color = valColor; valValueEl.textContent = '$' + usd(totalValLive); }
+        if (valSubEl)   { valSubEl.style.color   = valColor; valSubEl.textContent   = (valPct >= 0 ? '+' : '') + fix(valPct) + '% vs compra'; }
+
+        const pnlNetoColor = pnlNeto >= 0 ? 'var(--color-accent)' : '#f23645';
+        const pnlValueEl = document.getElementById('cartera-pnl-neto-value');
+        const pnlSubEl   = document.getElementById('cartera-pnl-neto-sub');
+        if (pnlValueEl) { pnlValueEl.style.color = pnlNetoColor; pnlValueEl.textContent = (pnlNeto >= 0 ? '+' : '') + '$' + usd(Math.abs(pnlNeto)); }
+        if (pnlSubEl)   { pnlSubEl.style.color   = pnlNetoColor; pnlSubEl.textContent   = (pnlPct >= 0 ? '+' : '') + fix(pnlPct) + '% sobre capital'; }
+    }
 }
 
 // ── ESTILOS ───────────────────────────────────────────────────────────────────
@@ -365,8 +398,10 @@ function metricsRow(m) {
     }
 
     cards += metricCard('Capital Invertido',  '$' + usd(m.total_inv), 'Base de referencia', 'var(--color-text)', 'cartera-capital-invertido')
-        + metricCard('Valor de Mercado',   '$' + usd(m.total_val), valSign + fix(m.val_pct) + '% vs compra', valColor, 'cartera-valor-mercado')
-        + metricCard('P&L Neto (−comis.)', pnlSign + '$' + usd(Math.abs(n(m.pnl_neto))), pnlSign + fix(m.pnl_pct) + '% sobre capital', pnlColor, 'cartera-pnl-neto');
+        + metricCard('Valor de Mercado',   '$' + usd(m.total_val), valSign + fix(m.val_pct) + '% vs compra', valColor, 'cartera-valor-mercado',
+            { valueId: 'cartera-valor-mercado-value', subId: 'cartera-valor-mercado-sub' })
+        + metricCard('P&L Neto (−comis.)', pnlSign + '$' + usd(Math.abs(n(m.pnl_neto))), pnlSign + fix(m.pnl_pct) + '% sobre capital', pnlColor, 'cartera-pnl-neto',
+            { valueId: 'cartera-pnl-neto-value', subId: 'cartera-pnl-neto-sub' });
 
     if (hasSim) {
         const realColor = m.pnl_realizado_acum >= 0 ? 'var(--color-accent)' : '#f23645';
