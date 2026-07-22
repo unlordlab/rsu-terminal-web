@@ -81,10 +81,12 @@ def _safe(val, default=0.0):
 
 # ── IBD RATINGS ───────────────────────────────────────────────────────────────
 
-def _rs_rating_real(perf_12m: float, universe_perfs: list) -> int:
-    """RS real: percentil en el universo escaneado."""
+def _rs_rating_real(perf_12m: float, universe_perfs: list):
+    """RS real: percentil en el universo escaneado. Sin universo de
+    referencia no hay percentil que calcular -- None, no una aproximación
+    (antes `50 + perf_12m/2`) con la misma forma que un percentil real."""
     if not universe_perfs:
-        return max(1, min(99, int(50 + perf_12m / 2)))
+        return None
     rank = sum(1 for p in universe_perfs if p < perf_12m)
     return max(1, min(99, int(rank / len(universe_perfs) * 99) + 1))
 
@@ -427,7 +429,15 @@ def analyze_ticker(ticker: str, universe_perfs: list = None) -> dict:
 
         smr_num   = 100 if smr_r in ['A','B'] else 60 if smr_r == 'C' else 30
         acc_num   = 100 if acc_dis in ['A','B'] else 60 if acc_dis == 'C' else 30
-        composite = int(rs_r * 0.35 + eps_r * 0.30 + smr_num * 0.20 + acc_num * 0.15)
+        # rs_r puede ser None (sin universo de referencia -- ver
+        # _rs_rating_real). Antes se rellenaba con una aproximación y
+        # siempre se usaban los 4 pesos fijos; ahora, sin RS real, se
+        # reescalan los 3 pesos restantes a base 100 en vez de tratar el
+        # hueco como un 0 -- mismo patrón que ya usa fund_score más abajo.
+        if rs_r is not None:
+            composite = int(rs_r * 0.35 + eps_r * 0.30 + smr_num * 0.20 + acc_num * 0.15)
+        else:
+            composite = int((eps_r * 0.30 + smr_num * 0.20 + acc_num * 0.15) / 0.65)
         composite = max(1, min(99, composite))
 
         # ── CAN SLIM criteria ─────────────────────────────────────────────────
@@ -442,20 +452,24 @@ def analyze_ticker(ticker: str, universe_perfs: list = None) -> dict:
             "C — EPS crecimiento >25%":         bool(eps_g >= 25),
             "A — Ventas anuales >25%":           bool(sales_g >= 25),
             "N — Near new high (<15% del máx)":  bool(near_new_high),
-            "S — RS Rating >80":                 bool(rs_r >= 80),
+            "S — RS Rating >80":                 bool(rs_r >= 80) if rs_r is not None else None,
             "L — Leader (Trend Template)":       bool(trend['passed']),
             "I — Sponsorship institucional":     bool(inst_sponsorship) if inst_sponsorship is not None else None,
             "M — (ver estado mercado)":          True,
         }
 
         # ── Score técnico (lo que puede evaluar sin fundamentales) ───────────
-        tech_score = sum([
-            25 if rs_r >= 80       else (15 if rs_r >= 70 else 0),
-            25 if trend['passed']  else (10 if trend['score'] >= 4 else 0),
-            20 if acc_dis in ['A','B'] else (10 if acc_dis == 'C' else 0),
-            15 if near_new_high    else 0,
-            15 if vol_ratio >= 1.5 else (8 if vol_ratio >= 1.0 else 0),
-        ])
+        # Mismo patrón de reescalado proporcional que fund_score: el
+        # componente RS (25 pts) solo entra si hay percentil real; sin él,
+        # el resto se reescala a /100 en vez de tratar el hueco como un 0.
+        tech_sub, tech_max = [], 0
+        if rs_r is not None:
+            tech_sub.append(25 if rs_r >= 80 else (15 if rs_r >= 70 else 0)); tech_max += 25
+        tech_sub.append(25 if trend['passed']  else (10 if trend['score'] >= 4 else 0)); tech_max += 25
+        tech_sub.append(20 if acc_dis in ['A','B'] else (10 if acc_dis == 'C' else 0)); tech_max += 20
+        tech_sub.append(15 if near_new_high    else 0); tech_max += 15
+        tech_sub.append(15 if vol_ratio >= 1.5 else (8 if vol_ratio >= 1.0 else 0)); tech_max += 15
+        tech_score = int(sum(tech_sub) / tech_max * 100) if tech_max > 0 else 0
         tech_score = min(100, tech_score)
 
         # ── Score fundamental ─────────────────────────────────────────────────

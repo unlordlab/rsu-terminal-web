@@ -686,17 +686,16 @@ def get_reddit_pulse():
     return result
 
 def _reddit_fallback():
-    fallback = [
-        {"ticker":"NVDA","price":None,"change":0.8, "buzz":98,"health":"85 Fuerte","social_hype":"★★★★★ Reddit Top","smart_money":"★★★★☆ Vol ×2.3","mentions":98},
-        {"ticker":"TSLA","price":None,"change":-0.4,"buzz":95,"health":"72 Fuerte","social_hype":"★★★★★ Reddit Top","smart_money":"★★★☆☆ Vol ×1.8","mentions":95},
-        {"ticker":"AAPL","price":None,"change":0.2, "buzz":88,"health":"80 Fuerte","social_hype":"★★★★☆",           "smart_money":"★★★★☆ Vol ×1.5","mentions":88},
-        {"ticker":"META","price":None,"change":1.1, "buzz":85,"health":"78 Fuerte","social_hype":"★★★★☆",           "smart_money":"★★★☆☆",         "mentions":85},
-        {"ticker":"PLTR","price":None,"change":2.3, "buzz":80,"health":"65 Hold",  "social_hype":"★★★★★ Reddit Top","smart_money":"★★★☆☆",         "mentions":80},
-        {"ticker":"AMD", "price":None,"change":-0.9,"buzz":75,"health":"60 Hold",  "social_hype":"★★★★☆ Reddit Top","smart_money":"★★★☆☆",         "mentions":75},
-        {"ticker":"GME", "price":None,"change":3.2, "buzz":72,"health":"40 Hold",  "social_hype":"★★★★★ Reddit Top","smart_money":"★☆☆☆☆",         "mentions":72},
-        {"ticker":"MSFT","price":None,"change":0.1, "buzz":70,"health":"82 Fuerte","social_hype":"★★★☆☆",           "smart_money":"★★★★★ Vol ×1.9","mentions":70},
-    ]
-    return {"data": fallback, "sources": ["Fallback"], "timestamp": get_timestamp(), "ok": True}
+    # Antes devolvia 8 tickers fijos con buzz/health/social_hype inventados,
+    # marcados "ok": True -- indistinguible de una respuesta real. Ante
+    # ausencia de menciones reales, se admite la ausencia en vez de fabricar
+    # datos con la misma forma que unos reales (sesion "eliminar fallbacks
+    # fabricados", 22/07/2026).
+    return {
+        "ok": False,
+        "error": "Sin menciones detectadas en Reddit/StockTwits en este momento",
+        "data": [], "sources": [], "timestamp": get_timestamp(),
+    }
 
 # ── RESUMEN DE MERCADO DIARIO (antes "Nightly Briefing") ─────────────────────
 
@@ -1099,22 +1098,23 @@ def get_fed_macro() -> dict:
                             break
                 except Exception:
                     pass
-            # Fallback 2Y: usar ^IRX (3M) que yfinance sí devuelve bien
-            if not yields.get('Y2Y'):
-                irx_val = yields.get('Y3M', 0)
-                if irx_val > 0:
-                    # 2Y históricamente ~0.3-0.5% sobre el 3M
-                    yields['Y2Y'] = round(irx_val + 0.47, 3)
+            # Sin fallback sintético: si ninguna fuente real trae el 2Y, se
+            # deja ausente -- antes se aproximaba con Y3M + 0.47 (offset
+            # histórico fijo), un número inventado con la misma forma que
+            # uno real.
 
             dgs3m = _fred_csv('DGS3MO')
             if dgs3m and dgs3m[-1][1] > 0:
                 yields['Y3M'] = round(dgs3m[-1][1], 3)
 
-            y10 = yields.get('Y10Y', 0)
-            y2  = yields.get('Y2Y', 0)
-            y3m = yields.get('Y3M', 0)
-            y5  = yields.get('Y5Y', 0)
-            y30 = yields.get('Y30Y', 0)
+            # .get(key) sin default -- un yield ausente debe llegar como
+            # None al JSON final, no como 0 (antes .get(key, 0) fabricaba
+            # un "0%" silencioso para cualquier fuente que hubiera fallado).
+            y10 = yields.get('Y10Y')
+            y2  = yields.get('Y2Y')
+            y3m = yields.get('Y3M')
+            y5  = yields.get('Y5Y')
+            y30 = yields.get('Y30Y')
             sp10_2  = round(y10 - y2, 3) if y10 and y2 else None
             sp10_3m = round(y10 - y3m, 3) if y10 and y3m else None
             dgs10 = _fred_csv('DGS10')

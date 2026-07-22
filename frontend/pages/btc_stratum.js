@@ -192,13 +192,18 @@ function halvingSection(data) {
 
 function macroSection(data) {
     const m = data.macro;
-    const statusColor = m.status === 'EXPANSIVO' ? 'var(--color-accent)' : m.status === 'NEUTRAL' ? '#ffb800' : '#f23645';
+    // m.dxy puede venir null si la fuente (yfinance) falló -- antes el
+    // backend fabricaba 103.0/50/NEUTRAL fijo; ahora se admite la ausencia
+    // y aquí se muestra explícitamente "N/D" en vez de "null" o un color
+    // engañoso (null < 50 evaluaría true en JS por coerción a 0).
+    const hasData = m.dxy != null;
+    const statusColor = m.status === 'EXPANSIVO' ? 'var(--color-accent)' : m.status === 'NEUTRAL' ? '#ffb800' : m.status === 'RESTRICTIVO' ? '#f23645' : 'var(--color-muted)';
     return '<div style="background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius);padding:1.25rem;margin-bottom:1rem;">'
         + '<div style="color:var(--color-accent);font-size:12px;letter-spacing:0.08em;margin-bottom:0.75rem;">CONDICIONES MACRO</div>'
         + '<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:1rem;">'
-        + macroCard('DXY', m.dxy, 'Índice Dólar — valor alto = adverso para BTC', m.dxy_score < 50 ? 'var(--color-accent)' : '#f23645')
-        + macroCard('LIQUIDEZ', m.liquidity_score + '/100', 'Score de condiciones de liquidez global', statusColor)
-        + macroCard('ENTORNO', m.status, 'Condición macroeconómica actual', statusColor)
+        + macroCard('DXY', hasData ? m.dxy : 'N/D', 'Índice Dólar — valor alto = adverso para BTC', hasData ? (m.dxy_score < 50 ? 'var(--color-accent)' : '#f23645') : 'var(--color-muted)')
+        + macroCard('LIQUIDEZ', hasData ? m.liquidity_score + '/100' : 'N/D', 'Score de condiciones de liquidez global', hasData ? statusColor : 'var(--color-muted)')
+        + macroCard('ENTORNO', hasData ? m.status : 'Sin datos', 'Condición macroeconómica actual', hasData ? statusColor : 'var(--color-muted)')
         + '</div>'
         + '</div>';
 }

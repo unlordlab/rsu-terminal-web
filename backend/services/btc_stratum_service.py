@@ -354,7 +354,11 @@ def _get_macro_data() -> dict:
             "status":          "EXPANSIVO" if liquidity_score > 60 else "NEUTRAL" if liquidity_score > 40 else "RESTRICTIVO",
         }
     except Exception:
-        return {"dxy": 103.0, "dxy_score": 50.0, "liquidity_score": 50.0, "status": "NEUTRAL"}
+        # Antes fabricaba un DXY=103.0/score=50/NEUTRAL fijo, indistinguible
+        # de un dato real -- ante fallo real de la fuente, se admite la
+        # ausencia (ver precedente ya correcto en market_service.py para el
+        # DXY de forex, líneas ~201-204).
+        return {"dxy": None, "dxy_score": None, "liquidity_score": None, "status": None}
 
 def _calc_alerts(price: float, ma200: float, rsu: float,
                  mvrv_z: float, puell: float) -> list:

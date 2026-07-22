@@ -230,7 +230,11 @@ function renderAnalysis(data) {
     }).join('');
 
     const ibdRows = [
-        ['RS Rating ' + tt('rs-rating'),  data.ibd.rs,        ratingColor(data.ibd.rs, 80, 60)],
+        // data.ibd.rs puede ser null (sin universo de referencia para el
+        // percentil real -- ver canslim_service.py _rs_rating_real). Antes
+        // el backend rellenaba con una aproximación; ahora se muestra
+        // "N/D" en vez de un número inventado.
+        ['RS Rating ' + tt('rs-rating'),  data.ibd.rs != null ? data.ibd.rs : 'N/D', data.ibd.rs != null ? ratingColor(data.ibd.rs, 80, 60) : '#555'],
         ['EPS Rating',     data.ibd.eps,       ratingColor(data.ibd.eps, 80, 60)],
         ['Composite ' + tt('ibd-composite'), data.ibd.composite, ratingColor(data.ibd.composite, 80, 60)],
         ['SMR Rating',     data.ibd.smr,       gradeColor(data.ibd.smr)],
