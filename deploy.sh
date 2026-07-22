@@ -9,7 +9,7 @@
 # Uso: ./deploy.sh
 set -e  # cualquier fallo detiene el script en vez de seguir a ciegas
 
-echo "=== 1/5: Comprobando estado de git ==="
+echo "=== 1/6: Comprobando estado de git ==="
 # Solo bloqueamos por cambios en archivos que YA están en git (modificados,
 # borrados, en stage) — no por archivos sueltos sin trackear (backups, etc.),
 # que son normales y no afectan al despliegue.
@@ -26,7 +26,7 @@ if [ -n "$UNTRACKED" ]; then
     echo "$UNTRACKED"
 fi
 
-echo "=== 2/5: Trayendo cambios de GitHub ==="
+echo "=== 2/6: Trayendo cambios de GitHub ==="
 BEFORE_COMMIT=$(git rev-parse HEAD)
 git pull
 AFTER_COMMIT=$(git rev-parse HEAD)
@@ -37,7 +37,22 @@ if [ "$BEFORE_COMMIT" == "$AFTER_COMMIT" ]; then
     echo "  de que lo que está corriendo coincide siempre con lo último en disco."
 fi
 
-echo "=== 3/5: Comprobando si cambiaron las dependencias de Python ==="
+echo "=== 3/6: Ejecutando la suite de tests (red de seguridad, ~35 tests) ==="
+# pytest solo vivía en requirements-dev.txt para uso local/CI -- nunca se
+# había instalado en el host del VPS (deploy.sh corre fuera de Docker aquí).
+# Se instala aquí mismo, en silencio, si falta, para que este gate no rompa
+# el primer despliegue tras esta sesión por un simple "módulo no encontrado".
+python3 -m pip show pytest > /dev/null 2>&1 || python3 -m pip install -q -r requirements-dev.txt
+if ! (cd backend && python3 -m pytest tests/ -q); then
+    echo "✗ La suite de tests ha fallado con el código ya en disco (commit $AFTER_COMMIT)."
+    echo "  Abortando ANTES de reconstruir o recrear el contenedor -- el contenedor"
+    echo "  viejo sigue corriendo intacto, producción no se ha tocado todavía."
+    echo "  Revisa el fallo (arriba) y no despliegues hasta que la suite pase en verde."
+    exit 1
+fi
+echo "✓ Suite de tests en verde."
+
+echo "=== 4/6: Comprobando si cambiaron las dependencias de Python ==="
 if git diff --name-only "$BEFORE_COMMIT" "$AFTER_COMMIT" | grep -q "requirements.txt"; then
     echo "  requirements.txt cambió — reconstruyendo la imagen (esto tarda 1-2 min)..."
     docker compose build --no-cache app
@@ -45,10 +60,10 @@ else
     echo "  Sin cambios en dependencias — no hace falta reconstruir la imagen."
 fi
 
-echo "=== 4/5: Recreando el contenedor ==="
+echo "=== 5/6: Recreando el contenedor ==="
 docker compose up -d --force-recreate
 
-echo "=== 5/5: Comprobación rápida de salud (10s de margen para arrancar) ==="
+echo "=== 6/6: Comprobación rápida de salud (10s de margen para arrancar) ==="
 sleep 10
 if docker ps --filter "name=rsu-terminal-web-app-1" --filter "status=running" | grep -q rsu-terminal-web-app-1; then
     echo "✓ Contenedor arriba y corriendo."
