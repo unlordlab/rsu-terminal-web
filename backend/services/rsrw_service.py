@@ -17,14 +17,14 @@ import yfinance as yf
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "..", "shared"))
 from sp500_universe import SP500_SECTOR_MAP  # noqa: E402
 from time_utils import get_timestamp  # noqa: E402
+from rsrw_engine import (  # noqa: E402
+    rs_smooth as _rs_smooth, rs_trend_slope as _rs_trend_slope,
+    rs_percentile, rs_momentum, PERIODS, WEIGHTS, EMA_SMOOTH, TREND_WIN,
+)
 
 GIST_ID     = "36afc4bd0f8e376b0f6354889bda4d52"
 GIST_FILE   = "rsrw_scan.json"
 BENCHMARK   = "SPY"
-PERIODS     = [21, 63, 126]
-WEIGHTS     = {21: 0.20, 63: 0.35, 126: 0.45}
-EMA_SMOOTH  = 10
-TREND_WIN   = 21
 BATCH_SIZE  = 40
 BATCH_SLEEP = 1.8
 
@@ -123,19 +123,6 @@ def _get_sp500_tickers() -> tuple:
     tickers = list(SP500_SECTOR_MAP.keys())
     print(f"[RS/RW scan] Universo S&P 500 (lista estática embebida): {len(tickers)} tickers")
     return tickers, SP500_SECTOR_MAP
-
-def _rs_smooth(prices: pd.Series, spy: pd.Series, period: int) -> pd.Series:
-    rs = prices.pct_change(period) - spy.pct_change(period)
-    return rs.ewm(span=EMA_SMOOTH, min_periods=3).mean()
-
-def _rs_trend_slope(rs_series: pd.Series) -> float:
-    """Pendiente normalizada de la RS — numpy puro, sin scipy."""
-    recent = rs_series.dropna().iloc[-TREND_WIN:]
-    if len(recent) < 5: return 0.0
-    x     = np.arange(len(recent), dtype=float)
-    slope = float(np.polyfit(x, recent.values, 1)[0])
-    std   = float(recent.std())
-    return round(slope / std if std > 0 else 0.0, 4)
 
 def _run_scan_engine(max_tickers: int = 500) -> tuple:
     tickers, smap = _get_sp500_tickers()
@@ -241,8 +228,8 @@ def _run_scan_engine(max_tickers: int = 500) -> tuple:
         return pd.DataFrame(), pd.DataFrame(), {}
 
     df          = pd.DataFrame(rows).set_index("Ticker")
-    df["RS_Pct"] = df["RS_Score"].rank(pct=True).mul(100).round(1)
-    df["RS_Mom"] = (df["RS_21d"] > df["RS_63d"]).astype(int)
+    df["RS_Pct"] = rs_percentile(df["RS_Score"])
+    df["RS_Mom"] = df.apply(lambda r: rs_momentum(r["RS_21d"], r["RS_63d"]), axis=1)
 
     sector_rs = df.groupby("Sector")["RS_Pct"].mean().to_dict()
     df["RS_vs_Sector"] = df.apply(

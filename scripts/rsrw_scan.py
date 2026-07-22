@@ -30,16 +30,16 @@ from datetime import datetime, timezone
 # compatible con el runner de GitHub Actions.
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "shared"))
 from sp500_universe import SP500_SECTOR_MAP  # noqa: E402
+from rsrw_engine import (  # noqa: E402
+    rs_smooth as _rs_smooth, rs_trend_slope as _rs_trend_slope,
+    rs_percentile, rs_momentum, PERIODS, WEIGHTS, EMA_SMOOTH, TREND_WIN,
+)
 
 GIST_TOKEN = os.environ.get("GIST_TOKEN", "")
 GIST_ID    = os.environ.get("RSRW_GIST_ID", "36afc4bd0f8e376b0f6354889bda4d52")
 GIST_FILE  = "rsrw_scan.json"
 
 BENCHMARK   = "SPY"
-PERIODS     = [21, 63, 126]
-WEIGHTS     = {21: 0.20, 63: 0.35, 126: 0.45}
-EMA_SMOOTH  = 10
-TREND_WIN   = 21
 BATCH_SIZE  = 40
 BATCH_SLEEP = 1.8
 
@@ -65,21 +65,6 @@ def _get_sp500_tickers() -> tuple:
     tickers = list(SP500_SECTOR_MAP.keys())
     print(f"[RS/RW scan] Universo S&P 500 (lista estática embebida): {len(tickers)} tickers")
     return tickers, SP500_SECTOR_MAP
-
-
-def _rs_smooth(prices: pd.Series, spy: pd.Series, period: int) -> pd.Series:
-    rs = prices.pct_change(period) - spy.pct_change(period)
-    return rs.ewm(span=EMA_SMOOTH, min_periods=3).mean()
-
-
-def _rs_trend_slope(rs_series: pd.Series) -> float:
-    """Pendiente normalizada de la RS — numpy puro, sin scipy."""
-    recent = rs_series.dropna().iloc[-TREND_WIN:]
-    if len(recent) < 5: return 0.0
-    x     = np.arange(len(recent), dtype=float)
-    slope = float(np.polyfit(x, recent.values, 1)[0])
-    std   = float(recent.std())
-    return round(slope / std if std > 0 else 0.0, 4)
 
 
 def run_scan(max_tickers: int = 525) -> dict:
@@ -190,10 +175,11 @@ def run_scan(max_tickers: int = 525) -> dict:
 
     # RS_Pct (percentil dentro del universo) y RS_vs_Sector se calculan sobre
     # el conjunto completo ya construido — necesitan verse todos entre sí.
-    scores = {t: s["rs_score_raw"] for t, s in stocks.items()}
-    ranked = sorted(scores.items(), key=lambda x: x[1])
-    n      = len(ranked)
-    pct_by_ticker = {t: round((i + 1) / n * 100, 1) for i, (t, _) in enumerate(ranked)}
+    # rs_percentile() usa pandas rank(pct=True) (promedia rangos empatados)
+    # -- antes este fichero era el único de los 4 con un ranking manual por
+    # posición, que da un número distinto en cuanto hay un empate exacto.
+    scores = pd.Series({t: s["rs_score_raw"] for t, s in stocks.items()})
+    pct_by_ticker = rs_percentile(scores).to_dict()
 
     sector_scores: dict = {}
     for t, s in stocks.items():
@@ -202,19 +188,7 @@ def run_scan(max_tickers: int = 525) -> dict:
 
     for t, s in stocks.items():
         s["rs_percentile"] = pct_by_ticker[t]
-        # rs_momentum: ¿el ritmo de outperformance RECIENTE es más rápido que
-        # el de medio plazo? Antes comparaba rs_21d > rs_63d directamente —
-        # pero son diferenciales ACUMULADOS de ventanas de distinta longitud
-        # (21 días vs 63 días), así que un ticker con outperformance ESTABLE
-        # y constante tenía rs_63d > rs_21d casi siempre solo por acumular
-        # más tiempo, no porque estuviera desacelerando -- el indicador
-        # medía sobre todo el sesgo de longitud de ventana, no aceleración
-        # real. Arreglo: normalizar cada diferencial por su nº de días
-        # (ritmo diario equivalente) antes de comparar. Ver Plan Maestro
-        # 3.3, auditoría RS/RW 19-20/07/2026.
-        ritmo_21d = s["rs_21d"] / 21
-        ritmo_63d = s["rs_63d"] / 63
-        s["rs_momentum"]   = 1 if ritmo_21d > ritmo_63d else 0
+        s["rs_momentum"]   = rs_momentum(s["rs_21d"], s["rs_63d"])
         s["rs_vs_sector"]  = round(pct_by_ticker[t] - sector_avg_pct.get(s["sector"], 50), 1)
 
     # Rotación sectorial — blend de 3 ventanas (21/63/126, mismos pesos que

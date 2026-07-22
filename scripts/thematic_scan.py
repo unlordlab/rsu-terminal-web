@@ -13,6 +13,7 @@ scripts/daily_briefing.py en este repo.
 """
 
 import os
+import sys
 import json
 import time
 import requests
@@ -20,14 +21,19 @@ import pandas as pd
 from datetime import datetime, timezone
 import yfinance as yf
 
+# shared/ es sibling de scripts/ -- mismo patrón que ya usan rsrw_scan.py y
+# scanner_universe.py para no depender de nada de backend/ (este script
+# corre standalone en el runner de GitHub Actions).
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "shared"))
+from rsrw_engine import (  # noqa: E402
+    rs_smooth as _rs_smooth, rs_percentile, rs_momentum, PERIODS, WEIGHTS, EMA_SMOOTH,
+)
+
 GIST_TOKEN = os.environ.get("GIST_TOKEN", "")
 GIST_ID    = os.environ.get("THEMATIC_GIST_ID", "")
 GIST_FILE  = "thematic_scan.json"
 
 BENCHMARK   = "SPY"
-PERIODS     = [21, 63, 126]
-WEIGHTS     = {21: 0.20, 63: 0.35, 126: 0.45}
-EMA_SMOOTH  = 10
 BATCH_SIZE  = 40
 BATCH_SLEEP = 1.5
 
@@ -134,10 +140,6 @@ THEMATIC_SECTORS = {
 }
 
 
-def _rs_smooth(prices: pd.Series, spy: pd.Series, period: int) -> pd.Series:
-    rs = prices.pct_change(period) - spy.pct_change(period)
-    return rs.ewm(span=EMA_SMOOTH, min_periods=3).mean()
-
 
 def _fetch_batch(all_syms: list) -> dict:
     close_d = {}
@@ -202,8 +204,8 @@ def run_scan() -> dict:
         raise ValueError("Sin filas calculadas")
 
     df = pd.DataFrame(rows).set_index("ticker")
-    df["rs_pct"] = df["rs_score"].rank(pct=True).mul(100).round(1)
-    df["rs_mom"] = (df["rs_21d"] > df["rs_63d"]).astype(int)
+    df["rs_pct"] = rs_percentile(df["rs_score"])
+    df["rs_mom"] = df.apply(lambda r: rs_momentum(r["rs_21d"], r["rs_63d"]), axis=1)
 
     grouped = []
     for theme, tickers in THEMATIC_SECTORS.items():

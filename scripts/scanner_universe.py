@@ -49,15 +49,15 @@ import yfinance as yf
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "shared"))
 from sp500_universe import SP500_SECTOR_MAP  # noqa: E402
 from weinstein_phases import classify_phase_debounced, classify_phase_weekly  # noqa: E402
+from rsrw_engine import (  # noqa: E402
+    rs_smooth as _rs_smooth, rs_percentile, PERIODS, WEIGHTS, EMA_SMOOTH,
+)
 
 GIST_TOKEN = os.environ.get("GIST_TOKEN", "")
 GIST_ID    = os.environ.get("SCANNER_GIST_ID", "")
 GIST_FILE  = "scanner_scan.json"
 
 BENCHMARK    = "SPY"
-PERIODS      = [21, 63, 126]
-WEIGHTS      = {21: 0.20, 63: 0.35, 126: 0.45}
-EMA_SMOOTH   = 10
 RVOL_WINDOW  = 20   # media de volumen — ver hilo de decisión: 20d, no 14d (sin base estándar) ni 50d (menos reactivo)
 BATCH_SIZE   = 40
 BATCH_SLEEP  = 1.8
@@ -286,11 +286,6 @@ RUSSELL2000_TICKERS = [
 
 
 
-def _rs_smooth(prices: pd.Series, spy: pd.Series, period: int) -> pd.Series:
-    rs = prices.pct_change(period) - spy.pct_change(period)
-    return rs.ewm(span=EMA_SMOOTH, min_periods=3).mean()
-
-
 def _fetch_batch(all_syms: list) -> tuple:
     close_d, vol_d = {}, {}
     batches = [all_syms[i:i + BATCH_SIZE] for i in range(0, len(all_syms), BATCH_SIZE)]
@@ -491,7 +486,7 @@ def run_scan() -> dict:
     print(f"📊 Amplitud histórica calculada: {len(breadth_history)} sesiones (universo: {len(breadth_universe)} tickers)")
 
     df = pd.DataFrame(rows).set_index("ticker")
-    df["rs_pct"] = df["rs_score"].rank(pct=True).mul(100).round(1)
+    df["rs_pct"] = rs_percentile(df["rs_score"])
     df["score_tecnico"] = df.apply(
         lambda r: _technical_score(r["rs_pct"], r["phase"], r["rvol"]), axis=1
     )
