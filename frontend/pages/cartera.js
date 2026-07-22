@@ -189,6 +189,15 @@ function applyLivePrices(prices, abiertas) {
             const pnlUsd   = (price - pos.compra) * pos.shares;
             const pnlColor = pnl >= 0 ? 'var(--color-accent)' : '#f23645';
 
+            // Persistir en el objeto (no solo pintar el DOM): si el usuario
+            // ordena o filtra la tabla, renderActiveSection() repinta leyendo
+            // estos mismos campos de _carteraData.abiertas -- sin esto,
+            // revierte al snapshot de la carga inicial aunque el WS siga
+            // activo (hallazgo A8).
+            pos.actual = price;
+            pos.pnl    = pnl;
+            if (chg != null) pos.chg_hoy = chg;
+
             const pnlEl = document.querySelector(`[data-live-pnl-id="${pos.id}"]`);
             if (pnlEl) {
                 pnlEl.style.color = pnlColor;
