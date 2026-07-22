@@ -93,6 +93,16 @@ export async function render(container) {
 
 // ── AUTO-REFRESH ──────────────────────────────────────────────────────────────
 
+// Llamado por el router justo antes de destruir el contenedor de esta
+// página (navegación real fuera de Newsfeed) -- sin esto, los dos timers
+// seguían disparando peticiones y repintando el contador para siempre.
+export function cleanup() {
+    if (refreshTimer)   clearInterval(refreshTimer);
+    if (countdownTimer) clearInterval(countdownTimer);
+    refreshTimer = null;
+    countdownTimer = null;
+}
+
 function startAutoRefresh(container) {
     if (refreshTimer)  clearInterval(refreshTimer);
     if (countdownTimer) clearInterval(countdownTimer);

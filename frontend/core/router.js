@@ -147,16 +147,29 @@ function getMainEl() {
     return document.getElementById('main');
 }
 
+// Convención opcional: un módulo de página puede exportar `cleanup()` para
+// parar timers/WebSockets/gráficos antes de que su contenedor se destruya
+// de verdad (removeChild). Nunca se llama solo por ocultar una página para
+// cachearla (ver detachCurrentAsPrev) -- esa sigue "viva" a propósito, para
+// poder restaurarla al instante con scroll/filtros intactos.
+function callCleanup(page) {
+    if (page && typeof page.cleanup === 'function') {
+        try { page.cleanup(); } catch (e) { console.error('[router] cleanup falló:', e); }
+    }
+}
+
 function detachCurrentAsPrev() {
     if (!currentPage) return;
     const mainEl = getMainEl();
     const scrollTop = mainEl ? mainEl.scrollTop : 0;
     currentPage.container.style.display = 'none';
-    // Solo guardamos una página anterior: si ya había otra en caché, se descarta.
+    // Solo guardamos una página anterior: si ya había otra en caché, se descarta
+    // de verdad (removeChild) -- esa sí necesita cleanup, ya no va a volver.
     if (cachedPrevPage && cachedPrevPage.container.parentNode) {
+        callCleanup(cachedPrevPage);
         cachedPrevPage.container.parentNode.removeChild(cachedPrevPage.container);
     }
-    cachedPrevPage = { fullPath: currentPage.fullPath, container: currentPage.container, scrollTop };
+    cachedPrevPage = { fullPath: currentPage.fullPath, container: currentPage.container, scrollTop, cleanup: currentPage.cleanup };
 }
 
 async function loadView(fullPath) {
@@ -167,12 +180,13 @@ async function loadView(fullPath) {
     // -> restaurarla tal cual, sin volver a pedir datos ni perder filtros/scroll.
     if (cachedPrevPage && cachedPrevPage.fullPath === fullPath) {
         if (currentPage && currentPage.container.parentNode) {
+            callCleanup(currentPage);
             currentPage.container.parentNode.removeChild(currentPage.container);
         }
         const restored = cachedPrevPage;
         cachedPrevPage = null;
         restored.container.style.display = '';
-        currentPage = { fullPath, container: restored.container };
+        currentPage = { fullPath, container: restored.container, cleanup: restored.cleanup };
         const mainEl = getMainEl();
         requestAnimationFrame(() => { if (mainEl) mainEl.scrollTop = restored.scrollTop || 0; });
         return;
@@ -183,8 +197,11 @@ async function loadView(fullPath) {
         // Página realmente distinta: la actual pasa a ser la "anterior" cacheada.
         detachCurrentAsPrev();
     } else if (currentPage && sameRouteAsCurrent) {
-        // Misma sección (p.ej. otro ticker en /research): no cachear, descartar.
-        if (currentPage.container.parentNode) currentPage.container.parentNode.removeChild(currentPage.container);
+        // Misma sección (p.ej. otro ticker en /research): no cachear, descartar de verdad.
+        if (currentPage.container.parentNode) {
+            callCleanup(currentPage);
+            currentPage.container.parentNode.removeChild(currentPage.container);
+        }
         currentPage = null;
     }
 
@@ -192,12 +209,13 @@ async function loadView(fullPath) {
     container.className = 'view-page';
     view.appendChild(container);
     container.innerHTML = '<p class="loading">Cargando</p>';
-    currentPage = { fullPath, container };
+    currentPage = { fullPath, container, cleanup: null };
 
     try {
         const cleanPath = cleanRoute(fullPath);
         const loader = ROUTES[cleanPath] || ROUTES['/'];
         const module = await loader();
+        currentPage.cleanup = typeof module.cleanup === 'function' ? module.cleanup : null;
         await module.render(container);
         const mainEl = getMainEl();
         if (mainEl) mainEl.scrollTop = 0;

@@ -8,6 +8,8 @@ import { errorMessage } from '/core/ui.js';
 
 let _ws        = null;
 let _wsRetries = 0;
+let _wsReconnectTimer  = null;
+let _wsClosedByCleanup = false;
 let _carteraData = null;
 let _sparklines   = {};   // { ticker: [closes...] }
 let _sortActive   = { key: 'peso',  dir: -1 };
@@ -99,6 +101,7 @@ async function loadCartera(container) {
 
 function connectWS(abiertas) {
     if (_ws) { try { _ws.close(); } catch(_) {} }
+    _wsClosedByCleanup = false;
 
     const token = sessionStorage.getItem('rsu_token');
     const proto = location.protocol === 'https:' ? 'wss' : 'ws';
@@ -132,11 +135,23 @@ function connectWS(abiertas) {
             return;
         }
 
+        if (_wsClosedByCleanup) return;
+
         _wsRetries++;
         if (_wsRetries < 5) {
-            setTimeout(() => connectWS(abiertas), Math.min(5000 * _wsRetries, 30000));
+            _wsReconnectTimer = setTimeout(() => connectWS(abiertas), Math.min(5000 * _wsRetries, 30000));
         }
     };
+}
+
+// Llamado por el router justo antes de destruir el contenedor de Cartera
+// (navegación real fuera) -- sin esto, el socket seguía recibiendo precios
+// en vivo, y si se caía, el reintento automático podía reabrirlo más tarde
+// sin que nadie estuviera mirando la página.
+export function cleanup() {
+    _wsClosedByCleanup = true;
+    if (_wsReconnectTimer) { clearTimeout(_wsReconnectTimer); _wsReconnectTimer = null; }
+    if (_ws) { try { _ws.close(); } catch(_) {} _ws = null; }
 }
 
 function setWsStatus(state) {

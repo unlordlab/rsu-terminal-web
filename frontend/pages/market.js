@@ -1,6 +1,26 @@
 import { tt } from '/components/tooltip.js';
 import { onMarketUpdate } from '/core/websocket.js';
 
+// IDs de canvas de los gráficos Chart.js creados por esta página cuyo
+// destroy() no está ya cubierto por una variable propia (_spreadsChart,
+// _shillerChart) -- se destruyen todos en cleanup() vía Chart.getChart(id),
+// sin necesidad de guardar la instancia en el momento de crearla.
+let _marketChartIds = [];
+
+// Llamado por el router justo antes de destruir el contenedor de Market
+// (navegación real fuera) -- antes, de 7 gráficos Chart.js solo 2 se
+// destruían al volver a renderizar dentro de la misma visita; los otros 5
+// (y esos 2, si nunca volvías a esta página) quedaban vivos para siempre.
+export function cleanup() {
+    _marketChartIds.forEach(id => {
+        const c = window.Chart && window.Chart.getChart && window.Chart.getChart(id);
+        if (c) { try { c.destroy(); } catch (_) {} }
+    });
+    _marketChartIds = [];
+    if (_spreadsChart) { try { _spreadsChart.destroy(); } catch (_) {} _spreadsChart = null; }
+    if (_shillerChart) { try { _shillerChart.destroy(); } catch (_) {} _shillerChart = null; }
+}
+
 if (!document.getElementById('market-live-css')) {
     const s = document.createElement('style');
     s.id = 'market-live-css';
@@ -593,6 +613,7 @@ async function loadVix(el) {
         script.onload = function() {
             const ctx = document.getElementById(chartId);
             if (!ctx) return;
+            _marketChartIds.push(chartId);
             new Chart(ctx, {
                 type: 'line',
                 data: {
@@ -829,6 +850,7 @@ async function loadBreadth(el) {
                 const labels  = history.map(h => h.date.slice(5));
                 const adVals  = history.map(h => h.ad);
                 const spyVals = history.map(h => h.spy);
+                _marketChartIds.push(chartId);
                 new Chart(ctx, {
                     type: 'line',
                     data: {
@@ -920,6 +942,7 @@ async function loadVixLevels(el) {
             if (!ctx || !window.Chart) return;
             const labels = data.history.map(h => h.date.slice(5));
             const values = data.history.map(h => h.value);
+            _marketChartIds.push(chartId);
             new Chart(ctx, {
                 type: 'line',
                 data: {
@@ -1379,9 +1402,20 @@ function openBriefingModal(rawContent, htmlContent) {
             + '<div id="briefing-modal-body" style="overflow-y:auto;flex:1;color:var(--color-muted);font-size:13px;line-height:1.8;"></div>'
             + '</div>';
         document.body.appendChild(overlay);
-        document.getElementById('briefing-modal-close').addEventListener('click', () => { overlay.remove(); document.body.style.overflow = ''; });
-        overlay.addEventListener('click', e => { if (e.target === overlay) { overlay.remove(); document.body.style.overflow = ''; } });
-        document.addEventListener('keydown', function esc(e) { if (e.key === 'Escape') { overlay.remove(); document.body.style.overflow = ''; document.removeEventListener('keydown', esc); } });
+        // Los 3 cierres posibles (X, clic fuera, Escape) pasan por la misma
+        // close() para que el listener de teclado se quite siempre, no solo
+        // cuando se cierra con Escape -- antes, cerrar con la X o con clic
+        // fuera dejaba el listener vivo para siempre, y cada apertura
+        // sumaba uno más.
+        const onKey = (e) => { if (e.key === 'Escape') close(); };
+        const close = () => {
+            overlay.remove();
+            document.body.style.overflow = '';
+            document.removeEventListener('keydown', onKey);
+        };
+        document.getElementById('briefing-modal-close').addEventListener('click', close);
+        overlay.addEventListener('click', e => { if (e.target === overlay) close(); });
+        document.addEventListener('keydown', onKey);
     }
     document.getElementById('briefing-modal-body').innerHTML = htmlContent;
     document.body.style.overflow = 'hidden';
@@ -1470,6 +1504,7 @@ async function loadLiquidity(el) {
             const m2Data   = labels.map(d => nearestValue(m2Map, m2Dates, d));
             const spxData  = labels.map(d => nearestValue(spxMap, spxDates, d));
 
+            _marketChartIds.push(chartId);
             new Chart(ctx, {
                 type: 'line',
                 data: {
@@ -1574,6 +1609,7 @@ async function loadFedMacro(el) {
             setTimeout(() => {
                 const ctx = document.getElementById(chartId);
                 if (!ctx || !window.Chart) return;
+                _marketChartIds.push(chartId);
                 new Chart(ctx, {
                     type: 'line',
                     data: {
