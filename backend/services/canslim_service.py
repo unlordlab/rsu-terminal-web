@@ -1,6 +1,6 @@
 """
 CAN SLIM Service — RSU Terminal
-Universo: S&P 500 completo (503 tickers)
+Universo: S&P 500 completo (ver shared/sp500_universe.py -- fuente única, sesión 19)
 Fixes: NaN sanitization, RS real percentile, N+I criteria, Market widget
 """
 import pandas as pd
@@ -13,53 +13,14 @@ import warnings
 import sys, os
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "..", "shared"))
 from time_utils import get_timestamp  # noqa: E402
+from sp500_universe import SP500_SECTOR_MAP  # noqa: E402
 warnings.filterwarnings('ignore')
 
 # ── S&P 500 UNIVERSE ──────────────────────────────────────────────────────────
+# Antes: lista propia hardcodeada, desactualizada (~30% de discrepancia
+# contra el S&P500 real, ver sesión 19). Ahora deriva de la fuente única.
 
-SP500_TICKERS = [
-    "MMM","AOS","ABT","ABBV","ACN","ADBE","AMD","AES","AFL","APD","ABNB",
-    "AKAM","ALB","ARE","ALGN","ALLE","LNT","ALL","GOOGL","MO","AMZN","AMCR",
-    "AEE","AAL","AEP","AXP","AIG","AMT","AWK","AMP","AME","AMGN","APH","ADI",
-    "ANSS","AON","APA","AAPL","AMAT","APTV","ACGL","ADM","ANET","AJG","AIZ",
-    "T","ATO","ADSK","ADP","AZO","AVB","AVY","AXON","BKR","BALL","BAC","BK",
-    "BBWI","BAX","BDX","BBY","BIIB","BLK","BX","BA","BKNG","BWA","BSX","BMY",
-    "AVGO","BR","BRO","BLDR","BG","CDNS","CPT","CPB","COF","CAH","KMX","CCL",
-    "CARR","CAT","CBOE","CBRE","CDW","CNC","SCHW","CHTR","CVX","CMG","CB",
-    "CI","CINF","CTAS","CSCO","C","CFG","CLX","CME","CMS","KO","CTSH","CL",
-    "CMCSA","CMA","CAG","COP","ED","STZ","CEG","COO","CPRT","GLW","CPAY",
-    "CTVA","CSGP","COST","CTRA","CCI","CSX","CMI","CVS","DHR","DRI","DVA",
-    "DAY","DE","DAL","XRAY","DVN","DXCM","FANG","DLR","DFS","DG","DLTR","D",
-    "DPZ","DOV","DOW","DHI","DTE","DUK","DD","EMN","ETN","EBAY","ECL","EIX",
-    "EW","EA","ELV","LLY","EMR","ENPH","ETR","EOG","EPAM","EQT","EFX","EQIX",
-    "EQR","ESS","EL","ETSY","EG","EVRG","ES","EXC","EXPE","EXPD","EXR","XOM",
-    "FFIV","FDS","FICO","FAST","FRT","FDX","FIS","FITB","FSLR","FE","FI","F",
-    "FTNT","FTV","FOXA","FOX","BEN","FCX","GRMN","IT","GE","GEHC","GEN","GIS",
-    "GPC","GILD","GPN","GL","GS","HAL","HIG","HAS","HCA","DOC","HSIC","HSY",
-    "HES","HPE","HLT","HOLX","HD","HON","HRL","HST","HWM","HPQ","HUBB","HUM",
-    "HBAN","HII","IBM","IEX","IDXX","ITW","INCY","IR","PODD","INTC","ICE",
-    "IFF","IP","IPG","INTU","ISRG","IVZ","INVH","IQV","IRM","JBHT","JBL",
-    "JKHY","J","JNJ","JCI","JPM","JNPR","K","KVUE","KDP","KEY","KEYS","KMB",
-    "KIM","KMI","KLAC","KHC","KR","LHX","LH","LRCX","LW","LVS","LDOS","LEN",
-    "LIN","LYV","LKQ","LMT","L","LOW","LULU","LYB","MTB","MRO","MPC","MKTX",
-    "MAR","MMC","MLM","MAS","META","MET","MTD","MGM","MCHP","MU","MSFT","MAA",
-    "MRNA","MHK","MOH","TAP","MDLZ","MPWR","MNST","MCO","MS","MOS","MSI","MSCI",
-    "NDAQ","NTAP","NFLX","NEM","NWSA","NWS","NEE","NKE","NI","NDSN","NSC",
-    "NTRS","NOC","NCLH","NRG","NUE","NVDA","NVR","NXPI","ORLY","OXY","ODFL",
-    "OMC","ON","OKE","ORCL","OTIS","PCAR","PKG","PANW","PH","PAYX","PAYC",
-    "PYPL","PNR","PEP","PFE","PCG","PM","PSX","PNW","PNC","POOL","PPG",
-    "PPL","PFG","PG","PGR","PLD","PRU","PEG","PTC","PSA","PHM","PWR",
-    "QCOM","DGX","RL","RJF","RTX","O","REG","REGN","RF","RSG","RMD","RVTY",
-    "ROK","ROL","ROP","ROST","RCL","SPGI","CRM","SBAC","SLB","STX","SRE","NOW",
-    "SHW","SPG","SWKS","SJM","SNA","SOLV","SO","LUV","SWK","SBUX","STT","STLD",
-    "STE","SYK","SYF","SNPS","SYY","TMUS","TROW","TTWO","TPR","TRGP","TGT",
-    "TEL","TDY","TFX","TER","TSLA","TXN","TXT","TMO","TJX","TSCO","TT","TDG",
-    "TRV","TRMB","TFC","TYL","TSN","USB","UBER","UDR","ULTA","UNP","UAL","UPS",
-    "URI","UNH","UHS","VLO","VTR","VLTO","VRSN","VRSK","VZ","VRTX","VTRS",
-    "VICI","V","VMC","WRB","GWW","WAB","WBA","WMT","DIS","WBD","WM","WAT",
-    "WEC","WFC","WELL","WST","WDC","WY","WHR","WMB","WTW","WYNN","XEL",
-    "XYL","YUM","ZBRA","ZBH","ZTS",
-]
+SP500_TICKERS = list(SP500_SECTOR_MAP.keys())
 
 # ── SANITIZE NaN ──────────────────────────────────────────────────────────────
 
@@ -652,7 +613,7 @@ def _scan_single(ticker: str) -> dict | None:
 
 def scan_canslim(min_score: int = 40, max_results: int = 50) -> dict:
     """Escanea el S&P 500 completo con RS real calculado contra el universo."""
-    tickers = list(dict.fromkeys(SP500_TICKERS))   # 503 sin duplicados
+    tickers = list(dict.fromkeys(SP500_TICKERS))   # sin duplicados (ya vienen únicos de shared/sp500_universe.py)
 
     # Paso 1: datos básicos en paralelo
     raw_results = []

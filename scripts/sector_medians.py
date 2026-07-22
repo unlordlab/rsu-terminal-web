@@ -3,7 +3,8 @@
 RSU Terminal — Medianas sectoriales reales
 Calcula, para cada sector del S&P 500, la MEDIANA real de 14 métricas de
 valoración/rentabilidad/crecimiento (P/E, márgenes, ROE, etc.), a partir de
-los datos fundamentales reales de yfinance de los ~513 tickers del universo.
+los datos fundamentales reales de yfinance de los ~503 tickers del universo
+(shared/sp500_universe.py, fuente única -- ver sesión 19).
 Sube el resultado a un Gist propio, separado del de Scanner.
 
 Por qué existe (Fase 3.1 del Plan Maestro, 20/07/2026): SECTOR_BENCHMARKS en

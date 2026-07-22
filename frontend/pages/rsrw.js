@@ -18,7 +18,7 @@ export async function render(container) {
 function pageHeader() {
     return '<div style="margin-bottom:1.5rem;">'
         + '<div style="color:var(--color-accent);font-size:18px;letter-spacing:0.1em;text-shadow:var(--glow-text);margin-bottom:4px;">RS/RW SCANNER ' + tt('rsrw') + '</div>'
-        + '<div style="color:var(--color-muted);font-size:12px;">Relative Strength · Relative Weakness · IBD Methodology · S&amp;P 500 completo (525 tickers) · Scan nocturno automático, sin scan on-demand</div>'
+        + '<div style="color:var(--color-muted);font-size:12px;">Relative Strength · Relative Weakness · IBD Methodology · S&amp;P 500 completo (503 tickers) · Scan nocturno automático, sin scan on-demand</div>'
         + '</div>';
 }
 

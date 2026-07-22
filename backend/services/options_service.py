@@ -9,6 +9,7 @@ from datetime import datetime, timedelta
 from concurrent.futures import ThreadPoolExecutor
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "..", "shared"))
 from time_utils import get_timestamp  # noqa: E402
+from sp500_universe import SP500_SECTOR_MAP  # noqa: E402
 
 MASSIVE_KEY  = ""   # unused — placeholder for future provider
 MASSIVE_BASE = "https://api.massive.com"
@@ -40,57 +41,19 @@ WATCHLIST = [
     # RSU Portfolio
     "COHR","UMAC","LTRX","VVX","MIR","EQT","PLPC","ENS","PRIM","GLXY",
     "BWXT","UUUU","LEU","VIAV","TOST","URG","BOTZ","USAR",
-    # Ampliación (14/07/2026) — S&P 500 completo vía export de TradingView.
-    # AVISO DE ESCALA: esto casi cuadriplica el tamaño de WATCHLIST (149 ->
-    # 568 tickers) — el escaneo de opciones es mucho más pesado por ticker
-    # que una simple descarga de precio (hasta 5 llamadas a option_chain()
-    # por ticker, cada una con decenas de filas que iterar). Si el escaneo
-    # diario empieza a tardar demasiado o a fallar por rate-limit de Yahoo,
-    # este es el primer sitio a revisar — considera reducir max_workers en
-    # get_options_flow() o recortar esta lista.
-    "A", "ABT", "ACGL", "ADI", "ADM", "ADP", "ADSK", "AEE", "AEP", "AES",
-    "AFL", "AIG", "AIZ", "AJG", "AKAM", "ALGN", "ALL", "ALLE", "AMAT", "AMCR",
-    "AME", "AMGN", "AMP", "AMT", "AON", "AOS", "APA", "APD", "APH", "APO",
-    "APTV", "ARE", "ARES", "ATO", "AVB", "AVY", "AWK", "AZO", "BALL", "BAX",
-    "BBY", "BDX", "BEN", "BG", "BIIB", "BKNG", "BKR", "BLDR", "BMY", "BNY",
-    "BR", "BRO", "BSX", "BX", "BXP", "C", "CAH", "CARR", "CASY", "CB",
-    "CBOE", "CBRE", "CCI", "CCL", "CDNS", "CDW", "CEG", "CF", "CFG", "CHD",
-    "CHRW", "CHTR", "CI", "CIEN", "CINF", "CL", "CLX", "CMCSA", "CMG", "CMI",
-    "CMS", "CNC", "CNP", "COO", "COR", "CPAY", "CPRT", "CPT", "CRH", "CRL",
-    "CSCO", "CSGP", "CSX", "CTAS", "CTSH", "CTVA", "CVNA", "CVS", "D", "DAL",
-    "DD", "DECK", "DELL", "DG", "DGX", "DHI", "DHR", "DIS", "DLR", "DLTR",
-    "DOC", "DOV", "DOW", "DPZ", "DRI", "DTE", "DUK", "DVA", "DVN", "EA",
-    "EBAY", "ECHO", "ECL", "ED", "EFX", "EG", "EIX", "EL", "ELV", "EME",
-    "EOG", "EQIX", "EQR", "ERIE", "ES", "ESS", "ETR", "EVRG", "EW", "EXC",
-    "EXE", "EXPD", "EXPE", "EXR", "F", "FANG", "FAST", "FDS", "FDX", "FDXF",
-    "FE", "FFIV", "FICO", "FIS", "FISV", "FITB", "FIX", "FLEX", "FOX", "FRT",
-    "FSLR", "FTV", "GDDY", "GE", "GEHC", "GEN", "GEV", "GILD", "GIS", "GL",
-    "GLW", "GM", "GNRC", "GOOG", "GPC", "GPN", "GRMN", "GWW", "HAL", "HAS",
-    "HBAN", "HCA", "HIG", "HLT", "HONA", "HPE", "HPQ", "HRL", "HSIC", "HST",
-    "HSY", "HUBB", "HUM", "HWM", "IBKR", "IBM", "IDXX", "IEX", "IFF", "INCY",
-    "INTC", "INTU", "INVH", "IP", "IQV", "IR", "IRM", "ISRG", "IT", "ITW",
-    "IVZ", "J", "JBHT", "JBL", "JCI", "JKHY", "KDP", "KEY", "KEYS", "KHC",
-    "KIM", "KKR", "KLAC", "KMB", "KMI", "KR", "KVUE", "L", "LEN", "LH",
-    "LHX", "LII", "LITE", "LNT", "LOW", "LRCX", "LULU", "LUV", "LVS", "LYB",
-    "LYV", "MAA", "MAR", "MAS", "MCD", "MCHP", "MCK", "MDLZ", "MDT", "MET",
-    "MGM", "MKC", "MLM", "MMM", "MNST", "MO", "MOS", "MPC", "MPWR", "MRNA",
-    "MRSH", "MRVL", "MSCI", "MSI", "MTB", "MTD", "MU", "NCLH", "NDAQ", "NDSN",
-    "NEE", "NI", "NKE", "NRG", "NSC", "NTAP", "NTRS", "NUE", "NVR", "NWS",
-    "NXPI", "O", "ODFL", "OKE", "OMC", "ON", "ORLY", "OTIS", "PAYX", "PCAR",
-    "PCG", "PEG", "PFE", "PFG", "PGR", "PH", "PHM", "PKG", "PLD", "PM",
-    "PNC", "PNR", "PNW", "PODD", "PPG", "PPL", "PRU", "PSA", "PSKY", "PSX",
-    "PTC", "PWR", "Q", "QCOM", "RCL", "REG", "REGN", "RF", "RJF", "RL",
-    "RMD", "ROK", "ROL", "ROP", "ROST", "RSG", "RVTY", "SBAC", "SBUX", "SHW",
-    "SJM", "SNA", "SNDK", "SNPS", "SO", "SOLV", "SPG", "SRE", "STE", "STLD",
-    "STT", "STX", "STZ", "SW", "SWK", "SWKS", "SYF", "SYK", "SYY", "T",
-    "TAP", "TDG", "TDY", "TECH", "TEL", "TER", "TFC", "TGT", "TJX", "TKO",
-    "TMO", "TMUS", "TPL", "TPR", "TRGP", "TRMB", "TROW", "TRV", "TSCO", "TSN",
-    "TT", "TTWO", "TXN", "TXT", "TYL", "UAL", "UDR", "UHS", "ULTA", "UNP",
-    "UPS", "URI", "USB", "VEEV", "VICI", "VLO", "VLTO", "VMC", "VRSK", "VRSN",
-    "VRT", "VRTX", "VST", "VTR", "VTRS", "VZ", "WAB", "WAT", "WBD", "WDAY",
-    "WDC", "WEC", "WELL", "WM", "WMB", "WMT", "WRB", "WSM", "WST", "WTW",
-    "WY", "WYNN", "XEL", "XYL", "XYZ", "YUM", "ZBH", "ZBRA", "ZTS",
-]
+] + list(SP500_SECTOR_MAP.keys())
+# El bloque de arriba (mega caps/tech-growth/finanzas/defensa/energía/ETFs/
+# cartera RSU) es curación deliberada para Options Flow, no un intento de
+# replicar el S&P500 -- se mantiene tal cual. El S&P500 completo ya no es un
+# export estático (antes desactualizado, ver sesión 19): viene en vivo de
+# shared/sp500_universe.py, la fuente única del universo.
+# AVISO DE ESCALA: el S&P500 completo casi cuadriplica el tamaño de
+# WATCHLIST (~149 curados -> ~650 tickers) — el escaneo de opciones es mucho
+# más pesado por ticker que una simple descarga de precio (hasta 5 llamadas
+# a option_chain() por ticker, cada una con decenas de filas que iterar). Si
+# el escaneo diario empieza a tardar demasiado o a fallar por rate-limit de
+# Yahoo, este es el primer sitio a revisar — considera reducir max_workers
+# en get_options_flow() o recortar esta lista.
 WATCHLIST = list(dict.fromkeys(WATCHLIST))
 
 # Mapa sector → tickers (para heatmap)

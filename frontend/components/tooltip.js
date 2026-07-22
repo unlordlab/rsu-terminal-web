@@ -1692,7 +1692,7 @@ Current Ratio, Free Cash Flow, Dividend Yield y número de analistas no tienen u
     // ── RS/RW ─────────────────────────────────────────────────────────────────
     "rsrw": {
         title: "RS/RW Scanner — Relative Strength/Weakness",
-        short: "Identifica las acciones con mayor fortaleza y debilidad relativa vs el mercado, sobre el universo completo del S&P 500 (525 tickers), actualizado cada noche.",
+        short: "Identifica las acciones con mayor fortaleza y debilidad relativa vs el mercado, sobre el universo completo del S&P 500 (503 tickers), actualizado cada noche.",
         long: `El RS/RW Scanner identifica qué acciones están liderando (RS) y cuáles están rezagadas (RW) respecto al mercado en múltiples marcos temporales.
 
 UNIVERSO Y ACTUALIZACIÓN:

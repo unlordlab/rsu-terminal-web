@@ -20,6 +20,7 @@ from time_utils import get_timestamp  # noqa: E402
 from rsrw_engine import (  # noqa: E402
     rs_smooth as _rs_smooth, rs_trend_slope as _rs_trend_slope,
     rs_percentile, rs_momentum, PERIODS, WEIGHTS, EMA_SMOOTH, TREND_WIN,
+    SECTOR_ETFS, GICS_MAP,
 )
 from yf_batch import download_batch  # noqa: E402
 
@@ -28,21 +29,6 @@ GIST_FILE   = "rsrw_scan.json"
 BENCHMARK   = "SPY"
 BATCH_SIZE  = 40
 BATCH_SLEEP = 1.8
-
-SECTOR_ETFS = {
-    "Tecnología":"XLK","Salud":"XLV","Financieros":"XLF",
-    "Consumo Discrecional":"XLY","Consumo Básico":"XLP","Industriales":"XLI",
-    "Energía":"XLE","Materiales":"XLB","Servicios Públicos":"XLU",
-    "Bienes Raíces":"XLRE","Comunicaciones":"XLC",
-}
-
-GICS_MAP = {
-    "Information Technology":"Tecnología","Health Care":"Salud",
-    "Financials":"Financieros","Consumer Discretionary":"Consumo Discrecional",
-    "Consumer Staples":"Consumo Básico","Industrials":"Industriales",
-    "Energy":"Energía","Materials":"Materiales","Utilities":"Servicios Públicos",
-    "Real Estate":"Bienes Raíces","Communication Services":"Comunicaciones",
-}
 
 # ── GIST ──────────────────────────────────────────────────────────────────────
 
