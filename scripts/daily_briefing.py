@@ -5,12 +5,20 @@ Genera análisis diario via OpenRouter (Qwen) y lo guarda en GitHub Gist
 """
 
 import os
+import sys
 import json
 import time
 import requests
 from datetime import datetime, timedelta
 import yfinance as yf
 import numpy as np
+import pandas as pd
+
+# shared/ es sibling de scripts/ -- yfinance ya trae pandas como
+# dependencia, así que no es una dependencia nueva de verdad, solo no se
+# importaba directamente en este fichero hasta ahora.
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "shared"))
+from mcclellan import mcclellan_series  # noqa: E402
 
 GROQ_KEY   = os.environ.get("GROQ_API_KEY", "")
 GIST_TOKEN = os.environ.get("GIST_TOKEN", "")
@@ -538,15 +546,8 @@ def get_rsu_breadth_signals() -> dict:
         mcclellan, abi, new_highs, new_lows, universo_amplitud = None, None, None, None, None
         breadth_hist = gist.get("breadth_history", [])
         if len(breadth_hist) >= 40:
-            net = [h["advances"] - h["declines"] for h in breadth_hist]
-            # EMA simple sin pandas — el script no depende de pandas para esto
-            def ema(vals, span):
-                k = 2 / (span + 1)
-                e = vals[0]
-                for v in vals[1:]:
-                    e = v * k + e * (1 - k)
-                return e
-            mcclellan = round(ema(net, 19) - ema(net, 39), 1)
+            net_series = pd.Series([h["advances"] - h["declines"] for h in breadth_hist])
+            mcclellan  = round(float(mcclellan_series(net_series).iloc[-1]), 1)
 
             # NH-NL y ABI del ÚLTIMO día del historial de amplitud — este
             # historial ya cubre S&P 500 + Russell 2000 (ver

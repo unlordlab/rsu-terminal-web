@@ -7,6 +7,7 @@ from concurrent.futures import ThreadPoolExecutor
 from services.yf_pool import yf_executor
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "..", "shared"))
 from time_utils import get_timestamp  # noqa: E402
+from mcclellan import mcclellan_series  # noqa: E402
 
 # ── ÍNDICES ───────────────────────────────────────────────────────────────────
 
@@ -1496,9 +1497,7 @@ def get_market_breadth():
 
         if len(breadth_hist) >= 40:
             net_series = pd.Series([h["advances"] - h["declines"] for h in breadth_hist])
-            ema19_full = net_series.ewm(span=19, adjust=False).mean()
-            ema39_full = net_series.ewm(span=39, adjust=False).mean()
-            mc_series  = ema19_full - ema39_full
+            mc_series  = mcclellan_series(net_series)
 
             mcclellan = round(float(mc_series.iloc[-1]), 1)
             mcclellan_state = "ALCISTA" if mcclellan > 70 else ("BAJISTA" if mcclellan < -70 else "NEUTRO")
@@ -1559,9 +1558,7 @@ def get_market_breadth():
             current_net = ad_data.get("current_net", 0)
             if ad_data.get("ok") and len(ad_data.get("history", [])) >= 39:
                 net_series = pd.Series([h["net"] for h in ad_data["history"]])
-                ema19 = float(net_series.ewm(span=19, adjust=False).mean().iloc[-1])
-                ema39 = float(net_series.ewm(span=39, adjust=False).mean().iloc[-1])
-                mcclellan = round(ema19 - ema39, 1)
+                mcclellan  = round(float(mcclellan_series(net_series).iloc[-1]), 1)
                 mcclellan_state = "ALCISTA" if mcclellan > 70 else ("BAJISTA" if mcclellan < -70 else "NEUTRO")
 
         # ── % REAL del S&P 500 sobre SMA50 + New Highs/New Lows — mismo scan nocturno ──

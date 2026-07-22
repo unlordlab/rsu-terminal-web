@@ -6,6 +6,7 @@ from datetime import datetime
 from concurrent.futures import ThreadPoolExecutor
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "..", "shared"))
 from time_utils import get_timestamp  # noqa: E402
+from mcclellan import mcclellan_series  # noqa: E402
 
 VENTANA = 10
 
@@ -269,9 +270,7 @@ def _mcclellan_proxy(df_spy, sector_data=None, breadth_real=None):
     # backtest sigue usando el proxy de más abajo sin cambios.
     if breadth_real and len(breadth_real) >= 40:
         net_series = pd.Series([h["advances"] - h["declines"] for h in breadth_real])
-        ema19 = net_series.ewm(span=19, adjust=False).mean()
-        ema39 = net_series.ewm(span=39, adjust=False).mean()
-        return ema19 - ema39, "Amplitud real S&P 500"
+        return mcclellan_series(net_series), "Amplitud real S&P 500"
     if sector_data and len(sector_data) >= 3:
         up, down = 0, 0
         for etf, hist in sector_data.items():

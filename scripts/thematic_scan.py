@@ -28,6 +28,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "shared"))
 from rsrw_engine import (  # noqa: E402
     rs_smooth as _rs_smooth, rs_percentile, rs_momentum, PERIODS, WEIGHTS, EMA_SMOOTH,
 )
+from yf_batch import download_batch  # noqa: E402
 
 GIST_TOKEN = os.environ.get("GIST_TOKEN", "")
 GIST_ID    = os.environ.get("THEMATIC_GIST_ID", "")
@@ -142,26 +143,8 @@ THEMATIC_SECTORS = {
 
 
 def _fetch_batch(all_syms: list) -> dict:
-    close_d = {}
-    batches = [all_syms[i:i + BATCH_SIZE] for i in range(0, len(all_syms), BATCH_SIZE)]
-    n = len(batches)
-    for i, batch in enumerate(batches):
-        print(f"📦 Lote {i+1}/{n} ({len(batch)} símbolos)...")
-        try:
-            raw = yf.download(batch, period="200d", auto_adjust=True, progress=False, threads=True)
-            if isinstance(raw.columns, pd.MultiIndex):
-                closes = raw["Close"] if "Close" in raw.columns.get_level_values(0) else pd.DataFrame()
-            else:
-                closes = raw[["Close"]] if "Close" in raw.columns else pd.DataFrame()
-            for sym in batch:
-                if sym in closes.columns:
-                    series = closes[sym].dropna()
-                    if len(series) >= 130:
-                        close_d[sym] = series
-        except Exception as e:
-            print(f"⚠️  Lote {i+1}/{n} falló: {e}")
-        if i < n - 1:
-            time.sleep(BATCH_SLEEP)
+    close_d, _ = download_batch(all_syms, period="200d", batch_size=BATCH_SIZE,
+                                 batch_sleep=BATCH_SLEEP, include_volume=False)
     return close_d
 
 

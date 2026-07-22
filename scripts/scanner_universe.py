@@ -52,6 +52,7 @@ from weinstein_phases import classify_phase_debounced, classify_phase_weekly  # 
 from rsrw_engine import (  # noqa: E402
     rs_smooth as _rs_smooth, rs_percentile, PERIODS, WEIGHTS, EMA_SMOOTH,
 )
+from yf_batch import download_batch  # noqa: E402
 
 GIST_TOKEN = os.environ.get("GIST_TOKEN", "")
 GIST_ID    = os.environ.get("SCANNER_GIST_ID", "")
@@ -287,30 +288,7 @@ RUSSELL2000_TICKERS = [
 
 
 def _fetch_batch(all_syms: list) -> tuple:
-    close_d, vol_d = {}, {}
-    batches = [all_syms[i:i + BATCH_SIZE] for i in range(0, len(all_syms), BATCH_SIZE)]
-    n = len(batches)
-    for i, batch in enumerate(batches):
-        print(f"📦 Lote {i+1}/{n} ({len(batch)} símbolos)...")
-        try:
-            raw = yf.download(batch, period="2y", auto_adjust=True, progress=False, threads=True)
-            if isinstance(raw.columns, pd.MultiIndex):
-                closes = raw["Close"]  if "Close"  in raw.columns.get_level_values(0) else pd.DataFrame()
-                vols   = raw["Volume"] if "Volume" in raw.columns.get_level_values(0) else pd.DataFrame()
-            else:
-                closes = raw[["Close"]]  if "Close"  in raw.columns else pd.DataFrame()
-                vols   = raw[["Volume"]] if "Volume" in raw.columns else pd.DataFrame()
-            for sym in batch:
-                if sym in closes.columns:
-                    series = closes[sym].dropna()
-                    if len(series) >= 130:
-                        close_d[sym] = series
-                        vol_d[sym]   = vols[sym].dropna() if sym in vols.columns else pd.Series(dtype=float)
-        except Exception as e:
-            print(f"⚠️  Lote {i+1}/{n} falló: {e}")
-        if i < n - 1:
-            time.sleep(BATCH_SLEEP)
-    return close_d, vol_d
+    return download_batch(all_syms, period="2y", batch_size=BATCH_SIZE, batch_sleep=BATCH_SLEEP)
 
 
 def _technical_score(rs_pct: float, phase: int, rvol: float) -> float:

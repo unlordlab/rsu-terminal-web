@@ -34,6 +34,7 @@ from rsrw_engine import (  # noqa: E402
     rs_smooth as _rs_smooth, rs_trend_slope as _rs_trend_slope,
     rs_percentile, rs_momentum, PERIODS, WEIGHTS, EMA_SMOOTH, TREND_WIN,
 )
+from yf_batch import download_batch  # noqa: E402
 
 GIST_TOKEN = os.environ.get("GIST_TOKEN", "")
 GIST_ID    = os.environ.get("RSRW_GIST_ID", "36afc4bd0f8e376b0f6354889bda4d52")
@@ -72,56 +73,10 @@ def run_scan(max_tickers: int = 525) -> dict:
     tickers = tickers[:max_tickers]
     all_syms = list(dict.fromkeys([BENCHMARK] + list(SECTOR_ETFS.values()) + tickers))
 
-    close_d, vol_d = {}, {}
-    batches = [all_syms[i:i+BATCH_SIZE] for i in range(0, len(all_syms), BATCH_SIZE)]
-    n_batches = len(batches)
-
-    import yfinance as yf
-
-    for i, batch in enumerate(batches):
-        original_batch = list(batch)
-        original_size  = len(original_batch)
-        got_syms = set()
-
-        for attempt in range(3):
-            try:
-                raw = yf.download(batch, period="260d", interval="1d",
-                                   group_by="column", auto_adjust=True,
-                                   threads=True, progress=False)
-                if isinstance(raw.columns, pd.MultiIndex):
-                    closes = raw["Close"] if "Close" in raw.columns.get_level_values(0) else pd.DataFrame()
-                    vols   = raw["Volume"] if "Volume" in raw.columns.get_level_values(0) else pd.DataFrame()
-                else:
-                    closes = raw[["Close"]] if "Close" in raw.columns else pd.DataFrame()
-                    vols   = raw[["Volume"]] if "Volume" in raw.columns else pd.DataFrame()
-
-                for sym in batch:
-                    if sym in closes.columns:
-                        series = closes[sym].dropna()
-                        if len(series) >= 130:
-                            close_d[sym] = series
-                            vol_d[sym]   = vols[sym].dropna() if sym in vols.columns else pd.Series(dtype=float)
-                            got_syms.add(sym)
-
-                missing  = [s for s in original_batch if s not in got_syms]
-                coverage = len(got_syms) / original_size if original_size else 1.0
-
-                if coverage >= 0.85 or attempt == 2:
-                    if missing:
-                        print(f"[RS/RW scan] Lote {i+1}/{n_batches}: {len(missing)} símbolos sin datos suficientes tras {attempt+1} intento(s): {missing[:15]}{'...' if len(missing) > 15 else ''}")
-                    break
-
-                print(f"[RS/RW scan] Lote {i+1}/{n_batches}: cobertura {coverage:.0%} tras intento {attempt+1}, reintentando {len(missing)} símbolos...")
-                batch = missing
-                time.sleep(2.5)
-            except Exception as e:
-                print(f"[RS/RW scan] Lote {i+1}/{n_batches} intento {attempt+1} falló: {e}")
-                time.sleep(2.5)
-                continue
-
-        if i < n_batches - 1:
-            time.sleep(BATCH_SLEEP)
-
+    close_d, vol_d = download_batch(
+        all_syms, period="260d", batch_size=BATCH_SIZE, batch_sleep=BATCH_SLEEP,
+        max_retries=3, coverage_threshold=0.85, log_prefix="[RS/RW scan] ",
+    )
     print(f"[RS/RW scan] Total con histórico suficiente: {len(close_d)}/{len(all_syms)} símbolos solicitados")
 
     if BENCHMARK not in close_d:
