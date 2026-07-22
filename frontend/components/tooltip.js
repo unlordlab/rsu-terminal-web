@@ -1878,6 +1878,18 @@ CÓMO LEERLO EN LA TABLA:
 Si una fila no tiene un nivel válido, el sistema cae al cálculo antiguo (a partir de Cantidad/Inversión de la hoja), para no romper posiciones ya registradas de otra forma.`
     },
 
+    "cartera-pnl-dia": {
+        title: "P&L Hoy",
+        short: "Cuánto ha ganado o perdido tu cartera abierta hoy, en $ y %, sumando todas las posiciones.",
+        long: `Es la suma, en dólares, de **acciones × (precio actual − cierre de ayer)** de cada posición abierta — el número que responde a "¿cómo va mi cartera hoy?" sin tener que sumar la columna HOY % de la tabla a mano.
+
+El % de abajo es ese mismo $ dividido entre el valor de la cartera al cierre de ayer (no entre el capital invertido) — así refleja el movimiento del día, no el rendimiento total de la posición.
+
+Se recalcula en vivo con cada precio que llega por WebSocket, igual que el resto de la tabla.
+
+Las posiciones cuyo precio de cierre de ayer no se pudo descargar quedan **fuera del cálculo** — se prefiere no incluirlas a inventar un número, así que en un día con fallos de datos puntuales el total puede no reflejar el 100% de la cartera.`
+    },
+
     "cartera-capital-invertido": {
         title: "Capital Invertido",
         short: "Suma del $ realmente comprometido en tus posiciones abiertas, al precio de compra — no incluye cerradas.",

@@ -614,7 +614,8 @@ def get_cartera():
                     "val_act":  val_act,
                     "shares":   round(shares, 4),
                     "peso":     peso,
-                    "chg_hoy":  live.get("chg"),
+                    "chg_hoy":    live.get("chg"),
+                    "prev_close": live.get("prev"),
                     "estado":   row[col_estado],
                     "comment":  comment,
                     "sector":   sec.get("sector", "Sin clasificar"),
@@ -657,6 +658,18 @@ def get_cartera():
                 "val_pct":     round(val_pct, 2),
                 "total_comis": round(total_comis, 2),
             }
+
+            # P&L del día agregado -- solo sobre posiciones con cierre de ayer
+            # disponible (si el precio en vivo falló para un ticker, se
+            # excluye de ambos lados en vez de fabricar un dato).
+            rows_con_chg = [r for r in abiertas_rows if r.get("prev_close") and r["shares"]]
+            if rows_con_chg:
+                val_hoy_chg  = sum(r["shares"] * r["actual"] for r in rows_con_chg)
+                val_ayer_chg = sum(r["shares"] * r["prev_close"] for r in rows_con_chg)
+                if val_ayer_chg > 0:
+                    metrics["pnl_dia_usd"] = round(val_hoy_chg - val_ayer_chg, 2)
+                    metrics["pnl_dia_pct"] = round((val_hoy_chg - val_ayer_chg) / val_ayer_chg * 100, 2)
+
             if sim and sim.get("inv_by_idx"):
                 metrics["capital_inicial"]     = round(settings.capital_total, 2)
                 metrics["pnl_realizado_acum"]  = sim["pnl_realizado"]

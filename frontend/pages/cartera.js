@@ -211,6 +211,40 @@ function applyLivePrices(prices, abiertas) {
             if (dotEl) dotEl.className = 'row-live-dot active';
         });
     });
+
+    // P&L del día agregado: recalcula con el precio más reciente conocido
+    // de cada ticker (el de este mensaje si vino, si no el de la carga
+    // inicial) y el cierre de ayer que ya trae cada posición -- misma
+    // fórmula que el backend, así el número no da saltos entre la carga
+    // inicial y el primer tick.
+    const priceMap = {};
+    prices.forEach(p => { priceMap[p.ticker] = p.price; });
+    let valHoy = 0, valAyer = 0;
+    abiertas.forEach(pos => {
+        if (!pos.prev_close || !pos.shares) return;
+        const live = priceMap[pos.ticker] ?? pos.actual;
+        if (!live) return;
+        valHoy  += pos.shares * live;
+        valAyer += pos.shares * pos.prev_close;
+    });
+    if (valAyer > 0) {
+        // Redondeado a centavos antes de formatear -- sumar shares*precio de
+        // 50+ posiciones acumula imprecisión de punto flotante (p.ej.
+        // 5338.798 en vez de 5338.80) que usd() no recorta por sí solo.
+        const pnlDiaUsd = Math.round((valHoy - valAyer) * 100) / 100;
+        const pnlDiaPct = Math.round((valHoy - valAyer) / valAyer * 100 * 100) / 100;
+        const color = pnlDiaUsd >= 0 ? 'var(--color-accent)' : '#f23645';
+        const valueEl = document.getElementById('cartera-pnl-dia-value');
+        const subEl   = document.getElementById('cartera-pnl-dia-sub');
+        if (valueEl) {
+            valueEl.style.color = color;
+            valueEl.textContent = (pnlDiaUsd >= 0 ? '+$' : '-$') + usd(Math.abs(pnlDiaUsd));
+        }
+        if (subEl) {
+            subEl.style.color   = color;
+            subEl.textContent   = (pnlDiaPct >= 0 ? '+' : '') + fix(pnlDiaPct) + '% hoy';
+        }
+    }
 }
 
 // ── ESTILOS ───────────────────────────────────────────────────────────────────
@@ -316,9 +350,21 @@ function metricsRow(m) {
     const valSign  = m.val_pct  >= 0 ? '+' : '';
 
     const hasSim = m.capital_disponible != null;
-    const cols = hasSim ? 4 : 3;
+    const hasDia = m.pnl_dia_usd != null;
+    const cols = (hasSim ? 4 : 3) + (hasDia ? 1 : 0);
 
-    let cards = metricCard('Capital Invertido',  '$' + usd(m.total_inv), 'Base de referencia', 'var(--color-text)', 'cartera-capital-invertido')
+    let cards = '';
+    if (hasDia) {
+        const diaColor = m.pnl_dia_usd >= 0 ? 'var(--color-accent)' : '#f23645';
+        const diaSign  = m.pnl_dia_usd >= 0 ? '+' : '-';
+        cards += metricCard('P&L Hoy',
+            diaSign + '$' + usd(Math.abs(n(m.pnl_dia_usd))),
+            (m.pnl_dia_pct >= 0 ? '+' : '') + fix(m.pnl_dia_pct) + '% hoy',
+            diaColor, 'cartera-pnl-dia',
+            { valueId: 'cartera-pnl-dia-value', subId: 'cartera-pnl-dia-sub' });
+    }
+
+    cards += metricCard('Capital Invertido',  '$' + usd(m.total_inv), 'Base de referencia', 'var(--color-text)', 'cartera-capital-invertido')
         + metricCard('Valor de Mercado',   '$' + usd(m.total_val), valSign + fix(m.val_pct) + '% vs compra', valColor, 'cartera-valor-mercado')
         + metricCard('P&L Neto (−comis.)', pnlSign + '$' + usd(Math.abs(n(m.pnl_neto))), pnlSign + fix(m.pnl_pct) + '% sobre capital', pnlColor, 'cartera-pnl-neto');
 
@@ -333,12 +379,14 @@ function metricsRow(m) {
     <p style="color:var(--color-muted);font-size:10px;margin:0 0 1.5rem;">Solo posiciones abiertas — las operaciones cerradas se calculan aparte, en la sección "Historial Cerradas" de más abajo.</p>`;
 }
 
-function metricCard(label, value, sub, color, tooltipKey) {
+function metricCard(label, value, sub, color, tooltipKey, ids) {
     const tt = tooltipKey ? ` <span class="tt-trigger" data-tooltip="${tooltipKey}" title="¿Qué es esto?">?</span>` : '';
+    const valueIdAttr = ids && ids.valueId ? ` id="${ids.valueId}"` : '';
+    const subIdAttr   = ids && ids.subId   ? ` id="${ids.subId}"`   : '';
     return `<div style="background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius);padding:1.25rem;text-align:center;">
         <div style="color:var(--color-muted);font-size:11px;letter-spacing:.1em;margin-bottom:6px;">${label}${tt}</div>
-        <div style="color:${color};font-size:22px;font-weight:500;">${value}</div>
-        <div style="color:${color};font-size:11px;margin-top:4px;opacity:.7;">${sub}</div>
+        <div${valueIdAttr} style="color:${color};font-size:22px;font-weight:500;">${value}</div>
+        <div${subIdAttr} style="color:${color};font-size:11px;margin-top:4px;opacity:.7;">${sub}</div>
     </div>`;
 }
 
