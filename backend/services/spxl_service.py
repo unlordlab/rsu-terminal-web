@@ -10,7 +10,6 @@ from time_utils import get_timestamp  # noqa: E402
 CFG = {
     "phase_drops": [0.15, 0.10, 0.07, 0.10, 0.10, 0.10],
     "phase_alloc": [0.20, 0.15, 0.20, 0.20, 0.15, 0.10],
-    "reserve_pct": 0.10,
     "sell_a_tp": 0.20, "sell_a_keep": 0.05,
     "sell_a_runner_tp": 0.17, "sell_a_trail_stop": 0.11,
     "sell_b_tp": 0.10, "sell_b_keep": 0.20,
@@ -75,9 +74,9 @@ def get_spxl_live() -> dict:
         # mismo cálculo que usaría el backtest de verdad en este momento,
         # en vez de dos sistemas de fase distintos que podían no coincidir
         # entre sí. Ver conversación 18/07/2026.
-        full_hist = spxl.history(start="2008-11-05")[["Close"]].copy()
+        full_hist = spxl.history(start="2008-11-05")[["Close", "Low"]].copy()
         full_hist.index = full_hist.index.tz_localize(None)
-        full_hist.columns = ["price"]
+        full_hist.columns = ["price", "low"]
         full_hist = full_hist[~full_hist.index.duplicated(keep="last")].sort_index().dropna()
         bt_result  = run_backtest(full_hist, initial_capital=100_000)
         fstate     = bt_result["final_state"]
@@ -185,6 +184,7 @@ def _make_trade(date, exit_price, avg_cost, qty, phases_used, scenario, entry_da
 def run_backtest(df, initial_capital=100_000, debug=False):
     initial_capital = float(initial_capital)
     prices   = df['price'].values
+    lows     = df['low'].values if 'low' in df.columns else prices  # fallback defensivo
     dates    = df.index
     cash     = initial_capital
     shares   = 0.0
@@ -196,8 +196,8 @@ def run_backtest(df, initial_capital=100_000, debug=False):
     trades       = []
     equity_curve = []
     bnh_curve    = []
-    bnh_shares   = (initial_capital * (1 - CFG["reserve_pct"])) / prices[0]
-    bnh_cash     = initial_capital * CFG["reserve_pct"]
+    bnh_shares   = initial_capital / prices[0]
+    bnh_cash     = 0.0
     peak_equity  = initial_capital
     max_dd       = 0.0
     cycle_equity = initial_capital
@@ -209,7 +209,7 @@ def run_backtest(df, initial_capital=100_000, debug=False):
     sold_trim1      = False
     sold_trim2      = False
 
-    for i, (price, date) in enumerate(zip(prices, dates)):
+    for i, (price, low_today, date) in enumerate(zip(prices, lows, dates)):
         cur_equity = cash + (shares + runner_shares) * price
         bnh_val    = bnh_cash + bnh_shares * price
         equity_curve.append({"date": str(date)[:10], "equity": round(cur_equity, 2)})
@@ -320,9 +320,18 @@ def run_backtest(df, initial_capital=100_000, debug=False):
                     close_target = first_sell_px * (1 + CFG["sell_b_close_from"]) if first_sell_px else 0
                     trail_cond   = rg >= CFG["sell_b_trail_act"]
                     stop_px      = runner_peak * (1 - CFG["sell_b_trail_stop"]) if trail_cond else avg_cost
-                    if price >= close_target or price <= stop_px:
-                        trades.append(_make_trade(date, price, avg_cost, runner_shares, n_phases, "B-runner", entry_date))
-                        cash += runner_shares * price
+                    if price >= close_target:
+                        exit_px = price
+                    elif low_today <= stop_px:
+                        # El stop se dispara intradía; el cierre del día puede
+                        # haber recuperado por encima del nivel de stop -- el
+                        # fill realista es el nivel de stop, no el cierre.
+                        exit_px = min(price, stop_px)
+                    else:
+                        exit_px = None
+                    if exit_px is not None:
+                        trades.append(_make_trade(date, exit_px, avg_cost, runner_shares, n_phases, "B-runner", entry_date))
+                        cash += runner_shares * exit_px
                         runner_shares = 0; in_runner = False; first_sell_px = None
                         shares = avg_cost = 0; phase_idx = -1
                         phases_spent = []; entry_date = None
@@ -338,14 +347,24 @@ def run_backtest(df, initial_capital=100_000, debug=False):
                     shares         = 0
                     in_runner      = True
                     runner_peak    = price
+                    first_sell_px  = price
                 elif in_runner:
                     if price > runner_peak: runner_peak = price
                     runner_target = first_sell_px * (1 + CFG["sell_a_runner_tp"]) if first_sell_px else price * 1.17
                     stop_px       = runner_peak * (1 - CFG["sell_a_trail_stop"])
-                    if price >= runner_target or price <= stop_px:
-                        trades.append(_make_trade(date, price, avg_cost, runner_shares, n_phases, "A-runner", entry_date))
-                        cash += runner_shares * price
-                        runner_shares = 0; in_runner = False
+                    if price >= runner_target:
+                        exit_px = price
+                    elif low_today <= stop_px:
+                        # El stop se dispara intradía; el cierre del día puede
+                        # haber recuperado por encima del nivel de stop -- el
+                        # fill realista es el nivel de stop, no el cierre.
+                        exit_px = min(price, stop_px)
+                    else:
+                        exit_px = None
+                    if exit_px is not None:
+                        trades.append(_make_trade(date, exit_px, avg_cost, runner_shares, n_phases, "A-runner", entry_date))
+                        cash += runner_shares * exit_px
+                        runner_shares = 0; in_runner = False; first_sell_px = None
                         shares = avg_cost = 0; phase_idx = -1
                         phases_spent = []; entry_date = None
                         phase_high   = price
@@ -417,9 +436,9 @@ def compute_stats(trades, eq_curve, bnh_curve, initial_capital):
 def get_backtest(initial_capital: float = 100_000) -> dict:
     try:
         spxl    = yf.Ticker("SPXL")
-        df_raw  = spxl.history(start="2008-11-05")[["Close"]].copy()
+        df_raw  = spxl.history(start="2008-11-05")[["Close", "Low"]].copy()
         df_raw.index = df_raw.index.tz_localize(None)
-        df_raw.columns = ["price"]
+        df_raw.columns = ["price", "low"]
         df_raw = df_raw[~df_raw.index.duplicated(keep="last")].sort_index().dropna()
 
         result = run_backtest(df_raw, initial_capital)
@@ -468,9 +487,9 @@ def get_backtest_validation(initial_capital: float = 100_000) -> dict:
     distintos, o si su resultado global depende de un único tramo."""
     try:
         spxl   = yf.Ticker("SPXL")
-        df_raw = spxl.history(start="2008-11-05")[["Close"]].copy()
+        df_raw = spxl.history(start="2008-11-05")[["Close", "Low"]].copy()
         df_raw.index   = df_raw.index.tz_localize(None)
-        df_raw.columns = ["price"]
+        df_raw.columns = ["price", "low"]
         df_raw = df_raw[~df_raw.index.duplicated(keep="last")].sort_index().dropna()
 
         periodos = []
