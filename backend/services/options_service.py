@@ -851,6 +851,8 @@ def _process_chain(ticker: str, min_premium: float = 100_000, min_score: int = 4
                     price_o = _safe(row.get('lastPrice', 0))
                     strike  = _safe(row.get('strike', 0))
                     iv      = _safe(row.get('impliedVolatility', 0))
+                    bid     = _safe(row.get('bid', 0))
+                    ask     = _safe(row.get('ask', 0))
 
                     if vol < MIN_VOLUME or oi < MIN_OI or price_o < 0.10: continue
 
@@ -863,7 +865,16 @@ def _process_chain(ticker: str, min_premium: float = 100_000, min_score: int = 4
                     score, signal, vol_oi = _score_entry(vol, oi, premium, iv, exp_days, strike_pct_val, baseline)
                     if score < min_score: continue
 
-                    is_buy   = (vol / oi >= 0.3) if oi > 0 else True
+                    # Dirección por precio vs. bid/ask (Lee-Ready simplificado):
+                    # el último cruce por encima del punto medio del spread
+                    # indica agresor comprador. vol/OI mide actividad nueva
+                    # frente a posiciones existentes, no dirección -- con
+                    # spread inválido (contratos ilíquidos, bid/ask a 0) se
+                    # cae a ese heurístico como red de seguridad.
+                    if bid > 0 and ask > bid:
+                        is_buy = price_o >= (bid + ask) / 2
+                    else:
+                        is_buy = (vol / oi >= 0.3) if oi > 0 else True
                     # Block trade: prima alta, pocos contratos → institucional LEAPS
                     is_block = premium >= 500_000 and vol < 500
 
