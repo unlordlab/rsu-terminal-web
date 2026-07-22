@@ -37,43 +37,36 @@ if [ "$BEFORE_COMMIT" == "$AFTER_COMMIT" ]; then
     echo "  de que lo que está corriendo coincide siempre con lo último en disco."
 fi
 
-echo "=== 3/6: Ejecutando la suite de tests (red de seguridad, ~35 tests) ==="
-# pytest solo vivía en requirements-dev.txt para uso local/CI -- nunca se
-# había instalado en el host del VPS (deploy.sh corre fuera de Docker aquí).
-# Antes de intentar instalar pytest, comprobar que pip EXISTE de verdad --
-# en instalaciones mínimas de Ubuntu server, python3 no trae pip incluido
-# (falta el módulo entero, no solo el paquete), y "pip install" fallaría
-# con un traceback críptico que no dice qué hacer.
-if ! python3 -m pip --version > /dev/null 2>&1; then
-    echo "✗ pip no está disponible en este Python (python3 -m pip falla por completo,"
-    echo "  no es solo que falte pytest). Esto es un problema del sistema, no del código."
-    echo "  Arréglalo UNA VEZ con:"
-    echo "    sudo apt-get update && sudo apt-get install -y python3-pip"
-    echo "  y vuelve a correr ./deploy.sh. Abortando ANTES de tocar el contenedor."
-    exit 1
-fi
-# --break-system-packages: mismo flag que ya usan los docstrings de
-# backend/tests/*.py para este entorno -- Debian/Ubuntu recientes marcan
-# el python3 del sistema como "externally-managed" (PEP 668) y rechazan
-# pip install sin él. pytest es una dependencia hoja sin conflicto real
-# con paquetes del sistema, así que instalarla aquí es seguro.
-python3 -m pip show pytest > /dev/null 2>&1 || python3 -m pip install -q --break-system-packages -r requirements-dev.txt
-if ! (cd backend && python3 -m pytest tests/ -q); then
-    echo "✗ La suite de tests ha fallado con el código ya en disco (commit $AFTER_COMMIT)."
-    echo "  Abortando ANTES de reconstruir o recrear el contenedor -- el contenedor"
-    echo "  viejo sigue corriendo intacto, producción no se ha tocado todavía."
-    echo "  Revisa el fallo (arriba) y no despliegues hasta que la suite pase en verde."
-    exit 1
-fi
-echo "✓ Suite de tests en verde."
-
-echo "=== 4/6: Comprobando si cambiaron las dependencias de Python ==="
+echo "=== 3/6: Comprobando si cambiaron las dependencias de Python ==="
 if git diff --name-only "$BEFORE_COMMIT" "$AFTER_COMMIT" | grep -q "requirements.txt"; then
     echo "  requirements.txt cambió — reconstruyendo la imagen (esto tarda 1-2 min)..."
     docker compose build --no-cache app
 else
     echo "  Sin cambios en dependencias — no hace falta reconstruir la imagen."
 fi
+
+echo "=== 4/6: Ejecutando la suite de tests (red de seguridad, ~35 tests) ==="
+# El host del VPS no tiene pip NI las dependencias de la app (fastapi,
+# pandas, yfinance...) -- solo viven dentro de la imagen Docker, que ya
+# las trae instaladas de requirements.txt (Dockerfile). Intentar correr
+# pytest con el python3 del host estaba mal planteado desde el principio
+# (además de pelearse con pip ausente / PEP 668 "externally-managed", el
+# import de cualquier servicio real habría fallado por falta de fastapi).
+# Se corre en un contenedor EFÍMERO (--rm, se descarta al terminar) desde
+# la MISMA imagen que se acaba de reconstruir arriba si hacía falta --
+# --user root solo para poder instalar pytest en site-packages dentro de
+# ese contenedor desechable (la imagen real sigue corriendo como usuario
+# sin privilegios, esto no la toca). -T desactiva la pseudo-TTY, necesario
+# para correr sin terminal interactiva adjunta (cron, SSH no interactivo).
+if ! docker compose run --rm -T --user root app sh -c \
+    "pip install --no-cache-dir -q -r ../requirements-dev.txt && python -m pytest tests/ -q"; then
+    echo "✗ La suite de tests ha fallado con el código ya en disco (commit $AFTER_COMMIT)."
+    echo "  Abortando ANTES de recrear el contenedor en marcha -- el contenedor viejo"
+    echo "  sigue corriendo intacto, producción no se ha tocado todavía."
+    echo "  Revisa el fallo (arriba) y no despliegues hasta que la suite pase en verde."
+    exit 1
+fi
+echo "✓ Suite de tests en verde."
 
 echo "=== 5/6: Recreando el contenedor ==="
 docker compose up -d --force-recreate
