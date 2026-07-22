@@ -1,5 +1,5 @@
 import { tt } from '/components/tooltip.js';
-import { errorMessage } from '/core/ui.js';
+import { errorMessage, esc, safeUrl } from '/core/ui.js';
 
 const SECTORS = ['GENERAL','TECH','FINANCE','ENERGY','HEALTH','MACRO','CRYPTO','POLICY','DEFENSE'];
 const IMPACTS = ['ALL','HIGH','MED','LOW'];
@@ -214,23 +214,23 @@ function newsCard(item) {
     // Badge especial para Finnhub
     const isFinnhub = item.source_id === 'finnhub';
     const sourceBadge = item.source_url
-        ? '<a href="' + item.source_url + '" target="_blank" style="color:' + (isFinnhub ? 'var(--color-secondary)' : 'var(--color-muted)') + ';font-size:10px;text-decoration:none;" title="Ir a ' + item.source + '">'
-          + (isFinnhub ? '★ ' : '') + item.source + '</a>'
-        : '<span style="color:var(--color-muted);font-size:10px;">' + item.source + '</span>';
+        ? '<a href="' + safeUrl(item.source_url) + '" target="_blank" style="color:' + (isFinnhub ? 'var(--color-secondary)' : 'var(--color-muted)') + ';font-size:10px;text-decoration:none;" title="Ir a ' + esc(item.source) + '">'
+          + (isFinnhub ? '★ ' : '') + esc(item.source) + '</a>'
+        : '<span style="color:var(--color-muted);font-size:10px;">' + esc(item.source) + '</span>';
 
     return '<div style="display:flex;gap:10px;padding:10px 0;border-bottom:1px solid var(--color-border);align-items:flex-start;">'
         + '<div style="display:flex;flex-direction:column;gap:4px;flex-shrink:0;padding-top:2px;">'
         + '<div style="width:3px;height:32px;background:' + ic + ';border-radius:2px;"></div>'
         + '</div>'
         + '<div style="flex:1;min-width:0;">'
-        + '<a href="' + item.url + '" target="_blank" rel="noopener" style="color:var(--color-text);font-size:13px;line-height:1.4;display:block;margin-bottom:4px;text-decoration:none;" onmouseover="this.style.color=\'var(--color-accent)\'" onmouseout="this.style.color=\'var(--color-text)\'">'
-        + item.title
+        + '<a href="' + safeUrl(item.url) + '" target="_blank" rel="noopener" style="color:var(--color-text);font-size:13px;line-height:1.4;display:block;margin-bottom:4px;text-decoration:none;" onmouseover="this.style.color=\'var(--color-accent)\'" onmouseout="this.style.color=\'var(--color-text)\'">'
+        + esc(item.title)
         + '</a>'
-        + (item.desc ? '<div style="color:var(--color-muted);font-size:11px;line-height:1.4;margin-bottom:4px;">' + item.desc.substring(0, 120) + '...</div>' : '')
+        + (item.desc ? '<div style="color:var(--color-muted);font-size:11px;line-height:1.4;margin-bottom:4px;">' + esc(item.desc.substring(0, 120)) + '...</div>' : '')
         + '<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">'
         + '<span style="color:' + ic + ';font-size:10px;border:1px solid ' + ic + '33;padding:1px 6px;border-radius:3px;">' + item.impact + '</span>'
         + '<span style="color:' + sc + ';font-size:10px;">' + sentimentIcon(item.sentiment) + ' ' + item.sentiment + '</span>'
-        + '<span style="color:var(--color-secondary);font-size:10px;padding:1px 6px;background:rgba(0,217,255,0.08);border-radius:3px;">' + item.sector + '</span>'
+        + '<span style="color:var(--color-secondary);font-size:10px;padding:1px 6px;background:rgba(0,217,255,0.08);border-radius:3px;">' + esc(item.sector) + '</span>'
         + sourceBadge
         + '<span style="color:var(--color-muted);font-size:10px;margin-left:auto;">' + timeStr + '</span>'
         + '</div>'
@@ -277,12 +277,12 @@ function trumpCard(post) {
         + '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">'
         + '<div style="display:flex;gap:6px;align-items:center;">'
         + (isHigh ? '<span style="color:#f23645;font-size:9px;border:1px solid #f2364544;padding:1px 5px;border-radius:2px;">HIGH IMPACT</span>' : '')
-        + '<span style="color:var(--color-secondary);font-size:9px;padding:1px 5px;background:rgba(0,217,255,0.08);border-radius:2px;">' + post.sector + '</span>'
+        + '<span style="color:var(--color-secondary);font-size:9px;padding:1px 5px;background:rgba(0,217,255,0.08);border-radius:2px;">' + esc(post.sector) + '</span>'
         + '</div>'
         + '<span style="color:var(--color-muted);font-size:10px;">' + timeStr + '</span>'
         + '</div>'
-        + '<div style="color:var(--color-text);font-size:12px;line-height:1.5;margin-bottom:6px;">' + text.substring(0, 280) + (text.length > 280 ? '...' : '') + '</div>'
-        + (post.url ? '<a href="' + post.url + '" target="_blank" rel="noopener" style="color:var(--color-muted);font-size:10px;text-decoration:none;" onmouseover="this.style.color=\'#e2231a\'" onmouseout="this.style.color=\'var(--color-muted)\'">Ver post original ↗</a>' : '')
+        + '<div style="color:var(--color-text);font-size:12px;line-height:1.5;margin-bottom:6px;">' + esc(text.substring(0, 280)) + (text.length > 280 ? '...' : '') + '</div>'
+        + (post.url ? '<a href="' + safeUrl(post.url) + '" target="_blank" rel="noopener" style="color:var(--color-muted);font-size:10px;text-decoration:none;" onmouseover="this.style.color=\'#e2231a\'" onmouseout="this.style.color=\'var(--color-muted)\'">Ver post original ↗</a>' : '')
         + '</div>';
 }
 

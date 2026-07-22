@@ -355,12 +355,19 @@ def generar_pdf_tesis(tesis: dict) -> bytes:
     markdown -> HTML -> PDF, las dos librerías son puro Python (sin
     dependencias de sistema), para no complicar el Dockerfile. Ver
     conversación 18/07/2026."""
+    import html
     import markdown as md
     from xhtml2pdf import pisa
     import io
 
     fecha_str = tesis.get("fecha", "")
     html_body = md.markdown(tesis.get("contenido", ""), extensions=["tables", "fenced_code"])
+    # ticker/titulo/autor vienen del agente Bull (LLM + extracción web) y el
+    # PDF se distribuye a la comunidad -- sin escapar, un </style><script>
+    # en cualquiera de los tres rompe la plantilla o inyecta contenido.
+    tk     = html.escape(tesis.get('ticker', ''))
+    titulo = html.escape(tesis.get('titulo', ''))
+    autor  = html.escape(tesis.get('autor', ''))
 
     html_full = f"""<html>
 <head>
@@ -379,8 +386,8 @@ def generar_pdf_tesis(tesis: dict) -> bytes:
 </style>
 </head>
 <body>
-    <h1>{tesis.get('ticker', '')} — {tesis.get('titulo', '')}</h1>
-    <div class="cabecera">RSU Terminal &middot; {tesis.get('autor', '')} &middot; {fecha_str}</div>
+    <h1>{tk} — {titulo}</h1>
+    <div class="cabecera">RSU Terminal &middot; {autor} &middot; {fecha_str}</div>
     {html_body}
     <div class="disclaimer">Este informe tiene finalidad exclusivamente educativa e informativa. No constituye
     recomendación de inversión, asesoramiento financiero ni invitación a comprar o vender ningún activo.

@@ -1,4 +1,5 @@
 import { renderThemeMaker } from '/pages/admin_theme_maker.js';
+import { esc } from '/core/ui.js';
 
 const ADMIN_KEY_STORAGE = 'rsu_admin_key';
 
@@ -586,9 +587,9 @@ async function renderTesisPanel(content) {
         card.innerHTML = `
             <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px;flex-wrap:wrap;">
                 <div>
-                    <div style="font-size:14px;color:var(--color-text);font-weight:600;">${item.ticker} \u00b7 ${item.rating}</div>
-                    <div style="font-size:12px;color:var(--color-muted);margin-top:2px;">${item.titulo || '(sin t\u00edtulo)'}</div>
-                    <div style="font-size:11px;color:var(--color-muted);margin-top:4px;">${fuenteLabel} \u00b7 ${fecha}${item.criterio ? ' \u00b7 ' + item.criterio : ''}</div>
+                    <div style="font-size:14px;color:var(--color-text);font-weight:600;">${esc(item.ticker)} \u00b7 ${esc(item.rating)}</div>
+                    <div style="font-size:12px;color:var(--color-muted);margin-top:2px;">${item.titulo ? esc(item.titulo) : '(sin t\u00edtulo)'}</div>
+                    <div style="font-size:11px;color:var(--color-muted);margin-top:4px;">${fuenteLabel} \u00b7 ${fecha}${item.criterio ? ' \u00b7 ' + esc(item.criterio) : ''}</div>
                     ${avisoGemini}
                 </div>
                 <div style="display:flex;gap:6px;flex-shrink:0;">
@@ -643,7 +644,7 @@ async function renderTesisPanel(content) {
         `;
         const fechaAprobado = item.approved_at ? new Date(item.approved_at * 1000).toLocaleDateString('es-ES') : '';
         row.innerHTML = `
-            <span style="color:var(--color-text);">${item.ticker} \u00b7 ${item.rating} \u2014 <span style="color:var(--color-muted);">${item.titulo || ''}</span></span>
+            <span style="color:var(--color-text);">${esc(item.ticker)} \u00b7 ${esc(item.rating)} \u2014 <span style="color:var(--color-muted);">${item.titulo ? esc(item.titulo) : ''}</span></span>
             <div style="display:flex;align-items:center;gap:8px;flex-shrink:0;">
                 <span style="color:var(--color-muted);font-size:10px;">${fechaAprobado}</span>
                 <button class="tesis-unpublish-btn" style="background:none;border:1px solid #e0b13e;color:#e0b13e;padding:3px 8px;border-radius:var(--radius);cursor:pointer;font-family:var(--font-mono);font-size:10px;">RETIRAR</button>
@@ -1017,7 +1018,7 @@ function renderMeetingRoomMessages(chatBox, items) {
     }
     chatBox.innerHTML = items.map(m => {
         const color = AGENTE_COLOR[m.autor] || 'var(--color-muted)';
-        const label = AGENTE_LABEL[m.autor] || m.autor;
+        const label = AGENTE_LABEL[m.autor] || esc(m.autor);
         const esMarc = m.autor === 'marc';
         const fecha = new Date(m.created_at * 1000).toLocaleString('es-ES');
         const estadoTag = esMarc
@@ -1028,7 +1029,7 @@ function renderMeetingRoomMessages(chatBox, items) {
                 <span style="color:${color};font-size:11px;font-weight:600;">${label}</span>
                 <span style="color:var(--color-muted);font-size:9px;">${fecha} ${estadoTag}</span>
             </div>
-            <div style="background:${esMarc ? 'var(--color-surface2)' : 'rgba(255,255,255,0.03)'};border:1px solid var(--color-border);border-radius:var(--radius);padding:8px 12px;color:var(--color-text);font-size:12px;line-height:1.5;white-space:pre-wrap;">${m.mensaje}${!esMarc && m.destinatario ? '' : ''}${esMarc && m.destinatario ? '<div style="color:var(--color-muted);font-size:9px;margin-top:4px;">→ ' + (AGENTE_LABEL[m.destinatario] || m.destinatario) + '</div>' : ''}</div>
+            <div style="background:${esMarc ? 'var(--color-surface2)' : 'rgba(255,255,255,0.03)'};border:1px solid var(--color-border);border-radius:var(--radius);padding:8px 12px;color:var(--color-text);font-size:12px;line-height:1.5;white-space:pre-wrap;">${esc(m.mensaje)}${!esMarc && m.destinatario ? '' : ''}${esMarc && m.destinatario ? '<div style="color:var(--color-muted);font-size:9px;margin-top:4px;">→ ' + esc(AGENTE_LABEL[m.destinatario] || m.destinatario) + '</div>' : ''}</div>
         </div>`;
     }).join('');
     chatBox.scrollTop = chatBox.scrollHeight;
@@ -1059,11 +1060,11 @@ async function renderFeedbackPanel(content) {
             return `
                 <div style="background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius);padding:0.9rem 1rem;margin-bottom:0.6rem;${bg !== 'transparent' ? 'border-left:2px solid var(--color-accent);' : ''}background:${bg};">
                     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;flex-wrap:wrap;gap:6px;">
-                        <span style="font-size:11px;color:var(--color-accent);">${FB_TYPE_LABEL[f.tipo] || f.tipo}</span>
-                        <span style="font-size:10px;color:var(--color-muted);">${when} ${f.user_email ? '· ' + f.user_email : ''}</span>
+                        <span style="font-size:11px;color:var(--color-accent);">${FB_TYPE_LABEL[f.tipo] || esc(f.tipo)}</span>
+                        <span style="font-size:10px;color:var(--color-muted);">${when} ${f.user_email ? '· ' + esc(f.user_email) : ''}</span>
                     </div>
-                    <div style="color:var(--color-text);font-size:13px;line-height:1.5;white-space:pre-wrap;">${f.mensaje.replace(/</g, '&lt;')}</div>
-                    ${f.contacto ? `<div style="margin-top:6px;font-size:11px;color:var(--color-muted);">Responder a: <a href="mailto:${f.contacto}" style="color:var(--color-secondary);">${f.contacto}</a></div>` : ''}
+                    <div style="color:var(--color-text);font-size:13px;line-height:1.5;white-space:pre-wrap;">${esc(f.mensaje)}</div>
+                    ${f.contacto ? `<div style="margin-top:6px;font-size:11px;color:var(--color-muted);">Responder a: <a href="mailto:${esc(f.contacto)}" style="color:var(--color-secondary);">${esc(f.contacto)}</a></div>` : ''}
                     ${!f.leido ? `<button class="fb-mark-read" data-id="${f.id}" style="margin-top:8px;background:transparent;border:1px solid var(--color-border);color:var(--color-muted);border-radius:4px;padding:3px 10px;font-size:10px;cursor:pointer;">Marcar como leído</button>` : ''}
                 </div>
             `;

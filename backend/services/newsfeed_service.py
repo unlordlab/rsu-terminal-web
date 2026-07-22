@@ -104,6 +104,12 @@ def _strip_html(text: str) -> str:
     if not text: return ""
     text = re.sub(r"<[^>]+>", " ", text)
     text = _html.unescape(text)
+    # 2ª pasada: un payload doblemente codificado (&amp;lt;img...) sobrevive
+    # al primer strip (el parser XML aún lo ve como &lt;...&gt;) y solo se
+    # convierte en HTML real tras el unescape de arriba -- sin esto, salía
+    # de aquí como etiqueta viva. Defensa en profundidad; el esc() del
+    # frontend (core/ui.js) es la que realmente bloquea la ejecución.
+    text = re.sub(r"<[^>]+>", " ", text)
     return re.sub(r"\s+", " ", text).strip()
 
 def _is_negated(text: str, keyword: str) -> bool:

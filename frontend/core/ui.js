@@ -30,6 +30,27 @@ export function errorMessage(msg, opts = {}) {
 }
 
 /**
+ * Escapa HTML antes de insertar texto de terceros (RSS, LLMs, tickers de la
+ * URL, etc.) en innerHTML. Vía DOM (textContent -> innerHTML) en vez de
+ * reemplazos manuales para cubrir comillas y casos raros que un replace a
+ * mano se deja -- mismo enfoque ya probado en components/chat_widget.js.
+ */
+export function esc(str) {
+    if (str == null) return '';
+    const d = document.createElement('div');
+    d.textContent = String(str);
+    return d.innerHTML;
+}
+
+/**
+ * Valida que una URL de terceros use http(s) antes de usarla en href --
+ * evita que un feed externo cuele un esquema javascript:.
+ */
+export function safeUrl(url) {
+    return /^https?:\/\//i.test(url || '') ? url : '#';
+}
+
+/**
  * Añade un ticker a la Watchlist del usuario. Compartido entre Research y
  * Scanner (y cualquier otra página que quiera un botón "＋ Watchlist" rápido)
  * para no duplicar la llamada al endpoint en cada sitio.

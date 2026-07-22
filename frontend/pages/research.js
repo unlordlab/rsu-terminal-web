@@ -1,5 +1,5 @@
 import { tt } from '/components/tooltip.js';
-import { errorMessage } from '/core/ui.js';
+import { errorMessage, esc, safeUrl } from '/core/ui.js';
 
 export async function render(container) {
     container.innerHTML = pageHeader();
@@ -13,7 +13,7 @@ export async function render(container) {
         if (!ticker) return;
         btn.textContent   = 'ANALIZANDO...';
         btn.style.opacity = '0.7';
-        result.innerHTML  = '<div style="color:var(--color-muted);font-size:12px;padding:1rem;">Cargando datos de ' + ticker + '...</div>';
+        result.innerHTML  = '<div style="color:var(--color-muted);font-size:12px;padding:1rem;">Cargando datos de ' + esc(ticker) + '...</div>';
         try {
             const token = sessionStorage.getItem('rsu_token');
             const res   = await fetch('/api/v1/research/' + ticker, {
@@ -70,8 +70,8 @@ function cryptoHeaderSection(data, chgColor, chgStr) {
         + '<div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:1rem;">'
         + '<div>'
         + '<div style="display:flex;align-items:baseline;gap:12px;margin-bottom:4px;">'
-        + '<span class="ticker-link" style="color:var(--color-accent);font-size:24px;letter-spacing:0.1em;">' + data.ticker + '</span>'
-        + '<span style="color:var(--color-muted);font-size:14px;">' + data.name + '</span>'
+        + '<span class="ticker-link" style="color:var(--color-accent);font-size:24px;letter-spacing:0.1em;">' + esc(data.ticker) + '</span>'
+        + '<span style="color:var(--color-muted);font-size:14px;">' + esc(data.name) + '</span>'
         + '<span style="background:#a855f722;color:#a855f7;border:1px solid #a855f755;border-radius:3px;padding:1px 8px;font-size:9px;letter-spacing:0.05em;">CRIPTO</span>'
         + '</div>'
         + '</div>'
@@ -244,11 +244,11 @@ function headerSection(data, chgColor, chgStr) {
         + '<div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:1rem;">'
         + '<div>'
         + '<div style="display:flex;align-items:baseline;gap:12px;margin-bottom:4px;">'
-        + '<span onclick="goToResearch(\'' + data.ticker + '\')" class="ticker-link" style="color:var(--color-accent);font-size:24px;letter-spacing:0.1em;">' + data.ticker + '</span>'
-        + '<span style="color:var(--color-muted);font-size:14px;">' + data.name + '</span>'
+        + '<span onclick="goToResearch(\'' + esc(data.ticker) + '\')" class="ticker-link" style="color:var(--color-accent);font-size:24px;letter-spacing:0.1em;">' + esc(data.ticker) + '</span>'
+        + '<span style="color:var(--color-muted);font-size:14px;">' + esc(data.name) + '</span>'
         + '</div>'
-        + '<div style="color:var(--color-muted);font-size:12px;margin-bottom:4px;">' + data.sector + ' · ' + data.industry + ' · ' + data.country + '</div>'
-        + (data.website ? '<a href="' + data.website + '" target="_blank" style="color:var(--color-secondary);font-size:11px;">' + data.website + '</a>' : '')
+        + '<div style="color:var(--color-muted);font-size:12px;margin-bottom:4px;">' + esc(data.sector) + ' · ' + esc(data.industry) + ' · ' + esc(data.country) + '</div>'
+        + (data.website ? '<a href="' + safeUrl(data.website) + '" target="_blank" style="color:var(--color-secondary);font-size:11px;">' + esc(data.website) + '</a>' : '')
         + '</div>'
         + '<div style="text-align:right;">'
         + '<div style="color:var(--color-text);font-size:28px;font-weight:500;">$' + data.price.toLocaleString('en-US') + '</div>'
@@ -586,8 +586,8 @@ function newsSection(data) {
     return '<div style="background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius);padding:1.25rem;margin-bottom:1rem;">'
         + '<div style="color:var(--color-accent);font-size:12px;letter-spacing:0.08em;margin-bottom:0.75rem;">NOTICIAS RECIENTES</div>'
         + data.news.map(n => '<div style="padding:8px 0;border-bottom:1px solid var(--color-border);">'
-            + '<a href="' + n.url + '" target="_blank" style="color:var(--color-text);font-size:12px;line-height:1.4;display:block;">' + n.headline + '</a>'
-            + '<div style="color:var(--color-muted);font-size:10px;margin-top:3px;">' + n.source + (n.date ? ' · ' + n.date : '') + '</div>'
+            + '<a href="' + safeUrl(n.url) + '" target="_blank" style="color:var(--color-text);font-size:12px;line-height:1.4;display:block;">' + esc(n.headline) + '</a>'
+            + '<div style="color:var(--color-muted);font-size:10px;margin-top:3px;">' + esc(n.source) + (n.date ? ' · ' + esc(n.date) : '') + '</div>'
             + '</div>').join('')
         + '</div>';
 }
