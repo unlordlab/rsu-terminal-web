@@ -40,8 +40,18 @@ fi
 echo "=== 3/6: Ejecutando la suite de tests (red de seguridad, ~35 tests) ==="
 # pytest solo vivía en requirements-dev.txt para uso local/CI -- nunca se
 # había instalado en el host del VPS (deploy.sh corre fuera de Docker aquí).
-# Se instala aquí mismo, en silencio, si falta, para que este gate no rompa
-# el primer despliegue tras esta sesión por un simple "módulo no encontrado".
+# Antes de intentar instalar pytest, comprobar que pip EXISTE de verdad --
+# en instalaciones mínimas de Ubuntu server, python3 no trae pip incluido
+# (falta el módulo entero, no solo el paquete), y "pip install" fallaría
+# con un traceback críptico que no dice qué hacer.
+if ! python3 -m pip --version > /dev/null 2>&1; then
+    echo "✗ pip no está disponible en este Python (python3 -m pip falla por completo,"
+    echo "  no es solo que falte pytest). Esto es un problema del sistema, no del código."
+    echo "  Arréglalo UNA VEZ con:"
+    echo "    sudo apt-get update && sudo apt-get install -y python3-pip"
+    echo "  y vuelve a correr ./deploy.sh. Abortando ANTES de tocar el contenedor."
+    exit 1
+fi
 python3 -m pip show pytest > /dev/null 2>&1 || python3 -m pip install -q -r requirements-dev.txt
 if ! (cd backend && python3 -m pytest tests/ -q); then
     echo "✗ La suite de tests ha fallado con el código ya en disco (commit $AFTER_COMMIT)."
