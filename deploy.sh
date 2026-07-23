@@ -27,15 +27,33 @@ if [ -n "$UNTRACKED" ]; then
 fi
 
 echo "=== 2/6: Trayendo cambios de GitHub ==="
-BEFORE_COMMIT=$(git rev-parse HEAD)
-git pull
-AFTER_COMMIT=$(git rev-parse HEAD)
+# IMPORTANTE -- riesgo de auto-modificación: git pull puede actualizar este
+# mismo fichero (deploy.sh) mientras bash ya lo tiene cargado en memoria de
+# esta ejecución. Sin el relanzamiento de abajo, el resto de los pasos (3-6)
+# seguirían corriendo con la lógica VIEJA que bash ya había leído, aunque el
+# fichero en disco esté al día -- esto causó 2 despliegues seguidos
+# ejecutando código de sesiones anteriores sin que nadie se diera cuenta
+# hasta comparar el texto exacto de los mensajes de error (22/07/2026).
+if [ -z "${DEPLOY_SH_RELANZADO:-}" ]; then
+    BEFORE_COMMIT=$(git rev-parse HEAD)
+    git pull
+    AFTER_COMMIT=$(git rev-parse HEAD)
 
-if [ "$BEFORE_COMMIT" == "$AFTER_COMMIT" ]; then
-    echo "  Este 'git pull' no trajo nada nuevo (puede que ya lo hubieras traído a mano)."
-    echo "  Seguimos igualmente: recrear el contenedor es barato y así nos aseguramos"
-    echo "  de que lo que está corriendo coincide siempre con lo último en disco."
+    if [ "$BEFORE_COMMIT" == "$AFTER_COMMIT" ]; then
+        echo "  Este 'git pull' no trajo nada nuevo (puede que ya lo hubieras traído a mano)."
+        echo "  Seguimos igualmente: recrear el contenedor es barato y así nos aseguramos"
+        echo "  de que lo que está corriendo coincide siempre con lo último en disco."
+    else
+        echo "  Código actualizado -- relanzando deploy.sh desde la versión recién"
+        echo "  descargada (necesario, ver comentario arriba)."
+    fi
+    DEPLOY_SH_RELANZADO=1 DEPLOY_SH_BEFORE="$BEFORE_COMMIT" DEPLOY_SH_AFTER="$AFTER_COMMIT" exec "$0"
 fi
+# A partir de aquí, garantizado que este proceso viene de una relectura
+# fresca del fichero en disco -- todo lo de abajo es siempre la última
+# versión, nunca una mezcla vieja/nueva.
+BEFORE_COMMIT="$DEPLOY_SH_BEFORE"
+AFTER_COMMIT="$DEPLOY_SH_AFTER"
 
 echo "=== 3/6: Comprobando si cambiaron las dependencias de Python ==="
 if git diff --name-only "$BEFORE_COMMIT" "$AFTER_COMMIT" | grep -q "requirements.txt"; then
