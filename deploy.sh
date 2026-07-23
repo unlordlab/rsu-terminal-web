@@ -55,12 +55,18 @@ fi
 BEFORE_COMMIT="$DEPLOY_SH_BEFORE"
 AFTER_COMMIT="$DEPLOY_SH_AFTER"
 
-echo "=== 3/6: Comprobando si cambiaron las dependencias de Python ==="
-if git diff --name-only "$BEFORE_COMMIT" "$AFTER_COMMIT" | grep -q "requirements.txt"; then
-    echo "  requirements.txt cambió — reconstruyendo la imagen (esto tarda 1-2 min)..."
+echo "=== 3/6: Comprobando si cambió algo que afecte a la imagen Docker ==="
+# Antes solo miraba requirements.txt -- el fix de Reddit Pulse (23/07/2026)
+# tocó el Dockerfile (instalación de Chromium) sin tocar requirements.txt,
+# así que este chequeo dijo "sin cambios" y el contenedor se recreó con la
+# imagen VIEJA, sin el binario arreglado -- el bug seguía en producción
+# aunque el despliegue "funcionara". Cualquier cambio en el propio
+# Dockerfile (no solo en lo que él instala) tiene que disparar rebuild.
+if git diff --name-only "$BEFORE_COMMIT" "$AFTER_COMMIT" | grep -qE "^(requirements\.txt|Dockerfile)$"; then
+    echo "  requirements.txt o Dockerfile cambió — reconstruyendo la imagen (esto tarda 1-2 min)..."
     docker compose build --no-cache app
 else
-    echo "  Sin cambios en dependencias — no hace falta reconstruir la imagen."
+    echo "  Sin cambios que afecten a la imagen — no hace falta reconstruir."
 fi
 
 echo "=== 4/6: Ejecutando la suite de tests (red de seguridad, ~35 tests) ==="
