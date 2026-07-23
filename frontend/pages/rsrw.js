@@ -237,14 +237,17 @@ function renderTickerResult(data) {
     const trend = (data.rs_trend || 0) > 0.01 ? '▲ ALCISTA' : (data.rs_trend || 0) < -0.01 ? '▼ BAJISTA' : '→ LATERAL';
     const tColor = trend.includes('▲') ? 'var(--color-accent)' : trend.includes('▼') ? '#f23645' : 'var(--color-muted)';
     const chartId = 'rsrw-ticker-chart-' + Date.now();
+    const pct = data.rs_pct;
+    const pctColor = pct == null ? 'var(--color-muted)' : pct >= 80 ? 'var(--color-accent)' : pct <= 20 ? '#f23645' : '#ffb800';
 
     return '<div style="background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius);padding:1.25rem;margin-bottom:1rem;">'
         + '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem;">'
         + '<div style="color:var(--color-accent);font-size:18px;letter-spacing:0.1em;">' + esc(data.ticker) + '</div>'
         + '<div style="color:var(--color-muted);font-size:11px;">Actualizado: ' + esc(data.timestamp) + '</div>'
         + '</div>'
-        + '<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:1rem;margin-bottom:1rem;">'
-        + kpiCard('RS SCORE ' + tt('rsrw'), score.toFixed(1), 'vs SPY', color)
+        + '<div style="display:grid;grid-template-columns:repeat(5,1fr);gap:1rem;margin-bottom:1rem;">'
+        + kpiCard('RS% ' + tt('rs-rating'), pct == null ? 'N/D' : pct.toFixed(1), pct == null ? 'sin scan reciente' : 'vs universo', pctColor)
+        + kpiCard('RS SCORE', score.toFixed(1), 'vs SPY', color)
         + kpiCard('RS 21D', (data.rs_21d || 0).toFixed(2), '1 mes', 'var(--color-muted)')
         + kpiCard('RS 63D', (data.rs_63d || 0).toFixed(2), '3 meses', 'var(--color-muted)')
         + kpiCard('RS 126D', (data.rs_126d || 0).toFixed(2), '6 meses', 'var(--color-muted)')

@@ -304,8 +304,9 @@ def get_rsrw_scan(max_tickers: int = 500) -> dict:
 
 def get_rsrw_ticker(ticker: str) -> dict:
     try:
+        ticker_up = ticker.upper()
         spy    = yf.Ticker(BENCHMARK).history(period="260d")["Close"]
-        prices = yf.Ticker(ticker.upper()).history(period="260d")["Close"]
+        prices = yf.Ticker(ticker_up).history(period="260d")["Close"]
         if len(prices) < 63:
             return {"ok": False, "error": "Histórico insuficiente"}
 
@@ -332,11 +333,26 @@ def get_rsrw_ticker(ticker: str) -> dict:
             "values": [round(float(v) * 100, 2) for v in hist_rs.values],
         }
 
+        # Percentil real: se busca en el scan nocturno (Gist) más reciente. Sin
+        # scan disponible o ticker ausente de él, se deja sin percentil (None),
+        # no se fabrica -- mismo criterio que la caché de universo de CANSLIM
+        # (sesión 23).
+        rs_pct = None
+        try:
+            gist_data = _load_gist()
+            if gist_data:
+                df, _, _ = _parse_gist(gist_data)
+                if ticker_up in df.index:
+                    val = df.loc[ticker_up, "RS_Pct"]
+                    rs_pct = round(float(val), 1) if pd.notna(val) else None
+        except Exception:
+            pass
+
         return {
             "ok":       True,
-            "ticker":   ticker.upper(),
+            "ticker":   ticker_up,
             "rs_score": round(rs_score, 2),
-            "rs_pct":   None,
+            "rs_pct":   rs_pct,
             "rs_21d":   round(rs_vals_raw[21] * 100, 2),
             "rs_63d":   round(rs_vals_raw[63] * 100, 2),
             "rs_126d":  round(rs_vals_raw[126] * 100, 2),
