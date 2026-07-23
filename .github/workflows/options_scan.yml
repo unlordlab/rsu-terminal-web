@@ -1,0 +1,30 @@
+name: Options Flow Scan Trigger
+
+on:
+  schedule:
+    # L-V, 23:00 UTC -- siguiente hueco libre tras Thematic (22:00),
+    # Scanner (22:15), RS/RW (22:30) y CANSLIM (22:45); con margen extra
+    # porque option_chain() usa un endpoint de Yahoo distinto al de los
+    # otros 4 (no compite por el mismo rate limit) y no hay urgencia de
+    # ir pegado a los demás.
+    - cron: '0 23 * * 1-5'
+  workflow_dispatch:  # Permite ejecutar manualmente desde la pestaña Actions
+
+jobs:
+  trigger:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Disparar el scan de Options Flow en el backend
+        run: |
+          status=$(curl -s -o /tmp/resp.json -w "%{http_code}" -X POST \
+            --max-time 1500 \
+            -H "Authorization: Bearer ${{ secrets.BRIEFING_AUTH_TOKEN }}" \
+            "${{ secrets.RSU_BACKEND_URL }}/api/v1/options/scan-now")
+          echo "HTTP status: $status"
+          cat /tmp/resp.json
+          if [ "$status" != "200" ]; then
+            echo "::error::El disparo del scan de Options Flow falló (HTTP $status)"
+            exit 1
+          fi

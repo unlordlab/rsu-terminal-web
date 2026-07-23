@@ -50,10 +50,15 @@ async def oi_changes(user=Depends(verify_token)):
 
 @router.post("/scan-now")
 async def scan_now(user=Depends(verify_token)):
-    """Dispara el escaneo+guardado ahora mismo, en vez de esperar al loop
-    programado (corre 1h tras arrancar, luego cada 24h) — útil justo después
-    de desplegar, cuando la base de datos todavía está vacía. Es un escaneo
-    pesado (~150 tickers x 5 vencimientos vía yfinance), puede tardar un rato."""
+    """Dispara el escaneo+guardado ahora mismo. Desde la sesión 35, este
+    es el endpoint que llama el cron de GitHub Actions
+    (.github/workflows/options_scan.yml) a hora fija cada tarde tras el
+    cierre de mercado -- antes había un loop en el propio proceso del
+    backend que se auto-programaba 1h tras arrancar y luego cada 24h, así
+    que la hora real dependía de cuándo se había reiniciado el
+    contenedor. También sigue disponible para disparo manual (p.ej. justo
+    después de un deploy, si la base de datos está vacía). Escaneo pesado
+    (~570 tickers vía yfinance), puede tardar varios minutos."""
     from services.options_service import run_and_save_scan
     return run_and_save_scan()
 

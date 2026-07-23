@@ -382,20 +382,3 @@ async def cartera_check_loop():
             await loop.run_in_executor(None, procesar_cartera_notificaciones)
         except Exception as e:
             print(f"[CarteraCheck] Error: {e}")
-
-
-# Escanea Options Flow (~150 tickers x 5 vencimientos, pesado) y lo guarda una
-# vez al día — antes solo se guardaba si alguien pulsaba un botón manual en el
-# frontend, lo que significaba que si nadie visitaba la página ese día no se
-# acumulaba histórico. Corre 1h después de arrancar (deja que el resto de
-# loops de arranque terminen primero) y luego cada 24h.
-async def options_flow_scan_loop():
-    await asyncio.sleep(3600)  # 1h tras arrancar, no compitiendo con el resto de loops iniciales
-    while True:
-        try:
-            from services.options_service import run_and_save_scan
-            loop = asyncio.get_event_loop()
-            await loop.run_in_executor(None, run_and_save_scan)
-        except Exception as e:
-            print(f"[OptionsFlowScan] Error: {e}")
-        await asyncio.sleep(86400)  # 24h

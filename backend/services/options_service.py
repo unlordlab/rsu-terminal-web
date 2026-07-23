@@ -5,6 +5,7 @@ import numpy as np
 import sqlite3
 import os
 import sys
+import time
 from datetime import datetime, timedelta
 from concurrent.futures import ThreadPoolExecutor
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "..", "shared"))
@@ -48,12 +49,15 @@ WATCHLIST = [
 # export estático (antes desactualizado, ver sesión 19): viene en vivo de
 # shared/sp500_universe.py, la fuente única del universo.
 # AVISO DE ESCALA: el S&P500 completo casi cuadriplica el tamaño de
-# WATCHLIST (~149 curados -> ~650 tickers) — el escaneo de opciones es mucho
-# más pesado por ticker que una simple descarga de precio (hasta 5 llamadas
-# a option_chain() por ticker, cada una con decenas de filas que iterar). Si
-# el escaneo diario empieza a tardar demasiado o a fallar por rate-limit de
-# Yahoo, este es el primer sitio a revisar — considera reducir max_workers
-# en get_options_flow() o recortar esta lista.
+# WATCHLIST (~149 curados -> 570 tickers reales tras dedup, verificado
+# 23/07/2026) — el escaneo de opciones es mucho más pesado por ticker que
+# una simple descarga de precio (hasta 5 llamadas a option_chain() por
+# ticker, cada una con decenas de filas que iterar). Sesión 35: se subió
+# max_workers de 10 a 15 y se añadieron reintentos por vencimiento en
+# _process_chain(), y el disparo diario pasó a un cron de GitHub Actions
+# (sin límite de tiempo de una petición en vivo) -- si el escaneo sigue
+# tardando demasiado o fallando por rate-limit de Yahoo, este es el primer
+# sitio a revisar.
 WATCHLIST = list(dict.fromkeys(WATCHLIST))
 
 # Mapa sector → tickers (para heatmap)
@@ -395,9 +399,14 @@ def get_ticker_flow_simple(ticker: str, period: str = "1w") -> dict:
     }
 
 def run_and_save_scan() -> dict:
-    """Ejecuta un escaneo completo del WATCHLIST y lo persiste — pensado para
-    correr una vez al día desde un loop programado (ver ws.py), no manualmente
-    desde el frontend. El escaneo es pesado (~150 tickers x 5 vencimientos),
+    """Ejecuta un escaneo completo del WATCHLIST y lo persiste. Desde la
+    sesión 35, lo dispara un cron de GitHub Actions
+    (.github/workflows/options_scan.yml) llamando a POST /scan-now a hora
+    fija cada tarde tras el cierre de mercado -- antes corría desde un
+    loop programado dentro del propio proceso del backend (ver ws.py),
+    cuya hora real dependía de cuándo se había reiniciado el contenedor.
+    Sigue disponible también para disparo manual. El escaneo es pesado
+    (~570 tickers -- curados + S&P500 completo -- x hasta 5 vencimientos),
     no algo para disparar cada vez que alguien abre la página."""
     data = get_options_flow()
     if not data.get("ok"):
@@ -783,8 +792,21 @@ def _process_chain(ticker: str, min_premium: float = 100_000, min_score: int = 4
                 exp_date = datetime.strptime(exp, '%Y-%m-%d').date()
                 exp_days = (exp_date - today).days
                 if exp_days < 7 or exp_days > 180: continue
-                chain = tk.option_chain(exp)
             except Exception:
+                continue
+
+            # Reintentos con backoff corto -- option_chain() es la llamada más
+            # expuesta a fallos transitorios de red; antes un solo fallo
+            # perdía el vencimiento entero sin reintentar.
+            chain = None
+            for attempt in range(3):
+                try:
+                    chain = tk.option_chain(exp)
+                    break
+                except Exception:
+                    if attempt < 2:
+                        time.sleep(1.5)
+            if chain is None:
                 continue
 
             # Earnings proximity
@@ -921,7 +943,7 @@ def get_options_flow(min_premium: float = 100_000, min_score: int = 4, tickers: 
     results = []
     scan_ts = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
 
-    with ThreadPoolExecutor(max_workers=10) as ex:
+    with ThreadPoolExecutor(max_workers=15) as ex:
         futures = {ex.submit(_process_chain, t, min_premium, min_score): t for t in target}
         for f in futures:
             r = f.result()
