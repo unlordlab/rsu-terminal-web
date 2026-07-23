@@ -31,5 +31,7 @@ jobs:
           GIST_ID:              ${{ secrets.GIST_ID }}
           FINNHUB_API_KEY:      ${{ secrets.FINNHUB_API_KEY }}
           ALPHA_VANTAGE_API_KEY: ${{ secrets.ALPHA_VANTAGE_API_KEY }}
+          RSU_BACKEND_URL:      ${{ secrets.RSU_BACKEND_URL }}
+          BRIEFING_AUTH_TOKEN:  ${{ secrets.BRIEFING_AUTH_TOKEN }}
         run: |
           python scripts/daily_briefing.py

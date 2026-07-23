@@ -51,6 +51,12 @@ class RevokeSessionsRequest(BaseModel):
     email: str
 
 
+class MintTokenRequest(BaseModel):
+    email: str
+    expire_days: int = 1825  # ~5 años -- pensado para credenciales de
+    # servicio (scripts), no para una sesión de usuario normal.
+
+
 class ResetPasswordRequest(BaseModel):
     email: str
     new_password: str
@@ -181,3 +187,23 @@ async def admin_revoke_sessions(req: RevokeSessionsRequest, _admin: None = Depen
     if not ok:
         raise HTTPException(status_code=404, detail="Usuario no encontrado")
     return {"ok": True, "email": req.email.strip().lower()}
+
+
+@router.post("/admin/mint-token")
+async def admin_mint_token(req: MintTokenRequest, _admin: None = Depends(verify_admin_key)):
+    """Emite un token de larga duración para una cuenta ya existente --
+    pensado para credenciales de SERVICIO (p.ej. daily_briefing.py
+    llamando a un endpoint protegido), no para el login de una persona.
+    Se recomienda usar una cuenta dedicada (no la personal del admin):
+    /admin/revoke-sessions sube el token_version de la cuenta indicada, lo
+    que invalidaría en silencio CUALQUIER token de esa cuenta, incluido
+    este, si algún día se revocan las sesiones de la cuenta personal por
+    otro motivo."""
+    user = users_service.get_user_by_email(req.email.strip().lower())
+    if user is None:
+        raise HTTPException(status_code=404, detail="Usuario no encontrado")
+    token = create_token(
+        {"sub": user["email"], "tier": user["tier"], "tv": user["token_version"]},
+        expire_minutes=req.expire_days * 24 * 60,
+    )
+    return {"access_token": token, "email": user["email"], "expire_days": req.expire_days}

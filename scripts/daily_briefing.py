@@ -10,6 +10,7 @@ import json
 import time
 import requests
 from datetime import datetime, timedelta
+from zoneinfo import ZoneInfo
 import yfinance as yf
 import numpy as np
 import pandas as pd
@@ -34,6 +35,15 @@ MODEL      = "qwen/qwen3.6-27b"
 BIAS_HISTORY_FILE = "bias_history.json"
 BIAS_HISTORY_DAYS = 14
 
+# Historial de varios días con el TEXTO COMPLETO del briefing (no solo el
+# sesgo, a diferencia de BIAS_HISTORY_FILE) -- fichero aparte dentro del
+# mismo Gist, para que el modelo pueda mantener consistencia de niveles y
+# postura más allá de "ayer". briefing.json (un solo día, el más reciente)
+# se mantiene sin cambios porque backend/services/market_service.py
+# ::get_nightly_briefing() lo lee por nombre exacto para el frontend.
+BRIEFING_HISTORY_FILE = "briefing_history.json"
+BRIEFING_HISTORY_DAYS = 3
+
 # Mismo Gist que ya publica scanner_universe.py — lectura pública, sin token,
 # para traer al briefing las señales de amplitud REALES de RSU (McClellan,
 # % S&P sobre SMA50, NH-NL) en vez de que el briefing viva aislado del resto
@@ -44,14 +54,15 @@ SCANNER_GIST_FILE = "scanner_scan.json"
 FINNHUB_KEY = os.environ.get("FINNHUB_API_KEY", "")
 ALPHA_VANTAGE_KEY = os.environ.get("ALPHA_VANTAGE_API_KEY", "")
 
-# Insider Flow vive en SQLite dentro del backend (insider_history.db), no en
-# un Gist — así que solo es alcanzable desde este script si el backend está
-# desplegado y accesible por red pública. RSU_BACKEND_URL se deja vacío por
-# defecto (el Action de GitHub no tiene forma de llegar a un backend que
-# todavía no está en producción); el día que despliegues en Hetzner, basta
-# con rellenar este secret en el repo para que el briefing empiece a incluir
-# también los clusters de insiders — no hace falta tocar código de nuevo.
-RSU_BACKEND_URL = os.environ.get("RSU_BACKEND_URL", "").rstrip("/")
+# Insider Flow vive en SQLite dentro del backend (insider_history.db), no
+# en un Gist -- así que solo es alcanzable desde este script contactando
+# al backend en producción. RSU_BACKEND_URL apunta a la IP del VPS
+# (sin HTTPS todavía); BRIEFING_AUTH_TOKEN es un token de servicio de
+# larga duración emitido vía POST /api/v1/auth/admin/mint-token (ver
+# sesión 23/07/2026) -- el endpoint exige Authorization: Bearer, así que
+# sin el token la llamada da 403 aunque la URL esté bien configurada.
+RSU_BACKEND_URL     = os.environ.get("RSU_BACKEND_URL", "").rstrip("/")
+BRIEFING_AUTH_TOKEN = os.environ.get("BRIEFING_AUTH_TOKEN", "")
 
 # Tickers de mega/large-cap conocidos — para filtrar el calendario de earnings
 # a solo nombres con peso real de mercado, en vez de listar cientos de small
@@ -582,14 +593,20 @@ def get_rsu_breadth_signals() -> dict:
 # ── CLUSTERS DE INSIDERS (solo si el backend ya está desplegado) ─────────────
 
 def get_insider_clusters() -> list:
-    """Insider Flow vive en SQLite dentro del backend, no en un Gist — así que
-    esto solo funciona si RSU_BACKEND_URL apunta a un backend desplegado y
-    accesible por red pública. Mientras la terminal no esté en el servidor,
-    devuelve vacío sin romper el resto del briefing."""
-    if not RSU_BACKEND_URL:
+    """Insider Flow vive en SQLite dentro del backend, no en un Gist --
+    esto solo funciona si RSU_BACKEND_URL apunta al backend en producción
+    Y BRIEFING_AUTH_TOKEN trae un token de servicio válido (el endpoint
+    exige Authorization: Bearer, ver backend/routers/insider.py). Si
+    falta cualquiera de los dos, devuelve vacío sin romper el resto del
+    briefing -- mismo criterio que el resto de fuentes opcionales."""
+    if not RSU_BACKEND_URL or not BRIEFING_AUTH_TOKEN:
         return []
     try:
-        r = requests.get(f"{RSU_BACKEND_URL}/api/v1/insider/clusters", timeout=10)
+        r = requests.get(
+            f"{RSU_BACKEND_URL}/api/v1/insider/clusters",
+            headers={"Authorization": f"Bearer {BRIEFING_AUTH_TOKEN}"},
+            timeout=10,
+        )
         if r.status_code != 200:
             return []
         return r.json().get("clusters", [])[:5]
@@ -598,16 +615,19 @@ def get_insider_clusters() -> list:
         return []
 
 
-# ── POSTURA DE AYER (memoria entre días, no un caché de rendimiento) ─────────
+# ── MEMORIA DE LOS ÚLTIMOS DÍAS (texto completo, no un caché de rendimiento) ─
 
-def get_yesterday_stance() -> str:
-    """Lee el propio Gist de salida ANTES de sobrescribirlo con el briefing de
-    hoy. Esto es lo que da continuidad narrativa real ("ayer cerramos las
-    coberturas...") — no un caché que acelera respuestas, sino memoria de la
-    postura del día anterior para que el briefing de hoy pueda construir
-    sobre ella en vez de escribirse en el vacío cada mañana."""
+def get_briefing_history() -> list:
+    """Lee el historial de los últimos BRIEFING_HISTORY_DAYS briefings
+    completos (fecha + texto + sesgo) -- reemplaza a la antigua
+    get_yesterday_stance()/briefing.json (memoria de un solo día) por una
+    ventana de varios días, para que el modelo pueda mantener consistencia
+    de niveles/postura más allá de "ayer". Vive en un fichero aparte
+    dentro del mismo Gist -- briefing.json (el más reciente, un solo día)
+    se mantiene sin cambios porque backend/services/market_service.py
+    ::get_nightly_briefing() lo lee por nombre exacto para el frontend."""
     if not GIST_TOKEN:
-        return ""
+        return []
     try:
         r = requests.get(
             f"https://api.github.com/gists/{GIST_ID}",
@@ -615,28 +635,41 @@ def get_yesterday_stance() -> str:
             timeout=10,
         )
         if r.status_code != 200:
-            return ""
-        content = r.json()["files"].get("briefing.json", {}).get("content", "")
+            return []
+        content = r.json()["files"].get(BRIEFING_HISTORY_FILE, {}).get("content", "")
         if not content:
-            return ""
-        payload = json.loads(content)
-        prev_date = payload.get("date", "")
-        today     = datetime.now().strftime("%Y-%m-%d")
-        if prev_date == today:
-            return ""  # ya se generó hoy, no hay "ayer" que aportar
-        text = payload.get("text", "")
-        # Nos quedamos con un extracto corto (no todo el briefing de ayer) —
-        # solo lo suficiente para que el modelo sepa cuál fue su postura.
-        return text[:1200]
+            return []
+        history = json.loads(content)
+        return history if isinstance(history, list) else []
     except Exception as e:
-        print(f"⚠️  No se pudo leer la postura de ayer: {e}")
-        return ""
+        print(f"⚠️  No se pudo leer el historial de briefings: {e}")
+        return []
+
+
+def _append_briefing_history(history: list, date: str, text: str, bias: str) -> list:
+    """Añade el briefing de hoy y poda a los últimos BRIEFING_HISTORY_DAYS
+    -- evita duplicado si se re-ejecuta el mismo día, mismo criterio que
+    _append_bias()."""
+    history = [h for h in history if h.get("date") != date]
+    history.append({"date": date, "text": text, "bias": bias or "N/D"})
+    history.sort(key=lambda h: h["date"])
+    return history[-BRIEFING_HISTORY_DAYS:]
+
+
+def format_briefing_history(history: list) -> str:
+    """Bloque narrativo legible para el prompt -- mismo criterio ya
+    establecido en el proyecto de no volcar JSON crudo (ver sector_lines,
+    calendar_lines...). Orden cronológico, el más reciente al final."""
+    if not history:
+        return "Sin briefings anteriores registrados todavía."
+    ordered = sorted(history, key=lambda h: h["date"])
+    return "\n\n".join(f"[{h['date']} — sesgo {h.get('bias', 'N/D')}]\n{h['text'][:2000]}" for h in ordered)
 
 
 # ── CONSTRUIR PROMPT ──────────────────────────────────────────────────────────
 
 def build_prompt(market_data: dict, news: list, major_headlines: list, earnings: list, breadth: dict,
-                  insider_clusters: list, yesterday_stance: str, bias_history: list) -> str:
+                  insider_clusters: list, briefing_history: list, bias_history: list) -> str:
     d = market_data
 
     # Formatear índices
@@ -664,12 +697,14 @@ def build_prompt(market_data: dict, news: list, major_headlines: list, earnings:
         chg5 = sv.get("chg_5d", 0) or 0
         sector_lines += f"| {etf} | {sv['name']} | {chg1:+.2f}% | {chg5:+.2f}% |\n"
 
-    # Futuros (gap pre-market real, no inventado)
+    # Futuros (gap pre-market real, no inventado) -- con hora ET real, para
+    # que el modelo no describa un dato pre-market como si fuera del cierre.
     es = d.get("ES", {})
     nq = d.get("NQ", {})
+    et_time = datetime.now(ZoneInfo("America/New_York")).strftime("%H:%M ET")
     futures_str = "Dato no disponible"
     if es.get("price") is not None and nq.get("price") is not None:
-        futures_str = f"ES (S&P): {fmt('ES')} | NQ (Nasdaq): {fmt('NQ')}"
+        futures_str = f"ES (S&P): {fmt('ES')} | NQ (Nasdaq): {fmt('NQ')} — dato de las {et_time}"
 
     # Niveles técnicos reales (SMA20/50/200, rango 20d) — calculados, no inventados
     def fmt_tech(name):
@@ -786,14 +821,24 @@ def build_prompt(market_data: dict, news: list, major_headlines: list, earnings:
     if not insider_lines:
         insider_lines = "Sin datos de Insider Flow disponibles en este ciclo.\n"
 
-    # Postura de ayer — memoria entre días para dar continuidad narrativa real
-    yesterday_block = (
-        f"TU PROPIO BRIEFING DE AYER (para dar continuidad — di explícitamente si mantienes, "
-        f"reduces o cambias esta postura, y por qué. Si el mercado te dio la razón o te la quitó, dilo con "
-        f"naturalidad — \"ayer funcionó\" o \"me equivoqué con el timing, esto es lo que cambio\" son frases "
-        f"legítimas, no debilidad):\n{yesterday_stance}\n"
-        if yesterday_stance else
-        "No hay briefing de ayer disponible (primera ejecución, o el de ayer no se generó) — escribe sin referencias al día anterior.\n"
+    # Memoria de los últimos días — continuidad narrativa real, con texto
+    # completo (no solo el sesgo, eso lo cubre bias_history_str aparte)
+    briefing_history_str = format_briefing_history(briefing_history)
+    memoria_block = (
+        f"""CONTEXTO HISTÓRICO — MEMORIA DE LOS ÚLTIMOS {len(briefing_history)} BRIEFINGS (tus propias notas de días anteriores, más reciente al final):
+{briefing_history_str}
+
+De ese historial, ten en cuenta:
+1. Tu postura del día más reciente — di explícitamente si mantienes, reduces o cambias esa postura hoy, y por qué. Si el mercado te dio la razón o te la quitó, dilo con naturalidad — "ayer funcionó" o "me equivoqué con el timing, esto es lo que cambio" son frases legítimas, no debilidad.
+2. Los niveles técnicos que citaste en esos días — si vuelves a mencionar un nivel de invalidación, sé consistente con lo dicho antes o explica por qué cambia.
+3. Las frases de apertura que ya usaste — no repitas la misma fórmula de arranque de un día para otro.
+
+REGLAS DE CONTINUIDAD NARRATIVA:
+- No digas "ayer" de algo que pasó hace 2 o 3 días — usa la fecha real de cada entrada del historial para situarte correctamente en el tiempo.
+- Mantén el mismo nivel de invalidación técnica de un día a otro salvo que el precio ya lo haya invalidado o superado — en ese caso, dilo explícitamente y da el nuevo nivel.
+"""
+        if briefing_history else
+        "No hay briefings anteriores disponibles (primera ejecución, o el histórico está vacío) — escribe sin referencias a días anteriores.\n"
     )
 
     bias_history_str = format_bias_history(bias_history)
@@ -813,7 +858,7 @@ IDIOMA: Español castellano, natural. Nada de emojis. Nada de listas interminabl
 
 VARIEDAD: Esto se publica todos los días. No repitas la misma fórmula de apertura ni las mismas frases hechas cada vez — varía cómo empiezas y cómo conectas las ideas, como lo haría una persona real escribiendo día tras día, no una plantilla rellenada.
 
-PROHIBIDO SONAR A TEXTO GENERADO: Nunca uses coletillas típicas de IA como "es importante destacar que", "cabe mencionar que", "en resumen", "cabe señalar", "es fundamental tener en cuenta", "no debemos olvidar que". Ningún trader real las usa escribiendo rápido por la mañana — si se cuela alguna de estas, reescribe la frase.
+PROHIBIDO SONAR A TEXTO GENERADO: Nunca uses coletillas típicas de IA como "es importante destacar que", "cabe mencionar que", "en resumen", "cabe señalar", "es fundamental tener en cuenta", "no debemos olvidar que", "vale la pena recordar que", "como se ha señalado", "es relevante destacar". Ningún trader real las usa escribiendo rápido por la mañana — si se cuela alguna de estas, reescribe la frase.
 
 CUANTIFICA, NO GENERALICES: Cada afirmación cualitativa debe ir atada a un número concreto de los datos proporcionados abajo. No "el VIX está tranquilo" — "el VIX cotiza en 14,2, por debajo del rango reciente". No "el mercado ha recuperado terreno" — el nivel exacto de dónde a dónde. Tienes los datos, úsalos en vez de quedarte en adjetivos vagos.
 
@@ -823,11 +868,20 @@ SIN CIERRE DE ASISTENTE: No termines con nada tipo "espero que esta información
 
 CONVICCIÓN CALIBRADA: Evita tanto las afirmaciones categóricas ("esto va a pasar") como la vaguedad que no compromete a nada ("podría pasar cualquier cosa"). El registro correcto es: "lo más probable es X, y esto se invalida si pasa Y" — una lectura de probabilidades con un punto de invalidación claro, no una predicción ni un texto que no dice nada.
 
-NORMA ANTI-ALUCINACIÓN: No inventes datos, precios, ni titulares que no estén en los bloques de abajo. Si falta un dato, dilo o simplemente no lo menciones — no rellenes el hueco con algo inventado. No inventes noticias que no estén en la lista de titulares proporcionada. De los titulares recibidos, ignora cualquiera que no tenga impacto financiero/económico/geopolítico real — un feed de noticias generalista trae de todo, tu criterio es filtrar lo irrelevante, no mencionarlo por completar espacio.
+REGLAS ANTI-ALUCINACIÓN — ESTRICTAS, SIN EXCEPCIONES:
+1. No inventes datos, precios, ni titulares que no estén en los bloques de abajo. Si falta un dato, dilo o simplemente no lo menciones — no rellenes el hueco con algo inventado. No inventes noticias que no estén en la lista de titulares proporcionada. De los titulares recibidos, ignora cualquiera que no tenga impacto financiero/económico/geopolítico real — un feed de noticias generalista trae de todo, tu criterio es filtrar lo irrelevante, no mencionarlo por completar espacio.
+2. No asumas que hoy hay una publicación de datos macro "típica" (payrolls, IPC, etc.) salvo que aparezca en el CALENDARIO ECONÓMICO de abajo con fecha confirmada — un dato que "suele publicarse sobre estas fechas" no es lo mismo que un dato confirmado en el calendario proporcionado.
+3. Materias primas (oro, petróleo): los precios de arriba son de futuro continuo (front month), no spot ni un contrato con vencimiento específico — no inventes un código de contrato concreto (p.ej. "CLQ26"), refiérete a ellos como "el futuro" o "el precio" del activo.
+4. VIX: si lo citas fuera del horario de mercado (pre-market/after-hours), usa el dato de la sesión anterior tal cual se te proporciona, sin afirmar que es el "settlement oficial de las 16:15 ET" salvo certeza.
+5. Yields de bonos: el dato proporcionado ya es la variación diaria real — no la redondees a "sin cambios" ni la infles, cítala tal cual viene, incluso si es un movimiento pequeño o plano.
+6. Tipos de bancos centrales: si mencionas la Fed, usa el proxy de Fed Funds ya proporcionado, nunca MRO/discount/prime u otro tipo distinto. No menciones tipos del BCE ni de otro banco central si no aparecen en los datos proporcionados.
+7. Variaciones porcentuales: usa la cifra ya calculada y proporcionada para cada activo — no la recalcules mentalmente ni la redondees de forma distinta a como aparece.
+8. Datos sectoriales (XLE, XLK, etc.): los porcentajes de arriba corresponden al cierre de sesión, no a pre-market/after-hours — no los presentes como datos intradía en tiempo real.
+9. Futuros pre-market: la hora (ET) del dato ya viene indicada junto al propio dato — cítala si mencionas el gap, no des el número como si fuera "ahora mismo" sin contexto horario.
 
 LONGITUD: 500-700 palabras. Esto no es un informe de 2000 palabras con 11 secciones — es una nota que se lee en 3-4 minutos.
 
-{yesterday_block}
+{memoria_block}
 
 TU SESGO DE LOS ÚLTIMOS DÍAS (para dar contexto de tendencia, p.ej. "llevamos N sesiones en el mismo sesgo" si aplica — no lo fuerces si no aporta nada hoy):
 {bias_history_str}
@@ -846,7 +900,7 @@ DATOS REALES DE MERCADO HOY ({d['date']} — {d['time']}):
 - Petróleo WTI: {fmt('WTI')}
 - Bitcoin: {fmt('BTC')}
 
-FUTUROS PRE-MARKET (gap real vs cierre anterior):
+FUTUROS PRE-MARKET (gap real vs cierre anterior, hora del dato indicada arriba):
 {futures_str}
 
 NIVELES TÉCNICOS CALCULADOS (medias móviles y rango — NO inventes otros niveles, usa solo estos):
@@ -1010,7 +1064,7 @@ def format_bias_history(history: list) -> str:
 
 # ── GUARDAR EN GIST ───────────────────────────────────────────────────────────
 
-def save_to_gist(content: str, market_data: dict, bias: str, bias_history: list):
+def save_to_gist(content: str, market_data: dict, bias: str, bias_history: list, briefing_history: list):
     if not GIST_TOKEN:
         raise ValueError("GIST_TOKEN no configurado")
 
@@ -1024,6 +1078,7 @@ def save_to_gist(content: str, market_data: dict, bias: str, bias_history: list)
     }
 
     updated_history = _append_bias(bias_history, market_data["date"], bias or "N/D")
+    updated_briefing_history = _append_briefing_history(briefing_history, market_data["date"], content, bias)
 
     r = requests.patch(
         f"https://api.github.com/gists/{GIST_ID}",
@@ -1038,6 +1093,9 @@ def save_to_gist(content: str, market_data: dict, bias: str, bias_history: list)
                 },
                 BIAS_HISTORY_FILE: {
                     "content": json.dumps(updated_history, ensure_ascii=False, indent=2)
+                },
+                BRIEFING_HISTORY_FILE: {
+                    "content": json.dumps(updated_briefing_history, ensure_ascii=False, indent=2)
                 }
             }
         },
@@ -1054,8 +1112,8 @@ def save_to_gist(content: str, market_data: dict, bias: str, bias_history: list)
 def main():
     print(f"🕐 Generando briefing — {datetime.now().strftime('%Y-%m-%d %H:%M UTC')}")
 
-    print("📰 Leyendo tu postura de ayer (para continuidad narrativa)...")
-    yesterday_stance = get_yesterday_stance()
+    print("📰 Leyendo el historial de los últimos 3 briefings (memoria narrativa)...")
+    briefing_history = get_briefing_history()
 
     print("📊 Leyendo registro de sesgo de los últimos días...")
     bias_history = get_bias_history()
@@ -1082,7 +1140,7 @@ def main():
     insider_clusters = get_insider_clusters()
 
     print("🤖 Construyendo prompt...")
-    prompt = build_prompt(market_data, news, major_headlines, earnings, breadth, insider_clusters, yesterday_stance, bias_history)
+    prompt = build_prompt(market_data, news, major_headlines, earnings, breadth, insider_clusters, briefing_history, bias_history)
 
     print(f"🧠 Llamando a {MODEL} via Groq...")
     raw_briefing = generate_briefing(prompt)
@@ -1101,7 +1159,7 @@ def main():
         )
 
     print("💾 Guardando en GitHub Gist...")
-    save_to_gist(briefing, market_data, bias, bias_history)
+    save_to_gist(briefing, market_data, bias, bias_history, briefing_history)
 
     print("✅ Briefing completado")
     print(f"📝 Palabras generadas: {len(briefing.split())}")
