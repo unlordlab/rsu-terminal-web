@@ -17,9 +17,9 @@ httpx>=0.28.1,<1.0.0  # rango abierto, no version exacta -- anthropic exige
 requests==2.32.3
 
 # Data
-pandas==2.2.3
-numpy==1.26.4
-yfinance==0.2.66
+pandas==3.0.5
+numpy==2.4.6
+yfinance==1.5.1
 anthropic==0.117.0  # agente Bull (tesis) — ver conversacion 17/07/2026
 google-genai==2.12.1  # agente Bull, modo de prueba gratuito (Gemini)
 Pillow==12.3.0  # redimensionar la foto de Gael para Telegram
