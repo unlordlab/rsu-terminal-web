@@ -2,12 +2,13 @@ import { tt } from '/components/tooltip.js';
 import { errorMessage, esc } from '/core/ui.js';
 
 let _lastScanData = null;
+let _lastMinScore = 60;
 
 window.__canslimBack = function() {
     if (!_lastScanData) return;
     const scanEl = document.querySelector('#canslim-scan-result');
     const resEl  = document.querySelector('#canslim-result');
-    if (scanEl) scanEl.innerHTML = renderScanResults(_lastScanData);
+    if (scanEl) scanEl.innerHTML = renderScanResults(_lastScanData, _lastMinScore);
     if (resEl)  resEl.innerHTML  = '';
     if (scanEl) scanEl.scrollIntoView({ behavior: 'smooth', block: 'start' });
 };
@@ -26,6 +27,7 @@ export async function render(container) {
     loadMarket(container);
     setupAnalyzer(container);
     setupScanner(container);
+    loadScan(container);
 }
 
 function header() {
@@ -120,14 +122,13 @@ function scannerPanel() {
         + '<div style="color:var(--color-accent);font-size:13px;letter-spacing:0.08em;margin-bottom:1rem;">SCANNER S&P 500 COMPLETO</div>'
         + '<div style="display:flex;gap:8px;align-items:center;">'
         + '<div style="color:var(--color-muted);font-size:12px;">Score mínimo:</div>'
-        + '<select id="min-score" style="background:var(--color-bg);border:1px solid var(--color-border);border-radius:var(--radius);padding:8px 12px;color:var(--color-text);font-family:var(--font-mono);font-size:12px;">'
+        + '<select id="min-score" style="background:var(--color-bg);border:1px solid var(--color-border);border-radius:var(--radius);padding:8px 12px;color:var(--color-text);font-family:var(--font-mono);font-size:12px;flex:1;">'
         + '<option value="40">40 — Amplio</option>'
         + '<option value="60" selected>60 — Estándar</option>'
         + '<option value="80">80 — Estricto</option>'
         + '</select>'
-        + '<button id="scan-btn" style="background:var(--color-secondary);color:#000;border:none;border-radius:var(--radius);padding:8px 16px;font-family:var(--font-mono);font-size:12px;cursor:pointer;letter-spacing:0.05em;flex:1;">ESCANEAR S&P 500 (503)</button>'
         + '</div>'
-        + '<div style="color:var(--color-muted);font-size:11px;margin-top:8px;">RS real calculado como percentil vs universo · ~90 segundos</div>'
+        + '<div style="color:var(--color-muted);font-size:11px;margin-top:8px;">RS real calculado como percentil vs universo · Scan nocturno automático, sin scan on-demand</div>'
         + '</div>';
 }
 
@@ -173,31 +174,35 @@ function setupAnalyzer(container) {
 }
 
 function setupScanner(container) {
-    const btn    = container.querySelector('#scan-btn');
     const select = container.querySelector('#min-score');
     const result = container.querySelector('#canslim-scan-result');
 
-    btn.addEventListener('click', async () => {
-        const minScore    = select.value;
-        btn.textContent   = 'ESCANEANDO...';
-        btn.style.opacity = '0.7';
-        result.innerHTML  = '<div style="padding:1rem;color:var(--color-muted);font-size:12px;">Escaneando S&P 500 completo (503 acciones)... RS real calculado como percentil. ~90 segundos.</div>';
-        try {
-            const token = sessionStorage.getItem('rsu_token');
-            const res   = await fetch('/api/v1/canslim/scan?min_score=' + minScore + '&max_results=50', {
-                headers: token ? { 'Authorization': 'Bearer ' + token } : {}
-            });
-            const data  = await res.json();
-            if (!data.ok) throw new Error('Error en el scan');
-            _lastScanData = data;
-            result.innerHTML = renderScanResults(data);
-        } catch(e) {
-            result.innerHTML = errorMessage(e.message);
-        } finally {
-            btn.textContent   = 'ESCANEAR S&P 500 (503)';
-            btn.style.opacity = '1';
-        }
+    // El scan ya viene completo del Gist nocturno (loadScan) -- cambiar el
+    // score mínimo solo refiltra en el cliente, sin nueva petición. Mismo
+    // patrón que RS/RW, que ya no tiene botón de scan on-demand (sesión 32).
+    select.addEventListener('change', () => {
+        _lastMinScore = parseInt(select.value, 10);
+        if (_lastScanData) result.innerHTML = renderScanResults(_lastScanData, _lastMinScore);
     });
+}
+
+async function loadScan(container) {
+    const result = container.querySelector('#canslim-scan-result');
+    result.innerHTML = '<div style="padding:1rem;color:var(--color-muted);font-size:12px;">Cargando scan nocturno...</div>';
+    try {
+        const token = sessionStorage.getItem('rsu_token');
+        const res   = await fetch('/api/v1/canslim/gist', {
+            headers: token ? { 'Authorization': 'Bearer ' + token } : {}
+        });
+        const data  = await res.json();
+        if (!data.ok) throw new Error(data.error || 'Scan nocturno no disponible todavía');
+        _lastScanData = data;
+        const select = container.querySelector('#min-score');
+        _lastMinScore = parseInt(select.value, 10);
+        result.innerHTML = renderScanResults(data, _lastMinScore);
+    } catch(e) {
+        result.innerHTML = errorMessage(e.message);
+    }
 }
 
 // ── RENDER ANALYSIS ───────────────────────────────────────────────────────────
@@ -485,9 +490,15 @@ function renderChart(data) {
 
 // ── SCAN RESULTS ──────────────────────────────────────────────────────────────
 
-function renderScanResults(data) {
-    if (!data.candidates || data.candidates.length === 0) {
-        return '<div style="padding:1rem;color:var(--color-muted);font-size:12px;margin-top:1rem;">No se encontraron candidatos.</div>';
+function renderScanResults(data, minScore) {
+    // El Gist nocturno trae TODOS los candidatos ya puntuados (sesión 32) --
+    // el filtro por score mínimo, antes resuelto en el backend vía query
+    // param, ahora se aplica aquí, al cliente, sin nueva petición.
+    const filtered = (data.candidates || []).filter(c => c.score >= (minScore || 0));
+    const shown     = filtered.slice(0, 50);
+
+    if (shown.length === 0) {
+        return '<div style="padding:1rem;color:var(--color-muted);font-size:12px;margin-top:1rem;">No se encontraron candidatos con ese score mínimo.</div>';
     }
 
     const cols = 'grid-template-columns:80px 80px 90px 60px 70px 70px 80px 70px 80px';
@@ -496,7 +507,7 @@ function renderScanResults(data) {
         + '<div>TICKER</div><div>PRECIO</div><div>12M PERF</div><div>RS</div><div>ACC/DIS</div><div>NEAR HIGH</div><div>VOL RATIO</div><div>TREND</div><div>SCORE</div>'
         + '</div>';
 
-    const rows = data.candidates.map(c => {
+    const rows = shown.map(c => {
         const perfColor  = c.perf_12m >= 0 ? 'var(--color-accent)' : '#f23645';
         const scoreColor = c.score >= 70 ? 'var(--color-accent)' : c.score >= 50 ? '#ffb800' : '#f23645';
         const nearColor  = c.near_new_high ? 'var(--color-accent)' : '#ffb800';
@@ -515,8 +526,8 @@ function renderScanResults(data) {
 
     const summary = '<div style="display:flex;gap:1.5rem;padding:8px 14px;font-size:11px;color:var(--color-muted);border-bottom:1px solid var(--color-border);">'
         + '<span>Escaneados: <b style="color:var(--color-text);">' + esc(data.scanned) + '</b></span>'
-        + '<span>Candidatos: <b style="color:var(--color-accent);">' + esc(data.total) + '</b></span>'
-        + '<span>Mostrando: <b style="color:var(--color-text);">' + data.candidates.length + '</b></span>'
+        + '<span>Candidatos: <b style="color:var(--color-accent);">' + esc(filtered.length) + '</b></span>'
+        + '<span>Mostrando: <b style="color:var(--color-text);">' + shown.length + '</b></span>'
         + '<span style="margin-left:auto;">' + esc(data.timestamp) + '</span>'
         + '</div>';
 

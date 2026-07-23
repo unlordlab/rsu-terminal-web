@@ -18,14 +18,20 @@ import yfinance as yf
 
 def download_batch(tickers, period, batch_size=40, batch_sleep=1.8,
                     max_retries=1, retry_sleep=2.5, coverage_threshold=1.0,
-                    min_history=130, include_volume=True, log_prefix=""):
+                    min_history=130, include_volume=True, include_hl=False, log_prefix=""):
     """Devuelve (close_d, vol_d): dict[ticker] -> pd.Series. Con
     max_retries=1 (por defecto) es un único intento por lote, sin
     reintento -- el patrón que ya tenían scanner_universe.py/
     thematic_scan.py. Con max_retries=3 y coverage_threshold=0.85
     reproduce el patrón de rsrw_service.py/rsrw_scan.py: hasta 3
-    reintentos por lote, re-solicitando solo los símbolos que faltaron."""
-    close_d, vol_d = {}, {}
+    reintentos por lote, re-solicitando solo los símbolos que faltaron.
+
+    include_hl=True (usado por scripts/canslim_scan.py, sesión 32) añade
+    un tercer valor de retorno hl_d: dict[ticker] -> pd.DataFrame con
+    columnas High/Low, extraídas del mismo yf.download() ya en curso --
+    con include_hl=False (default) el retorno sigue siendo el 2-tuple de
+    siempre, sin tocar el contrato de los 4 consumidores existentes."""
+    close_d, vol_d, hl_d = {}, {}, {}
     batches = [tickers[i:i + batch_size] for i in range(0, len(tickers), batch_size)]
     n_batches = len(batches)
 
@@ -41,9 +47,13 @@ def download_batch(tickers, period, batch_size=40, batch_sleep=1.8,
                 if isinstance(raw.columns, pd.MultiIndex):
                     closes = raw["Close"] if "Close" in raw.columns.get_level_values(0) else pd.DataFrame()
                     vols   = raw["Volume"] if include_volume and "Volume" in raw.columns.get_level_values(0) else pd.DataFrame()
+                    highs  = raw["High"] if include_hl and "High" in raw.columns.get_level_values(0) else pd.DataFrame()
+                    lows   = raw["Low"] if include_hl and "Low" in raw.columns.get_level_values(0) else pd.DataFrame()
                 else:
                     closes = raw[["Close"]] if "Close" in raw.columns else pd.DataFrame()
                     vols   = raw[["Volume"]] if include_volume and "Volume" in raw.columns else pd.DataFrame()
+                    highs  = raw[["High"]] if include_hl and "High" in raw.columns else pd.DataFrame()
+                    lows   = raw[["Low"]] if include_hl and "Low" in raw.columns else pd.DataFrame()
 
                 for sym in batch:
                     if sym in closes.columns:
@@ -52,6 +62,11 @@ def download_batch(tickers, period, batch_size=40, batch_sleep=1.8,
                             close_d[sym] = series
                             if include_volume:
                                 vol_d[sym] = vols[sym].dropna() if sym in vols.columns else pd.Series(dtype=float)
+                            if include_hl:
+                                hl_d[sym] = pd.DataFrame({
+                                    "High": highs[sym] if sym in highs.columns else pd.Series(dtype=float),
+                                    "Low":  lows[sym]  if sym in lows.columns  else pd.Series(dtype=float),
+                                })
                             got_syms.add(sym)
 
                 missing  = [s for s in original_batch if s not in got_syms]
@@ -74,4 +89,6 @@ def download_batch(tickers, period, batch_size=40, batch_sleep=1.8,
         if i < n_batches - 1:
             time.sleep(batch_sleep)
 
+    if include_hl:
+        return close_d, vol_d, hl_d
     return close_d, vol_d

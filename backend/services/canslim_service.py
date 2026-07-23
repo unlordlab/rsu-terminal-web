@@ -3,6 +3,8 @@ CAN SLIM Service — RSU Terminal
 Universo: S&P 500 completo (ver shared/sp500_universe.py -- fuente única, sesión 19)
 Fixes: NaN sanitization, RS real percentile, N+I criteria, Market widget
 """
+import json
+import requests
 import pandas as pd
 import numpy as np
 import yfinance as yf
@@ -14,6 +16,7 @@ import sys, os
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "..", "shared"))
 from time_utils import get_timestamp  # noqa: E402
 from sp500_universe import SP500_SECTOR_MAP  # noqa: E402
+from canslim_engine import perf_12m as _perf_12m, acc_dis_rating as _acc_dis_rating  # noqa: E402
 from services.cache import cache, TTL  # noqa: E402
 warnings.filterwarnings('ignore')
 
@@ -42,14 +45,8 @@ def _safe(val, default=0.0):
         return default
 
 # ── IBD RATINGS ───────────────────────────────────────────────────────────────
-
-def _perf_12m(hist: pd.DataFrame) -> float:
-    """Retorno a ~12 meses (252 sesiones) -- misma fórmula en
-    analyze_ticker() y _scan_single() para que el percentil de RS
-    Rating compare peras con peras (antes divergían: iloc[-252] sobre
-    2y vs iloc[0] sobre 1y). Ver sesión 23."""
-    price = _safe(hist['Close'].iloc[-1])
-    return _safe(((price / hist['Close'].iloc[-252]) - 1) * 100) if len(hist) >= 252 else 0.0
+# _perf_12m/_acc_dis_rating -- ver shared/canslim_engine.py (sesión 32,
+# promovidas para compartirlas con scripts/canslim_scan.py, el scan nocturno).
 
 def _rs_rating_real(perf_12m: float, universe_perfs: list):
     """RS real: percentil en el universo escaneado. Sin universo de
@@ -83,48 +80,6 @@ def _smr_rating(sales_g: float, roe: float, margins: float) -> str:
     if score >= 5: return 'B'
     if score >= 3: return 'C'
     if score >= 1: return 'D'
-    return 'E'
-
-def _acc_dis_rating(hist: pd.DataFrame) -> str:
-    """Rating de Acumulación/Distribución (A-E) sobre los últimos 20 días.
-
-    Usa el multiplicador de flujo de dinero de Chaikin -- ((Close-Low) -
-    (High-Close)) / (High-Low) -- que pondera CADA día según dónde cierra
-    el precio DENTRO de su propio rango de la sesión (High-Low), no solo
-    si cierra por encima o por debajo de la apertura.
-
-    Antes se clasificaba cada día como "volumen alcista" o "volumen
-    bajista" solo mirando Close vs Open -- eso clasifica mal los días de
-    reversión: un día que abre bajo, cae más durante la sesión, pero
-    CIERRA cerca del máximo del día (alguien compró fuerte en la caída,
-    acumulación real) se contaba como "bajista" solo por cerrar por
-    debajo de la apertura, aunque la acción del precio dentro del día
-    dijera lo contrario -- justo los días más informativos para detectar
-    acumulación/distribución real. Ver Plan Maestro 3.5, auditoría
-    CANSLIM 19-20/07/2026.
-    """
-    if len(hist) < 20:
-        return 'C'
-    recent = hist.tail(20)
-    rango = recent['High'] - recent['Low']
-    # Multiplicador -1 (cierre en el mínimo del día) a +1 (cierre en el
-    # máximo). Días sin rango (High==Low, rarísimo con datos reales) se
-    # tratan como neutros en vez de dividir por cero.
-    multiplicador = ((recent['Close'] - recent['Low']) - (recent['High'] - recent['Close'])) / rango
-    multiplicador = multiplicador.replace([float('inf'), float('-inf')], 0).fillna(0)
-    flujo_ponderado = (multiplicador * recent['Volume']).sum()
-    volumen_total   = recent['Volume'].sum()
-    if volumen_total == 0:
-        return 'C'
-    # flujo_ponderado/volumen_total va de -1 (distribución pura) a +1
-    # (acumulación pura) -- reescalado a 0-1 para reutilizar los mismos
-    # umbrales de siempre (antes "ratio" era up_vol/total, con el mismo
-    # rango 0-1).
-    ratio = (flujo_ponderado / volumen_total + 1) / 2
-    if ratio >= 0.70: return 'A'
-    if ratio >= 0.58: return 'B'
-    if ratio >= 0.45: return 'C'
-    if ratio >= 0.35: return 'D'
     return 'E'
 
 def _trend_template(hist: pd.DataFrame, price: float) -> dict:
@@ -389,12 +344,18 @@ def analyze_ticker(ticker: str, universe_perfs: list = None) -> dict:
             pass
 
         # ── RS rating ────────────────────────────────────────────────────────
-        # Sin universo explícito, reutiliza el del último scan_canslim()
-        # reciente (caché, TTL 10 min) -- si nadie ha escaneado en ese
-        # margen, sigue sin universo y el RS Rating queda None ("N/D"),
-        # igual que siempre. Ver sesión 23.
+        # Sin universo explícito: primero el scan nocturno (Gist, siempre
+        # fresco, sesión 32 -- get_canslim_from_gist() ya deja
+        # "canslim:universe_perfs" en caché al leer el Gist), si no hay
+        # Gist configurado o falla, el caché de 10 min que deja
+        # scan_canslim() on-demand (sesión 23) -- si ninguna de las dos
+        # tiene datos, sigue sin universo y el RS Rating queda None
+        # ("N/D"), igual que siempre.
         if universe_perfs is None:
-            universe_perfs = cache.get("canslim:universe_perfs") or []
+            universe_perfs = cache.get("canslim:universe_perfs")
+            if not universe_perfs:
+                get_canslim_from_gist()
+                universe_perfs = cache.get("canslim:universe_perfs") or []
         rs_r = _rs_rating_real(perf_12m, universe_perfs)
 
         # ── IBD Ratings ───────────────────────────────────────────────────────
@@ -567,7 +528,70 @@ def analyze_ticker(ticker: str, universe_perfs: list = None) -> dict:
         import traceback
         return {"ok": False, "error": str(e), "detail": traceback.format_exc()}
 
-# ── SCANNER S&P 500 COMPLETO ──────────────────────────────────────────────────
+# ── SCAN NOCTURNO (GIST) ──────────────────────────────────────────────────────
+# scripts/canslim_scan.py corre 1x/día (L-V) vía GitHub Actions y sube el
+# resultado aquí -- mismo patrón que rsrw_service.py::_load_gist() (sesión
+# 32). El ID es público (solo el token de escritura es secreto) -- rellenar
+# tras crear el Gist la primera vez.
+CANSLIM_GIST_ID   = ""  # ← rellenar con el ID del Gist tras el primer despliegue
+CANSLIM_GIST_FILE = "canslim_scan.json"
+
+
+def _load_canslim_gist() -> dict | None:
+    if not CANSLIM_GIST_ID:
+        return None
+    try:
+        r = requests.get(
+            f"https://api.github.com/gists/{CANSLIM_GIST_ID}",
+            timeout=10,
+            headers={"Accept": "application/vnd.github.v3+json"},
+        )
+        r.raise_for_status()
+        content = r.json()["files"][CANSLIM_GIST_FILE]["content"]
+        data    = json.loads(content)
+        return data if data.get("candidates") else None
+    except Exception:
+        return None
+
+
+def get_canslim_from_gist() -> dict:
+    """Lee el scan nocturno ya calculado -- reemplaza a scan_canslim() como
+    camino principal del frontend (mismo criterio que
+    rsrw_service.py::get_rsrw_from_gist(), sesión 32). Sin Gist configurado
+    o sin datos todavía, cae a un resultado vacío honesto (ok:False), no a
+    un scan on-demand automático -- si se quiere forzar un cálculo fresco,
+    scan_canslim()/GET /api/v1/canslim/scan sigue disponible tal cual."""
+    from services.cache import cache
+    cache_key = "canslim:gist"
+    cached = cache.get(cache_key)
+    if cached is not None:
+        return cached
+
+    data = _load_canslim_gist()
+    if not data:
+        result = {"ok": False, "error": "Scan nocturno no disponible todavía", "candidates": [], "timestamp": get_timestamp()}
+    else:
+        result = {
+            "ok":         True,
+            "candidates": data.get("candidates", []),
+            "total":      data.get("total", len(data.get("candidates", []))),
+            "scanned":    data.get("scanned", 0),
+            "timestamp":  get_timestamp(),
+        }
+        # El universo completo de percentiles se cachea aparte (10 min,
+        # mismo TTL/clave que ya usaba scan_canslim() para
+        # analyze_ticker() -- sesión 23) para no tener que releer el Gist
+        # completo en cada análisis individual.
+        perfs = data.get("perfs")
+        if perfs:
+            cache.set("canslim:universe_perfs", perfs, TTL["canslim"])
+    cache.set(cache_key, result, 600)  # 10 min -- el dato en sí solo cambia 1x/día
+    return result
+
+
+# ── SCANNER S&P 500 COMPLETO (on-demand, ya no es el camino principal del
+# frontend -- se mantiene disponible, mismo criterio que
+# rsrw_service.py::get_rsrw_scan()) ────────────────────────────────────────────
 
 def _scan_single(ticker: str) -> dict | None:
     try:

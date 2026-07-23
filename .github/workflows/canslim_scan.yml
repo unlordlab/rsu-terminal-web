@@ -1,0 +1,35 @@
+name: CANSLIM Scanner S&P 500
+
+on:
+  schedule:
+    # Lunes a viernes a las 00:45 CET (22:45 UTC) — 15 min después de
+    # RS/RW, siguiente hueco libre en la misma secuencia escalonada
+    # (Thematic 22:00, Scanner 22:15, RS/RW 22:30), para no competir por
+    # rate limit de Yahoo con los otros 3 scans nocturnos.
+    - cron: '45 22 * * 1-5'
+  workflow_dispatch:  # Permite ejecutar manualmente desde la pestaña Actions
+
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          pip install requests yfinance pandas numpy
+
+      - name: Run CANSLIM Scanner
+        env:
+          GIST_TOKEN:      ${{ secrets.GIST_TOKEN }}
+          CANSLIM_GIST_ID: ${{ secrets.CANSLIM_GIST_ID }}
+        run: |
+          python scripts/canslim_scan.py
