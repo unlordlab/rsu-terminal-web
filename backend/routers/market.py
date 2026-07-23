@@ -69,7 +69,9 @@ async def vix(user=Depends(verify_token)):
 
 @router.get("/reddit")
 async def reddit(user=Depends(verify_token)):
-    return get_reddit_pulse()
+    import asyncio
+    loop = asyncio.get_event_loop()
+    return await loop.run_in_executor(None, get_reddit_pulse)
 
 @router.get("/briefing")
 async def briefing(user=Depends(verify_token)):

@@ -29,3 +29,6 @@ xlrd==2.0.2  # lectura de .xls antiguo (dataset CAPE de Shiller, Yale)
 pytz==2024.1
 markdown==3.7
 xhtml2pdf==0.2.16
+
+# Scraping (Reddit Pulse -- ver sesion 23/07/2026)
+playwright==1.61.0

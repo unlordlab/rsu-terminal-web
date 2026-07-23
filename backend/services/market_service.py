@@ -656,6 +656,56 @@ def _get_reddit_token() -> str | None:
     except Exception:
         return None
 
+def _fetch_reddit_and_stocktwits_via_browser(need_reddit: bool, need_stocktwits: bool):
+    """Navegador headless real (Playwright) -- reddit.com/*.json y
+    api.stocktwits.com devuelven 403 (challenge JS anti-bot) desde la IP
+    del VPS a peticiones HTTP normales, verificado 23/07/2026; un
+    navegador real lo resuelve solo. Import diferido: si Playwright/
+    Chromium no está instalado (p.ej. un entorno local sin
+    `playwright install`), no rompe el arranque de la app, solo esta
+    función deja de aportar datos -- mismo criterio "sin dato real, sin
+    fabricar nada" del resto del proyecto.
+
+    IMPORTANTE: NO añadir playwright-stealth ni ningún parche de
+    anti-detección -- probado y descartado explícitamente, Reddit lo
+    detecta y bloquea MÁS que un Chromium headless sin modificar
+    (fingerprint "demasiado perfecto"). Usa old.reddit.com (HTML clásico)
+    en vez de www.reddit.com (Shreddit) -- trae más posts de golpe sin
+    necesitar simular scroll."""
+    sources, titles, symbols = [], [], []
+    try:
+        from playwright.sync_api import sync_playwright
+        import json as _json
+        with sync_playwright() as p:
+            browser = p.chromium.launch(headless=True)
+            page = browser.new_page(user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36")
+            if need_reddit:
+                for sub in ['wallstreetbets', 'stocks', 'investing', 'options', 'StockMarket']:
+                    try:
+                        page.goto(f'https://old.reddit.com/r/{sub}/hot/', timeout=15000, wait_until='domcontentloaded')
+                        page.wait_for_timeout(1500)
+                        els = page.query_selector_all('a.title')
+                        if els:
+                            titles.extend(e.inner_text() for e in els)
+                            sources.append('Reddit')
+                            break
+                    except Exception:
+                        continue
+            if need_stocktwits:
+                try:
+                    page.goto('https://api.stocktwits.com/api/2/trending/symbols.json', timeout=10000, wait_until='domcontentloaded')
+                    body = page.evaluate("() => document.body.innerText")
+                    data = _json.loads(body)
+                    symbols = data.get('symbols', [])[:20]
+                    if symbols:
+                        sources.append('StockTwits')
+                except Exception:
+                    pass
+            browser.close()
+    except Exception:
+        pass
+    return sources, titles, symbols
+
 def get_reddit_pulse():
     from services.cache import cache, TTL
     cached = cache.get("market:reddit")
@@ -668,6 +718,9 @@ def get_reddit_pulse():
     })
     ticker_mentions = {}
     sources = []
+    reddit_ok = False
+    st_tickers = []
+    st_ok = False
 
     token = _get_reddit_token()
     if token:
@@ -678,6 +731,7 @@ def get_reddit_pulse():
                 if r.status_code != 200:
                     continue
                 sources.append('Reddit')
+                reddit_ok = True
                 for post in r.json().get('data', {}).get('children', []):
                     p    = post.get('data', {})
                     text = f"{p.get('title','')} {p.get('selftext','')}".upper()
@@ -687,7 +741,6 @@ def get_reddit_pulse():
             except Exception:
                 continue
 
-    st_tickers = []
     try:
         r = session.get('https://api.stocktwits.com/api/2/trending/symbols.json', timeout=8)
         if r.status_code == 200:
@@ -700,8 +753,27 @@ def get_reddit_pulse():
                     ticker_mentions[t] = ticker_mentions.get(t, 0) + weight
             if st_tickers:
                 sources.append('StockTwits')
+                st_ok = True
     except Exception:
         pass
+
+    if not reddit_ok or not st_ok:
+        b_sources, b_titles, b_symbols = _fetch_reddit_and_stocktwits_via_browser(
+            need_reddit=not reddit_ok, need_stocktwits=not st_ok,
+        )
+        if 'Reddit' in b_sources:
+            sources.append('Reddit')
+            for title in b_titles:
+                for ticker, count in _extract_tickers(title.upper()):
+                    ticker_mentions[ticker] = ticker_mentions.get(ticker, 0) + count
+        if 'StockTwits' in b_sources:
+            sources.append('StockTwits')
+            for i, item in enumerate(b_symbols):
+                t = item.get('symbol', '').upper()
+                if t and 2 <= len(t) <= 6:
+                    st_tickers.append(t)
+                    weight = max(1, 20 - i)
+                    ticker_mentions[t] = ticker_mentions.get(t, 0) + weight
 
     if not ticker_mentions:
         return _reddit_fallback()

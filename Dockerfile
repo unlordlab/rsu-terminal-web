@@ -11,6 +11,15 @@ WORKDIR /app
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
+# Chromium headless para Reddit Pulse -- reddit.com/*.json y
+# api.stocktwits.com bloquean con 403 (challenge JS anti-bot) desde la IP
+# del VPS; un navegador real lo resuelve, ver sesión 23/07/2026.
+# PLAYWRIGHT_BROWSERS_PATH dentro de /app para que el chown de más abajo
+# le dé permisos al usuario "app" sin privilegios -- si no, el binario
+# quedaría en /root/.cache, inaccesible tras el USER app.
+ENV PLAYWRIGHT_BROWSERS_PATH=/app/pw-browsers
+RUN playwright install --with-deps chromium
+
 # Copiar todo el proyecto
 COPY . .
 
