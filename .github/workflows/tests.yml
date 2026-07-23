@@ -5,6 +5,8 @@ on:
     branches: [main]
   pull_request:
     branches: [main]
+  workflow_dispatch:  # permite disparar manualmente desde la pestaña Actions --
+                       # útil si alguna vez el trigger de push no llega a activarse
 
 jobs:
   test:
