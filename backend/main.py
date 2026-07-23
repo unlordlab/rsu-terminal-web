@@ -8,7 +8,7 @@ from config import settings
 from auth import verify_token, require_tier, verify_admin_key
 from middleware.rate_limit import rate_limit
 from middleware.analytics import AnalyticsMiddleware
-from routers import auth, market, cartera, canslim, rsu_algoritmo, research, newsfeed, tesis, spxl, rsrw, ws, options, btc_stratum, insider, scanner, analytics, watchlist, community, chat, academy_review, laia_ethics, meeting_room
+from routers import auth, market, cartera, canslim, rsu_algoritmo, research, newsfeed, tesis, spxl, rsrw, ws, options, btc_stratum, insider, scanner, analytics, watchlist, community, chat, academy_review, laia_ethics, meeting_room, congress
 
 # Proxy global para yfinance — se aplica UNA vez aquí y afecta a TODAS las
 # llamadas a yfinance en cualquier archivo del backend (Algoritmo, Cartera,
@@ -97,6 +97,7 @@ app.include_router(ws.router)
 app.include_router(options.router,      dependencies=rl)
 app.include_router(btc_stratum.router,  dependencies=rl)
 app.include_router(insider.router,      dependencies=rl)
+app.include_router(congress.router,     dependencies=rl)
 app.include_router(scanner.router,      dependencies=rl)
 # Watchlist + Alertas: abierto a cualquier usuario registrado (tier free
 # incluido) por ahora. El día que se quiera pasar a tiers de pago, cambiar

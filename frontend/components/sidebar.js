@@ -16,6 +16,7 @@ export const NAV_ITEMS = [
     { path: '/options', label: 'Options Flow', icon: 'O' },
     { path: '/research',  label: 'Research',     icon: 'I' },
     { path: '/insider',   label: 'Insider Flow',  icon: '🔍' },
+    { path: '/congress',  label: 'Congress Trading', icon: '🏛️' },
     { path: '/academy', label: 'Academy', icon: 'Ac' },
     { path: '/roadmap', label: 'Roadmap 2026', icon: 'R' },
     { path: '/community', label: 'Comunidad', icon: '👥' },

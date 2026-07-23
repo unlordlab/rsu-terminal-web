@@ -1,0 +1,26 @@
+name: Congress Trading Scanner
+
+on:
+  schedule:
+    # L-V, 23:15 UTC -- siguiente hueco tras Options Flow (23:00). Sin
+    # urgencia real de horario (el STOCK Act da 30-45 días para declarar,
+    # no es un dato ligado al cierre de mercado), pero se mantiene el
+    # mismo bloque nocturno por consistencia operativa.
+    - cron: '15 23 * * 1-5'
+  workflow_dispatch:
+
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: pip install requests
+      - name: Run Congress Trading Scanner
+        env:
+          GIST_TOKEN:       ${{ secrets.GIST_TOKEN }}
+          CONGRESS_GIST_ID: ${{ secrets.CONGRESS_GIST_ID }}
+        run: python scripts/congress_scan.py

@@ -1290,6 +1290,29 @@ CÓMO USARLO:
 No es una señal de compra por sí sola — es un filtro para reducir 503 acciones a un puñado de candidatos que merece la pena analizar en detalle. Un score alto (70+) significa que el candidato pasa la mayoría de los filtros técnicos de CAN SLIM; el paso siguiente es siempre el análisis individual, que añade fundamentales (EPS, ventas, sponsorship institucional) antes de considerar cualquier decisión real.`
     },
 
+    // ── CONGRESS TRADING ─────────────────────────────────────────────────────
+    "congress-amount-range": {
+        title: "Rango de importe — no una cifra exacta",
+        short: "El STOCK Act obliga a declarar un RANGO (p.ej. $15,001-$50,000), nunca el importe exacto de la operación.",
+        long: `La ley que obliga a estos informes (STOCK Act / Ethics in Government Act) exige declarar bandas de importe, no la cifra exacta operada — es una decisión del propio marco legal, no una limitación de nuestros datos.
+
+Por eso esta terminal muestra siempre el rango completo tal cual se declaró (p.ej. "$15,001 - $50,000"), y cuando hace falta sumar varias operaciones (como en los clusters), se usa el extremo BAJO de cada rango — una suma conservadora, nunca una cifra inventada como si fuera precisa.`
+    },
+    "congress-days-to-file": {
+        title: "Días hasta declarar — plazo legal de 45 días",
+        short: "El STOCK Act exige declarar cada operación en un máximo de 45 días. Más de eso se marca como declaración TARDÍA.",
+        long: `Los congresistas y altos cargos del ejecutivo tienen hasta 45 días desde la operación para presentar el informe (Periodic Transaction Report). Esta columna muestra cuántos días pasaron entre la operación y su declaración pública.
+
+Una declaración tardía (marcada con ⚠️) no implica necesariamente mala fe, pero sí es una señal de menor transparencia respecto al plazo legal — y en la práctica, cuanto más tarda en declararse, más tiempo lleva el mercado sin conocer esa operación.`
+    },
+    "congress-cluster": {
+        title: "Cluster — varios congresistas, mismo ticker",
+        short: "2 o más congresistas distintos comprando el mismo valor dentro de la ventana de datos actual (últimos 90 días).",
+        long: `Un cluster aparece cuando 2 o más congresistas DIFERENTES han comprado el mismo ticker en la ventana de datos disponible — no es una señal de coordinación entre ellos (no hay forma de saber eso desde datos públicos), simplemente una coincidencia de interés en el mismo valor.
+
+FUERTE (3+ congresistas) vs MODERADA (2 congresistas) — el importe mostrado ("mín.") es la suma del extremo bajo de cada rango declarado, nunca una cifra exacta (ver tooltip de rango de importe).`
+    },
+
     // ── SPXL ──────────────────────────────────────────────────────────────────
     "spxl": {
         title: "SPXL — Direxion Daily S&P 500 Bull 3X",
