@@ -1877,7 +1877,7 @@ def get_research(ticker: str) -> dict:
 # scripts/sector_medians.py (Fase 3.1 del Plan Maestro, 20/07/2026). Igual
 # que scanner_service.py, el ID es público (solo el token de escritura es
 # secreto) -- rellenar tras crear el Gist la primera vez.
-SECTOR_MEDIANS_GIST_ID = ""  # ← rellenar con el ID del Gist tras el primer despliegue
+SECTOR_MEDIANS_GIST_ID = "9a8f96a19c239a0be18aaded30d56de1"
 SECTOR_MEDIANS_GIST_FILE = "sector_medians.json"
 
 
