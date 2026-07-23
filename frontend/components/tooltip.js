@@ -1289,6 +1289,22 @@ Máximo posible: 100 puntos, si se cumplen los 6 factores a la vez.
 CÓMO USARLO:
 No es una señal de compra por sí sola — es un filtro para reducir 503 acciones a un puñado de candidatos que merece la pena analizar en detalle. Un score alto (70+) significa que el candidato pasa la mayoría de los filtros técnicos de CAN SLIM; el paso siguiente es siempre el análisis individual, que añade fundamentales (EPS, ventas, sponsorship institucional) antes de considerar cualquier decisión real.`
     },
+    "canslim-3wt": {
+        title: "3 Weeks Tight (3WT) — Consolidación en rango estrecho",
+        short: "3+ semanas consecutivas con un rango de precio muy apretado (normalmente <1.5% semana a semana), tras una subida real previa — señal de acumulación silenciosa.",
+        long: `Patrón popularizado por Gil Morales y Chris Kacher ("Trade Like an O'Neil Disciple") como refinamiento del método CAN SLIM original de William O'Neil.
+
+QUÉ ES:
+Un valor que ya viene de una subida real (típicamente tras un breakout) entra en una fase donde el precio se mueve en un rango muy estrecho durante 3 semanas consecutivas o más — cada semana cierra prácticamente en el mismo sitio que la anterior, normalmente con volumen decreciente.
+
+POR QUÉ IMPORTA:
+Ese rango tan apretado indica que los vendedores se han agotado — nadie está soltando el valor con fuerza. Es una señal de acumulación silenciosa antes de un posible nuevo tramo al alza.
+
+VENTAJA FRENTE AL BREAKOUT ORIGINAL:
+Se considera un punto de entrada de menor riesgo que comprar justo en el breakout — el stop de protección queda mucho más cerca, precisamente porque el rango es estrecho.
+
+Nota: este badge todavía no se calcula en el scan nocturno de la terminal — este tooltip queda preparado para cuando se implemente esa detección.`
+    },
 
     // ── CONGRESS TRADING ─────────────────────────────────────────────────────
     "congress-amount-range": {

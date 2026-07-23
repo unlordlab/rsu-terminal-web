@@ -501,7 +501,7 @@ function renderScanResults(data, minScore) {
         return '<div style="padding:1rem;color:var(--color-muted);font-size:12px;margin-top:1rem;">No se encontraron candidatos con ese score mínimo.</div>';
     }
 
-    const cols = 'grid-template-columns:80px 80px 90px 60px 70px 70px 80px 70px 80px';
+    const cols = 'grid-template-columns:80px 80px 90px 60px 70px 70px 80px 70px 55px 80px';
 
     const header = '<div style="display:grid;' + cols + ';gap:8px;padding:8px 14px;border-bottom:1px solid var(--color-border);font-size:10px;color:var(--color-muted);letter-spacing:0.05em;">'
         + '<div>TICKER</div><div>PRECIO</div>'
@@ -511,6 +511,7 @@ function renderScanResults(data, minScore) {
         + '<div>NEAR HIGH ' + tt('canslim-near-high') + '</div>'
         + '<div>VOL RATIO ' + tt('canslim-vol-ratio') + '</div>'
         + '<div>TREND ' + tt('canslim-scan-trend') + '</div>'
+        + '<div>3WT ' + tt('canslim-3wt') + '</div>'
         + '<div>SCORE ' + tt('canslim-scan-score') + '</div>'
         + '</div>';
 
@@ -527,6 +528,7 @@ function renderScanResults(data, minScore) {
             + '<div style="color:' + nearColor + ';">' + (c.near_new_high ? '✓' : esc(c.pct_from_high) + '%') + '</div>'
             + '<div style="color:' + (c.vol_ratio >= 1.5 ? 'var(--color-accent)' : 'var(--color-muted)') + ';">' + c.vol_ratio.toFixed(1) + 'x</div>'
             + '<div style="color:' + (c.trend ? 'var(--color-accent)' : '#f23645') + ';">' + (c.trend ? '✓' : '✗') + '</div>'
+            + '<div style="color:' + (c.is_3wt ? 'var(--color-accent)' : 'var(--color-muted)') + ';">' + (c.is_3wt ? '✓' : '—') + '</div>'
             + '<div style="color:' + scoreColor + ';font-weight:500;">' + esc(c.score) + '</div>'
             + '</div>';
     }).join('');

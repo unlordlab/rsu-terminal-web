@@ -45,6 +45,14 @@ GIST_FILE  = "canslim_scan.json"
 BATCH_SIZE  = 40
 BATCH_SLEEP = 1.8
 
+# 3 Weeks Tight (3WT) -- patrón de Gil Morales/Chris Kacher ("Trade Like
+# an O'Neil Disciple"), refinamiento del método CAN SLIM original: 3+
+# semanas consecutivas con rango de precio muy apretado tras una subida
+# real, señal de acumulación silenciosa. Umbral típico citado: <=1.5% de
+# rango (máximo-mínimo)/cierre por semana.
+THREE_WEEKS_TIGHT_PCT = 1.5
+THREE_WEEKS_TIGHT_MIN_WEEKS = 3
+
 
 def run_scan() -> dict:
     tickers = list(SP500_SECTOR_MAP.keys())
@@ -90,6 +98,19 @@ def run_scan() -> dict:
         high_52w = float(closes.tail(252).max())
         pct_from_high = (price - high_52w) / high_52w * 100 if high_52w > 0 else -100
 
+        # 3 Weeks Tight: agrega Close/High/Low diarios a semanal (cierre =
+        # último de la semana, high/low = máximo/mínimo de la semana) y
+        # comprueba si las últimas THREE_WEEKS_TIGHT_MIN_WEEKS semanas
+        # tienen todas un rango (high-low)/close por debajo del umbral.
+        is_3wt = False
+        weekly = hist[["Close", "High", "Low"]].resample("W-FRI").agg(
+            {"Close": "last", "High": "max", "Low": "min"}
+        ).dropna()
+        if len(weekly) >= THREE_WEEKS_TIGHT_MIN_WEEKS:
+            last_weeks = weekly.tail(THREE_WEEKS_TIGHT_MIN_WEEKS)
+            weekly_range_pct = (last_weeks["High"] - last_weeks["Low"]) / last_weeks["Close"] * 100
+            is_3wt = bool((weekly_range_pct <= THREE_WEEKS_TIGHT_PCT).all())
+
         raw_results.append({
             "ticker":        t,
             "price":         round(price, 2),
@@ -98,6 +119,7 @@ def run_scan() -> dict:
             "vol_ratio":     round(vol_ratio, 2),
             "trend":         trend_ok,
             "pct_from_high": round(pct_from_high, 1),
+            "is_3wt":        is_3wt,
         })
 
     print(f"📊 {len(raw_results)}/{len(tickers)} tickers con datos completos (precio ≥$5, volumen ≥100k)")
