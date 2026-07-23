@@ -1201,6 +1201,95 @@ Es normal ver un RS distinto para el mismo ticker según dónde lo mires — no 
 Consecuencia práctica: para un ticker que lleva un año excelente pero se ha enfriado en los últimos meses, CANSLIM tenderá a darle un número más alto (premia el año completo) y RS/RW uno más bajo (pesa más lo reciente). Al revés con un ticker que arrancó flojo y lleva unos meses fuerte. Ninguno de los dos "acierta más" — son dos horizontes distintos, y verlos juntos da más información que cualquiera de los dos por separado.`
     },
 
+    "canslim-perf-12m": {
+        title: "12M PERF — Retorno bruto a 12 meses",
+        short: "Cuánto ha subido o bajado el precio en los últimos 12 meses, en crudo — sin comparar con nadie más.",
+        long: `Es el retorno del precio de la acción en los últimos 252 días de sesión (~12 meses), calculado directo: (precio hoy / precio hace 12 meses − 1) × 100.
+
+DIFERENCIA CON RS (LA COLUMNA DE AL LADO):
+▸ 12M PERF es el número crudo — cuánto ha subido esta acción en absoluto, sin más contexto.
+▸ RS es el percentil de ESE mismo retorno dentro de todo el universo escaneado esa noche — cuánto mejor lo ha hecho esta acción que las demás.
+
+Una acción puede subir un 15% (12M PERF modesto) y aun así tener un RS alto, si el resto del mercado ha subido menos o ha bajado. Al revés, una acción puede subir un 40% y tener un RS más bajo, si es un año en el que la mayoría del universo ha subido todavía más. Mira las dos columnas juntas, no solo una.`
+    },
+
+    "canslim-acc-dis": {
+        title: "ACC/DIS — Acumulación/Distribución (A-E)",
+        short: "Rating A-E de los últimos 20 días: si el volumen se ha concentrado en subidas (acumulación) o bajadas (distribución).",
+        long: `Mide si, en los últimos 20 días de sesión, el volumen negociado se ha concentrado más en días de subida (acumulación — dinero institucional entrando) o de bajada (distribución — dinero institucional saliendo).
+
+CÓMO SE CALCULA:
+Usa el multiplicador de flujo de dinero de Chaikin — ((Cierre−Mínimo) − (Máximo−Cierre)) / (Máximo−Mínimo) — que pondera cada día según dónde cierra el precio DENTRO de su propio rango de la sesión, no solo si cierra por encima o por debajo de la apertura. Un día que abre bajo, cae durante la sesión, pero cierra cerca del máximo (alguien compró fuerte en la caída) cuenta como acumulación real, aunque el precio haya cerrado en rojo respecto al día anterior.
+
+ESCALA:
+▸ A/B → acumulación clara, el dinero grande está entrando
+▸ C → neutro, sin sesgo claro
+▸ D/E → distribución, el dinero grande está saliendo
+
+Es la parte del scan que más se acerca a "ver" el comportamiento institucional día a día, sin depender de que la acción publique su composición de accionistas.`
+    },
+
+    "canslim-near-high": {
+        title: "NEAR HIGH — Cerca del máximo de 52 semanas",
+        short: "Si el precio está dentro del 15% de su máximo de las últimas 52 semanas.",
+        long: `O'Neil insistía en comprar líderes cerca de sus máximos, no gangas lejos de ellos — una acción que cotiza cerca de su máximo de 52 semanas está demostrando fuerza real, no solo potencial.
+
+UMBRAL:
+✓ (verde) → el precio está a menos de un 15% de su máximo de las últimas 52 semanas.
+Sin marcar → el precio está más lejos, aunque el resto de factores sean favorables.
+
+POR QUÉ IMPORTA:
+Comprar una acción "barata" porque está lejos de su máximo suena intuitivo, pero en la práctica suele significar que algo va mal — el mercado ya ha castigado esa acción por una razón. Los mejores movimientos históricos de CAN SLIM salieron de acciones rompiendo a nuevos máximos, no recuperando desde mínimos.`
+    },
+
+    "canslim-vol-ratio": {
+        title: "VOL RATIO — Volumen relativo",
+        short: "Volumen de hoy dividido entre el volumen medio de los últimos 50 días. >1.5x indica interés institucional real.",
+        long: `Compara el volumen negociado HOY contra el volumen medio de los últimos 50 días de sesión — un ratio de 2.0x significa que hoy se ha negociado el doble de lo habitual.
+
+POR QUÉ IMPORTA (la "S" de CAN SLIM — Supply & Demand):
+Un movimiento de precio sin volumen que lo respalde es sospechoso — puede ser ruido, no una tendencia real. Un movimiento con volumen 1.5x-2x+ por encima de lo normal sugiere que hay dinero institucional real detrás, no solo pequeños inversores.
+
+CÓMO USARLO:
+▸ Ruptura de resistencia + vol ratio alto → señal fuerte, el movimiento tiene "combustible" real
+▸ Ruptura de resistencia + vol ratio bajo (<1x) → sospechosa, podría fallar y volver atrás
+▸ Vol ratio muy alto sin movimiento de precio → indecisión, mucha gente comprando y vendiendo sin que nadie gane la partida todavía`
+    },
+
+    "canslim-scan-trend": {
+        title: "TREND (scanner) — Alineación rápida de medias móviles",
+        short: "Chequeo ligero de 3 condiciones (Precio > MA50, Precio > MA150, MA50 > MA150) usado en el scan de las 503 acciones.",
+        long: `Esta es una versión SIMPLIFICADA del filtro técnico, pensada para poder evaluar las 503 acciones del S&P 500 cada noche sin ralentizar el scan. Comprueba solo 3 condiciones:
+
+1. Precio > MA50
+2. Precio > MA150
+3. MA50 > MA150
+
+✓ = las 3 se cumplen (tendencia alcista de corto/medio plazo confirmada)
+✗ = al menos una falla
+
+NO ES EL TREND TEMPLATE COMPLETO:
+El análisis individual de un ticker (pestaña "ANALIZAR") usa el Trend Template completo de Minervini, con 7 condiciones — incluye MA200, la pendiente de la MA200, y el rango de 52 semanas, no solo la alineación de medias cortas. Este chequeo de 3 condiciones del scan es un filtro rápido para descartar candidatos débiles a gran escala, no un sustituto del análisis completo — usa el candidato del scan como punto de partida, luego analízalo individualmente antes de decidir nada.`
+    },
+
+    "canslim-scan-score": {
+        title: "SCORE (scan) — Puntuación técnica 0-100",
+        short: "Suma de 6 factores técnicos, cada uno con su propio peso: RS, tendencia, Acc/Dis, volumen, retorno 12m y cercanía al máximo.",
+        long: `El score del scanner combina 6 señales puramente técnicas (sin fundamentales — esos solo se calculan en el análisis individual, sería demasiado caro pedirlos cada noche para 503 acciones):
+
+▸ RS ≥ 80 → +25 puntos
+▸ TREND (las 3 condiciones de medias móviles) ✓ → +25 puntos
+▸ ACC/DIS en A o B → +20 puntos
+▸ VOL RATIO ≥ 1.5x → +15 puntos
+▸ 12M PERF ≥ 20% → +10 puntos
+▸ NEAR HIGH (dentro del 15% del máximo) → +5 puntos
+
+Máximo posible: 100 puntos, si se cumplen los 6 factores a la vez.
+
+CÓMO USARLO:
+No es una señal de compra por sí sola — es un filtro para reducir 503 acciones a un puñado de candidatos que merece la pena analizar en detalle. Un score alto (70+) significa que el candidato pasa la mayoría de los filtros técnicos de CAN SLIM; el paso siguiente es siempre el análisis individual, que añade fundamentales (EPS, ventas, sponsorship institucional) antes de considerar cualquier decisión real.`
+    },
+
     // ── SPXL ──────────────────────────────────────────────────────────────────
     "spxl": {
         title: "SPXL — Direxion Daily S&P 500 Bull 3X",

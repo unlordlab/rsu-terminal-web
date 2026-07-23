@@ -393,7 +393,7 @@ function renderAnalysis(data) {
         // Chart
         + '<div style="background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius);padding:1rem;">'
         + '<div style="color:var(--color-accent);font-size:12px;letter-spacing:0.08em;margin-bottom:0.75rem;">PRECIO · MAs 50/200 · ÚLTIMOS 60 DÍAS</div>'
-        + '<div style="position:relative;width:100%;height:220px;overflow:hidden;">'
+        + '<div style="position:relative;width:100%;height:340px;overflow:hidden;">'
         + '<canvas id="canslim-chart"></canvas>'
         + '</div>'
         + '</div>'
@@ -461,7 +461,7 @@ function renderChart(data) {
             type: 'line',
             data: { labels: data.chart.dates, datasets },
             options: {
-                responsive:          false,
+                responsive:          true,
                 maintainAspectRatio: false,
                 animation:           false,
                 plugins: {
@@ -504,7 +504,14 @@ function renderScanResults(data, minScore) {
     const cols = 'grid-template-columns:80px 80px 90px 60px 70px 70px 80px 70px 80px';
 
     const header = '<div style="display:grid;' + cols + ';gap:8px;padding:8px 14px;border-bottom:1px solid var(--color-border);font-size:10px;color:var(--color-muted);letter-spacing:0.05em;">'
-        + '<div>TICKER</div><div>PRECIO</div><div>12M PERF</div><div>RS</div><div>ACC/DIS</div><div>NEAR HIGH</div><div>VOL RATIO</div><div>TREND</div><div>SCORE</div>'
+        + '<div>TICKER</div><div>PRECIO</div>'
+        + '<div>12M PERF ' + tt('canslim-perf-12m') + '</div>'
+        + '<div>RS ' + tt('rs-rating') + '</div>'
+        + '<div>ACC/DIS ' + tt('canslim-acc-dis') + '</div>'
+        + '<div>NEAR HIGH ' + tt('canslim-near-high') + '</div>'
+        + '<div>VOL RATIO ' + tt('canslim-vol-ratio') + '</div>'
+        + '<div>TREND ' + tt('canslim-scan-trend') + '</div>'
+        + '<div>SCORE ' + tt('canslim-scan-score') + '</div>'
         + '</div>';
 
     const rows = shown.map(c => {

@@ -293,35 +293,34 @@ def analyze_ticker(ticker: str, universe_perfs: list = None) -> dict:
         inst_data_ok    = False
 
         try:
+            # Formato actual de yfinance (verificado con datos reales
+            # 23/07/2026): major_holders es un DataFrame con índice
+            # "Breakdown" (insidersPercentHeld, institutionsPercentHeld,
+            # institutionsFloatPercentHeld, institutionsCount) y una única
+            # columna "Value" -- los porcentajes vienen como FRACCIÓN
+            # (0.665 = 66.5%), no como texto "66.50%". El parseo anterior
+            # asumía el formato viejo (string con "%") y por eso nunca
+            # multiplicaba por 100 -- guardaba 0.665 tal cual, un número
+            # que SIEMPRE cae por debajo del umbral de 40, así que el
+            # badge de sponsorship institucional salía rojo en el 100% de
+            # los casos, sin importar la acción. Confirmado contra AAPL
+            # (66.5%), JPM (76.1%), XOM (68.4%), TXN (94.7%) reales.
             major = tk.major_holders
-            if major is not None and not major.empty:
-                # Nuevo formato yfinance: columnas Value/Description o index-based
-                # Intentar ambos formatos
-                df = major.reset_index()
-                for idx in range(len(df)):
-                    row_vals = [str(v).lower() for v in df.iloc[idx].tolist()]
-                    row_str  = ' '.join(row_vals)
-                    if 'institution' in row_str and 'float' not in row_str:
-                        # Buscar el valor numérico en la fila
-                        for v in df.iloc[idx].tolist():
-                            v_str = str(v).replace('%', '').strip()
-                            try:
-                                parsed = float(v_str)
-                                if 0 < parsed <= 100:
-                                    inst_pct        = parsed
-                                    inst_pct_source = "major_holders"
-                                    inst_data_ok    = True
-                                    break
-                            except Exception:
-                                continue
-                        if inst_data_ok:
-                            break
+            if major is not None and not major.empty and 'institutionsPercentHeld' in major.index:
+                raw = _safe(major.loc['institutionsPercentHeld', 'Value'])
+                if raw > 0:
+                    inst_pct        = raw * 100
+                    inst_pct_source = "major_holders"
+                    inst_data_ok    = True
         except Exception:
             pass
 
-        # Fallback: info['institutionPercentHeld']
+        # Fallback: info['heldPercentInstitutions'] -- el nombre de campo
+        # viejo, "institutionPercentHeld", ya no existe en la API actual
+        # de yfinance (siempre devuelve None); el campo real hoy es
+        # "heldPercentInstitutions", verificado igual que arriba.
         if not inst_data_ok:
-            raw = _safe(info.get('institutionPercentHeld', 0)) * 100
+            raw = _safe(info.get('heldPercentInstitutions', 0)) * 100
             if raw > 0:
                 inst_pct        = raw
                 inst_pct_source = "info"
@@ -533,7 +532,7 @@ def analyze_ticker(ticker: str, universe_perfs: list = None) -> dict:
 # resultado aquí -- mismo patrón que rsrw_service.py::_load_gist() (sesión
 # 32). El ID es público (solo el token de escritura es secreto) -- rellenar
 # tras crear el Gist la primera vez.
-CANSLIM_GIST_ID   = ""  # ← rellenar con el ID del Gist tras el primer despliegue
+CANSLIM_GIST_ID   = "5925708e930b8074e753d353bcdd4bc9"
 CANSLIM_GIST_FILE = "canslim_scan.json"
 
 
