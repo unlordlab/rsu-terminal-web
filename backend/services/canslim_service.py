@@ -14,6 +14,7 @@ import sys, os
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "..", "shared"))
 from time_utils import get_timestamp  # noqa: E402
 from sp500_universe import SP500_SECTOR_MAP  # noqa: E402
+from services.cache import cache, TTL  # noqa: E402
 warnings.filterwarnings('ignore')
 
 # ── S&P 500 UNIVERSE ──────────────────────────────────────────────────────────
@@ -41,6 +42,14 @@ def _safe(val, default=0.0):
         return default
 
 # ── IBD RATINGS ───────────────────────────────────────────────────────────────
+
+def _perf_12m(hist: pd.DataFrame) -> float:
+    """Retorno a ~12 meses (252 sesiones) -- misma fórmula en
+    analyze_ticker() y _scan_single() para que el percentil de RS
+    Rating compare peras con peras (antes divergían: iloc[-252] sobre
+    2y vs iloc[0] sobre 1y). Ver sesión 23."""
+    price = _safe(hist['Close'].iloc[-1])
+    return _safe(((price / hist['Close'].iloc[-252]) - 1) * 100) if len(hist) >= 252 else 0.0
 
 def _rs_rating_real(perf_12m: float, universe_perfs: list):
     """RS real: percentil en el universo escaneado. Sin universo de
@@ -304,7 +313,7 @@ def analyze_ticker(ticker: str, universe_perfs: list = None) -> dict:
         prev_close = _safe(hist['Close'].iloc[-2])
         chg_pct    = ((price - prev_close) / prev_close * 100) if prev_close else 0
 
-        perf_12m = _safe(((price / hist['Close'].iloc[-252]) - 1) * 100 if len(hist) >= 252 else 0)
+        perf_12m = _perf_12m(hist)
         perf_6m  = _safe(((price / hist['Close'].iloc[-126]) - 1) * 100 if len(hist) >= 126 else 0)
         perf_3m  = _safe(((price / hist['Close'].iloc[-63])  - 1) * 100 if len(hist) >= 63  else 0)
 
@@ -380,7 +389,13 @@ def analyze_ticker(ticker: str, universe_perfs: list = None) -> dict:
             pass
 
         # ── RS rating ────────────────────────────────────────────────────────
-        rs_r = _rs_rating_real(perf_12m, universe_perfs or [])
+        # Sin universo explícito, reutiliza el del último scan_canslim()
+        # reciente (caché, TTL 10 min) -- si nadie ha escaneado en ese
+        # margen, sigue sin universo y el RS Rating queda None ("N/D"),
+        # igual que siempre. Ver sesión 23.
+        if universe_perfs is None:
+            universe_perfs = cache.get("canslim:universe_perfs") or []
+        rs_r = _rs_rating_real(perf_12m, universe_perfs)
 
         # ── IBD Ratings ───────────────────────────────────────────────────────
         eps_r   = _eps_rating(eps_g)
@@ -557,7 +572,7 @@ def analyze_ticker(ticker: str, universe_perfs: list = None) -> dict:
 def _scan_single(ticker: str) -> dict | None:
     try:
         tk   = yf.Ticker(ticker)
-        hist = tk.history(period="1y")
+        hist = tk.history(period="2y")  # antes "1y" -- necesario para iloc[-252] real, ver _perf_12m
         if len(hist) < 100:
             return None
 
@@ -569,7 +584,7 @@ def _scan_single(ticker: str) -> dict | None:
         if vol_avg < 100_000:
             return None
 
-        perf_12m = _safe(((price / hist['Close'].iloc[0]) - 1) * 100)
+        perf_12m = _perf_12m(hist)
 
         try:
             fi     = tk.fast_info
@@ -626,6 +641,11 @@ def scan_canslim(min_score: int = 40, max_results: int = 50) -> dict:
 
     # Paso 2: RS real = percentil dentro del universo escaneado
     perfs = [r['perf_12m'] for r in raw_results]
+    if perfs:
+        # Se cachea el universo completo para que analyze_ticker() pueda
+        # dar un RS Rating real sin haber corrido su propio scan --
+        # TTL["canslim"]=600 ya existía definido y sin usar. Ver sesión 23.
+        cache.set("canslim:universe_perfs", perfs, TTL["canslim"])
     for r in raw_results:
         rank = sum(1 for p in perfs if p < r['perf_12m'])
         r['rs'] = max(1, min(99, int(rank / len(perfs) * 99) + 1)) if perfs else 50
