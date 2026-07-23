@@ -5,6 +5,7 @@ import requests
 import sys, os
 from concurrent.futures import ThreadPoolExecutor
 from services.yf_pool import yf_executor
+from config import settings
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "..", "shared"))
 from time_utils import get_timestamp  # noqa: E402
 from mcclellan import mcclellan_series  # noqa: E402
@@ -626,6 +627,35 @@ def _enrich_ticker(ticker, mention_count, max_mentions, st_tickers):
             "mentions": mention_count, "ok": False,
         }
 
+def _get_reddit_token() -> str | None:
+    """Token OAuth de Reddit (client_credentials, sin contraseña de
+    usuario) -- cacheado 55 min (dura 1h). None si no hay credenciales
+    configuradas o si Reddit rechaza la petición (app aún sin aprobar,
+    credenciales inválidas...) -- el llamador debe tratarlo igual que
+    "Reddit no disponible", sin excepción."""
+    from services.cache import cache
+    if not settings.reddit_client_id or not settings.reddit_client_secret:
+        return None
+    cached = cache.get("market:reddit_token")
+    if cached:
+        return cached
+    try:
+        from requests.auth import HTTPBasicAuth
+        r = requests.post(
+            "https://www.reddit.com/api/v1/access_token",
+            auth=HTTPBasicAuth(settings.reddit_client_id, settings.reddit_client_secret),
+            data={"grant_type": "client_credentials"},
+            headers={"User-Agent": settings.reddit_user_agent},
+            timeout=10,
+        )
+        r.raise_for_status()
+        token = r.json().get("access_token")
+        if token:
+            cache.set("market:reddit_token", token, 3300)
+        return token
+    except Exception:
+        return None
+
 def get_reddit_pulse():
     from services.cache import cache, TTL
     cached = cache.get("market:reddit")
@@ -639,20 +669,23 @@ def get_reddit_pulse():
     ticker_mentions = {}
     sources = []
 
-    for sub in ['wallstreetbets', 'stocks', 'investing', 'options', 'StockMarket']:
-        try:
-            r = session.get(f'https://www.reddit.com/r/{sub}/hot.json?limit=30&t=day', timeout=10)
-            if r.status_code != 200:
+    token = _get_reddit_token()
+    if token:
+        session.headers.update({"Authorization": f"Bearer {token}"})
+        for sub in ['wallstreetbets', 'stocks', 'investing', 'options', 'StockMarket']:
+            try:
+                r = session.get(f'https://oauth.reddit.com/r/{sub}/hot?limit=30&t=day', timeout=10)
+                if r.status_code != 200:
+                    continue
+                sources.append('Reddit')
+                for post in r.json().get('data', {}).get('children', []):
+                    p    = post.get('data', {})
+                    text = f"{p.get('title','')} {p.get('selftext','')}".upper()
+                    for ticker, count in _extract_tickers(text):
+                        ticker_mentions[ticker] = ticker_mentions.get(ticker, 0) + count
+                break
+            except Exception:
                 continue
-            sources.append('Reddit')
-            for post in r.json().get('data', {}).get('children', []):
-                p    = post.get('data', {})
-                text = f"{p.get('title','')} {p.get('selftext','')}".upper()
-                for ticker, count in _extract_tickers(text):
-                    ticker_mentions[ticker] = ticker_mentions.get(ticker, 0) + count
-            break
-        except Exception:
-            continue
 
     st_tickers = []
     try:

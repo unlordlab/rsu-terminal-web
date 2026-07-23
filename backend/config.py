@@ -56,6 +56,19 @@ class Settings(BaseSettings):
     telegram_bot_token: str = ""
     telegram_chat_id: str = ""
     terminal_base_url: str = "http://178.104.148.117"  # ver conversacion 17/07/2026, sin dominio propio todavia
+    # Reddit OAuth (grant_type=client_credentials, solo lectura de listados
+    # públicos) -- necesario porque reddit.com/*.json bloquea con 403 desde la
+    # IP del VPS (Hetzner), verificado 23/07/2026, independiente del
+    # User-Agent. Se registra una app tipo "script" gratis en
+    # reddit.com/prefs/apps -- puede tardar en aprobarse. Vacío = Reddit Pulse
+    # sigue funcionando solo con StockTwits (o "sin datos" si ese también
+    # falla), igual que hoy -- sin romper nada mientras no haya credenciales.
+    reddit_client_id: str = ""
+    reddit_client_secret: str = ""
+    # Reddit exige un User-Agent único y descriptivo (con el usuario/app real)
+    # para no ser limitado agresivamente -- actualizar con el nombre de la app
+    # creada en reddit.com/prefs/apps.
+    reddit_user_agent: str = "RSUTerminal/1.0"
 
     class Config:
         env_file = ".env"
