@@ -699,11 +699,16 @@ def _fetch_reddit_and_stocktwits_via_browser(need_reddit: bool, need_stocktwits:
                     symbols = data.get('symbols', [])[:20]
                     if symbols:
                         sources.append('StockTwits')
-                except Exception:
-                    pass
+                except Exception as e:
+                    print(f"[RedditBrowser] StockTwits vía navegador falló: {type(e).__name__}: {e}")
             browser.close()
-    except Exception:
-        pass
+    except Exception as e:
+        # Se registra explícitamente -- antes se tragaba en silencio, lo
+        # que hizo indiagnosticable el fallo real en producción (23/07/2026:
+        # el binario chromium-headless-shell no había quedado instalado
+        # del todo tras el build, y el widget mostraba "sin datos" sin
+        # ningún rastro en los logs).
+        print(f"[RedditBrowser] Navegador headless falló por completo: {type(e).__name__}: {e}")
     return sources, titles, symbols
 
 def get_reddit_pulse():
