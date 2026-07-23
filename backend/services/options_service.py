@@ -25,7 +25,7 @@ WATCHLIST = [
     # Tech/Growth
     "PLTR","CRWD","PANW","NET","SNOW","ARM","SMCI","AXON","NBIS","RKLB",
     "COIN","HOOD","MSTR","UBER","ABNB","DXCM","ZS","OKTA","DASH","RIVN",
-    "SOFI","MELI","NOW","ANET","FTNT","CPNG","SHOP","SQ","PYPL","APP",
+    "SOFI","MELI","NOW","ANET","FTNT","CPNG","SHOP","PYPL","APP",
     "CELH","DUOL","TTD","HUBS","DDOG","MDB","ZM","BILL","DOCN","GTLB",
     # Finance
     "GS","MS","BLK","SCHW","COF","AXP","SPGI","ICE","CME","MCO",

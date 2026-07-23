@@ -57,7 +57,7 @@ THEMATIC_SECTORS = {
         "VRNS","TENB","FFIV","CHKP","GEN",
     ],
     "FINTECH": [
-        "SQ","PYPL","SOFI","AFRM","UPST","COIN","HOOD","FOUR","GPN","FI",
+        "XYZ","PYPL","SOFI","AFRM","UPST","COIN","HOOD","FOUR","GPN","FI",
         "MA","V","AXP","NU","PAGS","STNE","TOST","FUTU",
     ],
     "BOOMER": [
