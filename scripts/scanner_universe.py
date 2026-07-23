@@ -300,7 +300,7 @@ def _technical_score(rs_pct: float, phase: int, rvol: float) -> float:
     return round(rs_pts + phase_pts + rvol_pts, 1)
 
 
-def _compute_breadth_history(close_d: dict, tickers: list, lookback_days: int = 65) -> list:
+def _compute_breadth_history(close_d: dict, tickers: list, lookback_days: int = 150) -> list:
     """Amplitud de mercado REAL derivada del propio universo S&P 500 que este
     script ya descarga cada noche (500 tickers x 2 años de histórico) — en vez de
     depender de fuentes externas de avance/declive (^ADV/^DEC de Yahoo, que
@@ -314,6 +314,17 @@ def _compute_breadth_history(close_d: dict, tickers: list, lookback_days: int = 
 
     Todo vectorizado con pandas sobre datos que ya están en memoria — cero
     llamadas de red adicionales.
+
+    lookback_days=150 (antes 65, sesión 20, 23/07/2026): el histórico se
+    RECALCULA DESDE CERO cada noche (no hay estado de EMA persistido entre
+    scans), así que la EMA39 del McClellan necesita suficiente ventana
+    propia para madurar cada vez. Verificado empíricamente con datos reales
+    (168 tickers, ~2.5 años): con 65 días, el valor resultante tenía un 33%
+    más de ruido día-a-día que el mismo cálculo sobre histórico largo
+    (correlación 0.906) — un artefacto de la ventana corta, no movimiento
+    real de mercado. A partir de ~130 días la divergencia desaparece del
+    todo (correlación 0.9998); 150 deja margen cómodo. Ver memoria del
+    proyecto para el detalle de la comparación.
     """
     cols = {t: close_d[t] for t in tickers if t in close_d}
     if len(cols) < 50:
