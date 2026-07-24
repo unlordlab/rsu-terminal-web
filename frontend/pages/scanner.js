@@ -284,7 +284,7 @@ function renderResults(el, data) {
         { label: 'PRECIO',  key: 'precio' },
         { label: 'RVOL',    key: 'rvol' },
         { label: 'RS%',     key: 'rs_pct' },
-        { label: 'SCORE',   key: 'score_tecnico' },
+        { label: 'SCORE TÉC. ' + tt('score-tecnico'), key: 'score_tecnico' },
         { label: 'ABSORC',  key: 'dias_absorcion' },
         { label: 'FASE',    key: 'phase' },
         { label: 'SECTOR',  key: 'sector' },
