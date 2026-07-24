@@ -178,7 +178,7 @@ def save_to_gist(result: dict):
 
 
 def main():
-    print(f"🕐 CANSLIM Scanner — {datetime.now().strftime('%Y-%m-%d %H:%M UTC')}")
+    print(f"🕐 CANSLIM Scanner — {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M UTC')}")
     result = run_scan()
     print(f"📊 {result['total']} candidatos de {result['scanned']} escaneados")
     print("💾 Guardando en GitHub Gist...")

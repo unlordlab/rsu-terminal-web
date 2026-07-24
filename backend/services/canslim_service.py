@@ -10,7 +10,7 @@ import numpy as np
 import yfinance as yf
 import math
 from datetime import datetime, timedelta
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import ThreadPoolExecutor, as_completed
 import warnings
 import sys, os
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "..", "shared"))
@@ -698,7 +698,11 @@ def scan_canslim(min_score: int = 40, max_results: int = 50) -> dict:
     raw_results = []
     with ThreadPoolExecutor(max_workers=15) as ex:
         futures = {ex.submit(_scan_single, t): t for t in tickers}
-        for future in futures:
+        # as_completed() en vez de iterar el dict (orden de envío) -- así se
+        # recogen los resultados según van terminando, no bloqueado esperando
+        # al primer ticker enviado si resulta ser uno lento mientras otros
+        # posteriores ya han acabado.
+        for future in as_completed(futures):
             result = future.result()
             if result:
                 raw_results.append(result)
