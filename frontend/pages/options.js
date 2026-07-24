@@ -185,14 +185,48 @@ async function loadTicker(ticker, period) {
     if (!body) return;
     body.innerHTML = loading();
     try {
-        const res  = await fetch('/api/v1/options/ticker-flow/' + ticker + '?period=' + period, { headers: authHeader() });
-        const data = await res.json();
+        // GEX en paralelo, sin bloquear el render de flujo si falla o
+        // tarda -- es una sección adicional, no crítica para la vista
+        // principal (mismo criterio de resiliencia que el resto del proyecto).
+        const [flowRes, gexRes] = await Promise.all([
+            fetch('/api/v1/options/ticker-flow/' + ticker + '?period=' + period, { headers: authHeader() }),
+            fetch('/api/v1/options/gex/' + ticker, { headers: authHeader() }).catch(() => null),
+        ]);
+        const data = await flowRes.json();
+        const gex  = gexRes ? await gexRes.json().catch(() => ({ ok: false })) : { ok: false };
         if (!data.ok) { body.innerHTML = errorMessage(data.error || 'Sin datos'); return; }
-        body.innerHTML = renderTicker(data);
+        body.innerHTML = renderTicker(data) + renderGex(gex);
         wireTickerPeriods(body);
     } catch (e) {
         body.innerHTML = errorMessage(e.message);
     }
+}
+
+function renderGex(gex) {
+    if (!gex || !gex.ok) return '';   // silencioso si falla -- GEX es un extra, no rompe la vista principal
+    const color = gex.total_gex >= 0 ? 'var(--color-accent)' : '#f23645';
+    const regimenTxt = gex.regimen === 'POSITIVO'
+        ? 'Dealers tienden a amortiguar el movimiento (compran en caídas, venden en subidas)'
+        : 'Dealers tienden a amplificar el movimiento (venden en caídas, compran en subidas)';
+    const maxAbs = Math.max(...gex.by_strike.map(x => Math.abs(x.gex)), 1);
+    const rows = gex.by_strike.map(r => {
+        const barColor = r.gex >= 0 ? 'var(--color-accent)' : '#f23645';
+        const pct = Math.abs(r.gex) / maxAbs * 100;
+        return `<div style="display:grid;grid-template-columns:80px 1fr 90px;gap:8px;padding:5px 14px;align-items:center;font-size:11px;">
+            <span style="color:var(--color-text);">$${esc(r.strike)}</span>
+            <div style="background:var(--color-bg,#0a0a0a);border-radius:3px;height:6px;"><div style="height:100%;width:${pct}%;background:${barColor};border-radius:3px;"></div></div>
+            <span style="color:${barColor};text-align:right;">${esc(r.gex_fmt)}</span>
+        </div>`;
+    }).join('');
+    return `
+    <div style="background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius);overflow:hidden;margin-top:1rem;">
+        <div style="padding:10px 14px;border-bottom:1px solid var(--color-border);display:flex;justify-content:space-between;align-items:center;">
+            <span style="color:var(--color-muted);font-size:11px;letter-spacing:0.06em;">GAMMA EXPOSURE (GEX) ${tt('options-gex')}</span>
+            <span style="color:${color};font-size:16px;font-weight:700;">${esc(gex.total_gex_fmt)} <span style="font-size:10px;color:var(--color-muted);font-weight:400;">/ 1% mov.</span></span>
+        </div>
+        <div style="padding:8px 14px;font-size:11px;color:var(--color-muted);border-bottom:1px solid var(--color-border);">${esc(regimenTxt)}</div>
+        ${rows}
+    </div>`;
 }
 
 function wireTickerPeriods(scope) {

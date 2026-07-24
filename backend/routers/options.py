@@ -8,6 +8,7 @@ from services.options_service import (
     get_db_stats, get_repeat_signals,
     get_ticker_history_summary, init_db,
     get_options_flow_simple, get_ticker_flow_simple, get_oi_changes,
+    get_gamma_exposure,
 )
 
 router = APIRouter(prefix="/api/v1/options", tags=["options"])
@@ -47,6 +48,10 @@ async def ticker_flow(ticker: str, period: str = Query("1w"), user=Depends(verif
 @router.get("/oi-changes")
 async def oi_changes(user=Depends(verify_token)):
     return get_oi_changes()
+
+@router.get("/gex/{ticker}")
+async def gex(ticker: str, user=Depends(verify_token)):
+    return get_gamma_exposure(ticker)
 
 @router.post("/scan-now")
 async def scan_now(user=Depends(verify_token)):

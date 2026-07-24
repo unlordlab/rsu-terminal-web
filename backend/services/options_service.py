@@ -6,6 +6,7 @@ import sqlite3
 import os
 import sys
 import time
+import math
 from datetime import datetime, timedelta
 from concurrent.futures import ThreadPoolExecutor
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "..", "shared"))
@@ -607,6 +608,135 @@ def _fmt_premium(val: float) -> str:
     if val >= 1_000_000: return f"${val/1_000_000:.1f}M"
     if val >= 1_000:     return f"${val/1_000:.0f}K"
     return f"${val:.0f}"
+
+RISK_FREE_RATE = 0.045  # aproximado -- gamma es poco sensible a r, no
+                         # compensa una descarga de red solo por esto
+
+def _norm_pdf(x: float) -> float:
+    return math.exp(-x * x / 2) / math.sqrt(2 * math.pi)
+
+def _bs_gamma(S: float, K: float, T: float, sigma: float, r: float = RISK_FREE_RATE) -> float:
+    """Gamma de Black-Scholes -- idéntica para call y put al mismo
+    strike/vencimiento. T en años, sigma = IV en decimal (0.30, no 30)."""
+    if S <= 0 or K <= 0 or T <= 0 or sigma <= 0:
+        return 0.0
+    d1 = (math.log(S / K) + (r + sigma ** 2 / 2) * T) / (sigma * math.sqrt(T))
+    return _norm_pdf(d1) / (S * sigma * math.sqrt(T))
+
+def _fmt_gex(val: float) -> str:
+    """Como _fmt_premium() pero con signo -- GEX puede ser negativo."""
+    sign = "+" if val >= 0 else "-"
+    v = abs(val)
+    if v >= 1_000_000_000: return f"{sign}${v/1_000_000_000:.2f}B"
+    if v >= 1_000_000:     return f"{sign}${v/1_000_000:.1f}M"
+    if v >= 1_000:         return f"{sign}${v/1_000:.0f}K"
+    return f"{sign}${v:.0f}"
+
+def get_gamma_exposure(ticker: str) -> dict:
+    """GEX (Gamma Exposure) agregada por strike -- estimación de cuánta
+    gamma tienen los dealers según el convenio estándar de la industria
+    (calls = dealer largo gamma, puts = dealer corto gamma; ver
+    tooltip "options-gex" para el porqué -- los datos públicos de OI no
+    distinguen si el dealer está comprado o vendido en cada contrato,
+    esto es una estimación ampliamente usada, no una observación directa
+    de la posición real). Positivo → los dealers tienden a amortiguar el
+    movimiento (venden en subidas, compran en caídas). Negativo → tienden
+    a amplificarlo. Fórmula verificada contra SpotGamma/SqueezeMetrics
+    (quien acuñó el término): GEX = gamma × OI × 100 × spot² × 0.01.
+
+    NO usa _process_chain() -- necesita el open interest de TODA la
+    cadena (incluidos contratos con volumen bajo/nulo hoy pero mucho OI
+    acumulado), no solo los contratos que pasarían el filtro de volumen/
+    prima del escaneo de flujo, que descartaría justo lo que más pesa
+    aquí. Ver sesión 24/07/2026."""
+    try:
+        tk    = yf.Ticker(ticker.upper())
+        price = 0.0
+        try:
+            fi    = tk.fast_info
+            price = _safe(getattr(fi, 'last_price', None))
+        except Exception: pass
+        if not price:
+            hist  = tk.history(period="2d")
+            price = float(hist['Close'].iloc[-1]) if not hist.empty else 0
+        if not price:
+            return {"ok": False, "error": f"Sin precio para {ticker}"}
+
+        expirations = tk.options
+        if not expirations:
+            return {"ok": False, "error": f"Sin cadena de opciones para {ticker}"}
+
+        today = datetime.now().date()
+        gex_by_strike: dict = {}
+        total_gex = 0.0
+        exp_days_min, exp_days_max = None, None
+
+        # Filtrar por 7-180 días ANTES de recortar a 5 -- tickers con
+        # vencimientos diarios (SPY, QQQ...) tienen sus primeros 5
+        # vencimientos cronológicos todos por debajo de 7 días, así que
+        # recortar antes de filtrar (como hacía _process_chain) dejaba la
+        # cadena completa vacía para justo los subyacentes con más
+        # liquidez de opciones del mercado. Verificado con datos reales:
+        # SPY fallaba con "sin OI/IV suficiente" hasta este fix.
+        valid_exps = []
+        for exp in expirations:
+            try:
+                exp_date = datetime.strptime(exp, '%Y-%m-%d').date()
+                exp_days = (exp_date - today).days
+                if 7 <= exp_days <= 180:
+                    valid_exps.append((exp, exp_days))
+            except Exception:
+                continue
+
+        for exp, exp_days in valid_exps[:5]:
+            chain = None
+            for attempt in range(3):   # mismo patrón de reintentos que _process_chain
+                try:
+                    chain = tk.option_chain(exp)
+                    break
+                except Exception:
+                    if attempt < 2: time.sleep(1.5)
+            if chain is None: continue
+
+            T = exp_days / 365.0
+            for opt_type, df, sign in [('call', chain.calls, 1), ('put', chain.puts, -1)]:
+                for _, row in df.iterrows():
+                    oi     = _safe(row.get('openInterest', 0))
+                    iv     = _safe(row.get('impliedVolatility', 0))
+                    strike = _safe(row.get('strike', 0))
+                    if oi <= 0 or iv <= 0 or strike <= 0: continue
+                    gamma   = _bs_gamma(price, strike, T, iv)
+                    contrib = sign * gamma * oi * 100 * price ** 2 * 0.01
+                    gex_by_strike[strike] = gex_by_strike.get(strike, 0.0) + contrib
+                    total_gex += contrib
+
+            exp_days_min = exp_days if exp_days_min is None else min(exp_days_min, exp_days)
+            exp_days_max = exp_days if exp_days_max is None else max(exp_days_max, exp_days)
+
+        if not gex_by_strike:
+            return {"ok": False, "error": f"Sin OI/IV suficiente para calcular GEX de {ticker}"}
+
+        by_strike = sorted(
+            [{"strike": k, "gex": round(v, 0), "gex_fmt": _fmt_gex(v)} for k, v in gex_by_strike.items()],
+            key=lambda x: -abs(x["gex"])
+        )[:15]
+        by_strike.sort(key=lambda x: x["strike"])   # tras recortar al top 15, ordenar por strike para la tabla
+
+        regimen = "POSITIVO" if total_gex > 0 else "NEGATIVO"
+
+        return {
+            "ok":            True,
+            "ticker":        ticker.upper(),
+            "price":         round(price, 2),
+            "total_gex":     round(total_gex, 0),
+            "total_gex_fmt": _fmt_gex(total_gex),
+            "regimen":       regimen,
+            "by_strike":     by_strike,
+            "exp_days_range": [exp_days_min, exp_days_max] if exp_days_min is not None else None,
+            "timestamp":     get_timestamp(),
+        }
+    except Exception as e:
+        return {"ok": False, "ticker": ticker.upper(), "error": str(e)}
 
 def _pct_from_atm(strike: float, price: float) -> str:
     if price <= 0: return ""

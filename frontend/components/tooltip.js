@@ -678,6 +678,23 @@ LIMITACIÓN:
 Solo puede calcularse a partir del segundo día de escaneo guardado — con un único día de histórico no hay nada contra lo que comparar, y esta sección aparecerá vacía hasta entonces.`
     },
 
+    "options-gex": {
+        title: "GEX — Gamma Exposure",
+        short: "Estimación de cuánta gamma tienen agregada los market makers, por strike. Positivo → tienden a amortiguar el movimiento del precio. Negativo → tienden a amplificarlo.",
+        long: `GEX mide cuánta "gamma" tienen acumulada los dealers (market makers) que venden opciones, agregada por strike y vencimiento — a diferencia del resto de Options Flow, que mira contrato a contrato, esto suma TODO el open interest de la cadena para estimar el posicionamiento agregado del mercado.
+
+POR QUÉ IMPORTA:
+Cuando el precio se mueve, los dealers ajustan su cobertura (hedging) comprando o vendiendo el subyacente para mantenerse neutrales. Si tienen gamma POSITIVA, esa cobertura va EN CONTRA del movimiento (venden en subidas, compran en caídas) — amortigua la volatilidad, mercado más tranquilo. Si tienen gamma NEGATIVA, la cobertura va A FAVOR del movimiento (compran en subidas, venden en caídas) — amplifica la volatilidad, movimientos más bruscos.
+
+FÓRMULA:
+GEX = gamma × Open Interest × 100 × precio² × 0,01, sumado por cada contrato — calls en positivo, puts en negativo. La gamma se calcula con Black-Scholes a partir de la IV que ya trae cada contrato (yfinance no da los Griegos directamente).
+
+⚠ IMPORTANTE — ES UNA ESTIMACIÓN, NO UN HECHO:
+El convenio "calls = dealer largo gamma, puts = dealer corto gamma" es el estándar de la industria (lo popularizó SqueezeMetrics), pero es una SUPOSICIÓN — los datos públicos de Open Interest no dicen si el dealer está comprado o vendido en cada contrato concreto, solo asumen el caso más común. Trátalo como una lectura orientativa del posicionamiento agregado del mercado, no como la posición real y verificada de los dealers.
+
+Solo se calcula sobre vencimientos de 7 a 180 días (mismo criterio que el resto de Options Flow) — no incluye 0DTE ni LEAPS muy lejanos.`
+    },
+
     "options-net-score": {
         title: "Net Score",
         short: "Recuento simple: +1 por cada entrada alcista (Buy Call / Sell Put) del periodo, -1 por cada bajista (Buy Put / Sell Call). No pondera por prima.",
