@@ -407,7 +407,13 @@ def analyze_ticker(ticker: str, universe_perfs: list = None) -> dict:
 
         can_slim_letters = {
             "C — EPS crecimiento >25%":         bool(eps_g >= 25),
-            "A — Ventas anuales >25%":           bool(sales_g >= 25),
+            # "revenueGrowth" de yfinance es crecimiento TRIMESTRAL interanual,
+            # no anual -- la etiqueta decía "Ventas anuales" afirmando algo que
+            # el dato no mide (CAN SLIM distingue C=trimestral de A=anual
+            # sostenido a propósito). Renombrada para ser honesta con lo que
+            # de verdad se calcula, sin inventar un cálculo anual nuevo. Ver
+            # auditoría CANSLIM 21/07/2026, hallazgo #8.
+            "A — Crecimiento de ventas >25%":    bool(sales_g >= 25),
             "N — Near new high (<15% del máx)":  bool(near_new_high),
             "S — RS Rating >80":                 bool(rs_r >= 80) if rs_r is not None else None,
             "L — Leader (Trend Template)":       bool(trend['passed']),
@@ -545,8 +551,15 @@ def analyze_ticker(ticker: str, universe_perfs: list = None) -> dict:
         })
 
     except Exception as e:
+        # El traceback completo va al log del servidor, nunca a la respuesta
+        # -- antes se devolvía en "detail", exponiendo rutas del sistema de
+        # ficheros y estructura interna a cualquier usuario autenticado (el
+        # frontend nunca lo leía, era pura exposición sin uso). Ver auditoría
+        # CANSLIM 21/07/2026, hallazgo #9.
         import traceback
-        return {"ok": False, "error": str(e), "detail": traceback.format_exc()}
+        print(f"[CANSLIM] Error en analyze_ticker({ticker!r}): {type(e).__name__}: {e}")
+        print(traceback.format_exc())
+        return {"ok": False, "error": str(e)}
 
 # ── SCAN NOCTURNO (GIST) ──────────────────────────────────────────────────────
 # scripts/canslim_scan.py corre 1x/día (L-V) vía GitHub Actions y sube el
@@ -718,6 +731,5 @@ def scan_canslim(min_score: int = 40, max_results: int = 50) -> dict:
         "candidates": candidates[:max_results],
         "total":      len(candidates),
         "scanned":    len(tickers),
-        "universe_perfs": perfs[:10],   # muestra de percentiles para debug
         "timestamp":  get_timestamp(),
     })
