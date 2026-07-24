@@ -16,6 +16,7 @@ import sys, os
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "..", "shared"))
 from time_utils import get_timestamp  # noqa: E402
 from sp500_universe import SP500_SECTOR_MAP  # noqa: E402
+from market_regime import spy_trend_snapshot  # noqa: E402
 from canslim_engine import perf_12m as _perf_12m, acc_dis_rating as _acc_dis_rating  # noqa: E402
 from services.cache import cache, TTL  # noqa: E402
 warnings.filterwarnings('ignore')
@@ -161,13 +162,19 @@ def get_market_status() -> dict:
         spy_price  = _safe(spy_hist['Close'].iloc[-1])
         spy_prev   = _safe(spy_hist['Close'].iloc[-2])
         spy_chg    = (spy_price - spy_prev) / spy_prev * 100 if spy_prev else 0
-        spy_ma50   = float(spy_hist['Close'].tail(50).mean())
-        spy_ma200  = float(spy_hist['Close'].tail(200).mean()) if len(spy_hist) >= 200 else spy_ma50
         spy_high52 = float(spy_hist['Close'].tail(252).max())
         spy_pct_from_high = (spy_price - spy_high52) / spy_high52 * 100
 
-        spy_above_ma50  = spy_price > spy_ma50
-        spy_above_ma200 = spy_price > spy_ma200
+        # SMA50/SMA200 y sus "above" -- vía shared/market_regime.py, mismo
+        # cálculo que ya usa market_service.py::get_market_breadth() (ver
+        # auditoría CANSLIM 21/07/2026, hallazgo #10). Antes, con menos de
+        # 200 sesiones, spy_ma200 se sustituía en silencio por spy_ma50
+        # (sesgo optimista); ahora es None -- spy_above_ma200 también
+        # queda None y sencillamente no suma los 20 puntos del score más
+        # abajo (`if spy_above_ma200:` es falsy con None).
+        snap = spy_trend_snapshot(spy_hist['Close'])
+        spy_ma50, spy_ma200 = snap["sma50"], snap["sma200"]
+        spy_above_ma50, spy_above_ma200 = snap["above_sma50"], snap["above_sma200"]
 
         spy_perf_3m  = _safe(((spy_price / spy_hist['Close'].iloc[-63]) - 1) * 100 if len(spy_hist) >= 63 else 0)
         spy_perf_1m  = _safe(((spy_price / spy_hist['Close'].iloc[-21]) - 1) * 100 if len(spy_hist) >= 21 else 0)
@@ -245,7 +252,7 @@ def get_market_status() -> dict:
                 "above_ma50":    spy_above_ma50,
                 "above_ma200":   spy_above_ma200,
                 "ma50":          round(spy_ma50, 2),
-                "ma200":         round(spy_ma200, 2),
+                "ma200":         round(spy_ma200, 2) if spy_ma200 is not None else None,
                 "pct_from_high": round(spy_pct_from_high, 1),
                 "perf_1w":       round(spy_perf_1w, 2),
                 "perf_1m":       round(spy_perf_1m, 2),

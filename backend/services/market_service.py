@@ -9,6 +9,7 @@ from config import settings
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "..", "shared"))
 from time_utils import get_timestamp  # noqa: E402
 from mcclellan import mcclellan_series  # noqa: E402
+from market_regime import spy_trend_snapshot  # noqa: E402
 
 # ── ÍNDICES ───────────────────────────────────────────────────────────────────
 
@@ -1566,9 +1567,8 @@ def get_market_breadth():
         if len(spy_hist) < 50:
             raise ValueError("Histórico insuficiente tras filtrar valores nulos")
 
-        current = float(spy_hist['Close'].iloc[-1])
-        sma50   = float(spy_hist['Close'].rolling(50).mean().iloc[-1])
-        sma200  = float(spy_hist['Close'].rolling(200).mean().iloc[-1]) if len(spy_hist) >= 200 else None
+        snap = spy_trend_snapshot(spy_hist['Close'])
+        current, sma50, sma200 = snap["price"], snap["sma50"], snap["sma200"]
 
         # Verificación explícita: si por cualquier motivo el cálculo dio NaN,
         # tratarlo igual que un fallo de datos en vez de propagar NaN con ok=True
