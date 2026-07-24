@@ -371,14 +371,25 @@ def _rvol_en_minimo(df_spy, ventana=VENTANA):
     ventana — no al máximo de volumen de cualquier día de la ventana (que es lo que
     hacía la versión anterior). Esto es más preciso: volumen de clímax importa
     sobre todo si ocurre justo en el día de pánico máximo, no en un día cualquiera.
+
+    La media de volumen de referencia se calcula EN el propio día del mínimo
+    (media móvil de 20 sesiones hasta esa fecha), no con la media de "hoy" --
+    tras una capitulación el volumen de las semanas siguientes suele dispararse,
+    así que usar la media de hoy como denominador infla ese denominador y
+    subestima sistemáticamente el RVOL del día de pánico real, justo la puerta
+    estructural (gatekeeper_b) que más importa detectar bien. Ver auditoría RSU
+    Algoritmo 21/07/2026, hallazgo #4.
     """
     sub = df_spy.tail(ventana)
     if len(sub) < 3:
         return 0.0, None
-    idx_min   = sub['Low'].idxmin()
-    vol_media = float(df_spy['Volume'].rolling(20).mean().iloc[-1])
+    idx_min = sub['Low'].idxmin()
+    vol_media_hasta_min = df_spy['Volume'].rolling(20).mean().loc[idx_min]
+    if pd.isna(vol_media_hasta_min) or vol_media_hasta_min <= 0:
+        return 0.0, None
+    vol_media = float(vol_media_hasta_min)
     vol_dia   = float(sub.loc[idx_min, 'Volume'])
-    rvol      = vol_dia / vol_media if vol_media > 0 else 1.0
+    rvol      = vol_dia / vol_media
     return rvol, idx_min
 
 def _mcclellan_con_giro(df_spy, sector_data=None, ventana=5, breadth_real=None):
@@ -816,15 +827,15 @@ def get_rsu_algoritmo():
             return {"ok": False, "error": "Datos insuficientes de SPY"}
 
         df_spy = df_spy.dropna(subset=['Close'])
-
-        # Limpiar datos anómalos usando percentiles (solo sobre el tramo reciente,
-        # para no distorsionar el histórico largo usado por la EMA200 semanal)
-        recent = df_spy.tail(180)
-        q10 = float(recent['Close'].quantile(0.05))
-        q90 = float(recent['Close'].quantile(0.95))
-        df_spy_clean_tail = recent[recent['Close'].between(q10 * 0.7, q90 * 1.3)].copy()
-        # Sustituir solo el tramo reciente limpio, conservando el histórico largo intacto
-        df_spy = pd.concat([df_spy.iloc[:-len(recent)], df_spy_clean_tail])
+        # (Antes había aquí un filtro que borraba filas de los últimos 180 días
+        # fuera de una banda de percentiles calculada sobre ese mismo tramo. Se
+        # quita: en una caída vertical sostenida, las barras más bajas -- las
+        # que definen el suelo que el algoritmo existe para detectar -- son
+        # justo las candidatas a caer fuera de esa banda, dejando además huecos
+        # en el índice que contaminaban RSI/ATR/medias móviles sin aviso.
+        # yfinance no devuelve outliers salvajes en SPY -- el filtro resolvía
+        # un problema que casi no existe e introducía uno real. Ver auditoría
+        # RSU Algoritmo 21/07/2026, hallazgo crítico #3.)
 
         credit_spread = _credit_stress_gate(credit_hist)  # sin fecha → último dato disponible
         resultado = _calcular_score_punto(df_spy, df_vix, sector_data, df_vix3m, credit_spread=credit_spread, breadth_real=breadth_real)
@@ -840,15 +851,13 @@ def get_rsu_algoritmo():
         except Exception as e:
             print(f"[AlgoritmoTracking] Error procesando resultado: {type(e).__name__}: {e}")
 
-        # Chart limpio con filtro robusto de percentiles
-        closes_raw   = df_spy['Close'].tail(90)
-        q10          = float(closes_raw.quantile(0.10))
-        q90          = float(closes_raw.quantile(0.90))
-        closes_clean = closes_raw[closes_raw.between(q10 * 0.8, q90 * 1.2)].tail(60)
+        # Mismo criterio que arriba (hallazgo #3): sin filtro de percentiles --
+        # un desplome real no debe recortarse visualmente del propio gráfico.
+        closes_chart = df_spy['Close'].tail(60)
 
         chart = {
-            "dates":  [_fmt_fecha(d) for d in closes_clean.index],
-            "closes": [round(float(c), 2) for c in closes_clean.values],
+            "dates":  [_fmt_fecha(d) for d in closes_chart.index],
+            "closes": [round(float(c), 2) for c in closes_chart.values],
         }
 
         result = {
