@@ -702,8 +702,7 @@ async function loadBreadth(el) {
         const mcBadge       = !mcAvailable ? ''
             : (data.ad_source === 'sp500_r2k' ? '<span style="color:#00ffad;font-size:9px;">[S&amp;P 500 + RUSSELL 2000 REAL]</span>'
                 : data.ad_source === 'nyse_yahoo' ? '<span style="color:#00ffad;font-size:9px;">[NYSE REAL]</span>'
-                : data.ad_source === 'sp500' ? '<span style="color:#00ffad;font-size:9px;">[S&amp;P 500 REAL]</span>'
-                : '<span style="color:#ff9800;font-size:9px;">[PROXY SPY]</span>');
+                : '<span style="color:#00ffad;font-size:9px;">[S&amp;P 500 REAL]</span>');
         const abiAvailable  = data.abi != null;
         const abiColor      = abiAvailable ? (data.abi >= 40 ? '#f23645' : (data.abi <= 15 ? 'var(--color-muted)' : '#ff9800')) : 'var(--color-muted)';
         const abiBadge      = !abiAvailable ? '' : mcBadge; // mismo dato de origen que McClellan, misma etiqueta
@@ -814,10 +813,8 @@ async function loadBreadth(el) {
         let adSectionHtml = '';
         let chartId = null;
         if (data.ad_ok) {
-            const badgeText  = data.ad_source === 'nyse_yahoo' ? '[NYSE REAL]'
-                : data.ad_source === 'sp500' ? '[S&P 500 REAL]'
-                : '[PROXY SPY]';
-            const badgeColor = data.ad_source === 'proxy_spy' ? '#ff9800' : '#00ffad';
+            const badgeText  = data.ad_source === 'nyse_yahoo' ? '[NYSE REAL]' : '[S&P 500 REAL]';
+            const badgeColor = '#00ffad';
             const netColor   = data.current_net >= 0 ? '#00ffad' : '#f23645';
             const netArrow   = data.current_net >= 0 ? '▲' : '▼';
             chartId = 'ad-chart-' + Date.now();

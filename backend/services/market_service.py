@@ -1661,7 +1661,9 @@ def get_market_breadth():
             ad_data = get_advance_decline()
             ad_ok = ad_data.get("ok", False)
             ad_real_data = ad_data.get("real_data", False)
-            ad_source = "nyse_yahoo" if ad_real_data else "proxy_spy"
+            # get_advance_decline() ya no fabrica un proxy sintético -- o
+            # devuelve datos reales de NYSE (^ADV/^DEC), o ok:False.
+            ad_source = "nyse_yahoo" if ad_real_data else "n/d"
             ad_history_out = ad_data.get("history", [])
             current_adv = ad_data.get("current_adv", 0)
             current_dec = ad_data.get("current_dec", 0)
@@ -1816,7 +1818,23 @@ def get_market_breadth():
 def get_advance_decline():
     """
     Línea Advance/Decline del NYSE (^ADV / ^DEC vía Yahoo Finance).
-    Fallback: proxy sintético basado en SPY si Yahoo no devuelve datos.
+
+    Solo se usa como fallback dentro de get_market_breadth() cuando el
+    scan nocturno de Scanner (breadth_hist, amplitud real del S&P 500)
+    todavía no tiene 40+ sesiones acumuladas -- en la práctica, casi
+    nunca (Scanner ya guarda 150 días). Pensado para el arranque en frío
+    justo después de desplegar.
+
+    ^ADV/^DEC están CAÍDOS en Yahoo (verificado 24/07/2026, 404 en yfinance
+    para ambos, con y sin distintas variantes de símbolo) -- se deja el
+    intento por si Yahoo los restaura algún día (código inofensivo si
+    sigue fallando), pero SIN fallback sintético: antes, si Yahoo fallaba,
+    se fabricaba un avance/declive falso a partir del % diario de SPY
+    (adv = 250 + ratio*3000, clamped) marcado ok:True -- mismo patrón de
+    "número fabricado con la misma forma que uno real" ya eliminado en
+    Reddit Pulse/DXY/Yield 2Y/RS Rating CANSLIM (ver auditoría 22/07/2026).
+    Sin datos reales, se devuelve ok:False -- el frontend ya lo maneja
+    (la sección Línea A/D simplemente no se pinta si ad_ok es False).
     """
     from services.cache import cache, TTL
     cached = cache.get("market:ad_line")
@@ -1874,59 +1892,8 @@ def get_advance_decline():
     except Exception as e:
         print(f"[ADLine] Capa 1 (datos reales NYSE) falló: {type(e).__name__}: {e}")
 
-    # ── Capa 2: proxy sintético ─────────────────────────────────────────────
-    try:
-        spy_hist = yf.Ticker("SPY").history(period="6mo")
-        # Igual que en Market Breadth: filas con Close NaN pueden colarse en datos
-        # parciales/recientes de yfinance. Sin filtrarlas, una división por un Close
-        # nulo o NaN produce inf/NaN, y `int(NaN)` lanza ValueError, abortando todo
-        # el cálculo de las ~124 filas en vez de solo la fila problemática.
-        spy_hist = spy_hist.dropna(subset=['Close'])
-        print(f"[ADLine] Capa 2 (proxy SPY): {len(spy_hist)} puntos obtenidos (tras filtrar nulos)")
-        if len(spy_hist) > 20:
-            cumulative = 0
-            for i in range(1, len(spy_hist)):
-                prev_close = spy_hist['Close'].iloc[i - 1]
-                if prev_close == 0 or prev_close != prev_close:  # cero o NaN
-                    continue  # saltar esta fila puntual, no abortar todo el cálculo
-                day_change = spy_hist['Close'].iloc[i] - prev_close
-                ratio = day_change / prev_close
-                if ratio != ratio or ratio in (float('inf'), float('-inf')):  # NaN o Inf
-                    continue
-                adv = int(250 + ratio * 3000)
-                adv = max(50, min(450, adv))
-                dec = 500 - adv
-                net = adv - dec
-                cumulative += net
-                ad_history.append({
-                    "date": spy_hist.index[i].strftime('%Y-%m-%d'),
-                    "ad": round(cumulative / 1000, 2),
-                    "adv": adv,
-                    "dec": dec,
-                    "net": net,
-                    "spy": round(float(spy_hist['Close'].iloc[i]), 2),
-                })
-            if not ad_history:
-                raise ValueError("Todas las filas de SPY fueron descartadas por datos inválidos")
-            current = ad_history[-1]
-            result = {
-                "ok": True,
-                "real_data": False,
-                "history": ad_history[-90:],
-                "current_ad": current["ad"],
-                "current_adv": current["adv"],
-                "current_dec": current["dec"],
-                "current_net": current["net"],
-                "spy_current": current["spy"],
-                "spy_change": round(current["spy"] - ad_history[-2]["spy"], 2) if len(ad_history) >= 2 else 0,
-                "timestamp": get_timestamp(),
-            }
-            result = _sanitize_breadth(result)
-            cache.set("market:ad_line", result, TTL["market"])
-            return result
-    except Exception as e:
-        print(f"[ADLine] Capa 2 (proxy SPY) también falló: {type(e).__name__}: {e}")
-
+    # Sin datos reales (^ADV/^DEC caídos) -- ok:False, no se fabrica un
+    # avance/declive sintético. Ver docstring de la función.
     return {
         "ok": False, "real_data": False, "history": [],
         "current_ad": 0, "current_adv": 0, "current_dec": 0, "current_net": 0,
