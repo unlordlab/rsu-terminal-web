@@ -171,21 +171,39 @@ def procesar_resultado_algoritmo(resultado):
 
     ahora = datetime.utcnow().isoformat()
 
+    # Compare-and-swap atómico: get_rsu_algoritmo() tiene caché de 10 min,
+    # pero se refresca tanto desde ws.py::algoritmo_check_loop() (cada 30
+    # min) como desde cualquier usuario cargando el Dashboard/Algoritmo --
+    # si dos llamadas caen justo cuando la caché expira, ambas pueden leer
+    # el mismo estado_anterior arriba antes de que ninguna escriba. Solo la
+    # llamada cuyo UPDATE realmente mueve la fila (rowcount=1) "gana" la
+    # transición y sigue hasta enviar Telegram; la otra ve rowcount=0 (la
+    # primera ya dejó estado_actual en estado_nuevo) y no envía nada. Se
+    # comitea de inmediato para que la reserva sea visible al momento.
+    # INSERT OR IGNORE primero garantiza que la fila id=1 exista siempre
+    # (incluida la primerísima vez, cuando la tabla está vacía). Antes, el
+    # envío ocurría ANTES de este chequeo atómico. Ver reporte del usuario
+    # 24/07/2026 (mismo patrón corregido también en
+    # cartera_tracking_service.py::procesar_cartera_notificaciones).
+    conn.execute("INSERT OR IGNORE INTO estado_actual (id, estado, actualizado_en) VALUES (1, NULL, NULL)")
+    cur = conn.execute(
+        "UPDATE estado_actual SET estado = ?, actualizado_en = ? "
+        "WHERE id = 1 AND (estado IS NULL OR estado != ?)",
+        (estado_nuevo, ahora, estado_nuevo)
+    )
+    conn.commit()
+    if cur.rowcount == 0:
+        conn.close()
+        return  # otra llamada concurrente ya ganó esta misma transición
+
     # 1. Registrar el cambio
     conn.execute(
         "INSERT INTO cambios_semaforo (fecha, estado_anterior, estado_nuevo, senal, score, precio) VALUES (?,?,?,?,?,?)",
         (ahora, estado_anterior, estado_nuevo, resultado.get('senal'), resultado.get('score'), resultado.get('precio'))
     )
-
-    # 2. Actualizar el estado conocido
-    conn.execute(
-        "INSERT INTO estado_actual (id, estado, actualizado_en) VALUES (1, ?, ?) "
-        "ON CONFLICT(id) DO UPDATE SET estado=excluded.estado, actualizado_en=excluded.actualizado_en",
-        (estado_nuevo, ahora)
-    )
     conn.commit()
 
-    # 3. Notificar (fuera de la transacción de BD — si Telegram falla no debe perder el registro ya guardado)
+    # 2. Notificar (fuera de la transacción de BD — si Telegram falla no debe perder el registro ya guardado)
     mensaje = _construir_mensaje(estado_anterior, resultado)
     enviado = _enviar_telegram(mensaje)
     conn.execute(
@@ -194,7 +212,7 @@ def procesar_resultado_algoritmo(resultado):
     )
     conn.commit()
 
-    # 4. Si el nuevo estado es accionable, abrir seguimiento de resultado real
+    # 3. Si el nuevo estado es accionable, abrir seguimiento de resultado real
     if estado_nuevo in ESTADOS_ACCIONABLES:
         factores = {k: v.get('score') for k, v in (resultado.get('metricas') or {}).items() if v.get('max', 0) > 0}
         conn.execute('''

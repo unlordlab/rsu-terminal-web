@@ -66,6 +66,29 @@ def _mensaje_cierre(row):
     )
 
 
+def _reclamar(conn, clave, tipo, ticker):
+    """Intenta reservar la clave de dedup ANTES de enviar nada -- el propio
+    INSERT OR IGNORE (protegido por el UNIQUE de la columna `clave`) es el
+    chequeo: si esta llamada es la primera en insertarla, rowcount=1 y "gana"
+    el derecho a enviar el Telegram; si ya existía (otra llamada la reservó
+    antes), rowcount=0 y no se envía nada. Se comitea de inmediato para que
+    la reserva sea visible al momento a cualquier otra conexión concurrente.
+
+    Antes, el envío ocurría ANTES de este INSERT (con un SELECT previo de
+    solo lectura) -- dos llamadas solapadas (p.ej. el bucle de 15 min
+    coincidiendo con una llamada manual a /notificaciones/check) podían ver
+    ambas "no existe todavía" y las dos mandaban el aviso. Ver reporte del
+    usuario 24/07/2026 (avisos duplicados en Cartera y en el semáforo del
+    Algoritmo -- mismo patrón corregido también en
+    algoritmo_tracking_service.py::procesar_resultado_algoritmo)."""
+    cur = conn.execute(
+        "INSERT OR IGNORE INTO notificadas (clave, tipo, ticker, enviado_en) VALUES (?,?,?,?)",
+        (clave, tipo, ticker, datetime.utcnow().isoformat())
+    )
+    conn.commit()
+    return cur.rowcount == 1
+
+
 def procesar_cartera_notificaciones():
     """
     Job periódico — compara el estado actual de Cartera contra lo ya
@@ -84,31 +107,29 @@ def procesar_cartera_notificaciones():
     enviadas = 0
     for row in data.get('abiertas', []):
         clave = f"{row['ticker']}|{row['fecha']}|apertura"
-        ya_existe = conn.execute("SELECT 1 FROM notificadas WHERE clave = ?", (clave,)).fetchone()
-        if ya_existe:
+        if es_primera_vez:
+            conn.execute(
+                "INSERT OR IGNORE INTO notificadas (clave, tipo, ticker, enviado_en) VALUES (?,?,?,?)",
+                (clave, 'apertura', row['ticker'], datetime.utcnow().isoformat())
+            )
             continue
-        if not es_primera_vez:
+        if _reclamar(conn, clave, 'apertura', row['ticker']):
             enviar_telegram(_mensaje_apertura(row))
             enviadas += 1
-        conn.execute(
-            "INSERT OR IGNORE INTO notificadas (clave, tipo, ticker, enviado_en) VALUES (?,?,?,?)",
-            (clave, 'apertura', row['ticker'], datetime.utcnow().isoformat())
-        )
 
     for row in data.get('cerradas', []):
         # Misma fecha de ENTRADA que en apertura (no la de cierre) — es la
         # clave natural que conecta ambos eventos de la misma posición.
         clave = f"{row['ticker']}|{row['fecha']}|cierre"
-        ya_existe = conn.execute("SELECT 1 FROM notificadas WHERE clave = ?", (clave,)).fetchone()
-        if ya_existe:
+        if es_primera_vez:
+            conn.execute(
+                "INSERT OR IGNORE INTO notificadas (clave, tipo, ticker, enviado_en) VALUES (?,?,?,?)",
+                (clave, 'cierre', row['ticker'], datetime.utcnow().isoformat())
+            )
             continue
-        if not es_primera_vez:
+        if _reclamar(conn, clave, 'cierre', row['ticker']):
             enviar_telegram(_mensaje_cierre(row))
             enviadas += 1
-        conn.execute(
-            "INSERT OR IGNORE INTO notificadas (clave, tipo, ticker, enviado_en) VALUES (?,?,?,?)",
-            (clave, 'cierre', row['ticker'], datetime.utcnow().isoformat())
-        )
 
     conn.commit()
     conn.close()
