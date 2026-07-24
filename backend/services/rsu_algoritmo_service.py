@@ -271,18 +271,54 @@ def _mcclellan_proxy(df_spy, sector_data=None, breadth_real=None):
     if breadth_real and len(breadth_real) >= 40:
         net_series = pd.Series([h["advances"] - h["declines"] for h in breadth_real])
         return mcclellan_series(net_series), "Amplitud real S&P 500"
+
+    # PRIORIDAD 2: oscilador de amplitud SECTORIAL (9 ETFs SPDR) -- cuántos
+    # sectores suben vs bajan cada día, EMA19-EMA39 + reescalado por
+    # percentil móvil (mismo criterio de suavizado que el McClellan real y
+    # que el proxy de SPY de abajo). A diferencia del proxy de SPY, esto SÍ
+    # mide amplitud real (participación de sectores), no el momentum de un
+    # único índice -- y a diferencia de PRIORIDAD 1, tiene histórico
+    # completo desde 1998, por eso es la fuente que de verdad usa el
+    # backtest (PRIORIDAD 1 nunca tiene 10-20 años de amplitud real).
+    # Verificado con datos reales (150 días de solape con el Gist de
+    # Scanner, único tramo comparable): correlación 0.76-0.79 (vs 0.455
+    # del proxy SPY de abajo), discrepancia de banda de puntuación 23-30%
+    # (vs 47%). Sigue siendo una aproximación de 9 buckets, no de ~500
+    # acciones -- por eso se etiqueta "Sectores", no "amplitud real". Ver
+    # auditoría RSU Algoritmo, sesión 24/07/2026.
     if sector_data and len(sector_data) >= 3:
-        up, down = 0, 0
-        for etf, hist in sector_data.items():
-            if len(hist) < 2:
-                continue
-            chg = hist['Close'].pct_change().iloc[-1]
-            if chg > 0: up += 1
-            else:       down += 1
-        total = up + down
-        if total > 0:
-            osc = (up - down) / total * 100
-            return pd.Series([osc]), "Sectores"
+        sector_closes = pd.DataFrame({
+            etf: hist['Close'] for etf, hist in sector_data.items() if len(hist) > 0
+        })
+        sector_closes.index = sector_closes.index.normalize()
+        if len(sector_closes) >= 100:
+            chg   = sector_closes.pct_change()
+            up    = (chg > 0).sum(axis=1)
+            down  = (chg < 0).sum(axis=1)
+            total = up + down
+            osc_diario = (up - down) / total.replace(0, np.nan) * 100
+            mc_bruto   = mcclellan_series(osc_diario)
+            VENTANA_PCT_SECT = 500
+            percentil_sect = mc_bruto.rolling(VENTANA_PCT_SECT, min_periods=60).apply(
+                lambda x: (x < x[-1]).sum() / len(x) * 100, raw=True
+            )
+            mc_sectorial = (percentil_sect - 50) * 2
+            # Reindexar a las fechas EXACTAS de df_spy -- sector_closes viene
+            # de 9 descargas independientes (una por ETF), sin garantía de
+            # coincidir fila a fila con el índice de SPY (aunque coticen en
+            # el mismo calendario NYSE, un hueco de datos en un solo ETF
+            # desalinearía las posiciones). El backtest accede a esta serie
+            # de forma puramente posicional (mcclellan_full.iloc[pos],
+            # contra el índice de df_spy_full) -- sin este reindex, una sola
+            # fila desalineada desplazaría TODO el backtest a partir de ahí,
+            # en silencio. ffill: días de SPY sin lectura sectorial exacta
+            # (rarísimo, mismo calendario) heredan la última conocida.
+            mc_sectorial = mc_sectorial.reindex(df_spy.index.normalize(), method='ffill')
+            if not mc_sectorial.empty and pd.notna(mc_sectorial.iloc[-1]):
+                return mc_sectorial, "Sectores (9 ETFs, histórico completo)"
+
+    # PRIORIDAD 3 (última red de seguridad): proxy de momentum de SPY, si
+    # ni la amplitud real ni los sectores están disponibles.
     closes = df_spy['Close']
     pct    = closes.pct_change()
     ema19  = pct.ewm(span=19).mean()
@@ -318,7 +354,14 @@ def _descargar_sectores():
     result = {}
     def _fetch(etf):
         try:
-            return etf, yf.Ticker(etf).history(period="1mo")
+            # "max" en vez de "1mo" -- el oscilador de amplitud sectorial
+            # (ver _mcclellan_proxy, PRIORIDAD 2) necesita ~560 sesiones
+            # (ventana de percentil de 500 + EMA39 + margen) para dar una
+            # lectura fiable, tanto en vivo como en el backtest (que
+            # necesita 10-20 años completos). XLRE solo existe desde 2015
+            # -- yfinance devuelve NaN antes de esa fecha, el oscilador ya
+            # lo maneja bien (pandas ignora NaN en el recuento up/down).
+            return etf, yf.Ticker(etf).history(period="max")
         except Exception:
             return etf, pd.DataFrame()
     with ThreadPoolExecutor(max_workers=5) as ex:
@@ -949,7 +992,7 @@ def get_rsu_algoritmo_backtest(years: int = 10) -> dict:
       si el algoritmo aporta ventaja sobre simplemente estar invertido siempre.
     """
     from services.cache import cache
-    cache_key = f"algoritmo:backtest:{years}y:v16"  # v8 — endpoint FRED /data/{id}.csv en vez de /graph/fredgraph.csv (confirmado en logs de producción que este último trunca a ~3 años pase lo que pase); invalida caché v7
+    cache_key = f"algoritmo:backtest:{years}y:v17"  # v17 — McClellan del backtest pasa de proxy de momentum SPY a oscilador de amplitud sectorial (9 ETFs), invalida caché v16
     cached = cache.get(cache_key)
     if cached:
         return cached
@@ -959,15 +1002,17 @@ def get_rsu_algoritmo_backtest(years: int = 10) -> dict:
         # semanal tenga histórico suficiente desde el primer día evaluado.
         BUFFER_YEARS = 5
         period_str = f"{years + BUFFER_YEARS}y"
-        with ThreadPoolExecutor(max_workers=4) as ex:
-            f_spy    = ex.submit(lambda: yf.Ticker("SPY").history(period=period_str))
-            f_vix    = ex.submit(lambda: yf.Ticker("^VIX").history(period=period_str))
-            f_vix3m  = ex.submit(lambda: yf.Ticker("^VIX3M").history(period=period_str))
-            f_credit = ex.submit(_fetch_hy_spread_cached)
+        with ThreadPoolExecutor(max_workers=5) as ex:
+            f_spy      = ex.submit(lambda: yf.Ticker("SPY").history(period=period_str))
+            f_vix      = ex.submit(lambda: yf.Ticker("^VIX").history(period=period_str))
+            f_vix3m    = ex.submit(lambda: yf.Ticker("^VIX3M").history(period=period_str))
+            f_credit   = ex.submit(_fetch_hy_spread_cached)
+            f_sectores = ex.submit(_descargar_sectores)
             df_spy_full   = f_spy.result()
             df_vix_full   = f_vix.result()
             df_vix3m_full = f_vix3m.result()
             hy_spread_full = f_credit.result()  # puede ser None si FRED falla — se maneja más abajo
+            sector_data_full = f_sectores.result()
 
         df_spy_full = df_spy_full.dropna(subset=['Close'])
         df_vix_full = df_vix_full.dropna(subset=['Close'])
@@ -995,7 +1040,7 @@ def get_rsu_algoritmo_backtest(years: int = 10) -> dict:
         # recalcular el percentil móvil (ventana de 500 días) desde cero en
         # cada uno de los ~5000 días del backtest, sobre una porción cada vez
         # mayor del histórico (ver comentario en _calcular_score_punto).
-        mcclellan_full, mcclellan_metodo = _mcclellan_proxy(df_spy_full, sector_data=None)
+        mcclellan_full, mcclellan_metodo = _mcclellan_proxy(df_spy_full, sector_data=sector_data_full)
         VENTANA_GIRO = 5
 
         fechas = df_spy_full.index[BUFFER:]
@@ -1266,7 +1311,8 @@ def get_rsu_algoritmo_backtest(years: int = 10) -> dict:
             "credit_spread_disponible": credit_ok,
             "credit_spread_cobertura_completa": credit_cobertura_completa,
             "credit_spread_desde": _fmt_fecha(hy_spread_full.index.min()) if credit_ok else None,
-            "metodologia":     "Sistema reformulado: sin Divergencia, FTD como confirmación posterior (no input del score), RSI diario+semanal, VIX con curva VIX/VIX3M, McClellan con giro al alza, RVOL en el día del mínimo, EMA200 semanal, régimen de mercado, gatekeepers obligatorios, filtro de estrés de crédito (BAA10Y) · McClellan vía proxy SPY (consistente en todo el periodo) · Señal = transición a estado VERDE puro (no VERDE-VOL, que cubre casos de cautela)",
+            "metodologia":     "Sistema reformulado: sin Divergencia, FTD como confirmación posterior (no input del score), RSI diario+semanal, VIX con curva VIX/VIX3M, McClellan con giro al alza, RVOL en el día del mínimo, EMA200 semanal, régimen de mercado, gatekeepers obligatorios, filtro de estrés de crédito (BAA10Y) · McClellan vía oscilador de amplitud sectorial (9 ETFs, histórico completo desde 1998) · Señal = transición a estado VERDE puro (no VERDE-VOL, que cubre casos de cautela)",
+            "mcclellan_metodo": mcclellan_metodo,
             "timestamp":       get_timestamp(),
         }
         # Si el fetch de BAA10Y falló ESTE cálculo en concreto, o si tiene

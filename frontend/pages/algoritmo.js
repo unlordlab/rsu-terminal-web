@@ -49,7 +49,9 @@ export async function render(container) {
                 // SMA200 ya no suma al score total (solo decide el umbral de VERDE, 60/70) —
                 // se muestra igual como contexto, pero con la etiqueta clara para no dar a
                 // entender que puntúa como el resto.
-                const etiqueta = key === 'SMA200' ? key + ' (umbral, no puntúa)' : key;
+                const etiqueta = key === 'SMA200' ? key + ' (umbral, no puntúa)'
+                                : key === 'Breadth' && m.metodo ? key + ' — ' + m.metodo
+                                : key;
                 return '<div style="margin-bottom:10px;">'
                     + '<div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:3px;">'
                     + '<span style="color:var(--color-muted);">' + etiqueta + '</span>'
@@ -366,6 +368,9 @@ function renderBacktestResults(data) {
             : (data.credit_spread_cobertura_completa === false
                 ? '<div style="color:#ff9800;margin-top:4px;">⚠ El histórico de BAA10Y descargado solo llega hasta ' + data.credit_spread_desde + ' — no cubre todo el periodo del backtest, así que el filtro de crédito no actuó en las fechas anteriores a esa.</div>'
                 : ''))
+        + (data.mcclellan_metodo
+            ? '<div style="color:var(--color-muted);margin-top:4px;">McClellan/Breadth en este backtest: ' + data.mcclellan_metodo + ' — aproximación de amplitud sectorial (9 ETFs), no de las ~500 acciones individuales del S&P 500.</div>'
+            : '')
         + '</div>'
 
         + '<div style="display:grid;grid-template-columns:80px 1fr 1fr 1fr 1fr;gap:10px;padding:6px 0;border-bottom:1px solid var(--color-border);font-size:10px;color:var(--color-muted);">'
