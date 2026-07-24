@@ -53,6 +53,7 @@ from rsrw_engine import (  # noqa: E402
     rs_smooth as _rs_smooth, rs_percentile, PERIODS, WEIGHTS, EMA_SMOOTH,
 )
 from yf_batch import download_batch  # noqa: E402
+from absorption import rolling_zscore_excluding_recent, THRESHOLD as ABSORPTION_THRESHOLD  # noqa: E402
 
 GIST_TOKEN = os.environ.get("GIST_TOKEN", "")
 GIST_ID    = os.environ.get("SCANNER_GIST_ID", "")
@@ -87,7 +88,7 @@ BATCH_SLEEP  = 1.8
 
 RUSSELL2000_TICKERS = [
     "AAMI", "AAP", "AAT", "ABAT", "ABCB", "ABEO", "ABG", "ABM", "ABOS", "ABR",
-    "ABSI", "ABUS", "ABX", "ACA", "ACAD", "ACCO", "ACDC", "ACEL", "ACH", "ACHC",
+    "ABSI", "ABUS", "ACA", "ACAD", "ACCO", "ACDC", "ACEL", "ACH", "ACHC",
     "ACHR", "ACHV", "ACIC", "ACIW", "ACLS", "ACMR", "ACNB", "ACR", "ACRE", "ACRS",
     "ACT", "ACTG", "ACTU", "ACU", "ACVA", "ADAM", "ADCT", "ADEA", "ADMA", "ADNT",
     "ADPT", "ADTN", "ADUS", "ADV", "AEBI", "AEHR", "AEO", "AESI", "AEVA", "AEYE",
@@ -288,7 +289,13 @@ RUSSELL2000_TICKERS = [
 
 
 def _fetch_batch(all_syms: list) -> tuple:
-    return download_batch(all_syms, period="2y", batch_size=BATCH_SIZE, batch_sleep=BATCH_SLEEP)
+    # max_retries=1 (por defecto) significaba un único intento por lote,
+    # sin reintento real -- un lote entero perdido (fallo transitorio de
+    # Yahoo) se quedaba sin esos ~40 tickers para toda la noche. RS/RW ya
+    # usa este mismo patrón (rsrw_service.py/rsrw_scan.py). Ver auditoría
+    # Scanner 21/07/2026, hallazgo #2.
+    return download_batch(all_syms, period="2y", batch_size=BATCH_SIZE, batch_sleep=BATCH_SLEEP,
+                           max_retries=3, coverage_threshold=0.85, log_prefix="[Scanner] ")
 
 
 def _technical_score(rs_pct: float, phase: int, rvol: float) -> float:
@@ -346,8 +353,13 @@ def _compute_breadth_history(close_d: dict, tickers: list, lookback_days: int = 
     valid_cnt = df.notna().sum(axis=1)
     pct_above = (above.sum(axis=1) / valid_cnt.replace(0, np.nan) * 100)
 
-    roll_max  = df.rolling(252, min_periods=20).max()
-    roll_min  = df.rolling(252, min_periods=20).min()
+    # shift(1) antes del rolling: la ventana de referencia de cada día
+    # EXCLUYE ese propio día, para que una meseta lateral en el máximo no
+    # cuente como "nuevo máximo" cada sesión que persiste (mismo criterio
+    # que el chequeo per-ticker más abajo). Ver auditoría Scanner
+    # 21/07/2026, hallazgo #5.
+    roll_max  = df.shift(1).rolling(252, min_periods=20).max()
+    roll_min  = df.shift(1).rolling(252, min_periods=20).min()
     new_highs = (df >= roll_max).sum(axis=1)
     new_lows  = (df <= roll_min).sum(axis=1)
 
@@ -380,6 +392,16 @@ def run_scan() -> dict:
     if BENCHMARK not in close_d:
         raise ValueError("Sin datos de SPY — cancelado")
 
+    # Tickers del universo (sobre todo RUSSELL2000_TICKERS, la lista más
+    # propensa a quedarse desactualizada) que no devolvieron datos --
+    # candidato a ticker muerto/renombrado (como fue "ABX", eliminado en
+    # esta misma sesión). Se loguea cada noche para poder auditar la lista
+    # con el tiempo, en vez de un repaso manual puntual de las ~2.000
+    # entradas. Ver auditoría Scanner 21/07/2026, hallazgo #4.
+    missing = [s for s in breadth_universe if s not in close_d]
+    if missing:
+        print(f"⚠️  {len(missing)} tickers del universo sin datos (posibles tickers muertos/renombrados): {missing[:30]}{'...' if len(missing) > 30 else ''}")
+
     spy  = close_d[BENCHMARK]
     rows = []
     for ticker in tickers:
@@ -409,19 +431,20 @@ def run_scan() -> dict:
             sma50_val   = float(prices.rolling(50).mean().iloc[-1]) if len(prices) >= 50 else float('nan')
             above_sma50 = bool(price > sma50_val) if sma50_val == sma50_val else None  # NaN check
 
-            # Nuevo máximo/mínimo sobre la ventana de histórico disponible (hasta 260
-            # sesiones ≈ 52 semanas, que es lo que se descarga en _fetch_batch). Con
-            # menos histórico disponible sigue siendo una comparación válida, solo que
-            # sobre una ventana más corta para los tickers con menos días.
             # Nuevo máximo/mínimo sobre las últimas 252 sesiones (52 semanas)
             # EXPLÍCITAMENTE — antes se comparaba contra prices.max() de TODO
             # el histórico descargado, lo cual era correcto mientras solo se
             # descargaban 260 sesiones (~52 semanas) pero se habría roto en
             # silencio al alargar el histórico a 2 años (habría pasado a
             # comparar contra el máximo de 2 años, no de 52 semanas).
-            window_252 = prices.tail(252)
-            new_high = bool(price >= float(window_252.max()))
-            new_low  = bool(price <= float(window_252.min()))
+            # La ventana EXCLUYE el día evaluado (prices.iloc[-253:-1], no
+            # tail(252)) -- si no, una meseta lateral en el máximo cuenta
+            # como "nuevo máximo" cada día que persiste, no solo el día real
+            # de la ruptura (price siempre es >= su propio máximo incluido
+            # en la ventana). Ver auditoría Scanner 21/07/2026, hallazgo #5.
+            window_252 = prices.iloc[-253:-1] if len(prices) >= 253 else prices.iloc[:-1]
+            new_high = bool(len(window_252) > 0 and price >= float(window_252.max()))
+            new_low  = bool(len(window_252) > 0 and price <= float(window_252.min()))
 
             # Señal de absorción: RVOL alto + impacto en precio bajo (proxy
             # de Amihud/Lambda de Kyle), sostenido en los últimos 10 días.
@@ -434,15 +457,16 @@ def run_scan() -> dict:
                 dollar_vol = prices * vols.reindex(prices.index).fillna(0)
                 amihud     = (returns.abs() / (dollar_vol / 1_000_000)).replace([float("inf"), float("-inf")], None)
                 rvol_series = vols / vols.rolling(RVOL_WINDOW).mean()
-                rvol_z   = (rvol_series - rvol_series.rolling(20).mean()) / rvol_series.rolling(20).std()
-                amihud_z = (amihud - amihud.rolling(20).mean()) / amihud.rolling(20).std()
-                # Umbral aflojado de 0.75 a 0.4 -- con datos reales del S&P
-                # 500, exigir 0.75 en las dos condiciones a la vez el MISMO
-                # día resultó demasiado estricto (0 coincidencias en los
-                # 487 tickers en la primera prueba real). Ver conversación
-                # 18/07/2026 -- pendiente seguir calibrando con más días
-                # de datos reales, no darlo por definitivo todavía.
-                absorcion_dia = (rvol_z > 0.4) & (amihud_z < -0.4)
+                # shared/absorption.py -- ventana de referencia que EXCLUYE
+                # el día evaluado y sus vecinos inmediatos, para que el
+                # propio pico anómalo no contamine su media/std de
+                # referencia (causa real de por qué 0.75 daba 0 coincidencias
+                # antes). Umbral restaurado a 0.75, coherente con
+                # turnover_service.py (Research), que usa la misma función.
+                # Ver auditoría Scanner 21/07/2026, hallazgo #1.
+                rvol_z   = rolling_zscore_excluding_recent(rvol_series)
+                amihud_z = rolling_zscore_excluding_recent(amihud)
+                absorcion_dia = (rvol_z > ABSORPTION_THRESHOLD) & (amihud_z < -ABSORPTION_THRESHOLD)
                 dias_absorcion = int(absorcion_dia.tail(10).sum())
             except Exception:
                 dias_absorcion = 0

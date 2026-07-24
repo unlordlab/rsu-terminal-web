@@ -14,8 +14,13 @@ Pensado para compartirse entre Research (comparativa individual vs.
 mercado) y, más adelante, Scanner (detección de anomalías / filtro de
 calidad sobre el universo completo).
 """
+import os
+import sys
 import yfinance as yf
 import pandas as pd
+
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "..", "shared"))
+from absorption import rolling_zscore_excluding_recent  # noqa: E402
 
 
 def _get_shares_outstanding(tk_obj) -> float | None:
@@ -92,17 +97,19 @@ def get_absorption_signal(ticker: str, days: int = 180) -> dict:
     if df is None or len(df) < 30:
         return {"ok": False, "error": "Datos insuficientes para calcular absorción"}
 
-    df["turnover_z"] = (df["turnover"] - df["turnover"].rolling(20).mean()) / df["turnover"].rolling(20).std()
-    df["amihud_z"]   = (df["amihud"]   - df["amihud"].rolling(20).mean())   / df["amihud"].rolling(20).std()
+    # shared/absorption.py -- ventana de referencia que EXCLUYE el día
+    # evaluado y sus vecinos inmediatos, para que el propio pico de
+    # rotación no contamine su media/std de referencia (el problema que
+    # este mismo comentario ya reconocía sin haberlo corregido). Mismo
+    # umbral (0.75) y misma función que scripts/scanner_universe.py, para
+    # que Scanner y Research dejen de poder divergir en silencio. Ver
+    # auditoría Scanner 21/07/2026, hallazgo #1.
+    df["turnover_z"] = rolling_zscore_excluding_recent(df["turnover"])
+    df["amihud_z"]   = rolling_zscore_excluding_recent(df["amihud"])
 
     # Día de "posible absorción": rotación por encima de su media reciente
     # Y, a la vez, impacto de precio por debajo de la suya -- ambas cosas
-    # a la vez, no una sola. Umbral de 0.75 desviaciones en cada dirección
-    # -- punto intermedio provisional; la ventana móvil de 20 días se ve
-    # "contaminada" por los propios días anómalos que intenta detectar
-    # (efecto normal de medias móviles cortas), así que este umbral
-    # conviene recalibrarlo con casos reales una vez en producción, no
-    # solo con datos sintéticos. Ver conversación 18/07/2026.
+    # a la vez, no una sola.
     df["absorcion_dia"] = (df["turnover_z"] > 0.75) & (df["amihud_z"] < -0.75)
 
     dias_absorcion = int(df["absorcion_dia"].tail(10).sum())

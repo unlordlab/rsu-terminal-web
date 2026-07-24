@@ -31,3 +31,11 @@ jobs:
           SCANNER_GIST_ID: ${{ secrets.SCANNER_GIST_ID }}
         run: |
           python scripts/scanner_universe.py
+
+      - name: Avisar por Telegram si el scan falló
+        if: failure()
+        continue-on-error: true
+        run: |
+          curl -s -X POST "https://api.telegram.org/bot${{ secrets.TELEGRAM_BOT_TOKEN }}/sendMessage" \
+            -d chat_id="${{ secrets.TELEGRAM_CHAT_ID }}" \
+            -d text="⚠️ Scanner Universo S&P 500: el scan nocturno ha fallado (run ${{ github.run_id }}). Revisar GitHub Actions."
