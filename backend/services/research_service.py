@@ -108,6 +108,32 @@ def _get_yfinance(ticker: str) -> dict:
                     })
         except Exception: pass
 
+        # Revisiones de estimaciones de EPS -- señal PREDICTIVA ("los
+        # analistas suben el número que esperan") distinta de
+        # `recommendations` de arriba, que es una opinión de compra/venta
+        # más estática ("los analistas dicen comprar"). Hallazgo 4.6 del
+        # roadmap asumía Finnhub para esto, pero sus endpoints de
+        # estimaciones (eps-estimate/revenue-estimate/price-target) son de
+        # pago -- devuelven 403 incluso con clave válida (verificado
+        # 24/07/2026). yfinance lo trae gratis vía Ticker.eps_revisions
+        # (mismo "Earnings Trend" que publica Yahoo Finance en su web).
+        eps_revisions = None
+        try:
+            rev = stock.eps_revisions
+            if rev is not None and not rev.empty and '0q' in rev.index:
+                row  = rev.loc['0q']
+                up   = int(_safe(row.get('upLast30days')) or 0)
+                down = int(_safe(row.get('downLast30days')) or 0)
+                total = up + down
+                if total > 0:
+                    eps_revisions = {
+                        "up_30d":   up,
+                        "down_30d": down,
+                        "net_pct":  round((up - down) / total * 100, 1),
+                    }
+        except Exception:
+            pass
+
         # Precio objetivo
         tm = _safe(info.get('targetMeanPrice'))
         target_data = {
@@ -265,6 +291,7 @@ def _get_yfinance(ticker: str) -> dict:
             "latest_rating_date": latest_rating_date,
             "recommendations": recommendations,
             "recommendations_trend": recommendations_trend,
+            "eps_revisions":  eps_revisions,
             "target_data":    target_data,
             "metrics":        metrics,
             "profitability":  profitability,
@@ -727,9 +754,19 @@ def _compute_rsu_score(yf_data: dict, piotroski: dict = None, sector_comparison:
             val_pts = None
 
     # ── 4. SENTIMIENTO DE MERCADO (20pts) ───────────────────────────────────
-    # Consenso de analistas + potencial de precio objetivo, ajustado por
-    # sentimiento de insiders (compras/ventas discrecionales reales con su
-    # propio dinero, señal históricamente más informativa que las ventas).
+    # Consenso de analistas + potencial de precio objetivo + revisiones de
+    # estimaciones de EPS, ajustado por sentimiento de insiders (compras/
+    # ventas discrecionales reales con su propio dinero, señal históricamente
+    # más informativa que las ventas).
+    #
+    # Las revisiones de EPS (eps_revisions) son deliberadamente un componente
+    # A PARTE de `recs` (recomendaciones), no una fusión de ambas -- miden
+    # cosas distintas: `recs` es la OPINIÓN de los analistas ("comprar/
+    # mantener/vender", un estado que cambia poco), mientras que las
+    # revisiones son si están SUBIENDO O BAJANDO el número que esperan
+    # (predictivo -- un analista puede mantener "comprar" durante meses
+    # mientras baja silenciosamente su estimación de beneficio). Ver
+    # hallazgo 4.6 del roadmap, sesión 24/07/2026.
     sent_components = []
     if recs and recs['total'] > 0:
         buy_pct = (recs['strong_buy'] + recs['buy']) / recs['total'] * 100
@@ -737,6 +774,10 @@ def _compute_rsu_score(yf_data: dict, piotroski: dict = None, sector_comparison:
     upside = target.get('upside')
     if upside is not None:
         sent_components.append(20 if upside > 25 else 15 if upside > 15 else 10 if upside > 5 else 0)
+    eps_rev = yf_data.get('eps_revisions')
+    if eps_rev is not None:
+        net = eps_rev['net_pct']
+        sent_components.append(20 if net > 50 else 15 if net > 0 else 10 if net > -50 else 0)
     if sent_components:
         sent_pts = sum(sent_components) / len(sent_components)
         insider_note = ""
@@ -749,7 +790,9 @@ def _compute_rsu_score(yf_data: dict, piotroski: dict = None, sector_comparison:
                 insider_note = " · Insiders vendiendo"
         sent_pts = round(max(0, min(20, sent_pts)))
         val_str = (f"{buy_pct:.0f}% alcistas" if recs and recs['total'] > 0 else "") \
-                   + (f" · {upside:+.0f}% objetivo" if upside is not None else "") + insider_note
+                   + (f" · {upside:+.0f}% objetivo" if upside is not None else "") \
+                   + (f" · Estimaciones {eps_rev['net_pct']:+.0f}% netas al alza ({eps_rev['up_30d']}↑/{eps_rev['down_30d']}↓ 30d)" if eps_rev is not None else "") \
+                   + insider_note
         breakdown.append({"label": "Sentimiento de Mercado", "pts": sent_pts, "max": 20, "val": val_str.strip(" ·")})
     else:
         sent_pts = None
@@ -1838,6 +1881,7 @@ def get_research(ticker: str) -> dict:
         "n_analysts":         yf_data['n_analysts'],
         "recommendations":    yf_data['recommendations'],
         "recommendations_trend": yf_data['recommendations_trend'],
+        "eps_revisions":      yf_data['eps_revisions'],
         "target_data":        yf_data['target_data'],
         "metrics":            yf_data['metrics'],
         "profitability":      yf_data['profitability'],
