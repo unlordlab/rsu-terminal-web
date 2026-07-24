@@ -140,7 +140,17 @@ def get_market_status() -> dict:
     """
     Análisis del mercado general (M en CAN SLIM).
     Usa SPY + VIX + amplitud para determinar el estado del mercado.
+
+    Cacheado 10 min -- desde que analyze_ticker() también lo llama (para la
+    letra M, ver hallazgo #2 de la auditoría CANSLIM 21/07/2026), analizar
+    varios tickers seguidos ya no dispara 3 descargas (SPY/VIX/QQQ) extra
+    por cada uno; el estado del mercado no cambia de un ticker a otro en la
+    misma sesión de todas formas.
     """
+    from services.cache import cache
+    cached = cache.get("canslim:market_status")
+    if cached:
+        return cached
     try:
         # SPY
         spy = yf.Ticker("SPY")
@@ -222,7 +232,7 @@ def get_market_status() -> dict:
             color = "#f23645"
             can_buy = False
 
-        return _sanitize({
+        result = _sanitize({
             "ok":            True,
             "status":        status,
             "status_es":     status_es,
@@ -245,9 +255,11 @@ def get_market_status() -> dict:
             "vix_risk":      "ALTO" if vix_level >= 30 else "MEDIO" if vix_level >= 20 else "BAJO",
             "timestamp":     get_timestamp(),
         })
+        cache.set("canslim:market_status", result, 600)  # 10 min
+        return result
 
     except Exception as e:
-        return {"ok": False, "error": str(e)}
+        return {"ok": False, "error": str(e)}  # sin cachear -- un fallo puntual no debe pegarse 10 min
 
 # ── ANALYZE TICKER ────────────────────────────────────────────────────────────
 
@@ -384,6 +396,15 @@ def analyze_ticker(ticker: str, universe_perfs: list = None) -> dict:
         # Si no hay dato (inst_data_ok=False), no penaliza
         inst_sponsorship = (inst_pct > 40) if inst_data_ok else None  # None = sin dato
 
+        # M -- estado real del mercado (get_market_status(), cacheado 10 min),
+        # no un True fijo. O'Neil consideraba esta la letra más importante:
+        # ninguna compra debería hacerse con el mercado en corrección. None
+        # (badge sin dato, mismo criterio que S/I arriba) solo si la propia
+        # descarga de mercado falla. Ver auditoría CANSLIM 21/07/2026, #2.
+        market = get_market_status()
+        market_can_buy = market.get("can_buy") if market.get("ok") else None
+        market_label   = market.get("status_es") if market.get("ok") else "sin datos"
+
         can_slim_letters = {
             "C — EPS crecimiento >25%":         bool(eps_g >= 25),
             "A — Ventas anuales >25%":           bool(sales_g >= 25),
@@ -391,7 +412,7 @@ def analyze_ticker(ticker: str, universe_perfs: list = None) -> dict:
             "S — RS Rating >80":                 bool(rs_r >= 80) if rs_r is not None else None,
             "L — Leader (Trend Template)":       bool(trend['passed']),
             "I — Sponsorship institucional":     bool(inst_sponsorship) if inst_sponsorship is not None else None,
-            "M — (ver estado mercado)":          True,
+            f"M — Mercado: {market_label}":      market_can_buy,
         }
 
         # ── Score técnico (lo que puede evaluar sin fundamentales) ───────────
