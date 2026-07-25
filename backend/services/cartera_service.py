@@ -47,10 +47,23 @@ def _get_daily_bars(tk_obj, ticker: str) -> tuple[float, float]:
         return cached["last"], cached["prev"]
     try:
         hist = tk_obj.history(period="5d", interval="1d")
-        if len(hist) >= 2:
-            last, prev = float(hist["Close"].iloc[-1]), float(hist["Close"].iloc[-2])
-        elif len(hist) == 1:
-            last = prev = float(hist["Close"].iloc[-1])
+        # Yahoo a veces incluye la fila más reciente con Close=NaN cuando esa
+        # sesión todavía no ha asentado el dato del todo (verificado en vivo,
+        # 25/07/2026: AAPL/NVDA devolvían NaN en la fila de "hoy" pese a
+        # tratarse de los tickers más líquidos del mercado -- no es un
+        # problema de datos raros, es un hueco normal del feed). iloc[-1]/
+        # iloc[-2] ciegos propagaban ese NaN hasta la respuesta HTTP, y
+        # json.dumps() no puede serializar NaN -- /api/v1/watchlist devolvía
+        # un 500 en texto plano ("Internal Server Error") en vez de JSON, y
+        # el mismo NaN corrompía cualquier otro consumidor de
+        # fetch_live_prices() (Cartera, WebSocket, Tesis, alertas). Se
+        # descartan las filas sin Close válido antes de elegir última/anterior
+        # -- así "el precio de hoy" es siempre el último cierre REAL conocido.
+        closes = hist["Close"].dropna()
+        if len(closes) >= 2:
+            last, prev = float(closes.iloc[-1]), float(closes.iloc[-2])
+        elif len(closes) == 1:
+            last = prev = float(closes.iloc[-1])
         else:
             return 0.0, 0.0
         _daily_bars_cache[ticker] = {"last": last, "prev": prev, "updated": now}
@@ -125,6 +138,8 @@ def _fetch_price_single(ticker: str) -> dict | None:
             try:
                 fi    = tk_obj.fast_info
                 price = float(fi.last_price or 0)
+                if not math.isfinite(price):
+                    price = 0.0
             except Exception:
                 pass
             last_bar, prev = _get_daily_bars(tk_obj, ticker)
@@ -141,11 +156,19 @@ def _fetch_price_single(ticker: str) -> dict | None:
             # cerrado, solo la de barras diarias (ya cacheada 6h).
             price, prev = _get_daily_bars(tk_obj, ticker)
 
-        if not price:
+        if not price or not math.isfinite(price):
             return None
-        chg   = (price - prev) / prev * 100 if prev else 0.0
+        chg = (price - prev) / prev * 100 if prev and math.isfinite(prev) else 0.0
+        # Guardia final defensiva -- si por cualquier otra vía no prevista
+        # price/chg acaban siendo NaN/inf, se devuelve None (mismo criterio
+        # de "sin dato, no se fabrica un número" del resto del proyecto) en
+        # vez de dejar que un valor no serializable rompa a TODOS los
+        # consumidores de fetch_live_prices() con un 500 en texto plano.
+        if not math.isfinite(chg):
+            return None
         entry = {"ticker": ticker, "price": round(price, 2),
-                 "prev": round(prev, 2), "chg": round(chg, 2), "updated": now}
+                 "prev": round(prev, 2) if math.isfinite(prev) else 0.0,
+                 "chg": round(chg, 2), "updated": now}
         _price_cache[ticker] = entry
         return entry
     except Exception:
