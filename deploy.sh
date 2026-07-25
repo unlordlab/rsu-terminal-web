@@ -9,7 +9,7 @@
 # Uso: ./deploy.sh
 set -e  # cualquier fallo detiene el script en vez de seguir a ciegas
 
-echo "=== 1/6: Comprobando estado de git ==="
+echo "=== 1/7: Comprobando estado de git ==="
 # Solo bloqueamos por cambios en archivos que YA están en git (modificados,
 # borrados, en stage) — no por archivos sueltos sin trackear (backups, etc.),
 # que son normales y no afectan al despliegue.
@@ -26,10 +26,10 @@ if [ -n "$UNTRACKED" ]; then
     echo "$UNTRACKED"
 fi
 
-echo "=== 2/6: Trayendo cambios de GitHub ==="
+echo "=== 2/7: Trayendo cambios de GitHub ==="
 # IMPORTANTE -- riesgo de auto-modificación: git pull puede actualizar este
 # mismo fichero (deploy.sh) mientras bash ya lo tiene cargado en memoria de
-# esta ejecución. Sin el relanzamiento de abajo, el resto de los pasos (3-6)
+# esta ejecución. Sin el relanzamiento de abajo, el resto de los pasos (3-7)
 # seguirían corriendo con la lógica VIEJA que bash ya había leído, aunque el
 # fichero en disco esté al día -- esto causó 2 despliegues seguidos
 # ejecutando código de sesiones anteriores sin que nadie se diera cuenta
@@ -55,7 +55,26 @@ fi
 BEFORE_COMMIT="$DEPLOY_SH_BEFORE"
 AFTER_COMMIT="$DEPLOY_SH_AFTER"
 
-echo "=== 3/6: Comprobando si cambió algo que afecte a la imagen Docker ==="
+echo "=== 3/7: Backup de las bases de datos antes de tocar nada ==="
+# Antes de reconstruir la imagen o recrear el contenedor -- si algo sale mal
+# en los pasos siguientes, queda una copia de las 13 bases de datos
+# EXACTAMENTE como estaban justo antes de este despliegue. Reutiliza
+# scripts/backup_dbs.sh (el mismo que ya corre a diario por cron) en vez de
+# duplicar su lógica -- misma API .backup() de SQLite, segura con WAL activo
+# (un cp normal puede copiar un estado inconsistente). Si el backup falla
+# (p.ej. el contenedor anterior no está corriendo), se aborta ANTES de tocar
+# nada -- no tiene sentido arriesgar el contenedor en marcha sin red de
+# seguridad. Ver auditoría de infraestructura 21/07/2026, hallazgo crítico
+# #4 ("el más grave de todo el proyecto" según el propio documento).
+if ! ./scripts/backup_dbs.sh; then
+    echo "✗ El backup pre-despliegue falló -- abortando ANTES de tocar nada."
+    echo "  Revisa el error de arriba (¿está corriendo rsu-terminal-web-app-1?)."
+    echo "  El contenedor en marcha sigue intacto, no se ha reconstruido ni recreado nada."
+    exit 1
+fi
+echo "✓ Backup completado."
+
+echo "=== 4/7: Comprobando si cambió algo que afecte a la imagen Docker ==="
 # Antes solo miraba requirements.txt -- el fix de Reddit Pulse (23/07/2026)
 # tocó el Dockerfile (instalación de Chromium) sin tocar requirements.txt,
 # así que este chequeo dijo "sin cambios" y el contenedor se recreó con la
@@ -69,7 +88,7 @@ else
     echo "  Sin cambios que afecten a la imagen — no hace falta reconstruir."
 fi
 
-echo "=== 4/6: Ejecutando la suite de tests (red de seguridad, ~35 tests) ==="
+echo "=== 5/7: Ejecutando la suite de tests (red de seguridad, ~35 tests) ==="
 # El host del VPS no tiene pip NI las dependencias de la app (fastapi,
 # pandas, yfinance...) -- solo viven dentro de la imagen Docker, que ya
 # las trae instaladas de requirements.txt (Dockerfile). Intentar correr
@@ -92,10 +111,10 @@ if ! docker compose run --rm -T --user root app sh -c \
 fi
 echo "✓ Suite de tests en verde."
 
-echo "=== 5/6: Recreando el contenedor ==="
+echo "=== 6/7: Recreando el contenedor ==="
 docker compose up -d --force-recreate
 
-echo "=== 6/6: Comprobación rápida de salud (10s de margen para arrancar) ==="
+echo "=== 7/7: Comprobación rápida de salud (10s de margen para arrancar) ==="
 sleep 10
 if docker ps --filter "name=rsu-terminal-web-app-1" --filter "status=running" | grep -q rsu-terminal-web-app-1; then
     echo "✓ Contenedor arriba y corriendo."
