@@ -59,7 +59,30 @@ def _get_daily_bars(tk_obj, ticker: str) -> tuple[float, float]:
         # fetch_live_prices() (Cartera, WebSocket, Tesis, alertas). Se
         # descartan las filas sin Close válido antes de elegir última/anterior
         # -- así "el precio de hoy" es siempre el último cierre REAL conocido.
-        closes = hist["Close"].dropna()
+        raw_closes = hist["Close"]
+        closes = raw_closes.dropna()
+
+        # Con el mercado cerrado (fin de semana/tras el cierre) y la fila
+        # MÁS RECIENTE todavía en NaN, el dropna() de arriba salta esa sesión
+        # entera -- "hoy" pasa a ser la última sesión COMPLETA (p.ej. jueves
+        # en vez de viernes), desplazando actual/anterior un día entero sin
+        # ningún aviso. Verificado en vivo, 25/07/2026: GOOGL mostraba el
+        # cierre del jueves como "hoy" un sábado porque el viernes seguía
+        # NaN. fast_info.last_price sí suele reflejar esa última sesión
+        # (aunque sea un snapshot, no el cierre "oficial" -- ver docstring)
+        # incluso con el mercado ya cerrado, así que se usa como relleno
+        # puntual SOLO para este hueco -- un snapshot aproximado de hoy es
+        # mejor que el cierre exacto de hace dos días.
+        if len(raw_closes) > 0 and pd.isna(raw_closes.iloc[-1]) and len(closes) >= 1:
+            try:
+                fallback = float(tk_obj.fast_info.last_price or 0)
+            except Exception:
+                fallback = 0.0
+            if fallback and math.isfinite(fallback):
+                last, prev = fallback, float(closes.iloc[-1])
+                _daily_bars_cache[ticker] = {"last": last, "prev": prev, "updated": now}
+                return last, prev
+
         if len(closes) >= 2:
             last, prev = float(closes.iloc[-1]), float(closes.iloc[-2])
         elif len(closes) == 1:
@@ -722,12 +745,22 @@ def get_cartera():
             ganadas  = len([r for r in cerradas_rows if r["pnl"] > 0])
             perdidas = len([r for r in cerradas_rows if r["pnl"] <= 0])
             win_rate = ganadas / len(cerradas_rows) * 100
+            # Media ponderada por capital invertido en cada operación --
+            # sumar los % de retorno sin ponderar (versión anterior) mezclaba
+            # operaciones de tamaños muy distintos como si pesaran igual
+            # (+50% de $200 y -10% de $5.000 sumaban +40%, sin sentido
+            # económico). Ver auditoría de Cartera, hallazgo #B3.
+            inv_cerradas = sum(r["inv"] for r in cerradas_rows)
+            avg_pnl = (
+                sum(r["pnl"] * r["inv"] for r in cerradas_rows) / inv_cerradas
+                if inv_cerradas > 0 else 0.0
+            )
             closed_stats = {
                 "total":    len(cerradas_rows),
                 "ganadas":  ganadas,
                 "perdidas": perdidas,
                 "win_rate": round(win_rate, 1),
-                "avg_pnl":  round(sum(r["pnl"] for r in cerradas_rows), 2),
+                "avg_pnl":  round(avg_pnl, 2),
             }
 
         mkt_status, mkt_color = get_market_status()

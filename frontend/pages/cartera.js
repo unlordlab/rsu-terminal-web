@@ -708,7 +708,7 @@ function closedStats(c) {
     return `<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:1rem;margin-bottom:1rem;">
         ${metricCard('Trades Cerrados', c.total, c.ganadas + 'W / ' + c.perdidas + 'L', 'var(--color-text)')}
         ${metricCard('Win Rate', fix(c.win_rate,1) + '%', 'Operaciones ganadoras', wrColor)}
-        ${metricCard('P&L Total Acum.', (c.avg_pnl >= 0 ? '+' : '') + fix(c.avg_pnl) + '%', 'Suma de cerradas', pnlColor)}
+        ${metricCard('P&L Total Acum.', (c.avg_pnl >= 0 ? '+' : '') + fix(c.avg_pnl) + '%', 'Media ponderada por capital', pnlColor)}
     </div>`;
 }
 

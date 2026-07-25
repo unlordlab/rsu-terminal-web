@@ -2,11 +2,11 @@
 snapshots.db -- base point-in-time, append-only, nunca UPDATE/DELETE. Ver
 DATOS_IRREPRODUCIBLES_PLAN.md (21/07/2026) y sesión 25/07/2026: la
 terminal calcula cada noche datos valiosos (fase Weinstein, RS%, RVOL,
-amplitud de mercado, score del Algoritmo...) y los tira -- los Gists de
-los scans nocturnos se sobrescriben, las ventanas móviles se podan. Esto
-guarda, cada noche, lo que se sabía esa noche, para poder construir en el
-futuro backtests point-in-time honestos (sin sesgo de supervivencia, sin
-look-ahead de datos revisados).
+amplitud de mercado, score del Algoritmo, equity de Cartera...) y los
+tira -- los Gists de los scans nocturnos se sobrescriben, las ventanas
+móviles se podan. Esto guarda, cada noche, lo que se sabía esa noche,
+para poder construir en el futuro backtests point-in-time honestos (sin
+sesgo de supervivencia, sin look-ahead de datos revisados).
 
 Escrito desde market_cache_warm_loop() (ws.py, cada 4 min) -- NO desde un
 bucle propio de 24h (ver comentario en ws.py sobre por qué: mismo error
@@ -61,6 +61,17 @@ def init_db():
             credit_spread     REAL
         )
     ''')
+    conn.execute('''
+        CREATE TABLE IF NOT EXISTS snapshot_cartera (
+            fecha               TEXT PRIMARY KEY,
+            equity              REAL,
+            invertido           REAL,
+            liquidez            REAL,
+            pnl_no_realizado    REAL,
+            pnl_realizado_acum  REAL,
+            n_posiciones        INTEGER
+        )
+    ''')
     conn.commit()
     conn.close()
 
@@ -80,6 +91,7 @@ def maybe_write_daily_snapshot():
     try:
         _maybe_write_mercado(conn, fecha, ultimo)
         _maybe_write_ticker(conn, fecha)
+        _maybe_write_cartera(conn, fecha)
     finally:
         conn.close()
 
@@ -142,6 +154,33 @@ def _maybe_write_ticker(conn, fecha):
     )
     conn.commit()
     print(f"[Snapshots] snapshot_ticker guardado para {fecha} ({len(rows)} tickers)")
+
+
+def _maybe_write_cartera(conn, fecha):
+    if conn.execute("SELECT 1 FROM snapshot_cartera WHERE fecha = ?", (fecha,)).fetchone():
+        return
+    try:
+        from services.cartera_service import get_cartera
+        c = get_cartera()
+        metrics = c.get("metrics", {})
+        if "pnl_realizado_acum" not in metrics or "capital_disponible" not in metrics:
+            return  # simulación de tiers no disponible todavía (sin columna
+                     # Nivel, o sin posiciones abiertas) -- se reintenta, no se fabrica
+        equity = round(metrics.get("total_val", 0.0) + metrics["capital_disponible"], 2)
+        n_pos  = len(c.get("abiertas", []))
+    except Exception as e:
+        print(f"[Snapshots] snapshot_cartera de {fecha} incompleto, se reintenta: {type(e).__name__}: {e}")
+        return
+
+    conn.execute(
+        "INSERT OR IGNORE INTO snapshot_cartera "
+        "(fecha, equity, invertido, liquidez, pnl_no_realizado, pnl_realizado_acum, n_posiciones) "
+        "VALUES (?, ?, ?, ?, ?, ?, ?)",
+        (fecha, equity, metrics.get("total_inv"), metrics["capital_disponible"],
+         metrics.get("pnl_neto"), metrics["pnl_realizado_acum"], n_pos)
+    )
+    conn.commit()
+    print(f"[Snapshots] snapshot_cartera guardado para {fecha}")
 
 
 init_db()
