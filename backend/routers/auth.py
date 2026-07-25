@@ -102,7 +102,13 @@ async def me(payload: dict = Depends(verify_token)):
     tier  = user["tier"] if user else payload.get("tier", "free")
     disclaimer_accepted = bool(user and user.get("disclaimer_accepted_at"))
     pricing_message_seen = bool(user and user.get("pricing_message_seen_at"))
-    return {"email": email, "tier": tier, "disclaimer_accepted": disclaimer_accepted, "pricing_message_seen": pricing_message_seen}
+    telegram_linked = bool(user and user.get("telegram_chat_id"))
+    return {
+        "email": email, "tier": tier,
+        "disclaimer_accepted": disclaimer_accepted,
+        "pricing_message_seen": pricing_message_seen,
+        "telegram_linked": telegram_linked,
+    }
 
 
 @router.post("/logout-all-sessions")
@@ -138,6 +144,35 @@ async def acknowledge_pricing(payload: dict = Depends(verify_token)):
     if not user:
         raise HTTPException(status_code=401, detail="Usuario no encontrado")
     return users_service.acknowledge_pricing_message(user["id"])
+
+
+@router.post("/telegram-link")
+async def telegram_link(payload: dict = Depends(verify_token)):
+    """Genera un código de un solo uso (caduca en 15 min) para vincular la
+    cuenta a Telegram vía deep-link -- el usuario lo abre, Telegram le manda
+    automáticamente '/start <código>' al bot, y el bucle de long-polling
+    (ver services/telegram_service.py) lo consume y guarda su chat_id. Si
+    el bot no está configurado en este entorno, error explícito en vez de
+    un código que nunca podrá usarse."""
+    from config import settings
+    if not getattr(settings, "telegram_bot_token", "") or not getattr(settings, "telegram_bot_username", ""):
+        raise HTTPException(status_code=503, detail="Notificaciones de Telegram no configuradas en este servidor")
+    email = payload.get("sub")
+    user  = users_service.get_user_by_email(email) if email else None
+    if not user:
+        raise HTTPException(status_code=401, detail="Usuario no encontrado")
+    code, expires_at = users_service.create_telegram_link_code(user["id"])
+    deep_link = f"https://t.me/{settings.telegram_bot_username}?start={code}"
+    return {"ok": True, "code": code, "deep_link": deep_link, "expires_at": expires_at}
+
+
+@router.post("/telegram-unlink")
+async def telegram_unlink(payload: dict = Depends(verify_token)):
+    email = payload.get("sub")
+    user  = users_service.get_user_by_email(email) if email else None
+    if not user:
+        raise HTTPException(status_code=401, detail="Usuario no encontrado")
+    return users_service.unlink_telegram(user["id"])
 
 
 @router.post("/admin/set-tier")

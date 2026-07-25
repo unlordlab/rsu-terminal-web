@@ -40,6 +40,10 @@ export function renderTopbar(container, navigate) {
             "></span>
             <span id="market-status" style="font-size:11px;color:var(--color-muted);flex-shrink:0;">● MKT</span>
             <span id="topbar-time" style="font-size:11px;color:var(--color-muted);flex-shrink:0;font-family:var(--font-mono);"></span>
+            <span id="account-btn" title="Mi Cuenta" style="
+                cursor:pointer;color:var(--color-muted);font-size:14px;
+                flex-shrink:0;line-height:1;user-select:none;
+            ">⚙</span>
             <button id="theme-toggle" style="
                 background:none;border:1px solid var(--color-border);
                 color:var(--color-muted);padding:3px 10px;
@@ -96,6 +100,12 @@ export function renderTopbar(container, navigate) {
     pricingBtn.addEventListener('click', () => {
         showPricingModal(null, { esConsulta: true });
     });
+
+    // Mi Cuenta (vinculación de Telegram, etc.)
+    const accountBtn = container.querySelector('#account-btn');
+    accountBtn.addEventListener('mouseenter', () => { accountBtn.style.color = 'var(--color-accent)'; });
+    accountBtn.addEventListener('mouseleave', () => { accountBtn.style.color = 'var(--color-muted)'; });
+    accountBtn.addEventListener('click', () => { navigate('/account'); });
 
     // Logout
     container.querySelector('#logout-btn').addEventListener('click', () => {

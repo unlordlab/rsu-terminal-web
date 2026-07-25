@@ -12,7 +12,7 @@ const FAQ_ITEMS = [
     },
     {
         q: '¿Cómo recibo avisos de mis alertas de Watchlist?',
-        a: 'Por ahora, solo dentro de la propia terminal: verás una campanita roja junto a "Watchlist" en el menú cuando salte una alerta. Todavía no hay notificación por email ni por Discord/Telegram fuera de la app — está en el roadmap para cuando montemos los agentes de comunidad.',
+        a: 'Verás una campanita roja junto a "Watchlist" en el menú cuando salte una alerta, y si vinculas tu Telegram desde "Mi Cuenta" (icono ⚙ arriba a la derecha) también te llega ahí, aunque no tengas la web abierta. Todavía no hay notificación por email ni por Discord.',
     },
     {
         q: '¿Qué diferencia hay entre los planes (Free, Tier 1, Tier S)?',

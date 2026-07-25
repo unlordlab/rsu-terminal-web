@@ -273,22 +273,45 @@ async def broadcast_cartera_loop():
 # Comprobación de alertas de precio (Watchlist). Cada 90s revisa TODAS las
 # alertas activas de TODOS los usuarios de una vez (agrupadas por ticker, un
 # solo fetch de precio por ticker aunque varios usuarios compartan alerta en
-# el mismo nombre). No hay push en tiempo real por WebSocket todavía — las
-# alertas disparadas quedan marcadas en BD (status='triggered', seen=0) y el
-# frontend las descubre haciendo poll a /api/v1/watchlist/alerts/unseen-count
-# (misma cadencia, ~60-90s) para la campanita del topbar. Si en el futuro se
-# monta un canal de notificación por usuario (Discord/Telegram/email), este
-# es el punto donde engancharlo: la lista `triggered` ya trae, por cada
-# alerta, user_id/ticker/condition/target_price/triggered_price.
+# el mismo nombre). Las alertas disparadas quedan marcadas en BD
+# (status='triggered', seen=0) -- el frontend las sigue descubriendo vía
+# poll a /api/v1/watchlist/alerts/unseen-count para la campanita del topbar
+# -- y desde el 25/07/2026 además se notifica por Telegram a quien tenga la
+# cuenta vinculada (ver watchlist_service.notify_triggered_alerts y
+# services/telegram_service.py). Ver hallazgo crítico #1, auditoría
+# Watchlist 21/07/2026.
 async def alerts_check_loop():
     while True:
         await asyncio.sleep(90)
         try:
-            from services.watchlist_service import check_all_active_alerts
+            from services.watchlist_service import check_all_active_alerts, notify_triggered_alerts
             loop = asyncio.get_event_loop()
-            await loop.run_in_executor(None, check_all_active_alerts)
-        except Exception:
-            pass
+            triggered = await loop.run_in_executor(None, check_all_active_alerts)
+            if triggered:
+                await loop.run_in_executor(None, notify_triggered_alerts, triggered)
+        except Exception as e:
+            print(f"[AlertsCheck] Error: {type(e).__name__}: {e}")
+
+
+# Long-polling del bot de Telegram para vincular cuentas de usuario (ver
+# services/telegram_service.py::poll_and_process_updates). getUpdates ya
+# bloquea ~25s en el lado de Telegram esperando un mensaje nuevo, así que
+# este bucle no necesita más pausa que un pequeño respiro en caso de error.
+# Si TELEGRAM_BOT_TOKEN no está configurado, se comprueba cada 5 min por si
+# se añade luego, sin busy-loop.
+async def telegram_link_poll_loop():
+    while True:
+        try:
+            from config import settings
+            if not getattr(settings, "telegram_bot_token", ""):
+                await asyncio.sleep(300)
+                continue
+            from services.telegram_service import poll_and_process_updates
+            loop = asyncio.get_event_loop()
+            await loop.run_in_executor(None, poll_and_process_updates)
+        except Exception as e:
+            print(f"[TelegramLink] Error: {type(e).__name__}: {e}")
+            await asyncio.sleep(30)
 
 
 # Ingesta de Insider Flow (SEC EDGAR Form 4). El feed "getcurrent" de EDGAR es

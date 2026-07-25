@@ -11,7 +11,8 @@ nada de este fichero.
 """
 import sqlite3
 import os
-from datetime import datetime, timezone
+from datetime import datetime, timezone, time as dt_time
+from zoneinfo import ZoneInfo
 
 DB_PATH = os.path.join(os.path.dirname(__file__), '..', 'users.db')
 
@@ -22,7 +23,6 @@ MAX_ACTIVE_ALERTS   = 30
 VALID_CONDITIONS = ("above", "below")
 VALID_METRICS    = ("price", "rvol", "ema_touch")
 EMA_PERIODS      = (10, 20, 50, 200)
-EMA_TOUCH_TOLERANCE_PCT = 0.5  # % de proximidad al valor de la EMA para considerar que el precio la "toca"
 
 
 def _conn():
@@ -66,6 +66,14 @@ def init_db():
     # ema_period: qué EMA vigilar (10/20/50/200) — solo relevante si metric='ema_touch'.
     try:
         conn.execute("ALTER TABLE alerts ADD COLUMN ema_period INTEGER")
+    except sqlite3.OperationalError:
+        pass  # la columna ya existe
+    # last_side ('above'/'below'): último lado conocido del precio respecto
+    # a la EMA -- necesario para detectar un CRUCE real entre dos pasadas
+    # de 90s, no solo cercanía en el instante del poll. Ver hallazgo #2,
+    # auditoría Watchlist 21/07/2026.
+    try:
+        conn.execute("ALTER TABLE alerts ADD COLUMN last_side TEXT")
     except sqlite3.OperationalError:
         pass  # la columna ya existe
     conn.commit()
@@ -247,6 +255,31 @@ def get_unseen_triggered_count(user_id: int) -> int:
 _rvol_cache: dict = {}
 _RVOL_CACHE_TTL = 300
 
+_NYSE_OPEN  = dt_time(9, 30)
+_NYSE_CLOSE = dt_time(16, 0)
+
+
+def _session_fraction_elapsed():
+    """Fracción (0-1) de la sesión NYSE transcurrida ahora mismo. None si
+    el mercado está cerrado (fuera de horario o fin de semana) -- ahí "hoy"
+    ya es un día completo, no hace falta ajustar nada. Simplificación:
+    asume acumulación lineal de volumen a lo largo de la sesión (en la
+    práctica es más alto cerca de apertura/cierre, forma de "U") -- corrige
+    la distorsión principal (comparar un día parcial contra un promedio de
+    días completos) sin modelar la curva intradía real, que sería una
+    mejora aparte. Ver hallazgo #3, auditoría Watchlist 21/07/2026."""
+    now_et = datetime.now(ZoneInfo("America/New_York"))
+    if now_et.weekday() >= 5:
+        return None
+    t = now_et.time()
+    if t < _NYSE_OPEN or t >= _NYSE_CLOSE:
+        return None
+    open_dt  = datetime.combine(now_et.date(), _NYSE_OPEN, tzinfo=now_et.tzinfo)
+    close_dt = datetime.combine(now_et.date(), _NYSE_CLOSE, tzinfo=now_et.tzinfo)
+    frac = (now_et - open_dt).total_seconds() / (close_dt - open_dt).total_seconds()
+    return max(0.02, min(1.0, frac))  # suelo pequeño: evita dividir por ~0 justo al abrir
+
+
 def _fetch_rvol_single(ticker: str):
     import time
     now = time.time()
@@ -262,7 +295,16 @@ def _fetch_rvol_single(ticker: str):
         vol_avg   = float(hist["Volume"].iloc[:-1].tail(20).mean())
         if vol_avg <= 0:
             return None
-        rvol = round(vol_today / vol_avg, 2)
+        # Sin ajuste, el volumen (parcial) de "hoy" a media sesión se
+        # compara contra el promedio de 20 días COMPLETOS -- el RVOL sale
+        # estructuralmente bajo por la mañana aunque el ritmo real de
+        # negociación sea anómalo. Se normaliza el promedio esperado a "lo
+        # que llevaría acumulado a estas horas" antes de dividir.
+        frac = _session_fraction_elapsed()
+        vol_avg_esperado = vol_avg * frac if frac is not None else vol_avg
+        if vol_avg_esperado <= 0:
+            return None
+        rvol = round(vol_today / vol_avg_esperado, 2)
         _rvol_cache[ticker] = {"rvol": rvol, "updated": now}
         return rvol
     except Exception:
@@ -406,16 +448,25 @@ def check_all_active_alerts() -> list:
             ema_value = _get_live_ema(a["ticker"], period, live_price)
             if not ema_value:
                 return
-            distance_pct = abs(live_price - ema_value) / ema_value * 100
-            if distance_pct <= EMA_TOUCH_TOLERANCE_PCT:
+            current_side = "above" if live_price >= ema_value else "below"
+            prev_side = a.get("last_side")
+            # prev_side=None (primera pasada tras crear la alerta) solo
+            # "arma" el estado -- no hay cruce que detectar todavía, solo
+            # se sabe dónde está el precio ahora. A partir de la SIGUIENTE
+            # pasada, un cambio de lado es un cruce real -- ya no basta con
+            # estar cerca del valor de la EMA (hallazgo #2, auditoría
+            # Watchlist 21/07/2026: antes disparaba por proximidad).
+            if prev_side is not None and prev_side != current_side:
                 conn.execute(
                     "UPDATE alerts SET status = 'triggered', triggered_at = ?, "
-                    "triggered_price = ?, seen = 0 WHERE id = ?",
-                    (now_iso, live_price, a["id"])
+                    "triggered_price = ?, seen = 0, last_side = ? WHERE id = ?",
+                    (now_iso, live_price, current_side, a["id"])
                 )
                 a["triggered_at"]    = now_iso
                 a["triggered_price"] = live_price
                 triggered.append(a)
+            else:
+                conn.execute("UPDATE alerts SET last_side = ? WHERE id = ?", (current_side, a["id"]))
 
         for a in price_alerts:
             p = prices.get(a["ticker"])
@@ -425,11 +476,48 @@ def check_all_active_alerts() -> list:
         for a in ema_alerts:
             _check_ema_touch(a)
 
-        if triggered:
-            conn.commit()
+        # Commit incondicional: _check_ema_touch escribe last_side en CADA
+        # pasada aunque no dispare (necesario para detectar el cruce
+        # siguiente) -- con el "if triggered: commit()" de antes, esas
+        # escrituras se habrían perdido al cerrar la conexión sin guardar.
+        conn.commit()
     finally:
         conn.close()
     return triggered
+
+
+# ── NOTIFICACIÓN POR TELEGRAM (por usuario) ───────────────────────────────────
+
+_METRIC_LABEL = {"price": "Precio", "rvol": "RVOL", "ema_touch": "Toque de EMA"}
+
+
+def notify_triggered_alerts(triggered: list) -> None:
+    """Envía un Telegram al dueño de cada alerta recién disparada -- solo a
+    quien tenga la cuenta vinculada; quien no la tenga sigue viendo la
+    alerta solo en la campanita, sin fallo ni aviso (vincular es opcional).
+    Llamado desde ws.py::alerts_check_loop() justo tras
+    check_all_active_alerts(). Ver hallazgo crítico #1, auditoría Watchlist
+    21/07/2026."""
+    if not triggered:
+        return
+    from services.users_service import get_telegram_chat_ids
+    from services.telegram_service import enviar_telegram
+    chat_ids = get_telegram_chat_ids(list({a["user_id"] for a in triggered}))
+    if not chat_ids:
+        return
+    for a in triggered:
+        chat_id = chat_ids.get(a["user_id"])
+        if not chat_id:
+            continue
+        metric_label = _METRIC_LABEL.get(a.get("metric", "price"), "Precio")
+        if a.get("metric") == "ema_touch":
+            detalle = f"cruzó su EMA{a.get('ema_period')}"
+        else:
+            cond = "por encima de" if a["condition"] == "above" else "por debajo de"
+            detalle = f"{cond} {a['target_price']}"
+        texto = (f"🔔 *{a['ticker']}* — alerta de {metric_label} disparada\n"
+                 f"Precio: {a.get('triggered_price')}\nCondición: {detalle}")
+        enviar_telegram(texto, chat_id=chat_id)
 
 
 init_db()

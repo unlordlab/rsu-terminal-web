@@ -8,20 +8,24 @@ import os
 import requests
 
 
-def enviar_telegram(mensaje: str) -> bool:
+def enviar_telegram(mensaje: str, chat_id: str = None) -> bool:
     """Envía un mensaje a Telegram vía la API de bots (sendMessage). Requiere
-    TELEGRAM_BOT_TOKEN y TELEGRAM_CHAT_ID en .env — si no están configurados,
-    no hace nada (no rompe el resto del flujo)."""
+    TELEGRAM_BOT_TOKEN en .env — si no está configurado, no hace nada (no
+    rompe el resto del flujo). Si no se pasa chat_id, usa el chat/canal fijo
+    de operaciones (settings.telegram_chat_id) -- comportamiento idéntico al
+    de siempre para los llamadores existentes (Algoritmo, Cartera, tesis
+    semanal). Para notificar a un usuario concreto de Watchlist, se pasa su
+    propio chat_id (ver users_service.get_telegram_chat_ids)."""
     from config import settings
-    token   = getattr(settings, "telegram_bot_token", "")
-    chat_id = getattr(settings, "telegram_chat_id", "")
-    if not token or not chat_id:
-        print("[Telegram] Sin TELEGRAM_BOT_TOKEN/TELEGRAM_CHAT_ID configurados — mensaje no enviado")
+    token = getattr(settings, "telegram_bot_token", "")
+    dest  = chat_id or getattr(settings, "telegram_chat_id", "")
+    if not token or not dest:
+        print("[Telegram] Sin TELEGRAM_BOT_TOKEN/chat_id configurados — mensaje no enviado")
         return False
     try:
         r = requests.post(
             f"https://api.telegram.org/bot{token}/sendMessage",
-            json={"chat_id": chat_id, "text": mensaje, "parse_mode": "Markdown"},
+            json={"chat_id": dest, "text": mensaje, "parse_mode": "Markdown"},
             timeout=10
         )
         if r.status_code != 200:
@@ -174,3 +178,61 @@ def anunciar_mejor_tesis_semana(candidatos: list) -> bool:
         return enviar_telegram(texto_final)
     texto_final = f"{texto}\n\n📈 Léela entera en la sección Tesis: {settings.terminal_base_url}/tesis"
     return enviar_telegram_foto(texto_final, _get_gael_photo_small())
+
+
+# ── Vinculación de cuentas por usuario (Watchlist -> Telegram) ───────────────
+# Un bot solo puede escribir a un chat_id si esa persona le escribió antes --
+# restricción de la propia API de Telegram, no de este proyecto. Recibir esa
+# interacción exige o bien un webhook (necesita HTTPS pública, que el VPS no
+# tiene todavía) o long polling contra getUpdates (llamada saliente, sin
+# puerto/HTTPS entrante) -- se usa long polling, mismo patrón de "bucle en
+# segundo plano" ya usado en toda la terminal (ver routers/ws.py). Ver
+# 25/07/2026.
+_last_update_id = 0
+
+
+def poll_and_process_updates() -> int:
+    """Una pasada de long-polling: getUpdates bloquea hasta 25s en el lado
+    de Telegram esperando un mensaje nuevo. Busca '/start <código>' (lo que
+    manda Telegram automáticamente al abrir un enlace t.me/<bot>?start=...)
+    y, si el código es válido, vincula la cuenta y confirma por Telegram.
+    Devuelve cuántos updates se procesaron (solo para logging del bucle)."""
+    global _last_update_id
+    from config import settings
+    token = getattr(settings, "telegram_bot_token", "")
+    if not token:
+        return 0
+    try:
+        r = requests.get(
+            f"https://api.telegram.org/bot{token}/getUpdates",
+            params={"offset": _last_update_id + 1, "timeout": 25},
+            timeout=30,
+        )
+        if r.status_code != 200:
+            return 0
+        updates = r.json().get("result", [])
+    except Exception as e:
+        print(f"[Telegram] Error en getUpdates: {type(e).__name__}: {e}")
+        return 0
+
+    for upd in updates:
+        _last_update_id = max(_last_update_id, upd.get("update_id", _last_update_id))
+        msg     = upd.get("message") or {}
+        text    = (msg.get("text") or "").strip()
+        chat_id = msg.get("chat", {}).get("id")
+        if not chat_id or not text.startswith("/start"):
+            continue
+        parts = text.split(maxsplit=1)
+        if len(parts) != 2:
+            continue
+        from services.users_service import consume_telegram_link_code
+        user_id = consume_telegram_link_code(parts[1].strip().upper(), str(chat_id))
+        if user_id:
+            enviar_telegram(
+                "✅ Tu cuenta de RSU Terminal ha sido vinculada. A partir de ahora "
+                "recibirás aquí tus alertas de Watchlist.", chat_id=chat_id)
+        else:
+            enviar_telegram(
+                "⚠️ Código no reconocido o caducado. Genera uno nuevo desde "
+                "*Mi Cuenta* en la terminal.", chat_id=chat_id)
+    return len(updates)

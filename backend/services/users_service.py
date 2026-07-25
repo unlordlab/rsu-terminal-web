@@ -7,8 +7,10 @@ Se guarda en SQLite (users.db), en el mismo estilo que options_flow.db
 """
 import sqlite3
 import os
+import secrets
+import string
 import bcrypt
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 
 DB_PATH = os.path.join(os.path.dirname(__file__), '..', 'users.db')
 
@@ -58,6 +60,22 @@ def init_db():
     # Ver conversación 20/07/2026.
     try:
         conn.execute("ALTER TABLE users ADD COLUMN pricing_message_seen_at TEXT")
+    except sqlite3.OperationalError:
+        pass  # la columna ya existe
+    # Vinculación de Telegram por usuario (Watchlist -> alertas), ver
+    # 25/07/2026. telegram_link_code/_expires_at son de un solo uso, corta
+    # vida (15 min) -- viven en la propia fila del usuario en vez de una
+    # tabla nueva, mismo criterio que pricing_message_seen_at.
+    try:
+        conn.execute("ALTER TABLE users ADD COLUMN telegram_chat_id TEXT")
+    except sqlite3.OperationalError:
+        pass  # la columna ya existe
+    try:
+        conn.execute("ALTER TABLE users ADD COLUMN telegram_link_code TEXT")
+    except sqlite3.OperationalError:
+        pass  # la columna ya existe
+    try:
+        conn.execute("ALTER TABLE users ADD COLUMN telegram_link_code_expires_at TEXT")
     except sqlite3.OperationalError:
         pass  # la columna ya existe
     conn.commit()
@@ -115,7 +133,7 @@ def get_user_by_email(email: str) -> dict | None:
     conn = _conn()
     try:
         row = conn.execute(
-            "SELECT id, email, tier, disclaimer_accepted_at, pricing_message_seen_at, token_version FROM users WHERE email = ?", (email,)
+            "SELECT id, email, tier, disclaimer_accepted_at, pricing_message_seen_at, token_version, telegram_chat_id FROM users WHERE email = ?", (email,)
         ).fetchone()
         return dict(row) if row else None
     finally:
@@ -176,6 +194,80 @@ def acknowledge_pricing_message(user_id: int) -> dict:
         )
         conn.commit()
         return {"ok": True}
+    finally:
+        conn.close()
+
+
+def create_telegram_link_code(user_id: int) -> tuple[str, str]:
+    """Código corto de un solo uso para vincular Telegram (deep-link
+    t.me/<bot>?start=<code>) -- caduca a los 15 min. Vive en la propia
+    fila del usuario (1:1, corta vida) -- mismo criterio que
+    pricing_message_seen_at, sin tabla nueva."""
+    code = ''.join(secrets.choice(string.ascii_uppercase + string.digits) for _ in range(8))
+    expires_at = (datetime.now(timezone.utc) + timedelta(minutes=15)).isoformat()
+    conn = _conn()
+    try:
+        conn.execute(
+            "UPDATE users SET telegram_link_code = ?, telegram_link_code_expires_at = ? WHERE id = ?",
+            (code, expires_at, user_id)
+        )
+        conn.commit()
+        return code, expires_at
+    finally:
+        conn.close()
+
+
+def consume_telegram_link_code(code: str, chat_id: str) -> int | None:
+    """Busca qué usuario generó este código (sin caducar) y le asigna el
+    chat_id que acaba de escribirle al bot. None si no existe/caducó -- el
+    llamador (telegram_service, al procesar /start) responde con un aviso
+    de código inválido en vez de fallar en silencio."""
+    conn = _conn()
+    try:
+        now_iso = datetime.now(timezone.utc).isoformat()
+        row = conn.execute(
+            "SELECT id FROM users WHERE telegram_link_code = ? AND telegram_link_code_expires_at > ?",
+            (code, now_iso)
+        ).fetchone()
+        if not row:
+            return None
+        user_id = row["id"]
+        conn.execute(
+            "UPDATE users SET telegram_chat_id = ?, telegram_link_code = NULL, "
+            "telegram_link_code_expires_at = NULL WHERE id = ?",
+            (str(chat_id), user_id)
+        )
+        conn.commit()
+        return user_id
+    finally:
+        conn.close()
+
+
+def unlink_telegram(user_id: int) -> dict:
+    conn = _conn()
+    try:
+        conn.execute("UPDATE users SET telegram_chat_id = NULL WHERE id = ?", (user_id,))
+        conn.commit()
+        return {"ok": True}
+    finally:
+        conn.close()
+
+
+def get_telegram_chat_ids(user_ids: list[int]) -> dict[int, str]:
+    """{user_id: chat_id} solo de quienes tienen Telegram vinculado --
+    usado por watchlist_service.notify_triggered_alerts() para resolver a
+    quién avisar en una sola consulta por lote (mismo criterio de "un
+    fetch por lote, no por usuario" que ya usa check_all_active_alerts())."""
+    if not user_ids:
+        return {}
+    conn = _conn()
+    try:
+        placeholders = ",".join("?" * len(user_ids))
+        rows = conn.execute(
+            f"SELECT id, telegram_chat_id FROM users WHERE id IN ({placeholders}) AND telegram_chat_id IS NOT NULL",
+            user_ids
+        ).fetchall()
+        return {r["id"]: r["telegram_chat_id"] for r in rows}
     finally:
         conn.close()
 

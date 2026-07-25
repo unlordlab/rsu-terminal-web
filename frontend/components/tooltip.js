@@ -71,8 +71,8 @@ LÍMITE: hasta 50 tickers por usuario. Es una lista personal — no se comparte 
 CÓMO SE COMPRUEBAN:
 Un proceso en segundo plano revisa todas las alertas activas de todos los usuarios cada ~90 segundos (agrupando por ticker, así que no importa cuánta gente tenga una alerta en el mismo nombre — el dato se pide una sola vez por ticker y métrica). Para las alertas de EMA, el valor de la media de las sesiones ya cerradas se calcula una vez al día (no tiene sentido recalcularlo cada 90 segundos si los cierres de ayer no cambian) y se combina con el precio en vivo de hoy en cada ciclo. En cuanto se cumple la condición, la alerta pasa a "DISPARADA" y aparece un aviso (número rojo) junto a Watchlist en el menú lateral.
 
-IMPORTANTE — SOLO DENTRO DE LA TERMINAL:
-Por ahora el aviso es únicamente dentro de la app (campanita + listado en Watchlist). Todavía no hay notificación por email, Discord o Telegram — si cierras la pestaña, la alerta se sigue comprobando en el servidor y la verás marcada como disparada la próxima vez que entres, pero no recibirás ningún aviso fuera de la terminal.
+NOTIFICACIONES:
+Dentro de la app siempre verás la campanita + el listado en Watchlist. Si vinculas tu Telegram desde "Mi Cuenta" (icono ⚙ en la barra superior), también recibirás un mensaje ahí en cuanto se dispare, sin necesitar la pestaña abierta. Todavía no hay notificación por email ni Discord.
 
 LÍMITE: hasta 30 alertas activas por usuario. Una alerta disparada no vuelve a comprobarse ni se repite — si quieres seguir vigilando el mismo nivel, crea una nueva. Puedes limpiar en bloque las ya disparadas con el botón "Limpiar disparadas".`
     },

@@ -32,6 +32,7 @@ export async function render(container) {
     wireForm(container);
     loadWatchlist(container);
     loadAlerts(container);
+    loadTelegramBanner(container);
 
     // Deep-link ?ticker= -- a diferencia de research.js/rsrw.js/insider.js/
     // canslim.js, aquí SOLO se rellena el campo, sin enviar automáticamente:
@@ -58,6 +59,8 @@ function pageShell() {
         + '</div>'
 
         + '<div id="wl-table"></div>'
+
+        + '<div id="wl-telegram-banner"></div>'
 
         // Crear alerta
         + '<div style="margin-top:1.5rem;margin-bottom:0.75rem;color:var(--color-accent);font-size:14px;letter-spacing:0.08em;">⏰ NUEVA ALERTA ' + tt('price-alerts') + '</div>'
@@ -203,7 +206,7 @@ async function loadAlerts(container) {
                 const condLabel = isEma
                     ? ('Toque de EMA' + esc(a.ema_period))
                     : (a.condition === 'above' ? 'Por encima de ' : 'Por debajo de ') + (isRvol ? 'RVOL' : 'precio');
-                const targetFmt = isEma ? '±0,5%' : (isRvol ? Number(a.target_price).toFixed(2) + 'x' : '$' + Number(a.target_price).toFixed(2));
+                const targetFmt = isEma ? 'Cruce' : (isRvol ? Number(a.target_price).toFixed(2) + 'x' : '$' + Number(a.target_price).toFixed(2));
                 const stColor   = IMPACT_COLOR[a.status] || 'var(--color-muted)';
                 const bg        = a.status === 'triggered' && !a.seen ? 'rgba(0,255,173,0.05)' : 'transparent';
                 const fmtTriggerPrice = (v) => isRvol ? v.toFixed(2) + 'x' : '$' + v.toFixed(2);
@@ -236,6 +239,20 @@ async function loadAlerts(container) {
             .catch(() => {});
     } catch(e) {
         el.innerHTML = shell('MIS ALERTAS', error(e.message));
+    }
+}
+
+async function loadTelegramBanner(container) {
+    const el = container.querySelector('#wl-telegram-banner');
+    if (!el) return;
+    try {
+        const res  = await fetch('/api/v1/auth/me', { headers: authHeader() });
+        const data = await res.json();
+        if (!res.ok || data.telegram_linked) { el.innerHTML = ''; return; }
+        el.innerHTML = '<div style="margin-top:0.75rem;padding:8px 14px;background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius);font-size:11px;color:var(--color-muted);">'
+            + '🔔 Tus alertas solo se ven aquí en la web. Vincula Telegram desde <span onclick="window.__navigate(\'/account\')" style="color:var(--color-accent);cursor:pointer;">Mi Cuenta</span> para recibirlas también fuera de la app.</div>';
+    } catch (e) {
+        el.innerHTML = '';
     }
 }
 

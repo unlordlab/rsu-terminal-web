@@ -55,6 +55,10 @@ class Settings(BaseSettings):
     # quiera publicar (para un canal, empieza por "-100...").
     telegram_bot_token: str = ""
     telegram_chat_id: str = ""
+    # @handle público del bot (sin @) -- para construir el enlace
+    # t.me/<user>?start=<code> de vinculación por usuario (Watchlist, ver
+    # 25/07/2026). Dato no sensible, distinto del token.
+    telegram_bot_username: str = ""
     terminal_base_url: str = "http://178.104.148.117"  # ver conversacion 17/07/2026, sin dominio propio todavia
     # Reddit OAuth (grant_type=client_credentials, solo lectura de listados
     # públicos) -- necesario porque reddit.com/*.json bloquea con 403 desde la
