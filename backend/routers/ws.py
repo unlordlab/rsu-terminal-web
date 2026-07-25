@@ -406,6 +406,21 @@ async def algoritmo_resultados_loop():
             print(f"[AlgoritmoResultados] Error: {e}")
 
 
+# Mismo patrón que algoritmo_resultados_loop(), pero para el tracking del
+# RSU Score por ticker (ver services/rsu_score_tracking_service.py) --
+# rellena resultado_5d/10d/20d/60d de las señales cuyo horizonte ya se ha
+# cumplido. Una vez al día basta, el resultado solo cambia con el cierre.
+async def rsu_score_resultados_loop():
+    while True:
+        await asyncio.sleep(86400)  # 24h
+        try:
+            from services.rsu_score_tracking_service import actualizar_resultados_pendientes
+            loop = asyncio.get_event_loop()
+            await loop.run_in_executor(None, actualizar_resultados_pendientes)
+        except Exception as e:
+            print(f"[RSUScoreResultados] Error: {e}")
+
+
 # Revisa Cartera (Google Sheet) cada 15 min buscando aperturas/cierres nuevos
 # y notifica por Telegram — el sheet lo edita Marc a mano, así que no hace
 # falta más frecuencia que esta para no perderse cambios durante horario de

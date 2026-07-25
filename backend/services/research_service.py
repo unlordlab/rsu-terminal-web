@@ -1860,6 +1860,12 @@ def get_research(ticker: str) -> dict:
     suggestions = _generate_suggestions(yf_data)
     rsu_score   = _compute_rsu_score(yf_data, piotroski, sector_comparison, insider.get("summary"), technical)
 
+    try:
+        from services.rsu_score_tracking_service import registrar_score
+        registrar_score(ticker, rsu_score, yf_data.get('price'))
+    except Exception as e:
+        print(f"[RSUScoreTracking] Error registrando: {type(e).__name__}: {e}")
+
     result = {
         "ok":                 True,
         "ticker":             yf_data['ticker'],

@@ -46,7 +46,49 @@ export async function render(container) {
         setTimeout(() => doResearch(), 100);
     } else {
         input.focus();
+        loadScoreTracking(container);
     }
+}
+
+// Vista vacía (antes de buscar un ticker): resumen de qué tan bien ha
+// predicho el RSU Score hasta ahora, agregado por bucket -- ver
+// TODO_RSU_TERMINAL.md 4.2. Se sobrescribe sin conflicto en cuanto el
+// usuario busca un ticker real (mismo contenedor #research-result).
+async function loadScoreTracking(container) {
+    const result = container.querySelector('#research-result');
+    if (!result) return;
+    try {
+        const token = sessionStorage.getItem('rsu_token');
+        const res = await fetch('/api/v1/research/score-tracking/resumen', {
+            headers: token ? { 'Authorization': 'Bearer ' + token } : {}
+        });
+        const data = await res.json();
+        if (!data.ok) return;
+        result.innerHTML = renderScoreTrackingSummary(data.resumen);
+    } catch (e) { /* silencioso -- es contenido de la vista vacía, no un error de búsqueda */ }
+}
+
+function renderScoreTrackingSummary(resumen) {
+    const rows = resumen.map(b => {
+        const fmt = (v) => v == null ? '<span style="color:var(--color-muted);">—</span>'
+            : '<span style="color:' + (v >= 0 ? 'var(--color-accent)' : '#f23645') + ';">' + (v >= 0 ? '+' : '') + v.toFixed(2) + '%</span>';
+        return '<div style="display:grid;grid-template-columns:1fr 70px 90px 90px 90px 90px;gap:8px;padding:8px 14px;border-bottom:1px solid var(--color-border);font-size:12px;align-items:center;">'
+            + '<div style="color:var(--color-text);">' + esc(b.bucket) + ' <span style="color:var(--color-muted);font-size:10px;">(' + esc(b.rango) + ')</span></div>'
+            + '<div style="text-align:right;color:var(--color-muted);">' + esc(b.n) + '</div>'
+            + '<div style="text-align:right;">' + fmt(b.avg_5d) + '</div>'
+            + '<div style="text-align:right;">' + fmt(b.avg_10d) + '</div>'
+            + '<div style="text-align:right;">' + fmt(b.avg_20d) + '</div>'
+            + '<div style="text-align:right;">' + fmt(b.avg_60d) + '</div>'
+            + '</div>';
+    }).join('');
+    const header = '<div style="display:grid;grid-template-columns:1fr 70px 90px 90px 90px 90px;gap:8px;padding:7px 14px;border-bottom:1px solid var(--color-border);font-size:10px;color:var(--color-muted);">'
+        + '<div>SCORE</div><div style="text-align:right;">N</div><div style="text-align:right;">+5D</div><div style="text-align:right;">+10D</div><div style="text-align:right;">+20D</div><div style="text-align:right;">+60D</div></div>';
+    const total = resumen.reduce((s, b) => s + b.n, 0);
+    return '<div style="background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius);overflow:hidden;">'
+        + '<div style="padding:10px 14px;border-bottom:1px solid var(--color-border);color:var(--color-muted);font-size:11px;letter-spacing:0.06em;">¿UN SCORE ALTO ACIERTA MÁS? · RETORNO MEDIO POR BUCKET</div>'
+        + header + rows
+        + (total === 0 ? '<div style="padding:1rem 14px;color:var(--color-muted);font-size:11px;">Sin historial todavía — se acumula con cada ticker investigado, resultados a partir de unas semanas.</div>' : '')
+        + '</div>';
 }
 
 function pageHeader() {

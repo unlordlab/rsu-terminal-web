@@ -11,6 +11,14 @@ router = APIRouter(prefix="/api/v1/research", tags=["research"])
 # get_research(), así que tampoco puede acabar reflejado en ningún sitio.
 _TICKER_RE = re.compile(r"^[A-Z0-9.\-^=]{1,12}$")
 
+# Registrada ANTES de /{ticker} -- si no, "score-tracking" se interpretaría
+# como un ticker y esta ruta nunca se alcanzaría (mismo motivo por el que
+# watchlist.py registra /alerts antes que /{ticker}).
+@router.get("/score-tracking/resumen")
+async def score_tracking_resumen(user=Depends(verify_token)):
+    from services.rsu_score_tracking_service import obtener_resumen_por_bucket, obtener_historial
+    return {"ok": True, "resumen": obtener_resumen_por_bucket(), "historial": obtener_historial(100)}
+
 @router.get("/{ticker}")
 async def research(ticker: str, user=Depends(verify_token)):
     if not _TICKER_RE.match(ticker.upper()):
