@@ -256,8 +256,14 @@ def get_earnings_calendar() -> dict:
             item['price'] = None
         return item
 
+    # Enriquecer las mismas 100 filas que se muestran más abajo (antes solo
+    # las primeras 50) -- el límite de visualización subió de 30 a 100 el
+    # 20/07/2026 para no cortar días enteros del calendario, pero este
+    # límite se quedó sin subir de paso: las filas 51-100 se mostraban sin
+    # precio ("—") porque nunca pasaban por enrich(). Ver auditoría Market
+    # 21/07/2026, hallazgo #16.
     with ThreadPoolExecutor(max_workers=8) as ex:
-        items[:50] = list(ex.map(enrich, items[:50]))
+        items[:100] = list(ex.map(enrich, items[:100]))
 
     def fmt_time(t):
         t = (t or '').lower()
