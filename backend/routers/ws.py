@@ -358,6 +358,20 @@ async def market_cache_warm_loop():
                 await loop.run_in_executor(None, get_credit_spreads)
         except Exception as e:
             print(f"[MarketWarm] Error refrescando caché: {e}")
+        # Snapshot point-in-time (ver services/snapshots_service.py) -- en
+        # try/except propio para que un fallo aquí no interfiera con el
+        # refresco de caché de arriba. maybe_write_daily_snapshot() es
+        # idempotente por fecha de sesión: en el 99% de las pasadas de 4
+        # min no hace nada (ya escribió hoy), solo actúa la primera vez
+        # que ve una fecha de sesión nueva -- por eso no hace falta un
+        # bucle propio de 24h (ver hallazgo de la sesión 35 con Options
+        # Flow: un bucle "cada 24h desde que arrancó" deriva de cuándo se
+        # reinició el contenedor, no de una fecha real).
+        try:
+            from services.snapshots_service import maybe_write_daily_snapshot
+            await loop.run_in_executor(None, maybe_write_daily_snapshot)
+        except Exception as e:
+            print(f"[Snapshots] Error: {e}")
 
 
 # Recalcula el RSU Algoritmo en vivo cada 30 min, independientemente de si
