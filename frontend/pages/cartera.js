@@ -393,7 +393,7 @@ function metricsRow(m) {
 
     const hasSim = m.capital_disponible != null;
     const hasDia = m.pnl_dia_usd != null;
-    const cols = (hasSim ? 4 : 3) + (hasDia ? 1 : 0);
+    const cols = (hasSim ? 5 : 3) + (hasDia ? 1 : 0);
 
     let cards = '';
     if (hasDia) {
@@ -413,10 +413,14 @@ function metricsRow(m) {
             { valueId: 'cartera-pnl-neto-value', subId: 'cartera-pnl-neto-sub' });
 
     if (hasSim) {
+        cards += metricCard('Capital Disponible', '$' + usd(m.capital_disponible),
+            'Libre para nuevas posiciones', 'var(--color-text)', 'cartera-capital-disponible');
+
         const realColor = m.pnl_realizado_acum >= 0 ? 'var(--color-accent)' : '#f23645';
         const realSign  = m.pnl_realizado_acum >= 0 ? '+' : '';
-        cards += metricCard('Capital Disponible', '$' + usd(m.capital_disponible),
-            'Inicial $' + usd(m.capital_inicial) + ' ' + realSign + '$' + usd(Math.abs(n(m.pnl_realizado_acum))) + ' realiz.', realColor, 'cartera-capital-disponible');
+        const realPct   = m.capital_inicial > 0 ? (m.pnl_realizado_acum / m.capital_inicial * 100) : 0;
+        cards += metricCard('P&L Realizado', realSign + '$' + usd(Math.abs(n(m.pnl_realizado_acum))),
+            realSign + fix(realPct) + '% sobre capital inicial', realColor, 'cartera-pnl-realizado');
     }
 
     return `<div style="display:grid;grid-template-columns:repeat(${cols},1fr);gap:1rem;margin-bottom:.5rem;">${cards}</div>

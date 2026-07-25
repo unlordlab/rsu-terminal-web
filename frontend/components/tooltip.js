@@ -2078,7 +2078,15 @@ Solo cuenta posiciones ABIERTAS — el P&L de las que ya cerraste vive aparte, e
 
 En otras palabras: es cuánto podrías invertir en una posición CORE/HIGH/LOTTERY nueva ahora mismo, sin necesidad de aportar más capital, contando con que tus ganancias (o pérdidas) ya cerradas se han sumado (o restado) a tu bolsa real.
 
-El texto pequeño debajo ("Inicial $X, +$Y realiz.") te desglosa de dónde sale ese número: tu capital de partida, más el P&L acumulado de todo lo que ya has cerrado.`
+El P&L ya realizado (ganancias/pérdidas de lo que ya cerraste) tiene su propia tarjeta al lado, "P&L Realizado" — ahí ves el desglose exacto en $ y en %.`
+    },
+
+    "cartera-pnl-realizado": {
+        title: "P&L Realizado",
+        short: "Ganancia/pérdida en $ de TODAS tus operaciones ya cerradas, acumulada sobre tu Capital Inicial.",
+        long: `Suma, en dólares, el resultado de cada operación cerrada -- la misma simulación cronológica que calcula "Capital Disponible" (ver esa tarjeta al lado). El % de abajo es ese mismo importe dividido entre tu Capital Inicial configurado.
+
+No lo confundas con "P&L Total Acum." (sección Historial Cerradas, más abajo): esa tarjeta es la media ponderada por capital del % de retorno de CADA operación cerrada por separado -- responde "¿qué rendimiento típico tuvo cada operación?". Esta tarjeta responde una pregunta distinta: "¿cuánto ha crecido mi capital real gracias a lo que ya cerré?". Pueden dar números distintos porque el capital se recicla entre operaciones a lo largo del tiempo (el mismo dinero entra y sale de posiciones distintas) -- no es un error, son dos preguntas diferentes con dos respuestas legítimamente distintas.`
     },
 
     "spxl-equity-final": {
