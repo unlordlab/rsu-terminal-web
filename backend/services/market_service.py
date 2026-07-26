@@ -782,7 +782,15 @@ def get_reddit_pulse():
                     ticker_mentions[t] = ticker_mentions.get(t, 0) + weight
 
     if not ticker_mentions:
-        return _reddit_fallback()
+        fallback = _reddit_fallback()
+        # Cachear también el fallo (TTL más corto que el éxito, ver
+        # TTL["reddit_fail"] en cache.py) -- sin esto, cada petición durante
+        # una caída de Reddit/StockTwits relanzaba la cadena completa desde
+        # cero (OAuth + StockTwits + fallback de navegador headless, ~4-5s)
+        # para CADA usuario que abriera Market, sin ninguna caché compartida
+        # de "esto está fallando ahora mismo".
+        cache.set("market:reddit", fallback, TTL["reddit_fail"])
+        return fallback
 
     top          = [t for t, _ in sorted(ticker_mentions.items(), key=lambda x: -x[1])[:15]]
     max_mentions = max(ticker_mentions.values())

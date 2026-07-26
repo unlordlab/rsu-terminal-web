@@ -159,6 +159,12 @@ TTL = {
     "vix":         300,   # 5 min (antes 120s) — mismo razonamiento
     "spreads":     3600,  # 1 hora — credit spreads FRED
     "reddit":      300,   # 5 min  — reddit pulse
+    "reddit_fail": 120,   # 2 min  — negative cache: evita relanzar la cadena
+                           # completa (OAuth Reddit + StockTwits + fallback de
+                           # navegador headless, ~4-5s) en cada petición mientras
+                           # la fuente está caída. Más corto que "reddit" para
+                           # reintentar razonablemente pronto en cuanto se
+                           # recupere. Ver sesión 22/07/2026.
     "briefing":    3600,  # 1 hora — nightly briefing
     "calendar":    1800,  # 30 min — calendario económico
     "earnings":    1800,  # 30 min — earnings calendar
