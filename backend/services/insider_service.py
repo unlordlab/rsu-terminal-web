@@ -17,6 +17,32 @@ HEADERS     = {
     "Host":            "efts.sec.gov",
 }
 
+# ── Ritmo de peticiones a SEC EDGAR ──────────────────────────────────────────
+#
+# SEC EDGAR bloquea (429) por encima de ~10 peticiones/segundo por IP (fair
+# access policy publicada). _ingest_cycle() dispara hasta 100 filings x 2
+# peticiones cada uno vía ThreadPoolExecutor(10) -- sin ningún control de
+# ritmo, los workers concurrentes superan de largo ese límite en ráfaga, y el
+# bloqueo de SEC persiste más allá de la propia ráfaga (el siguiente ciclo,
+# 20 min después, ya empieza fallando en la primera petición). Ver incidente
+# 26/07/2026. _sec_get() es el único punto por el que pasan todas las
+# peticiones de este módulo a sec.gov/efts.sec.gov, con un lock global que
+# las espacia -- así el límite se respeta de verdad sin importar cuántos
+# workers concurrentes (o llamadas de usuarios distintos) lo usen a la vez.
+import threading
+_sec_rate_lock = threading.Lock()
+_sec_last_call = [0.0]
+_SEC_MIN_INTERVAL = 0.15  # ~6-7 req/s, con margen bajo el límite oficial
+
+
+def _sec_get(url, **kwargs):
+    with _sec_rate_lock:
+        elapsed = time.monotonic() - _sec_last_call[0]
+        if elapsed < _SEC_MIN_INTERVAL:
+            time.sleep(_SEC_MIN_INTERVAL - elapsed)
+        _sec_last_call[0] = time.monotonic()
+    return requests.get(url, **kwargs)
+
 # ── PERSISTENCIA ──────────────────────────────────────────────────────────────
 #
 # El feed de EDGAR ("getcurrent") es una foto de "lo que se está presentando
@@ -197,7 +223,7 @@ def _looks_like_entity(name: str) -> bool:
 def _parse_form4(filing_url: str) -> dict:
     """Parsea un Form 4 de SEC EDGAR"""
     try:
-        r = requests.get(filing_url, headers={"User-Agent": "RSU Terminal contact@rsu-terminal.com"}, timeout=10)
+        r = _sec_get(filing_url, headers={"User-Agent": "RSU Terminal contact@rsu-terminal.com"}, timeout=10)
         if r.status_code != 200: return {}
         root = ET.fromstring(r.content)
 
@@ -287,11 +313,16 @@ def _ingest_cycle(max_filings: int = 100) -> dict:
     /api/v1/insider/feed (campo last_ingest_log) sin tener que mirar logs."""
     print("[InsiderIngest] Iniciando ciclo de ingesta...")
     try:
-        r = requests.get(
-            "https://www.sec.gov/cgi-bin/browse-edgar?action=getcurrent&type=4&dateb=&owner=include&count=100&search_text=&output=atom",
-            headers={"User-Agent": "RSU Terminal contact@rsu-terminal.com"},
-            timeout=15,
-        )
+        atom_url = "https://www.sec.gov/cgi-bin/browse-edgar?action=getcurrent&type=4&dateb=&owner=include&count=100&search_text=&output=atom"
+        r = _sec_get(atom_url, headers={"User-Agent": "RSU Terminal contact@rsu-terminal.com"}, timeout=15)
+        if r.status_code == 429:
+            # Un solo reintento respetando Retry-After (o 60s por defecto) --
+            # si SEC sigue bloqueando tras esperar, se registra el fallo y se
+            # deja para el próximo ciclo (20 min) en vez de insistir más.
+            wait_s = min(int(r.headers.get("Retry-After", 60) or 60), 120)
+            print(f"[InsiderIngest] 429 en el feed atom -- reintentando en {wait_s}s")
+            time.sleep(wait_s)
+            r = _sec_get(atom_url, headers={"User-Agent": "RSU Terminal contact@rsu-terminal.com"}, timeout=15)
         print(f"[InsiderIngest] GET getcurrent atom feed -> status {r.status_code}, {len(r.content)} bytes")
         if r.status_code != 200:
             msg = f"SEC EDGAR error {r.status_code}: {r.text[:200]}"
@@ -316,7 +347,7 @@ def _ingest_cycle(max_filings: int = 100) -> dict:
 
         def parse_filing(f):
             try:
-                r2 = requests.get(f["url"], headers={"User-Agent": "RSU Terminal contact@rsu-terminal.com"}, timeout=8)
+                r2 = _sec_get(f["url"], headers={"User-Agent": "RSU Terminal contact@rsu-terminal.com"}, timeout=8)
                 if r2.status_code != 200: return []
 
                 import re
@@ -398,15 +429,30 @@ def _ingest_cycle(max_filings: int = 100) -> dict:
         return {"ok": False, "error": msg, "new": 0}
 
 
+INGEST_RETRY_COOLDOWN_S = 300  # 5 min
+
 def get_insider_feed() -> dict:
     """Sirve el feed desde el histórico acumulado en SQLite (ver _ingest_cycle
     e insider_ingest_loop en routers/ws.py). Si la base está vacía — típico
     justo tras el primer arranque, antes de que corra el primer ciclo del
     bucle en segundo plano — hace una pasada de ingesta síncrona para no
-    dejar la sección vacía en el primer vistazo."""
+    dejar la sección vacía en el primer vistazo.
+
+    Cooldown: sin esto, cada petición concurrente mientras la base sigue
+    vacía (varios usuarios a la vez, o get_confluence_tickers() desde
+    Options Flow) dispararía su propio ciclo completo contra SEC -- si SEC
+    ya está devolviendo 429, eso solo empeora el bloqueo. Si el último
+    intento (con éxito o no) fue hace menos de INGEST_RETRY_COOLDOWN_S, no
+    se reintenta."""
     info = _last_ingest_info()
     if not info["total_stored"]:
-        _ingest_cycle()
+        last_log = _last_ingest_log()
+        recently_tried = (
+            last_log and last_log.get("ran_at") and
+            (datetime.now() - datetime.fromisoformat(last_log["ran_at"])).total_seconds() < INGEST_RETRY_COOLDOWN_S
+        )
+        if not recently_tried:
+            _ingest_cycle()
 
     rows = _read_transactions(FEED_WINDOW_DAYS)
 
@@ -454,14 +500,14 @@ def get_insider_ticker(ticker: str) -> dict:
 
     try:
         # Buscar CIK por ticker
-        r = requests.get(
+        r = _sec_get(
             f"https://efts.sec.gov/LATEST/search-index?q=%22{ticker}%22&forms=4&dateRange=custom&startdt={(datetime.now()-timedelta(days=180)).strftime('%Y-%m-%d')}",
             headers={"User-Agent": "RSU Terminal contact@rsu-terminal.com"},
             timeout=10,
         )
 
         # Alternativa: usar EDGAR company search
-        r2 = requests.get(
+        r2 = _sec_get(
             "https://www.sec.gov/cgi-bin/browse-edgar",
             params={
                 "company":   "",
@@ -495,7 +541,7 @@ def get_insider_ticker(ticker: str) -> dict:
             if not url: return None
 
             try:
-                r3 = requests.get(url, headers={"User-Agent": "RSU Terminal contact@rsu-terminal.com"}, timeout=8)
+                r3 = _sec_get(url, headers={"User-Agent": "RSU Terminal contact@rsu-terminal.com"}, timeout=8)
                 if r3.status_code != 200: return None
                 xml_matches = re.findall(r'href="(/Archives/edgar/data/[^"]+\.xml)"', r3.text)
                 xml_url = None
