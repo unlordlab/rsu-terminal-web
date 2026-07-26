@@ -1,5 +1,6 @@
 import time
 import threading
+import hashlib
 from collections import defaultdict
 from fastapi import Request, HTTPException
 
@@ -30,7 +31,15 @@ HEAVY_ENDPOINTS = {
 }
 
 def _get_key(request: Request) -> str:
-    token = request.headers.get("Authorization", "")[:20]
+    # Hash del token COMPLETO, no los primeros 20 chars -- "Bearer eyJhbGciOiJI"
+    # (la cabecera JWT en base64) es idéntico para cualquier usuario con el
+    # mismo algoritmo, así que truncar ahí no aportaba nada: el límite era
+    # efectivamente por IP para toda la terminal, no por usuario (dos
+    # personas en la misma oficina, o el mismo usuario en varios
+    # dispositivos, compartían la misma cuota). El hash del token entero sí
+    # distingue una cuenta de otra.
+    auth = request.headers.get("Authorization", "")
+    token = hashlib.sha256(auth.encode()).hexdigest()[:16] if auth else ""
     ip    = request.client.host if request.client else "unknown"
     return f"{ip}:{token}"
 
