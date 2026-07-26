@@ -11,7 +11,7 @@ nada de este fichero.
 """
 import sqlite3
 import os
-from datetime import datetime, timezone, time as dt_time
+from datetime import datetime, timezone, timedelta, time as dt_time
 from zoneinfo import ZoneInfo
 
 DB_PATH = os.path.join(os.path.dirname(__file__), '..', 'users.db')
@@ -74,6 +74,15 @@ def init_db():
     # auditoría Watchlist 21/07/2026.
     try:
         conn.execute("ALTER TABLE alerts ADD COLUMN last_side TEXT")
+    except sqlite3.OperationalError:
+        pass  # la columna ya existe
+    # recurring: si al dispararse debe volver a 'active' tras un cooldown en
+    # vez de quedarse consumida para siempre. Por defecto activo solo para
+    # ema_touch (ver create_alert) -- el caso de uso natural es recurrente
+    # ("avísame cada vez que vuelva a su EMA50"), a diferencia de price/rvol
+    # con objetivo único. Ver hallazgo #7, auditoría Watchlist 21/07/2026.
+    try:
+        conn.execute("ALTER TABLE alerts ADD COLUMN recurring INTEGER NOT NULL DEFAULT 0")
     except sqlite3.OperationalError:
         pass  # la columna ya existe
     conn.commit()
@@ -164,6 +173,7 @@ def create_alert(user_id: int, ticker: str, condition: str, target_price: float,
             return {"ok": False, "error": f"Periodo de EMA inválido (usa uno de {EMA_PERIODS})"}
         condition = "touch"
         target_price = float(ema_period)  # sin uso numérico real aquí — el periodo real vive en ema_period; se replica por compatibilidad con la columna NOT NULL
+        recurring = 1
     else:
         if condition not in VALID_CONDITIONS:
             return {"ok": False, "error": "Condición inválida (usa 'above' o 'below')"}
@@ -174,6 +184,7 @@ def create_alert(user_id: int, ticker: str, condition: str, target_price: float,
         if target_price <= 0:
             return {"ok": False, "error": "Valor objetivo debe ser mayor que 0"}
         ema_period = None
+        recurring = 0
 
     conn = _conn()
     try:
@@ -183,9 +194,9 @@ def create_alert(user_id: int, ticker: str, condition: str, target_price: float,
         if count >= MAX_ACTIVE_ALERTS:
             return {"ok": False, "error": f"Límite de {MAX_ACTIVE_ALERTS} alertas activas alcanzado"}
         cur = conn.execute(
-            "INSERT INTO alerts (user_id, ticker, condition, target_price, status, created_at, seen, metric, ema_period) "
-            "VALUES (?, ?, ?, ?, 'active', ?, 1, ?, ?)",
-            (user_id, ticker, condition, target_price, datetime.now(timezone.utc).isoformat(), metric, ema_period)
+            "INSERT INTO alerts (user_id, ticker, condition, target_price, status, created_at, seen, metric, ema_period, recurring) "
+            "VALUES (?, ?, ?, ?, 'active', ?, 1, ?, ?, ?)",
+            (user_id, ticker, condition, target_price, datetime.now(timezone.utc).isoformat(), metric, ema_period, recurring)
         )
         conn.commit()
         return {"ok": True, "id": cur.lastrowid}
@@ -341,7 +352,13 @@ _ema_cache: dict = {}
 
 def _get_ema_baseline(ticker: str, period: int):
     key = (ticker, period)
-    today = datetime.now(timezone.utc).strftime('%Y-%m-%d')
+    # Fecha de sesión NYSE (ET), no UTC -- entre las 00:00 y ~06:00 UTC (que
+    # son las 19:00-01:00 ET, con la sesión ya cerrada) el "hoy" UTC ya es el
+    # día siguiente al día de mercado, así que la vela del cierre real no se
+    # reconocía como "de hoy" y se incluía en la base -- el precio en vivo la
+    # volvía a sumar por encima, contando el cierre de la sesión dos veces en
+    # la EMA. Ver hallazgo #6, auditoría Watchlist 21/07/2026.
+    today = datetime.now(ZoneInfo("America/New_York")).strftime('%Y-%m-%d')
     cached = _ema_cache.get(key)
     if cached and cached["date"] == today:
         return cached["ema"]
@@ -377,7 +394,42 @@ def _get_live_ema(ticker: str, period: int, live_price: float):
     return live_price * k + baseline * (1 - k)
 
 
+def _purge_stale_caches():
+    """Purga entradas caducadas de _rvol_cache/_ema_cache -- sin esto, ambos
+    diccionarios de módulo crecen sin límite durante toda la vida del
+    proceso (las entradas caducan por tiempo pero nunca se borran). Se llama
+    una vez por ciclo desde check_all_active_alerts() (cada 90s), no en cada
+    fetch individual, para no recorrer el diccionario entero por ticker.
+    Ver hallazgo #5, auditoría Watchlist 21/07/2026."""
+    import time
+    now = time.time()
+    for k in [k for k, v in _rvol_cache.items() if (now - v["updated"]) >= _RVOL_CACHE_TTL]:
+        del _rvol_cache[k]
+    today = datetime.now(ZoneInfo("America/New_York")).strftime('%Y-%m-%d')
+    for k in [k for k, v in _ema_cache.items() if v["date"] != today]:
+        del _ema_cache[k]
+
+
 # ── COMPROBACIÓN DE ALERTAS (llamada desde el bucle en segundo plano) ────────
+
+RECURRING_COOLDOWN_HOURS = 24
+
+
+def _reactivate_recurring_alerts(conn):
+    """Alertas recurring=1 disparadas hace más de RECURRING_COOLDOWN_HOURS
+    vuelven a 'active' -- el caso natural es ema_touch ("avísame cada vez
+    que vuelva a su EMA50"), donde exigir recrearla a mano cada vez no tiene
+    sentido. last_side se resetea a NULL para que la siguiente pasada solo
+    "arme" el estado de nuevo (mismo criterio que una alerta recién creada),
+    sin disparar de inmediato comparando contra un last_side ya obsoleto.
+    Ver hallazgo #7, auditoría Watchlist 21/07/2026."""
+    cutoff = (datetime.now(timezone.utc) - timedelta(hours=RECURRING_COOLDOWN_HOURS)).isoformat()
+    conn.execute(
+        "UPDATE alerts SET status = 'active', last_side = NULL "
+        "WHERE recurring = 1 AND status = 'triggered' AND triggered_at IS NOT NULL AND triggered_at < ?",
+        (cutoff,)
+    )
+
 
 def check_all_active_alerts() -> list:
     """Revisa TODAS las alertas activas de TODOS los usuarios de una vez,
@@ -386,8 +438,12 @@ def check_all_active_alerts() -> list:
     para llamarse periódicamente desde un bucle en segundo plano (ver
     routers/ws.py, alerts_check_loop()) — mismo patrón que ya usáis para el
     broadcast de precios en tiempo real."""
+    _purge_stale_caches()
+
     conn = _conn()
     try:
+        _reactivate_recurring_alerts(conn)
+        conn.commit()
         rows = conn.execute("SELECT * FROM alerts WHERE status = 'active'").fetchall()
         active = [dict(r) for r in rows]
     finally:
