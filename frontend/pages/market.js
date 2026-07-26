@@ -995,9 +995,6 @@ async function loadCrypto(el) {
             rsData = { ok: false, error: 'No se pudo contactar con /crypto-rs: ' + rsErr.message };
         }
 
-        const fgColor = fgData.value >= 75 ? '#00ffad' : fgData.value >= 55 ? '#7fd858' : fgData.value >= 45 ? '#ff9800' : fgData.value >= 25 ? '#ff6b35' : '#f23645';
-        const fgChangeColor = fgData.change >= 0 ? '#00ffad' : '#f23645';
-
         const rows = cryptoData.data.map(c => {
             if (!c.ok) return errorRow(c.ticker, c.name);
             const up         = c.pct >= 0;
@@ -1013,16 +1010,26 @@ async function loadCrypto(el) {
                 color);
         }).join('');
 
-        const fgBlock = '<div style="display:flex;align-items:center;gap:12px;padding:10px 14px;border-bottom:1px solid var(--color-border);">'
-            + '<div style="width:48px;height:48px;border-radius:50%;border:3px solid ' + fgColor + ';display:flex;align-items:center;justify-content:center;flex-shrink:0;">'
-            + '<span style="color:' + fgColor + ';font-size:15px;font-weight:700;">' + fgData.value + '</span>'
-            + '</div>'
-            + '<div>'
-            + '<div style="color:' + fgColor + ';font-size:12px;font-weight:600;">' + fgData.classification + '</div>'
-            + '<div style="color:var(--color-muted);font-size:10px;">Fear &amp; Greed Cripto ' + tt('crypto-fear-greed')
-            + ' · <span style="color:' + fgChangeColor + ';">' + (fgData.change >= 0 ? '+' : '') + fgData.change + ' vs ayer</span></div>'
-            + '</div>'
-            + '</div>';
+        // fgData.ok=false (alternative.me caído) devuelve un fallback con la
+        // MISMA forma que uno real (value:50, classification:"Neutral") --
+        // sin este chequeo se pintaba indistinguible de un dato real. Ver
+        // auditoría Market 21/07/2026, hallazgo #4.
+        const fgBlock = !fgData.ok
+            ? '<div style="padding:10px 14px;border-bottom:1px solid var(--color-border);color:var(--color-muted);font-size:11px;">Fear &amp; Greed Cripto ' + tt('crypto-fear-greed') + ': N/D (fuente no disponible)</div>'
+            : (() => {
+                const fgColor = fgData.value >= 75 ? '#00ffad' : fgData.value >= 55 ? '#7fd858' : fgData.value >= 45 ? '#ff9800' : fgData.value >= 25 ? '#ff6b35' : '#f23645';
+                const fgChangeColor = fgData.change >= 0 ? '#00ffad' : '#f23645';
+                return '<div style="display:flex;align-items:center;gap:12px;padding:10px 14px;border-bottom:1px solid var(--color-border);">'
+                    + '<div style="width:48px;height:48px;border-radius:50%;border:3px solid ' + fgColor + ';display:flex;align-items:center;justify-content:center;flex-shrink:0;">'
+                    + '<span style="color:' + fgColor + ';font-size:15px;font-weight:700;">' + fgData.value + '</span>'
+                    + '</div>'
+                    + '<div>'
+                    + '<div style="color:' + fgColor + ';font-size:12px;font-weight:600;">' + fgData.classification + '</div>'
+                    + '<div style="color:var(--color-muted);font-size:10px;">Fear &amp; Greed Cripto ' + tt('crypto-fear-greed')
+                    + ' · <span style="color:' + fgChangeColor + ';">' + (fgData.change >= 0 ? '+' : '') + fgData.change + ' vs ayer</span></div>'
+                    + '</div>'
+                    + '</div>';
+            })();
 
         const rsBlock = (() => {
             if (!rsData || !rsData.ok) {
