@@ -25,13 +25,25 @@ Uso en cada función (sustituye al `with ThreadPoolExecutor(...) as ex:`):
 
 No usar `with yf_executor as ex:` — el pool es compartido y NO debe
 cerrarse al terminar una función, o rompería a todas las demás.
+
+26/07/2026 — hasta esta fecha solo 2 de ~10 módulos usaban este pool
+(market_service.py, cartera_service.py); el resto creaba su propio
+ThreadPoolExecutor privado (CANSLIM 15, Options Flow 15, Research 10,
+Earnings 8, RSU Algoritmo 5-6, Newsfeed 6, Watchlist 4, BTC Stratum 2),
+sumando ~76-92 conexiones simultáneas TEÓRICAS si varios coincidían en el
+tiempo -- muy por encima del techo que este fichero existe para imponer.
+Migrados todos al pool compartido. De paso, el proxy residencial que
+motivó el límite de 4 ya no está en uso (yfinance_proxy_url vacío por
+defecto, dado de baja por coste) -- las peticiones salen directas desde la
+IP del VPS, sin el colchón de IP residencial que tenía el proxy. Subido a
+6 como punto de partida conservador (no hay límite publicado de Yahoo como
+el de SEC EDGAR, así que es una estimación a monitorizar, no un número
+verificado) -- ajustar si en producción nunca se satura, o bajarlo si
+aparecen 429/403 de Yahoo.
 """
 from concurrent.futures import ThreadPoolExecutor
 
-# Límite global de conexiones simultáneas a yfinance/proxy en toda la app.
-# Si en el futuro se sube el plan del proxy (o se migra a EODHD, que no
-# tiene este problema de ráfaga), este es el único número que hay que tocar.
-YF_MAX_WORKERS = 4
+YF_MAX_WORKERS = 6
 
 yf_executor = ThreadPoolExecutor(
     max_workers=YF_MAX_WORKERS,

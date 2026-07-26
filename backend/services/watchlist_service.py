@@ -313,17 +313,16 @@ def _fetch_rvol_single(ticker: str):
 
 def fetch_live_rvol(tickers: list) -> dict:
     """{ticker: rvol_float}. Tickers sin dato válido no aparecen en el dict."""
-    from concurrent.futures import ThreadPoolExecutor
+    from services.yf_pool import yf_executor
     result = {}
-    with ThreadPoolExecutor(max_workers=4) as ex:
-        futures = {ex.submit(_fetch_rvol_single, t): t for t in tickers}
-        for fut, t in futures.items():
-            try:
-                r = fut.result(timeout=15)
-                if r is not None:
-                    result[t] = r
-            except Exception:
-                pass
+    futures = {yf_executor.submit(_fetch_rvol_single, t): t for t in tickers}
+    for fut, t in futures.items():
+        try:
+            r = fut.result(timeout=15)
+            if r is not None:
+                result[t] = r
+        except Exception:
+            pass
     return result
 
 

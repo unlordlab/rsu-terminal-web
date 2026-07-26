@@ -2,7 +2,6 @@ import yfinance as yf
 import requests
 from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
-from concurrent.futures import ThreadPoolExecutor
 import os
 import sys
 from dotenv import load_dotenv
@@ -262,8 +261,8 @@ def get_earnings_calendar() -> dict:
     # límite se quedó sin subir de paso: las filas 51-100 se mostraban sin
     # precio ("—") porque nunca pasaban por enrich(). Ver auditoría Market
     # 21/07/2026, hallazgo #16.
-    with ThreadPoolExecutor(max_workers=8) as ex:
-        items[:100] = list(ex.map(enrich, items[:100]))
+    from services.yf_pool import yf_executor
+    items[:100] = list(yf_executor.map(enrich, items[:100]))
 
     def fmt_time(t):
         t = (t or '').lower()

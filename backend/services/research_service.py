@@ -1817,8 +1817,13 @@ def get_research(ticker: str) -> dict:
     if ticker.endswith('-USD'):
         return _get_research_crypto(ticker)
 
+    from services.yf_pool import yf_executor
     with ThreadPoolExecutor(max_workers=10) as ex:
-        f_yf      = ex.submit(_get_yfinance, ticker)
+        # f_yf va al pool COMPARTIDO de yfinance (services/yf_pool.py), no al
+        # pool local de este endpoint -- las otras 9 llamadas de aquí abajo
+        # son Finnhub/Alpha Vantage/SEC, con sus propios límites, sin
+        # relación con el riesgo de bloqueo de Yahoo.
+        f_yf      = yf_executor.submit(_get_yfinance, ticker)
         f_fh      = ex.submit(_get_finnhub, ticker)
         f_av      = ex.submit(_get_alpha_vantage, ticker)
         f_analyst_chg = ex.submit(_get_finnhub_analyst_changes, ticker)

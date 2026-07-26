@@ -437,11 +437,11 @@ def _get_prices() -> list:
             return {"name": name, "price": round(last, 4), "chg": round(chg, 2)}
         except Exception:
             return None
-    with ThreadPoolExecutor(max_workers=6) as ex:
-        futures = {ex.submit(_fetch, name, ticker): name for name, ticker in PRICE_TICKERS.items()}
-        for f in as_completed(futures):
-            r = f.result()
-            if r: result.append(r)
+    from services.yf_pool import yf_executor
+    futures = {yf_executor.submit(_fetch, name, ticker): name for name, ticker in PRICE_TICKERS.items()}
+    for f in as_completed(futures):
+        r = f.result()
+        if r: result.append(r)
     result.sort(key=lambda x: list(PRICE_TICKERS.keys()).index(x['name']))
     return result
 

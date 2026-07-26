@@ -336,13 +336,13 @@ def _get_halving_cycle() -> dict:
 
 def _get_macro_data() -> dict:
     try:
-        with ThreadPoolExecutor(max_workers=2) as ex:
-            f_dxy = ex.submit(lambda: yf.download(
-                "DX-Y.NYB", period="1y", interval="1d", progress=False, auto_adjust=True))
-            f_tlt = ex.submit(lambda: yf.download(
-                "TLT", period="1y", interval="1d", progress=False, auto_adjust=True))
-            dxy_df = _flatten(f_dxy.result()).dropna()
-            tlt_df = _flatten(f_tlt.result()).dropna()
+        from services.yf_pool import yf_executor
+        f_dxy = yf_executor.submit(lambda: yf.download(
+            "DX-Y.NYB", period="1y", interval="1d", progress=False, auto_adjust=True))
+        f_tlt = yf_executor.submit(lambda: yf.download(
+            "TLT", period="1y", interval="1d", progress=False, auto_adjust=True))
+        dxy_df = _flatten(f_dxy.result()).dropna()
+        tlt_df = _flatten(f_tlt.result()).dropna()
 
         dxy_current = float(dxy_df["Close"].iloc[-1])
         dxy_ma50    = float(dxy_df["Close"].rolling(50).mean().iloc[-1])

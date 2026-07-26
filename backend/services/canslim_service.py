@@ -10,7 +10,7 @@ import numpy as np
 import yfinance as yf
 import math
 from datetime import datetime, timedelta
-from concurrent.futures import ThreadPoolExecutor, as_completed
+from concurrent.futures import as_completed
 import warnings
 import sys, os
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "..", "shared"))
@@ -694,18 +694,20 @@ def scan_canslim(min_score: int = 40, max_results: int = 50) -> dict:
     """Escanea el S&P 500 completo con RS real calculado contra el universo."""
     tickers = list(dict.fromkeys(SP500_TICKERS))   # sin duplicados (ya vienen únicos de shared/sp500_universe.py)
 
-    # Paso 1: datos básicos en paralelo
+    # Paso 1: datos básicos en paralelo -- pool compartido de yfinance (ver
+    # services/yf_pool.py), no uno propio: este scan puede coincidir en el
+    # tiempo con otros módulos que también golpean yfinance.
+    from services.yf_pool import yf_executor
     raw_results = []
-    with ThreadPoolExecutor(max_workers=15) as ex:
-        futures = {ex.submit(_scan_single, t): t for t in tickers}
-        # as_completed() en vez de iterar el dict (orden de envío) -- así se
-        # recogen los resultados según van terminando, no bloqueado esperando
-        # al primer ticker enviado si resulta ser uno lento mientras otros
-        # posteriores ya han acabado.
-        for future in as_completed(futures):
-            result = future.result()
-            if result:
-                raw_results.append(result)
+    futures = {yf_executor.submit(_scan_single, t): t for t in tickers}
+    # as_completed() en vez de iterar el dict (orden de envío) -- así se
+    # recogen los resultados según van terminando, no bloqueado esperando
+    # al primer ticker enviado si resulta ser uno lento mientras otros
+    # posteriores ya han acabado.
+    for future in as_completed(futures):
+        result = future.result()
+        if result:
+            raw_results.append(result)
 
     # Paso 2: RS real = percentil dentro del universo escaneado
     perfs = [r['perf_12m'] for r in raw_results]

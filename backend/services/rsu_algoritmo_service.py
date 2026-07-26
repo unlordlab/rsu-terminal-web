@@ -364,9 +364,9 @@ def _descargar_sectores():
             return etf, yf.Ticker(etf).history(period="max")
         except Exception:
             return etf, pd.DataFrame()
-    with ThreadPoolExecutor(max_workers=5) as ex:
-        for etf, hist in ex.map(_fetch, etfs):
-            result[etf] = hist
+    from services.yf_pool import yf_executor
+    for etf, hist in yf_executor.map(_fetch, etfs):
+        result[etf] = hist
     return result
 
 def _resample_semanal(df):
@@ -848,10 +848,14 @@ def get_rsu_algoritmo():
         # de factores (RSI, VIX, McClellan, RVOL) siguen operando sobre los
         # últimos meses vía .tail() dentro de cada función — el histórico extra
         # solo es relevante para el cálculo semanal.
-        with ThreadPoolExecutor(max_workers=6) as ex:
-            f_spy     = ex.submit(lambda: yf.Ticker("SPY").history(period="5y"))
-            f_vix     = ex.submit(lambda: yf.Ticker("^VIX").history(period="3mo"))
-            f_vix3m   = ex.submit(lambda: yf.Ticker("^VIX3M").history(period="5d"))
+        # SPY/VIX/VIX3M (y, dentro de _descargar_sectores, los 9 ETFs
+        # sectoriales) van al pool COMPARTIDO de yfinance -- f_credit/
+        # f_breadth se quedan en el pool local, no son yfinance (FRED / Gist).
+        from services.yf_pool import yf_executor
+        with ThreadPoolExecutor(max_workers=3) as ex:
+            f_spy     = yf_executor.submit(lambda: yf.Ticker("SPY").history(period="5y"))
+            f_vix     = yf_executor.submit(lambda: yf.Ticker("^VIX").history(period="3mo"))
+            f_vix3m   = yf_executor.submit(lambda: yf.Ticker("^VIX3M").history(period="5d"))
             f_sect    = ex.submit(_descargar_sectores)
             f_credit  = ex.submit(_fetch_hy_spread_cached)
             f_breadth = ex.submit(_fetch_breadth_real)
@@ -1002,10 +1006,14 @@ def get_rsu_algoritmo_backtest(years: int = 10) -> dict:
         # semanal tenga histórico suficiente desde el primer día evaluado.
         BUFFER_YEARS = 5
         period_str = f"{years + BUFFER_YEARS}y"
-        with ThreadPoolExecutor(max_workers=5) as ex:
-            f_spy      = ex.submit(lambda: yf.Ticker("SPY").history(period=period_str))
-            f_vix      = ex.submit(lambda: yf.Ticker("^VIX").history(period=period_str))
-            f_vix3m    = ex.submit(lambda: yf.Ticker("^VIX3M").history(period=period_str))
+        # Mismo criterio que en get_rsu_algoritmo(): SPY/VIX/VIX3M (y los ETFs
+        # sectoriales, dentro de _descargar_sectores) van al pool compartido
+        # de yfinance; f_credit se queda local (FRED, no yfinance).
+        from services.yf_pool import yf_executor
+        with ThreadPoolExecutor(max_workers=2) as ex:
+            f_spy      = yf_executor.submit(lambda: yf.Ticker("SPY").history(period=period_str))
+            f_vix      = yf_executor.submit(lambda: yf.Ticker("^VIX").history(period=period_str))
+            f_vix3m    = yf_executor.submit(lambda: yf.Ticker("^VIX3M").history(period=period_str))
             f_credit   = ex.submit(_fetch_hy_spread_cached)
             f_sectores = ex.submit(_descargar_sectores)
             df_spy_full   = f_spy.result()

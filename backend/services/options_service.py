@@ -8,7 +8,6 @@ import sys
 import time
 import math
 from datetime import datetime, timedelta
-from concurrent.futures import ThreadPoolExecutor
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "..", "shared"))
 from time_utils import get_timestamp  # noqa: E402
 from sp500_universe import SP500_SECTOR_MAP  # noqa: E402
@@ -1073,12 +1072,12 @@ def get_options_flow(min_premium: float = 100_000, min_score: int = 4, tickers: 
     results = []
     scan_ts = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
 
-    with ThreadPoolExecutor(max_workers=15) as ex:
-        futures = {ex.submit(_process_chain, t, min_premium, min_score): t for t in target}
-        for f in futures:
-            r = f.result()
-            if r.get('ok') and r['total_prem'] > 0:
-                results.append(r)
+    from services.yf_pool import yf_executor
+    futures = {yf_executor.submit(_process_chain, t, min_premium, min_score): t for t in target}
+    for f in futures:
+        r = f.result()
+        if r.get('ok') and r['total_prem'] > 0:
+            results.append(r)
 
     all_calls_bought, all_puts_bought = [], []
     all_calls_sold,   all_puts_sold   = [], []
