@@ -767,13 +767,27 @@ def _compute_rsu_score(yf_data: dict, piotroski: dict = None, sector_comparison:
     # (predictivo -- un analista puede mantener "comprar" durante meses
     # mientras baja silenciosamente su estimación de beneficio). Ver
     # hallazgo 4.6 del roadmap, sesión 24/07/2026.
+    #
+    # buy_pct (recomendaciones) y upside (precio objetivo) SÍ salen del
+    # mismo pool de analistas de venta -- un analista optimista tiende a
+    # recomendar "Comprar" Y poner un precio objetivo alto a la vez, no son
+    # dos opiniones independientes sino la misma opinión medida dos veces
+    # con distinta unidad. Antes de este fix contaban como 2 votos
+    # separados dentro del promedio de la categoría, pesando el consenso de
+    # analistas el doble frente a eps_revisions (que sí es una señal
+    # distinta, ver arriba). Se fusionan en un único sub-componente
+    # ("consenso de analistas") antes de entrar al promedio general. Ver
+    # roadmap 4.5, sesión 26/07/2026.
     sent_components = []
+    analyst_subcomponents = []
     if recs and recs['total'] > 0:
         buy_pct = (recs['strong_buy'] + recs['buy']) / recs['total'] * 100
-        sent_components.append(20 if buy_pct >= 75 else 15 if buy_pct >= 60 else 10 if buy_pct >= 40 else 0)
+        analyst_subcomponents.append(20 if buy_pct >= 75 else 15 if buy_pct >= 60 else 10 if buy_pct >= 40 else 0)
     upside = target.get('upside')
     if upside is not None:
-        sent_components.append(20 if upside > 25 else 15 if upside > 15 else 10 if upside > 5 else 0)
+        analyst_subcomponents.append(20 if upside > 25 else 15 if upside > 15 else 10 if upside > 5 else 0)
+    if analyst_subcomponents:
+        sent_components.append(sum(analyst_subcomponents) / len(analyst_subcomponents))
     eps_rev = yf_data.get('eps_revisions')
     if eps_rev is not None:
         net = eps_rev['net_pct']

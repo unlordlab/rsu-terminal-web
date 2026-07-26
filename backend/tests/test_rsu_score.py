@@ -95,6 +95,29 @@ def test_rsu_score_datos_parciales_se_reescala():
     assert len(r["breakdown"]) == 2, "Solo deberían aparecer las 2 categorías con datos reales (Fundamental y Técnica)"
 
 
+def test_rsu_score_sentimiento_no_duplica_el_consenso_de_analistas():
+    """buy_pct (recomendaciones) y upside (precio objetivo) salen del mismo
+    pool de analistas -- antes del fix (roadmap 4.5, 26/07/2026) contaban
+    como 2 votos separados en el promedio de "Sentimiento de Mercado",
+    pesando el consenso de analistas el doble frente a eps_revisions (señal
+    genuinamente distinta). Caso con fuerte discrepancia: analistas muy
+    optimistas (100% buy) pero precio objetivo ya por debajo del actual
+    (upside negativo) y estimaciones de EPS revisándose a la baja con
+    fuerza. Antes del fix: (20+0+0)/3 = 6.67 -> round 7. Con el fix
+    (consenso fusionado en 1 voto = 10, promediado con eps_revisions = 0):
+    (10+0)/2 = 5 -> round 5."""
+    yf_data = {
+        "profitability": {},
+        "recommendations": {"strong_buy": 8, "buy": 2, "hold": 0, "sell": 0, "total": 10},
+        "target_data": {"upside": -20, "mean": 80},
+        "metrics": {},
+        "eps_revisions": {"net_pct": -60, "up_30d": 1, "down_30d": 9},
+    }
+    r = _compute_rsu_score(yf_data, None, None, None, None)
+    sentimiento = next(b for b in r["breakdown"] if b["label"] == "Sentimiento de Mercado")
+    assert sentimiento["pts"] == 5, f"Se esperaba pts=5 (consenso fusionado), salió {sentimiento['pts']}"
+
+
 def test_rsu_score_sin_ningun_dato_no_revienta():
     """Caso extremo: absolutamente ningún dato disponible -> no debe
     lanzar una excepción, debe devolver score=0 de forma controlada."""
