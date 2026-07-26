@@ -36,16 +36,20 @@ else:
     print(f"[Startup] Sin proxy configurado para yfinance (yfinance_proxy_url vacío)")
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    task1 = asyncio.create_task(ws.broadcast_loop())
-    task2 = asyncio.create_task(ws.broadcast_cartera_loop())
-    task3 = asyncio.create_task(ws.alerts_check_loop())
-    task4 = asyncio.create_task(ws.insider_ingest_loop())
-    task5 = asyncio.create_task(ws.market_cache_warm_loop())
-    task6 = asyncio.create_task(ws.algoritmo_check_loop())
-    task7 = asyncio.create_task(ws.algoritmo_resultados_loop())
-    task8 = asyncio.create_task(ws.cartera_check_loop())
-    task9 = asyncio.create_task(ws.telegram_link_poll_loop())
-    task10 = asyncio.create_task(ws.rsu_score_resultados_loop())
+    # Cada bucle va envuelto en ws.supervisar() -- si la Task muere por una
+    # excepción no capturada por su propio try/except interno (hoy se queda
+    # muerta para siempre, en silencio), se relanza sola tras 60s con un log
+    # explícito. Ver ws.py::supervisar().
+    task1 = asyncio.create_task(ws.supervisar("broadcast_loop", ws.broadcast_loop))
+    task2 = asyncio.create_task(ws.supervisar("broadcast_cartera_loop", ws.broadcast_cartera_loop))
+    task3 = asyncio.create_task(ws.supervisar("alerts_check_loop", ws.alerts_check_loop))
+    task4 = asyncio.create_task(ws.supervisar("insider_ingest_loop", ws.insider_ingest_loop))
+    task5 = asyncio.create_task(ws.supervisar("market_cache_warm_loop", ws.market_cache_warm_loop))
+    task6 = asyncio.create_task(ws.supervisar("algoritmo_check_loop", ws.algoritmo_check_loop))
+    task7 = asyncio.create_task(ws.supervisar("algoritmo_resultados_loop", ws.algoritmo_resultados_loop))
+    task8 = asyncio.create_task(ws.supervisar("cartera_check_loop", ws.cartera_check_loop))
+    task9 = asyncio.create_task(ws.supervisar("telegram_link_poll_loop", ws.telegram_link_poll_loop))
+    task10 = asyncio.create_task(ws.supervisar("rsu_score_resultados_loop", ws.rsu_score_resultados_loop))
     yield
     task1.cancel()
     task2.cancel()

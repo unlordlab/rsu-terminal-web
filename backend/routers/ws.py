@@ -245,6 +245,30 @@ async def websocket_cartera(websocket: WebSocket):
     except Exception:
         cartera_manager.disconnect(websocket)
 
+# ── SUPERVISOR ────────────────────────────────────────────────────────────────
+#
+# Las 10 tareas de fondo de main.py tienen la forma "while True: sleep;
+# try/except" -- eso protege DENTRO de cada vuelta, pero si algo revienta
+# FUERA de ese try (o dentro del propio manejo del error -- ya nos pasó en
+# esta sesión: un print() con una flecha "→" lanzó UnicodeEncodeError en la
+# consola de Windows, capturado solo porque ya estaba dentro de un try
+# ajeno), la Task de asyncio muere para siempre. Sin log, sin reinicio -- el
+# único síntoma es notar días después que algo dejó de funcionar (alertas
+# que no llegan, ingesta que no corre...). supervisar() envuelve cada bucle
+# para que, si el bucle entero muere, se relance solo tras un cooldown, con
+# un log explícito de cuándo y por qué. Ver auditoría de infraestructura,
+# hallazgo #7, 21/07/2026.
+async def supervisar(nombre: str, corrutina_factory, cooldown: int = 60):
+    while True:
+        try:
+            await corrutina_factory()
+        except asyncio.CancelledError:
+            raise  # shutdown real (task.cancel() en main.py) -- no es un fallo, no reintentar
+        except Exception as e:
+            print(f"[Supervisor] '{nombre}' murió: {type(e).__name__}: {e} -- reiniciando en {cooldown}s")
+            await asyncio.sleep(cooldown)
+
+
 # ── BACKGROUND LOOPS ──────────────────────────────────────────────────────────
 
 async def broadcast_loop():
@@ -254,8 +278,8 @@ async def broadcast_loop():
             try:
                 payload = await _build_payload()
                 await manager.broadcast(payload)
-            except Exception:
-                pass
+            except Exception as e:
+                print(f"[Broadcast] Error: {type(e).__name__}: {e}")
 
 
 async def broadcast_cartera_loop():
@@ -266,8 +290,8 @@ async def broadcast_cartera_loop():
                 loop   = asyncio.get_event_loop()
                 prices = await loop.run_in_executor(None, _get_cartera_prices)
                 await cartera_manager.broadcast({"type": "cartera_update", "prices": prices})
-            except Exception:
-                pass
+            except Exception as e:
+                print(f"[BroadcastCartera] Error: {type(e).__name__}: {e}")
 
 
 # Comprobación de alertas de precio (Watchlist). Cada 90s revisa TODAS las
