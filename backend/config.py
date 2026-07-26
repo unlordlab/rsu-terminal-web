@@ -59,6 +59,13 @@ class Settings(BaseSettings):
     # t.me/<user>?start=<code> de vinculación por usuario (Watchlist, ver
     # 25/07/2026). Dato no sensible, distinto del token.
     telegram_bot_username: str = ""
+    # chat_id PERSONAL del admin (mensaje directo, no el canal/grupo de
+    # telegram_chat_id) -- ese canal es comunitario (Algoritmo, Cartera,
+    # tesis, lo ve cualquier usuario suscrito), así que no es sitio para
+    # avisos privados como el feedback de Community (puede incluir quejas,
+    # contacto personal de usuarios, bugs delicados). Mismo bot de
+    # telegram_bot_token, chat_id distinto. Ver sesión 26/07/2026.
+    telegram_admin_chat_id: str = ""
     terminal_base_url: str = "http://178.104.148.117"  # ver conversacion 17/07/2026, sin dominio propio todavia
     # Reddit OAuth (grant_type=client_credentials, solo lectura de listados
     # públicos) -- necesario porque reddit.com/*.json bloquea con 403 desde la

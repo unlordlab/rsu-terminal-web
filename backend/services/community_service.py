@@ -11,12 +11,23 @@ de correo.
 """
 import sqlite3
 import os
+import re
 from datetime import datetime, timezone
 
 DB_PATH = os.path.join(os.path.dirname(__file__), '..', 'community.db')
 
 VALID_TYPES = ("bug", "sugerencia", "otro")
 MAX_MESSAGE_LEN = 3000
+
+_TYPE_EMOJI = {"bug": "🐛", "sugerencia": "💡", "otro": "💬"}
+
+# Validación simple, no RFC 5322 completo -- basta para atrapar erratas
+# obvias ("marc@gmial,com", "marc@" sin dominio...) sin rechazar direcciones
+# válidas raras. El campo se documenta como "Email opcional para que Marc
+# pueda responder" (routers/community.py) -- si alguien lo rellena con una
+# errata, hoy no hay forma de saberlo ni de responderle. Ver auditoría
+# Watchlist+Community, hallazgo #8, 21/07/2026.
+_EMAIL_RE = re.compile(r'^[^@\s]+@[^@\s]+\.[^@\s]+$')
 
 
 def _conn():
@@ -46,24 +57,46 @@ def init_db():
 def submit_feedback(user_id: int, user_email: str, tipo: str, mensaje: str, contacto: str = "") -> dict:
     tipo = (tipo or "").strip().lower()
     mensaje = (mensaje or "").strip()
+    contacto = (contacto or "").strip()
     if tipo not in VALID_TYPES:
         return {"ok": False, "error": "Tipo inválido (usa 'bug', 'sugerencia' u 'otro')"}
     if not mensaje:
         return {"ok": False, "error": "El mensaje no puede estar vacío"}
     if len(mensaje) > MAX_MESSAGE_LEN:
         mensaje = mensaje[:MAX_MESSAGE_LEN]
+    if contacto and not _EMAIL_RE.match(contacto):
+        return {"ok": False, "error": "El contacto no parece un email válido"}
 
     conn = _conn()
     try:
         cur = conn.execute(
             "INSERT INTO feedback (user_id, user_email, tipo, mensaje, contacto, created_at) "
             "VALUES (?, ?, ?, ?, ?, ?)",
-            (user_id, user_email, tipo, mensaje, (contacto or "").strip(), datetime.now(timezone.utc).isoformat())
+            (user_id, user_email, tipo, mensaje, contacto, datetime.now(timezone.utc).isoformat())
         )
         conn.commit()
-        return {"ok": True, "id": cur.lastrowid}
+        feedback_id = cur.lastrowid
     finally:
         conn.close()
+
+    # Aviso privado al admin -- NO al canal comunitario de telegram_chat_id
+    # (ese lo ve cualquier usuario suscrito a Algoritmo/Cartera/tesis; el
+    # feedback puede incluir quejas, contacto personal, bugs delicados).
+    # Un fallo aquí no debe romper la respuesta que ve el usuario -- mismo
+    # criterio que el resto de notificaciones "best effort" del proyecto.
+    try:
+        from config import settings
+        if getattr(settings, "telegram_admin_chat_id", ""):
+            from services.telegram_service import enviar_telegram
+            emoji = _TYPE_EMOJI.get(tipo, "💬")
+            texto = f"{emoji} Nuevo feedback ({tipo}) de {user_email or 'usuario desconocido'}\n\n{mensaje}"
+            if contacto:
+                texto += f"\n\nContacto: {contacto}"
+            enviar_telegram(texto, chat_id=settings.telegram_admin_chat_id)
+    except Exception as e:
+        print(f"[CommunityFeedback] No se pudo notificar por Telegram: {type(e).__name__}: {e}")
+
+    return {"ok": True, "id": feedback_id}
 
 
 def get_all_feedback() -> dict:
