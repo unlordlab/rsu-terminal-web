@@ -13,9 +13,25 @@ from time_utils import get_timestamp  # noqa: E402
 
 # ── SOURCES ───────────────────────────────────────────────────────────────────
 
+# Auditadas una a una el 28/07/2026 con criterio DOBLE: que respondan 200 Y
+# que su artículo más reciente sea realmente reciente. Cuatro estaban muertas
+# y se sustituyeron por equivalentes verificados vivos (<1h de antigüedad):
+#   - reuters    -> feeds.reuters.com ni siquiera resuelve DNS (Reuters cerró
+#                   sus RSS públicos). Sustituida por FT.
+#   - wsj        -> respondía 200 con 20 artículos... el más reciente de enero
+#                   de 2025, CONGELADO 547 días. Es el caso peligroso: no
+#                   falla, sirve contenido plausible pero obsoleto, y solo se
+#                   detecta comprobando fechas. Sustituida por Seeking Alpha.
+#   - blockworks -> los 8 últimos posts agrupados hace ~202 días: feed
+#                   abandonado. Sustituida por CoinDesk (misma temática cripto).
+#   - gurufocus  -> HTTP 403. Sustituida por Business Insider Markets.
+# NO se tocaron fed/macroalf/valuewalk aunque su último post tenga días: se
+# comprobó la distribución de fechas y publican de forma regular pero
+# espaciada (la Fed no saca notas a diario) -- baja frecuencia legítima, no
+# congelamiento. Confundir ambas cosas habría tirado fuentes que funcionan.
 SOURCES = [
-    {"id":"reuters",      "label":"REUTERS",     "url":"https://feeds.reuters.com/reuters/topNews"},
-    {"id":"wsj",          "label":"WSJ",         "url":"https://feeds.a.dj.com/rss/RSSMarketsMain.xml"},
+    {"id":"ft",           "label":"FT",          "url":"https://www.ft.com/companies?format=rss"},
+    {"id":"seekingalpha", "label":"SEEKING A.",  "url":"https://seekingalpha.com/market_currents.xml"},
     {"id":"cnbc",         "label":"CNBC",        "url":"https://www.cnbc.com/id/20910258/device/rss/rss.html"},
     {"id":"marketwatch",  "label":"MKTWATCH",    "url":"https://feeds.content.dowjones.io/public/rss/mw_topstories"},
     {"id":"yahoofinance", "label":"YAHOO FIN",   "url":"https://finance.yahoo.com/rss/topstories"},
@@ -23,17 +39,30 @@ SOURCES = [
     {"id":"zerohedge",    "label":"ZEROHEDGE",   "url":"https://feeds.feedburner.com/zerohedge/feed"},
     {"id":"investing",    "label":"INVESTING",   "url":"https://www.investing.com/rss/news.rss"},
     {"id":"reddit",       "label":"REDDIT",      "url":"https://www.reddit.com/r/investing+stocks+options/new.rss"},
-    {"id":"fed",          "label":"FED",         "url":"https://www.federalreserve.gov/feeds/press_all.xml", "fmt":"atom"},
+    # Este feed llevaba dos bugs preexistentes encadenados, ambos silenciosos
+    # (ver _parse_rss/_fetch_source): estaba declarado "fmt":"atom" siendo RSS,
+    # y además empieza con BOM UTF-8, que rompía el parseo. Ya no hace falta
+    # declarar formato -- se detecta solo.
+    {"id":"fed",          "label":"FED",         "url":"https://www.federalreserve.gov/feeds/press_all.xml"},
     {"id":"macroalf",     "label":"MACRO ALF",   "url":"https://themacrocompass.substack.com/feed"},
-    {"id":"blockworks",   "label":"BLOCKWORKS",  "url":"https://blockworks.co/feed"},
+    {"id":"coindesk",     "label":"COINDESK",    "url":"https://www.coindesk.com/arc/outboundfeeds/rss/"},
     {"id":"valuewalk",    "label":"VALUEWALK",   "url":"https://www.valuewalk.com/feed"},
-    {"id":"gurufocus",    "label":"GURUFOCUS",   "url":"https://www.gurufocus.com/term/news/rss"},
+    {"id":"businessins",  "label":"BUS. INSIDER","url":"https://markets.businessinsider.com/rss/news"},
 ]
+
+# Máxima antigüedad admitida para un artículo. Un feed que se congela sigue
+# respondiendo 200 y sirviendo sus últimos artículos para siempre (el de WSJ
+# llevaba 547 días así sin que nadie lo notara): sus items quedaban al final
+# de la lista por el orden por fecha, pero ocupaban cupo y desplazaban
+# noticias reales. 30 días es holgado a propósito -- las fuentes de baja
+# frecuencia legítimas (Fed, Substacks) siguen entrando, y un congelamiento
+# de verdad (meses) se descarta solo.
+MAX_ANTIGUEDAD_MINS = 30 * 24 * 60
 
 # URL de la web de cada fuente — para hipervínculo directo al clicar el label
 SOURCE_URLS = {
-    "reuters":      "https://www.reuters.com/markets/",
-    "wsj":          "https://www.wsj.com/news/markets",
+    "ft":           "https://www.ft.com/markets",
+    "seekingalpha": "https://seekingalpha.com/market-news",
     "cnbc":         "https://www.cnbc.com/markets/",
     "marketwatch":  "https://www.marketwatch.com/",
     "yahoofinance": "https://finance.yahoo.com/",
@@ -43,9 +72,9 @@ SOURCE_URLS = {
     "reddit":       "https://www.reddit.com/r/investing/",
     "fed":          "https://www.federalreserve.gov/newsevents/pressreleases.htm",
     "macroalf":     "https://themacrocompass.substack.com/",
-    "blockworks":   "https://blockworks.co/news",
+    "coindesk":     "https://www.coindesk.com/",
     "valuewalk":    "https://www.valuewalk.com/",
-    "gurufocus":    "https://www.gurufocus.com/news/",
+    "businessins":  "https://markets.businessinsider.com/news",
     "finnhub":      "https://finnhub.io/",
 }
 
@@ -237,12 +266,23 @@ def _mins_ago(pub_str: str) -> int:
     except Exception:
         return 999
 
-def _parse_rss(content: str, src: dict) -> list:
+def _parse_rss(content, src: dict) -> list:
+    """content: preferiblemente BYTES (r.content), no str. Ver _fetch_source --
+    un feed con BOM UTF-8 al principio (el de la Fed lo tiene) revienta el
+    parseo si se le pasa ya decodificado, y el except de abajo se lo tragaba
+    en silencio."""
     items = []
     try:
         root = ET.fromstring(content)
         ns   = {'atom': 'http://www.w3.org/2005/Atom'}
-        fmt  = src.get('fmt', 'rss')
+
+        # El formato se DETECTA, no se declara a mano. Con `fmt` manual había
+        # feeds mal etiquetados que devolvían 0 items sin avisar: el de la Fed
+        # figuraba como "atom" siendo RSS, y el de Reddit es Atom sin
+        # declararlo (así que se le aplicaba el parser RSS). Mirar la raíz del
+        # documento no se equivoca ni hay que mantenerlo cuando una fuente
+        # cambia de formato.
+        fmt = 'atom' if root.tag.endswith('}feed') or root.tag == 'feed' else 'rss'
 
         if fmt == 'atom':
             entries = root.findall('.//atom:entry', ns) or root.findall('.//{http://www.w3.org/2005/Atom}entry')
@@ -296,8 +336,24 @@ def _fetch_source(src: dict) -> tuple:
     try:
         r = requests.get(src['url'], headers=headers, timeout=8)
         if r.status_code == 200:
-            items = _parse_rss(r.text, src)
-            return items, src['id'], len(items) > 0
+            # r.content (bytes), NO r.text: un feed que empieza con BOM UTF-8
+            # -- el de la Fed lo hace -- rompe ElementTree si se le pasa ya
+            # decodificado a str ("not well-formed, line 1, column 1"), y el
+            # except de _parse_rss lo convertía en 0 items silenciosos. Con
+            # bytes, ElementTree gestiona BOM y encoding declarado él solo.
+            items = _parse_rss(r.content, src)
+            # Descartar artículos rancios (ver MAX_ANTIGUEDAD_MINS): un feed
+            # congelado responde 200 y sirve sus últimos artículos para
+            # siempre. mins_ago == 999 es el valor que pone _build cuando la
+            # fecha no se pudo parsear -- ahí no se puede juzgar, se conserva
+            # (mejor un item sin fecha fiable que perder una fuente entera por
+            # un formato de fecha raro).
+            frescos = [i for i in items if i['mins_ago'] == 999 or i['mins_ago'] <= MAX_ANTIGUEDAD_MINS]
+            if items and not frescos:
+                dias = min(i['mins_ago'] for i in items) / 1440
+                print(f"[Newsfeed] '{src['id']}' responde 200 pero su artículo más reciente "
+                      f"tiene {dias:.0f} días -- feed probablemente congelado, descartado")
+            return frescos, src['id'], len(frescos) > 0
         return [], src['id'], False
     except Exception:
         return [], src['id'], False
