@@ -23,7 +23,13 @@ function pageContent() {
 
 function header() {
     return '<div style="text-align:center;margin-bottom:2rem;">'
-        + '<div style="color:var(--color-muted);font-size:11px;letter-spacing:0.15em;margin-bottom:8px;">[SECURE CONNECTION ESTABLISHED // ENCRYPTION: AES-256]</div>'
+        // Antes decía "[SECURE CONNECTION ESTABLISHED // ENCRYPTION: AES-256]".
+        // Es texto decorativo, pero afirmaba una propiedad de seguridad que el
+        // sitio no tiene: hoy se sirve por HTTP, sin TLS. Una garantía de
+        // cifrado comunicada al usuario y no cumplida deja de ser un guiño
+        // estético en cuanto haya un incidente. Recuperable el día que haya
+        // HTTPS -- entonces será verdad.
+        + '<div style="color:var(--color-muted);font-size:11px;letter-spacing:0.15em;margin-bottom:8px;">[TRANSMISIÓN RECIBIDA // CANAL ABIERTO]</div>'
         + '<div style="color:var(--color-muted);font-size:12px;letter-spacing:0.1em;margin-bottom:10px;">&gt;&gt; MANIFESTO_RSU.exe</div>'
         + '<div class="manifest-glitch" data-text="REDISTRIBUTION RESEARCH UNIT (RSU)" style="position:relative;display:inline-block;color:var(--color-accent);font-size:28px;letter-spacing:0.06em;text-shadow:var(--glow-text);line-height:1.3;">'
         + 'REDISTRIBUTION RESEARCH UNIT (RSU)'

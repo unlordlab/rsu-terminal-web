@@ -8,7 +8,9 @@ function pageContent() {
 
 function header() {
     return '<div style="margin-bottom:2rem;text-align:center;">'
-        + '<div style="color:var(--color-muted);font-size:11px;letter-spacing:0.15em;margin-bottom:8px;">[SECURE CONNECTION ESTABLISHED // ENCRYPTION: AES-256]</div>'
+        // Ver el mismo cambio en manifest.js: la línea anterior afirmaba
+        // "ENCRYPTION: AES-256" en un sitio que se sirve por HTTP sin TLS.
+        + '<div style="color:var(--color-muted);font-size:11px;letter-spacing:0.15em;margin-bottom:8px;">[TRANSMISIÓN RECIBIDA // CANAL ABIERTO]</div>'
         + '<div style="color:var(--color-accent);font-size:24px;letter-spacing:0.12em;text-shadow:var(--glow-text);margin-bottom:6px;">🗺️ 2026 ROADMAP</div>'
         + '<div style="color:var(--color-secondary);font-size:13px;letter-spacing:0.2em;">PROTOCOLO DE NAVEGACIÓN ESTRATÉGICA // CICLO 2026</div>'
         + '</div>'

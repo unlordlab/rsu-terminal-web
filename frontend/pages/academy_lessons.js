@@ -2,6 +2,12 @@
 // RSU ACADEMY — Contenido de lecciones
 // Estructura modular: cada lección es un objeto independiente con secciones.
 // Para añadir/modificar: edita el array LESSONS o añade nuevas entradas.
+//
+// ⚠ TRAS AÑADIR O RENOMBRAR UNA LECCIÓN:  python scripts/gen_academy_manifest.py
+// El índice de módulos, el tiempo de lectura y la barra de progreso se pintan
+// desde academy_manifest.js (~8 KB) para no cargar este fichero (~525 KB) al
+// entrar en Academy. Una lección que no esté en el manifiesto no aparece en
+// ningún listado ni se puede abrir.
 // ─────────────────────────────────────────────────────────────────────────────
 
 // TIPOS DE BLOQUE disponibles en cada sección:

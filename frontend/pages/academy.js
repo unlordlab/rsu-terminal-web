@@ -2,65 +2,76 @@
 // RSU ACADEMY — Página principal + Renderer de lecciones
 // ─────────────────────────────────────────────────────────────────────────────
 
-import { LESSONS } from '/pages/academy_lessons.js';
-import { CHARTS  } from '/pages/academy_charts.js';
-import { QUIZZES } from '/pages/academy_quizzes.js';
+import { esc } from '/core/ui.js';
+import { LESSON_INDEX, PALABRAS_POR_MINUTO } from '/pages/academy_manifest.js';
+
+// ── CARGA BAJO DEMANDA DEL CONTENIDO ─────────────────────────────────────────
+// academy_lessons.js (~525 KB) y academy_charts.js (~684 KB) se importaban
+// antes de forma ESTÁTICA, así que entrar en Academy descargaba y parseaba
+// ~1,3 MB aunque el usuario solo quisiera ver el índice de módulos. En móvil
+// con datos eso son varios segundos de pantalla en blanco por una pantalla
+// que solo necesita 26 títulos.
+//
+// Ahora el índice se pinta con academy_manifest.js (~8 KB, generado por
+// scripts/gen_academy_manifest.py) y el contenido pesado se trae por partes,
+// solo cuando de verdad hace falta:
+//   · índice de módulos      → 0 KB extra
+//   · detalle de un módulo   → quizzes (~84 KB)
+//   · abrir una lección      → lecciones + gráficos (~1,2 MB, una sola vez)
+//   · buscador               → lecciones (~525 KB, al escribir la 1ª búsqueda)
+let _LESSONS = null;
+let _CHARTS  = null;
+let _QUIZZES = null;
+
+async function cargarLecciones() {
+    if (!_LESSONS) _LESSONS = (await import('/pages/academy_lessons.js')).LESSONS;
+    return _LESSONS;
+}
+async function cargarGraficos() {
+    if (!_CHARTS) _CHARTS = (await import('/pages/academy_charts.js')).CHARTS;
+    return _CHARTS;
+}
+async function cargarQuizzes() {
+    if (!_QUIZZES) _QUIZZES = (await import('/pages/academy_quizzes.js')).QUIZZES;
+    return _QUIZZES;
+}
+
+function authHeader() {
+    const token = sessionStorage.getItem('rsu_token') || localStorage.getItem('rsu_token');
+    return token
+        ? { 'Authorization': 'Bearer ' + token, 'Content-Type': 'application/json' }
+        : { 'Content-Type': 'application/json' };
+}
 
 // ── DATOS DE MÓDULOS ─────────────────────────────────────────────────────────
 
 const MODULES = [
-    { id:0,  title:'RSU Terminal',                icon:'🖥️', description:'Entiende qué es RSU Terminal, la metodología detrás y cómo sacar el máximo partido a cada herramienta.', duration:'40 min',
-      videos:[{title:'Qué es RSU Terminal',duration:'10:00'},{title:'La Metodología RSU',duration:'10:00'},{title:'Las Herramientas',duration:'12:00'},{title:'Flujo de Trabajo Semanal',duration:'8:00'}]},
-    { id:1,  title:'Configuración de Gráficos',   icon:'📊', description:'Configura correctamente tus gráficos en múltiples temporalidades. El análisis top-down empieza aquí.', duration:'59 min',
-      videos:[{title:'Gráfico Mensual — La visión macro',duration:'12:00'},{title:'Gráfico Semanal — La tendencia media',duration:'11:00'},{title:'Gráfico Diario — El setup operativo',duration:'12:00'},{title:'Velas Limpias — Sin ruido visual',duration:'10:00'},{title:'Medias Móviles Exponenciales (EMA)',duration:'14:00'}]},
-    { id:2,  title:'Estructura de Mercado',        icon:'🏗️', description:'Identifica la tendencia antes de operar. Máximos y mínimos crecientes o decrecientes lo dicen todo.', duration:'50 min',
-      videos:[{title:'Máximos Crecientes — Señal alcista',duration:'12:00'},{title:'Mínimos Crecientes — Soporte dinámico',duration:'13:00'},{title:'Máximos Decrecientes — Señal bajista',duration:'12:00'},{title:'Mínimos Decrecientes — Presión vendedora',duration:'13:00'}]},
-    { id:3,  title:'Análisis de Tendencia',        icon:'📈', description:'Nunca luches contra el mercado. Aprende a identificar y operar a favor de la tendencia dominante.', duration:'55 min',
-      videos:[{title:'Tendencia Alcista — Cómo montarla',duration:'14:00'},{title:'Tendencia Bajista — Cómo evitarla',duration:'13:00'},{title:'Rango Lateral — Paciencia obligatoria',duration:'14:00'},{title:'Validación de Líneas de Tendencia',duration:'14:00'}]},
-    { id:4,  title:'Soporte y Resistencia',        icon:'🧱', description:'Los niveles fuertes controlan el precio. Aprende a marcar zonas que realmente importan.', duration:'1h',
-      videos:[{title:'Soporte Fresco — Primera vez testeado',duration:'15:00'},{title:'Resistencia Mayor — Donde venden los grandes',duration:'15:00'},{title:'Marcado de Zonas — Técnica profesional',duration:'15:00'},{title:'Niveles con Múltiples Toques',duration:'15:00'}]},
-    { id:5,  title:'Oferta y Demanda',             icon:'⚖️', description:'Las instituciones actúan en estas zonas. Aprende a identificar dónde el dinero inteligente opera.', duration:'1h 10min',
-      videos:[{title:'Zonas de Demanda',duration:'18:00'},{title:'Zonas de Oferta',duration:'17:00'},{title:'Áreas de Rechazo',duration:'17:00'},{title:'Formación de Base',duration:'18:00'}]},
-    { id:6,  title:'Comportamiento de Velas',      icon:'🕯️', description:'El cierre de la vela revela la verdad. Las formaciones de velas cuentan la historia del mercado.', duration:'1h',
-      videos:[{title:'Engulfing Alcista',duration:'15:00'},{title:'Engulfing Bajista',duration:'15:00'},{title:'Pin Bar',duration:'15:00'},{title:'Inside Bar',duration:'15:00'}]},
-    { id:7,  title:'Rupturas de Precio',           icon:'💥', description:'Confirma si es real o una trampa. Las rupturas falsas son la fuente de pérdidas más común.', duration:'1h 5min',
-      videos:[{title:'Ruptura de Rango',duration:'16:00'},{title:'Ruptura de Tendencia',duration:'16:00'},{title:'Ruptura de Soporte',duration:'17:00'},{title:'Entradas en Retest',duration:'16:00'}]},
-    { id:8,  title:'Análisis de Volumen',          icon:'📦', description:'El volumen confirma el precio. Sin volumen, el movimiento no tiene convicción real.', duration:'1h',
-      videos:[{title:'Volumen en Rupturas',duration:'15:00'},{title:'Bajo Volumen en Retrocesos',duration:'15:00'},{title:'Volumen Clímax',duration:'16:00'},{title:'Participación Débil',duration:'15:00'}]},
-    { id:9,  title:'Patrones de Gráfico',          icon:'🔷', description:'Los patrones solo funcionan con contexto. Aprende a leerlos dentro de la tendencia dominante.', duration:'1h 10min',
-      videos:[{title:'Triángulo Ascendente',duration:'17:00'},{title:'Triángulo Descendente',duration:'17:00'},{title:'Rectángulo',duration:'18:00'},{title:'Bandera y Asta',duration:'18:00'}]},
-    { id:10, title:'Alineación Multi-Temporalidad',icon:'🔭', description:'La alineación crea potencia. Cuando mensual, semanal y diario coinciden, la probabilidad dispara.', duration:'1h 30min',
-      videos:[{title:'Sesgo Mensual',duration:'20:00'},{title:'Estructura Semanal',duration:'20:00'},{title:'Setup Diario',duration:'20:00'},{title:'Trigger en TF Menor',duration:'20:00'},{title:'Configurar tu Watchlist',duration:'10:00'}]},
-    { id:11, title:'Planificación del Trade',      icon:'📋', description:'Sin plan no hay trading. Define entrada, stop y objetivo antes de pulsar el botón.', duration:'1h',
-      videos:[{title:'Definir el Setup',duration:'15:00'},{title:'Ratio Riesgo/Recompensa',duration:'15:00'},{title:'Tamaño de Posición',duration:'15:00'},{title:'El Plan de Trade',duration:'15:00'}]},
-    { id:12, title:'Gestión del Riesgo',           icon:'🛡️', description:'Sobrevive primero, gana después. La gestión del riesgo es lo único que te mantiene en el juego.', duration:'1h 10min',
-      videos:[{title:'Riesgo Fijo por Trade',duration:'17:00'},{title:'Sizing de Posición',duration:'18:00'},{title:'Sin Revenge Trading',duration:'17:00'},{title:'Protección de Capital',duration:'18:00'}]},
-    { id:13, title:'Ejecución',                    icon:'⚡', description:'La disciplina es el edge. Espera confirmación, sigue el plan y sal sin ego.', duration:'1h',
-      videos:[{title:'Esperar Confirmación',duration:'15:00'},{title:'Evitar Entradas Prematuras',duration:'15:00'},{title:'Seguir el Plan',duration:'15:00'},{title:'Salir Sin Ego',duration:'15:00'}]},
-    { id:14, title:'Trampas del Mercado',          icon:'⚠️', description:'El mercado cobra matrícula. Aprende a reconocer las trampas más comunes antes de caer en ellas.', duration:'1h 5min',
-      videos:[{title:'Falsas Rupturas',duration:'16:00'},{title:'Entradas Tardías',duration:'16:00'},{title:'Sobretrading',duration:'17:00'},{title:'Ignorar el Volumen',duration:'16:00'}]},
-    { id:15, title:'Revisión Post-Trade',          icon:'📓', description:'Journal o repite el dolor. La revisión sistemática es lo que separa a los traders rentables.', duration:'50 min',
-      videos:[{title:'Captura de Pantalla',duration:'12:00'},{title:'Registro de Errores',duration:'13:00'},{title:'Revisión del Setup',duration:'13:00'},{title:'Lecciones Aprendidas',duration:'12:00'}]},
-    { id:16, title:'Las 4 Etapas (Weinstein)',     icon:'🔄', description:'Acumulación, avance, distribución y declive. El mapa de ciclo de vida que dice cuándo comprar y cuándo no.', duration:'1h',
-      videos:[{title:'Etapa 1 — Acumulación',duration:'15:00'},{title:'Etapa 2 — Avance',duration:'15:00'},{title:'Etapa 3 — Distribución',duration:'15:00'},{title:'Etapa 4 — Declive',duration:'15:00'}]},
-    { id:17, title:'El Mercado Descuenta Información', icon:'⏳', description:'Por qué el precio se mueve ANTES de la noticia. Buy the rumour, sell the news — y cómo no quedar atrapado en el lado equivocado.', duration:'1h',
-      videos:[{title:'La Máquina de Descontar',duration:'15:00'},{title:'Buy the Rumour',duration:'15:00'},{title:'Sell the News',duration:'15:00'},{title:'Earnings y Eventos Macro',duration:'15:00'}]},
-    { id:18, title:'Risk/Reward',                  icon:'⚖️', description:'No es una cifra que se calcula — es el resultado de dónde compras. Una buena zona de demanda mejora el riesgo, la recompensa y la psicología a la vez.', duration:'1h',
-      videos:[{title:'La Zona de Entrada lo Decide Todo',duration:'15:00'},{title:'Anatomía de una Buena Zona de Demanda',duration:'15:00'},{title:'El Lado Psicológico del Buen R:R',duration:'15:00'},{title:'Aplicar el R:R desde la Zona, no desde la Calculadora',duration:'15:00'}]},
-    { id:19, title:'Métodos de Confirmación de Entrada', icon:'🎯', description:'6 técnicas para confirmar que una entrada tiene base real: trendlines, soporte/resistencia, Fibonacci, consolidaciones, gaps y volumen.', duration:'1h 30min',
-      videos:[{title:'Reversión y Ruptura de Línea de Tendencia',duration:'15:00'},{title:'Soporte y Resistencia como Confirmación',duration:'15:00'},{title:'Retroceso de Fibonacci',duration:'15:00'},{title:'Consolidaciones',duration:'15:00'},{title:'Gaps de Precio',duration:'15:00'},{title:'Volumen Clímax y Tendencia',duration:'15:00'}]},
-    { id:20, title:'RSU Score Explicado',        icon:'🧮', description:'Qué mide realmente el RSU Score, cómo se calcula el Piotroski F-Score, y por qué son dos indicadores independientes que hay que leer juntos, no como un semáforo ciego.', duration:'50 min',
-      videos:[{title:'Qué Mide el RSU Score',duration:'12:00'},{title:'Piotroski F-Score — Salud Financiera',duration:'13:00'},{title:'Comparativa Sectorial — Valorar en Contexto',duration:'12:00'},{title:'Cómo Leer Todo Junto',duration:'13:00'}]},
-    { id:21, title:'Análisis Fundamental',       icon:'📐', description:'La base fundamental detrás de CAN SLIM: cómo leer estados financieros, rentabilidad, valoración con múltiplos y los catalizadores que mueven el precio.', duration:'55 min',
-      videos:[{title:'Ingresos, Márgenes y Beneficio',duration:'14:00'},{title:'Rentabilidad y Eficiencia — ROE, ROA',duration:'13:00'},{title:'Valoración — P/E, PEG, EV/EBITDA, P/S, P/B',duration:'14:00'},{title:'Catalizadores — Earnings, Insiders, Institucionales',duration:'14:00'}]},
-    { id:22, title:'El Triángulo RSU',           icon:'🔺', description:'Cuando el flujo de opciones, el posicionamiento institucional y la técnica se alinean, la probabilidad de una operación ganadora se dispara. La metodología de confluencia de tres señales.', duration:'50 min',
-      videos:[{title:'Los Tres Pilares del Triángulo',duration:'12:00'},{title:'Order Flow — La Huella del Dinero Grande',duration:'13:00'},{title:'Posicionamiento — Qué Apuesta el Mercado',duration:'13:00'},{title:'El Checklist de Confluencia',duration:'12:00'}]},
-    { id:23, title:'Convicción a Largo Plazo',   icon:'🏔️', description:'Por qué a veces merece la pena pagar una prima de valoración por una posición estratégica en un tema de crecimiento secular — y cómo no confundir convicción con negación cuando la tesis se rompe.', duration:'50 min',
-      videos:[{title:'Pagar la Prima por Posición Estratégica',duration:'13:00'},{title:'Identificar Posiciones "Misión Crítica"',duration:'13:00'},{title:'El Marco Temporal de la Convicción',duration:'12:00'},{title:'Convicción Propia y Gestión del Riesgo',duration:'12:00'}]},
-    { id:24, title:'Volatilidad, el VIX y la Oportunidad', icon:'🌪️', description:'La volatilidad no es lo mismo que perder capital de forma permanente. Qué mide el VIX de verdad, por qué los picos extremos de miedo han sido históricamente zonas interesantes — y por qué desconfiar de cualquier tabla de rendimientos "hipotéticos".', duration:'50 min',
-      videos:[{title:'Volatilidad: Dispersión, no Pérdida',duration:'12:00'},{title:'El VIX — Qué Mide y Qué NO Mide',duration:'13:00'},{title:'Picos de Miedo y Reversión a la Media',duration:'13:00'},{title:'Usarlo con Criterio, no a Ciegas',duration:'12:00'}]},
-    { id:25, title:'Construir una Posición con DCA', icon:'🧱', description:'Promediar coste con aportaciones fijas no es lo mismo que escalar una posición en una caída — y confundirlas es un error caro, sobre todo en instrumentos apalancados. Cómo construir cualquiera de las dos con criterio, no a ciegas.', duration:'50 min',
-      videos:[{title:'DCA Clásico — Mecánica y Psicología',duration:'12:00'},{title:'DCA vs. Invertir de Golpe — la Evidencia',duration:'13:00'},{title:'DCA vs. Entrada Escalonada — No son lo Mismo',duration:'13:00'},{title:'Construir tu Propia Posición con Criterio',duration:'12:00'}]},
+    { id:0,  title:'RSU Terminal',                icon:'🖥️', description:'Entiende qué es RSU Terminal, la metodología detrás y cómo sacar el máximo partido a cada herramienta.' },
+    { id:1,  title:'Configuración de Gráficos',   icon:'📊', description:'Configura correctamente tus gráficos en múltiples temporalidades. El análisis top-down empieza aquí.' },
+    { id:2,  title:'Estructura de Mercado',        icon:'🏗️', description:'Identifica la tendencia antes de operar. Máximos y mínimos crecientes o decrecientes lo dicen todo.' },
+    { id:3,  title:'Análisis de Tendencia',        icon:'📈', description:'Nunca luches contra el mercado. Aprende a identificar y operar a favor de la tendencia dominante.' },
+    { id:4,  title:'Soporte y Resistencia',        icon:'🧱', description:'Los niveles fuertes controlan el precio. Aprende a marcar zonas que realmente importan.' },
+    { id:5,  title:'Oferta y Demanda',             icon:'⚖️', description:'Las instituciones actúan en estas zonas. Aprende a identificar dónde el dinero inteligente opera.' },
+    { id:6,  title:'Comportamiento de Velas',      icon:'🕯️', description:'El cierre de la vela revela la verdad. Las formaciones de velas cuentan la historia del mercado.' },
+    { id:7,  title:'Rupturas de Precio',           icon:'💥', description:'Confirma si es real o una trampa. Las rupturas falsas son la fuente de pérdidas más común.' },
+    { id:8,  title:'Análisis de Volumen',          icon:'📦', description:'El volumen confirma el precio. Sin volumen, el movimiento no tiene convicción real.' },
+    { id:9,  title:'Patrones de Gráfico',          icon:'🔷', description:'Los patrones solo funcionan con contexto. Aprende a leerlos dentro de la tendencia dominante.' },
+    { id:10, title:'Alineación Multi-Temporalidad',icon:'🔭', description:'La alineación crea potencia. Cuando mensual, semanal y diario coinciden, la probabilidad dispara.' },
+    { id:11, title:'Planificación del Trade',      icon:'📋', description:'Sin plan no hay trading. Define entrada, stop y objetivo antes de pulsar el botón.' },
+    { id:12, title:'Gestión del Riesgo',           icon:'🛡️', description:'Sobrevive primero, gana después. La gestión del riesgo es lo único que te mantiene en el juego.' },
+    { id:13, title:'Ejecución',                    icon:'⚡', description:'La disciplina es el edge. Espera confirmación, sigue el plan y sal sin ego.' },
+    { id:14, title:'Trampas del Mercado',          icon:'⚠️', description:'El mercado cobra matrícula. Aprende a reconocer las trampas más comunes antes de caer en ellas.' },
+    { id:15, title:'Revisión Post-Trade',          icon:'📓', description:'Journal o repite el dolor. La revisión sistemática es lo que separa a los traders rentables.' },
+    { id:16, title:'Las 4 Etapas (Weinstein)',     icon:'🔄', description:'Acumulación, avance, distribución y declive. El mapa de ciclo de vida que dice cuándo comprar y cuándo no.' },
+    { id:17, title:'El Mercado Descuenta Información', icon:'⏳', description:'Por qué el precio se mueve ANTES de la noticia. Buy the rumour, sell the news — y cómo no quedar atrapado en el lado equivocado.' },
+    { id:18, title:'Risk/Reward',                  icon:'⚖️', description:'No es una cifra que se calcula — es el resultado de dónde compras. Una buena zona de demanda mejora el riesgo, la recompensa y la psicología a la vez.' },
+    { id:19, title:'Métodos de Confirmación de Entrada', icon:'🎯', description:'6 técnicas para confirmar que una entrada tiene base real: trendlines, soporte/resistencia, Fibonacci, consolidaciones, gaps y volumen.' },
+    { id:20, title:'RSU Score Explicado',        icon:'🧮', description:'Qué mide realmente el RSU Score, cómo se calcula el Piotroski F-Score, y por qué son dos indicadores independientes que hay que leer juntos, no como un semáforo ciego.' },
+    { id:21, title:'Análisis Fundamental',       icon:'📐', description:'La base fundamental detrás de CAN SLIM: cómo leer estados financieros, rentabilidad, valoración con múltiplos y los catalizadores que mueven el precio.' },
+    { id:22, title:'El Triángulo RSU',           icon:'🔺', description:'Cuando el flujo de opciones, el posicionamiento institucional y la técnica se alinean, la probabilidad de una operación ganadora se dispara. La metodología de confluencia de tres señales.' },
+    { id:23, title:'Convicción a Largo Plazo',   icon:'🏔️', description:'Por qué a veces merece la pena pagar una prima de valoración por una posición estratégica en un tema de crecimiento secular — y cómo no confundir convicción con negación cuando la tesis se rompe.' },
+    { id:24, title:'Volatilidad, el VIX y la Oportunidad', icon:'🌪️', description:'La volatilidad no es lo mismo que perder capital de forma permanente. Qué mide el VIX de verdad, por qué los picos extremos de miedo han sido históricamente zonas interesantes — y por qué desconfiar de cualquier tabla de rendimientos "hipotéticos".' },
+    { id:25, title:'Construir una Posición con DCA', icon:'🧱', description:'Promediar coste con aportaciones fijas no es lo mismo que escalar una posición en una caída — y confundirlas es un error caro, sobre todo en instrumentos apalancados. Cómo construir cualquiera de las dos con criterio, no a ciegas.' },
 ];
 
 const PHASES = [
@@ -72,6 +83,80 @@ const PHASES = [
     { label:'🔄 FASE 5 // CICLO DE VIDA DEL PRECIO',     modules:[16] },
     { label:'🧮 FASE 6 // HERRAMIENTAS PROPIETARIAS RSU', modules:[20,21,22] },
 ];
+
+// ── LECCIONES DE CADA MÓDULO ─────────────────────────────────────────────────
+// La lista sale del manifiesto (= del contenido real), no de una lista
+// declarada a mano en MODULES. Antes cada módulo declaraba un array `videos`
+// con títulos y duraciones tipo '15:00' heredado de una versión anterior de
+// Academy en la que las lecciones iban a ser vídeos: los vídeos nunca se
+// grabaron, pero la interfaz seguía anunciando 📹 y más de 20 horas de
+// duración sobre contenido que es texto. Además ese array ya había divergido
+// del contenido real (en el módulo 12, dos títulos declarados no coincidían
+// con los de las lecciones que se abrían).
+
+function leccionesDe(moduleId) {
+    return Object.keys(LESSON_INDEX)
+        .filter(k => k.startsWith(moduleId + '-'))
+        .map(k => ({ key: k, index: parseInt(k.split('-')[1], 10), ...LESSON_INDEX[k] }))
+        .sort((a, b) => a.index - b.index);
+}
+
+function minutosDeLectura(palabras) {
+    return Math.max(1, Math.round(palabras / PALABRAS_POR_MINUTO));
+}
+
+function minutosDeModulo(lecciones) {
+    return minutosDeLectura(lecciones.reduce((t, l) => t + l.words, 0));
+}
+
+// ── PROGRESO DEL USUARIO ─────────────────────────────────────────────────────
+// Una lección cuenta como leída cuando el usuario llega al FINAL de su
+// contenido (ver observarFinDeLeccion), no cuando la abre: marcar al abrir
+// habría llenado la barra de lecciones que nadie llegó a leer.
+
+let _leidas         = new Set();
+let _quizzes        = {};      // { "12": {score, total} }
+let _finLeccion      = null;   // comprobación de "he llegado al final", se limpia en cleanup()
+let _finLeccionMain  = null;   // nodo #main al que se enganchó (para poder desengancharlo)
+let _finLeccionTimer = null;   // red de seguridad periódica (ver observarFinDeLeccion)
+
+async function cargarProgreso() {
+    try {
+        const res  = await fetch('/api/v1/academy/progress', { headers: authHeader() });
+        const data = await res.json();
+        if (data && data.ok) {
+            _leidas  = new Set(data.lessons || []);
+            _quizzes = data.quizzes || {};
+        }
+    } catch (_) {
+        // Sin progreso disponible se sigue navegando con normalidad: las
+        // barras se quedan a cero, que es la verdad (no se sabe qué ha leído).
+    }
+}
+
+async function marcarLeccionLeida(key) {
+    if (_leidas.has(key)) return;
+    _leidas.add(key);                      // optimista: la UI responde al instante
+    try {
+        const res = await fetch('/api/v1/academy/progress/lesson', {
+            method: 'POST', headers: authHeader(), body: JSON.stringify({ lesson_key: key })
+        });
+        if (!res.ok) throw new Error(res.status);
+    } catch (_) {
+        _leidas.delete(key);               // no se guardó: no fingir que sí
+    }
+}
+
+async function guardarResultadoQuiz(moduleId, score, total) {
+    const previo = _quizzes[String(moduleId)];
+    if (!previo || score > previo.score) _quizzes[String(moduleId)] = { score, total };
+    try {
+        await fetch('/api/v1/academy/progress/quiz', {
+            method: 'POST', headers: authHeader(),
+            body: JSON.stringify({ module_id: moduleId, score, total })
+        });
+    } catch (_) { /* mismo criterio: si falla, se reintenta al repetir el quiz */ }
+}
 
 // ── ESTILOS ───────────────────────────────────────────────────────────────────
 
@@ -129,16 +214,161 @@ function injectStyles() {
 
 export async function render(container) {
     injectStyles();
-    container.innerHTML = header() + phases() + outcome() + footer();
+    container.innerHTML = header() + searchBox() + `<div id="ac-search-results"></div>`
+                        + `<div id="ac-index">${phases()}${outcome()}${footer()}</div>`;
     attachCardListeners(container);
+    attachSearch(container);
+
+    // El índice se pinta ya, sin esperar a la red; cuando llega el progreso se
+    // actualizan las barras en su sitio (una petición no debe retrasar la
+    // primera pintura de una página que no depende de ella).
+    cargarProgreso().then(() => actualizarBarras(container));
+}
+
+// El router destruye la página al navegar fuera (ver core/router.js): aquí se
+// sueltan los listeners de "lección leída" para que no sigan vivos apuntando a
+// un nodo que ya no está en el DOM.
+export function cleanup() {
+    detenerObservacion();
 }
 
 function header() {
-    return `<div style="margin-bottom:2rem;">
+    const totalLecciones = Object.keys(LESSON_INDEX).length;
+    const totalMin       = minutosDeLectura(
+        Object.values(LESSON_INDEX).reduce((t, l) => t + l.words, 0)
+    );
+    const horas = Math.floor(totalMin / 60), mins = totalMin % 60;
+    return `<div style="margin-bottom:1.25rem;">
         <div style="color:var(--color-accent);font-size:18px;letter-spacing:.1em;text-shadow:var(--glow-text);margin-bottom:4px;">RSU ACADEMY</div>
         <div style="color:var(--color-secondary);font-size:13px;letter-spacing:.15em;margin-bottom:4px;">TECHNICAL ANALYSIS BLUEPRINT</div>
-        <div style="color:var(--color-muted);font-size:12px;">${MODULES.length} MÓDULOS // ACCESO COMPLETO // DE CERO A TRADER TÉCNICO</div>
+        <div style="color:var(--color-muted);font-size:12px;">${MODULES.length} MÓDULOS · ${totalLecciones} LECCIONES · ~${horas}h ${mins}min DE LECTURA</div>
     </div>`;
+}
+
+// ── BUSCADOR ─────────────────────────────────────────────────────────────────
+// Con 26 módulos y 108 lecciones, "¿dónde se explicaba el VIX?" no tenía
+// respuesta salvo abrir módulos a ojo. Busca primero por título (instantáneo,
+// sale del manifiesto ya cargado) y, en cuanto llegan las lecciones, también
+// dentro del texto de cada una.
+
+function searchBox() {
+    return `<div style="margin-bottom:1.5rem;">
+        <input id="ac-search" type="search" placeholder="Buscar en Academy (p. ej. VIX, Weinstein, stop loss)…" autocomplete="off"
+            style="width:100%;background:var(--color-surface);border:1px solid var(--color-border);color:var(--color-text);border-radius:var(--radius);padding:10px 14px;font-family:var(--font-mono);font-size:13px;outline:none;">
+    </div>`;
+}
+
+function textoDeLeccion(lesson) {
+    const partes = [lesson.title || '', lesson.intro || ''];
+    (lesson.sections || []).forEach(sec => {
+        partes.push(sec.heading || '');
+        (sec.blocks || []).forEach(b => {
+            if (b.content) partes.push(b.content);
+            if (b.title)   partes.push(b.title);
+            if (b.items)   partes.push(b.items.join(' '));
+            if (b.headers) partes.push(b.headers.join(' '));
+            if (b.rows)    partes.push(b.rows.map(r => r.join(' ')).join(' '));
+        });
+    });
+    return partes.join(' ').replace(/<[^>]+>/g, ' ');
+}
+
+function extracto(texto, consulta) {
+    const pos = texto.toLowerCase().indexOf(consulta.toLowerCase());
+    if (pos < 0) return '';
+    const ini = Math.max(0, pos - 60);
+    const raw = (ini > 0 ? '…' : '') + texto.slice(ini, pos + consulta.length + 90).trim() + '…';
+    // Se escapa el fragmento y DESPUÉS se resalta sobre el texto ya escapado,
+    // así el <mark> no puede abrir la puerta a inyectar nada.
+    const escapado = esc(raw.replace(/\s+/g, ' '));
+    const aguja    = esc(consulta).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    return escapado.replace(new RegExp(aguja, 'gi'), m => `<mark style="background:rgba(0,255,173,.25);color:var(--color-text);">${m}</mark>`);
+}
+
+function buscar(consulta) {
+    const q = consulta.trim().toLowerCase();
+    if (q.length < 2) return [];
+    const resultados = [];
+    for (const [key, meta] of Object.entries(LESSON_INDEX)) {
+        const modId  = parseInt(key.split('-')[0], 10);
+        const modulo = MODULES.find(m => m.id === modId);
+        const enTitulo = meta.title.toLowerCase().includes(q);
+        let fragmento = '';
+        if (_LESSONS && _LESSONS[key]) {
+            const texto = textoDeLeccion(_LESSONS[key]);
+            if (texto.toLowerCase().includes(q)) fragmento = extracto(texto, consulta.trim());
+        }
+        if (enTitulo || fragmento) {
+            resultados.push({ key, title: meta.title, modulo, enTitulo, fragmento, words: meta.words });
+        }
+    }
+    // Coincidir en el título es una señal más fuerte que aparecer de pasada
+    // en el cuerpo: esos resultados van primero.
+    return resultados.sort((a, b) => (b.enTitulo - a.enTitulo) || a.key.localeCompare(b.key)).slice(0, 30);
+}
+
+function renderResultados(resultados, consulta, cargandoTexto) {
+    if (!resultados.length) {
+        return `<div style="background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius);padding:1.25rem;margin-bottom:1.5rem;color:var(--color-muted);font-size:12px;">
+            Sin resultados para "${esc(consulta)}"${cargandoTexto ? ' — todavía buscando solo por título, cargando el texto de las lecciones…' : ''}
+        </div>`;
+    }
+    return `<div style="background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius);overflow:hidden;margin-bottom:1.5rem;">
+        <div style="padding:10px 16px;border-bottom:1px solid var(--color-border);color:var(--color-accent);font-size:11px;letter-spacing:.08em;">
+            ${resultados.length} ${resultados.length === 1 ? 'RESULTADO' : 'RESULTADOS'}${cargandoTexto ? ' · buscando también dentro del texto…' : ''}
+        </div>
+        ${resultados.map(r => `
+            <div class="ac-lesson-item" data-search-key="${r.key}">
+                <div class="ac-lesson-num" style="background:${_leidas.has(r.key) ? 'var(--color-accent)' : 'rgba(255,255,255,.05)'};color:${_leidas.has(r.key) ? '#000' : 'var(--color-muted)'};">
+                    ${_leidas.has(r.key) ? '✓' : '📖'}
+                </div>
+                <div style="flex:1;min-width:0;">
+                    <div class="ac-lesson-title" style="color:var(--color-text);font-size:13px;">${esc(r.title)}</div>
+                    <div style="color:var(--color-muted);font-size:10px;margin-top:2px;">MÓDULO ${r.modulo ? r.modulo.id + ' · ' + esc(r.modulo.title) : '—'}</div>
+                    ${r.fragmento ? `<div style="color:var(--color-secondary);font-size:11px;line-height:1.5;margin-top:5px;">${r.fragmento}</div>` : ''}
+                </div>
+                <div style="color:var(--color-muted);font-size:11px;flex-shrink:0;">~${minutosDeLectura(r.words)} min</div>
+            </div>`).join('')}
+    </div>`;
+}
+
+function attachSearch(container) {
+    const input   = container.querySelector('#ac-search');
+    const salida  = container.querySelector('#ac-search-results');
+    const indice  = container.querySelector('#ac-index');
+    if (!input || !salida || !indice) return;
+
+    let debounce = null;
+
+    function pintar(consulta) {
+        if (consulta.trim().length < 2) {
+            salida.innerHTML = '';
+            indice.style.display = '';
+            return;
+        }
+        indice.style.display = 'none';
+        salida.innerHTML = renderResultados(buscar(consulta), consulta, !_LESSONS);
+        salida.querySelectorAll('[data-search-key]').forEach(item => {
+            const key   = item.getAttribute('data-search-key');
+            const modId = parseInt(key.split('-')[0], 10);
+            item.addEventListener('click', () => abrirLeccion(container, key, MODULES.find(m => m.id === modId)));
+        });
+    }
+
+    input.addEventListener('input', () => {
+        clearTimeout(debounce);
+        debounce = setTimeout(() => {
+            const consulta = input.value;
+            pintar(consulta);
+            // La primera búsqueda dispara la carga del texto completo; cuando
+            // llega se repinta con los resultados de cuerpo, no solo de título.
+            if (consulta.trim().length >= 2 && !_LESSONS) {
+                cargarLecciones().then(() => {
+                    if (input.value === consulta && document.body.contains(input)) pintar(consulta);
+                }).catch(() => {});
+            }
+        }, 200);
+    });
 }
 
 function phases() {
@@ -154,11 +384,14 @@ function phases() {
 }
 
 function card(m) {
-    const hasContent = Object.keys(LESSONS).some(k => k.startsWith(m.id + '-'));
+    const lecciones = leccionesDe(m.id);
+    const leidas    = lecciones.filter(l => _leidas.has(l.key)).length;
+    const pct       = lecciones.length ? Math.round(leidas / lecciones.length * 100) : 0;
+    const completo  = lecciones.length > 0 && leidas === lecciones.length;
     return `<div class="ac-card" data-id="${m.id}" style="background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius);overflow:hidden;">
         <div style="height:80px;background:linear-gradient(135deg,var(--color-surface),var(--color-bg,#0a0a0a));display:flex;align-items:center;justify-content:center;border-bottom:1px solid var(--color-border);position:relative;">
             <span style="font-size:2.2rem;">${m.icon}</span>
-            ${hasContent ? `<span style="position:absolute;top:8px;right:8px;background:var(--color-accent);color:#000;font-size:9px;padding:2px 6px;border-radius:10px;font-family:monospace;letter-spacing:.05em;">LEER</span>` : ''}
+            <span data-mod-badge="${m.id}" style="position:absolute;top:8px;right:8px;background:var(--color-accent);color:#000;font-size:9px;padding:2px 6px;border-radius:10px;font-family:monospace;letter-spacing:.05em;${completo ? '' : 'display:none;'}">✓ COMPLETO</span>
         </div>
         <div style="padding:1rem;">
             <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
@@ -167,12 +400,29 @@ function card(m) {
             </div>
             <div style="color:var(--color-muted);font-size:11px;line-height:1.5;margin-bottom:10px;">${m.description}</div>
             <div style="display:flex;gap:8px;font-size:10px;color:var(--color-muted);">
-                <span>📹 ${m.videos.length} lecciones</span>
-                <span>⏱ ${m.duration}</span>
+                <span>📖 ${lecciones.length} ${lecciones.length === 1 ? 'lección' : 'lecciones'}</span>
+                <span>⏱ ~${minutosDeModulo(lecciones)} min de lectura</span>
             </div>
-            <div class="ac-progress"><div class="ac-progress-bar" style="width:0%"></div></div>
+            <div class="ac-progress"><div class="ac-progress-bar" data-mod-bar="${m.id}" style="width:${pct}%"></div></div>
+            <div data-mod-txt="${m.id}" style="color:var(--color-muted);font-size:10px;margin-top:5px;">${leidas}/${lecciones.length} leídas</div>
         </div>
     </div>`;
+}
+
+// Repinta solo las barras/contadores cuando llega el progreso del backend,
+// sin volver a construir el índice entero (evita perder el scroll).
+function actualizarBarras(container) {
+    MODULES.forEach(m => {
+        const lecciones = leccionesDe(m.id);
+        const leidas    = lecciones.filter(l => _leidas.has(l.key)).length;
+        const pct       = lecciones.length ? Math.round(leidas / lecciones.length * 100) : 0;
+        const bar   = container.querySelector(`[data-mod-bar="${m.id}"]`);
+        const txt   = container.querySelector(`[data-mod-txt="${m.id}"]`);
+        const badge = container.querySelector(`[data-mod-badge="${m.id}"]`);
+        if (bar)   bar.style.width  = pct + '%';
+        if (txt)   txt.textContent  = `${leidas}/${lecciones.length} leídas`;
+        if (badge) badge.style.display = (lecciones.length > 0 && leidas === lecciones.length) ? '' : 'none';
+    });
 }
 
 function outcome() {
@@ -195,7 +445,7 @@ function outcome() {
 
 function footer() {
     return `<div style="text-align:center;margin-top:3rem;padding:1.5rem;border-top:1px solid var(--color-border);">
-        <div style="color:var(--color-muted);font-size:10px;letter-spacing:.15em;">[END OF TRANSMISSION // TECHNICAL_ANALYSIS_BLUEPRINT_v1.0]<br>[STATUS: ALL MODULES UNLOCKED // ACCESS: FULL]</div>
+        <div style="color:var(--color-muted);font-size:10px;letter-spacing:.15em;">[END OF TRANSMISSION // TECHNICAL_ANALYSIS_BLUEPRINT_v1.0]<br>[${MODULES.length} MÓDULOS // ${Object.keys(LESSON_INDEX).length} LECCIONES // RSU ACADEMY]</div>
     </div>`;
 }
 
@@ -211,9 +461,10 @@ function attachCardListeners(container) {
 
 // ── VISTA DE MÓDULO (lista de lecciones) ──────────────────────────────────────
 
-function renderModuleDetail(container, m) {
+async function renderModuleDetail(container, m) {
     injectStyles();
-    const lessons = m.videos.map((v, i) => ({...v, key: `${m.id}-${i+1}`}));
+    const lessons = leccionesDe(m.id);
+    await cargarQuizzes();   // ~84 KB, solo al entrar en un módulo
 
     container.innerHTML = `
         <button id="btn-volver" style="background:transparent;border:1px solid var(--color-border);color:var(--color-muted);border-radius:var(--radius);padding:6px 14px;font-family:var(--font-mono);font-size:12px;cursor:pointer;margin-bottom:1.5rem;">← VOLVER</button>
@@ -223,7 +474,7 @@ function renderModuleDetail(container, m) {
                 <span style="font-size:2.5rem;">${m.icon}</span>
                 <div>
                     <div style="color:var(--color-accent);font-size:18px;letter-spacing:.08em;">${m.title.toUpperCase()}</div>
-                    <div style="color:var(--color-muted);font-size:12px;margin-top:2px;">📹 ${m.videos.length} lecciones · ⏱ ${m.duration}</div>
+                    <div style="color:var(--color-muted);font-size:12px;margin-top:2px;">📖 ${lessons.length} ${lessons.length === 1 ? 'lección' : 'lecciones'} · ⏱ ~${minutosDeModulo(lessons)} min de lectura</div>
                 </div>
             </div>
             <div style="color:var(--color-text);font-size:13px;line-height:1.7;">${m.description}</div>
@@ -231,17 +482,17 @@ function renderModuleDetail(container, m) {
 
         <div style="background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius);overflow:hidden;">
             <div style="padding:10px 16px;border-bottom:1px solid var(--color-border);color:var(--color-accent);font-size:11px;letter-spacing:.08em;">CONTENIDO DEL MÓDULO</div>
-            ${lessons.map((v, i) => {
-                const hasLesson = !!LESSONS[v.key];
-                return `<div class="ac-lesson-item" data-key="${v.key}" data-has="${hasLesson}">
-                    <div class="ac-lesson-num" style="background:${hasLesson ? 'var(--color-accent)' : 'rgba(255,255,255,.05)'};color:${hasLesson ? '#000' : 'var(--color-muted)'};">
-                        ${hasLesson ? '▶' : i+1}
+            ${lessons.map((l, i) => {
+                const leida = _leidas.has(l.key);
+                return `<div class="ac-lesson-item" data-key="${l.key}">
+                    <div class="ac-lesson-num" style="background:${leida ? 'var(--color-accent)' : 'rgba(255,255,255,.05)'};color:${leida ? '#000' : 'var(--color-muted)'};">
+                        ${leida ? '✓' : i + 1}
                     </div>
                     <div style="flex:1;">
-                        <div class="ac-lesson-title" style="color:${hasLesson ? 'var(--color-text)' : 'var(--color-muted)'};font-size:13px;">${v.title}</div>
-                        ${hasLesson ? `<div style="color:var(--color-accent);font-size:10px;margin-top:2px;letter-spacing:.04em;">LECCIÓN DISPONIBLE</div>` : ''}
+                        <div class="ac-lesson-title" style="color:var(--color-text);font-size:13px;">${esc(l.title)}</div>
+                        ${leida ? `<div style="color:var(--color-accent);font-size:10px;margin-top:2px;letter-spacing:.04em;">LEÍDA</div>` : ''}
                     </div>
-                    <div style="color:var(--color-muted);font-size:11px;">${v.duration}</div>
+                    <div style="color:var(--color-muted);font-size:11px;">~${minutosDeLectura(l.words)} min</div>
                 </div>`;
             }).join('')}
         </div>
@@ -252,34 +503,53 @@ function renderModuleDetail(container, m) {
     container.querySelector('#btn-volver').addEventListener('click', () => render(container));
 
     container.querySelectorAll('.ac-lesson-item').forEach(item => {
-        if (item.getAttribute('data-has') !== 'true') return;
-        item.addEventListener('click', () => {
-            const key = item.getAttribute('data-key');
-            const lesson = LESSONS[key];
-            if (lesson) renderLesson(container, lesson, m);
-        });
+        item.addEventListener('click', () => abrirLeccion(container, item.getAttribute('data-key'), m));
     });
 
     const quizBtn = container.querySelector('#btn-start-quiz');
     if (quizBtn) {
         quizBtn.addEventListener('click', () => {
-            const quiz = QUIZZES[m.id];
+            const quiz = _QUIZZES[m.id];
             if (quiz) renderQuiz(container, quiz, m);
         });
     }
 }
 
+// Punto único de apertura de una lección: se encarga de traer el contenido
+// pesado (lecciones + gráficos) antes de renderizar, con un aviso visible
+// mientras llega -- la primera vez son ~1,2 MB y en móvil se nota.
+async function abrirLeccion(container, key, m) {
+    const previo = container.innerHTML;
+    if (!_LESSONS || !_CHARTS) {
+        container.innerHTML = `<div style="color:var(--color-muted);font-size:12px;padding:2rem;text-align:center;">Cargando contenido de la lección…</div>`;
+    }
+    try {
+        await Promise.all([cargarLecciones(), cargarGraficos()]);
+    } catch (_) {
+        container.innerHTML = previo;
+        return;
+    }
+    const lesson = _LESSONS[key];
+    if (lesson) renderLesson(container, lesson, m, key);
+    else container.innerHTML = previo;
+}
+
 // ── BLOQUE DE ACCESO AL QUIZ (en la vista de módulo) ───────────────────────────
 
 function quizBlock(m) {
-    const quiz = QUIZZES[m.id];
+    const quiz = _QUIZZES && _QUIZZES[m.id];
     if (!quiz) return '';
+    const previo = _quizzes[String(m.id)];
+    const marca  = previo
+        ? `<div style="color:var(--color-accent);font-size:11px;margin-top:4px;">✓ Mejor resultado: ${previo.score}/${previo.total} a la primera</div>`
+        : '';
     return `<div style="background:var(--color-surface);border:1px solid var(--color-accent);border-radius:var(--radius);padding:1.25rem;margin-top:1.5rem;display:flex;align-items:center;justify-content:space-between;gap:1rem;flex-wrap:wrap;">
         <div>
             <div style="color:var(--color-accent);font-size:12px;letter-spacing:.08em;margin-bottom:4px;">🎯 QUIZ DEL MÓDULO</div>
             <div style="color:var(--color-muted);font-size:11px;">${quiz.questions.length} preguntas · repite las que falles hasta acertarlas, sin límite de intentos</div>
+            ${marca}
         </div>
-        <button id="btn-start-quiz" style="background:var(--color-accent);color:#000;border:none;border-radius:var(--radius);padding:10px 20px;font-family:var(--font-mono);font-size:12px;font-weight:600;cursor:pointer;letter-spacing:.05em;flex-shrink:0;">EMPEZAR QUIZ →</button>
+        <button id="btn-start-quiz" style="background:var(--color-accent);color:#000;border:none;border-radius:var(--radius);padding:10px 20px;font-family:var(--font-mono);font-size:12px;font-weight:600;cursor:pointer;letter-spacing:.05em;flex-shrink:0;">${previo ? 'REPETIR QUIZ →' : 'EMPEZAR QUIZ →'}</button>
     </div>`;
 }
 
@@ -343,6 +613,7 @@ function renderQuiz(container, quiz, module) {
 
         const main = document.getElementById('main');
         if (main) main.scrollTop = 0;
+        window.scrollTo(0, 0);
     }
 
     function optionRow(opt, i, s) {
@@ -403,6 +674,11 @@ function renderQuizComplete(container, quiz, module, state) {
     const totalAttempts = state.reduce((sum, s) => sum + s.attempts, 0);
     const perfectRun = state.every(s => s.attempts === 1);
 
+    // Se guarda el número de preguntas acertadas A LA PRIMERA: todas acaban
+    // resolviéndose (el quiz no deja avanzar sin acertar), así que "4/4
+    // acertadas" no distinguiría a nadie. Los intentos sí.
+    guardarResultadoQuiz(module.id, state.filter(s => s.attempts === 1).length, quiz.questions.length);
+
     container.innerHTML = `
         <div style="text-align:center;padding:3rem 1.5rem;background:var(--color-surface);border:1px solid var(--color-accent);border-radius:var(--radius);">
             <div style="font-size:3rem;margin-bottom:1rem;">${perfectRun ? '🏆' : '✅'}</div>
@@ -424,17 +700,19 @@ function renderQuizComplete(container, quiz, module, state) {
 
     const main = document.getElementById('main');
     if (main) main.scrollTop = 0;
+    window.scrollTo(0, 0);   // #main tiene overflow:auto pero no es quien scrollea (ver observarFinDeLeccion)
 }
 
 // ── VISTA DE LECCIÓN (contenido didáctico) ────────────────────────────────────
 
-function renderLesson(container, lesson, module) {
+function renderLesson(container, lesson, module, lessonKey) {
     injectStyles();
 
     // Navegación entre lecciones del módulo
-    const moduleKey = lesson.moduleId;
-    const allLessons = module.videos.map((v,i) => ({key:`${moduleKey}-${i+1}`, title:v.title}));
-    const currentIdx = lesson.lessonIndex;
+    const moduleKey  = lesson.moduleId;
+    const allLessons = leccionesDe(moduleKey);
+    const currentIdx = allLessons.findIndex(l => l.key === lessonKey);
+    const minutos    = LESSON_INDEX[lessonKey] ? minutosDeLectura(LESSON_INDEX[lessonKey].words) : null;
 
     const navPills = allLessons.map((l,i) =>
         `<span class="ac-nav-pill ${i===currentIdx?'active':''}" data-key="${l.key}" data-title="${l.title}">${i+1}. ${l.title.split('—')[0].trim()}</span>`
@@ -460,7 +738,7 @@ function renderLesson(container, lesson, module) {
             <div style="color:var(--color-muted);font-size:11px;letter-spacing:.1em;margin-bottom:6px;">LECCIÓN ${currentIdx+1} DE ${allLessons.length}</div>
             <h1 style="font-size:20px;color:var(--color-text);letter-spacing:.05em;margin:0 0 6px;font-family:var(--font-mono);">${lesson.title}</h1>
             <div style="display:flex;gap:12px;align-items:center;">
-                <span style="color:var(--color-muted);font-size:12px;">⏱ ${lesson.duration}</span>
+                <span style="color:var(--color-muted);font-size:12px;">⏱ ~${minutos || 1} min de lectura</span>
                 <span style="color:var(--color-accent);font-size:10px;background:rgba(0,255,173,.08);padding:2px 8px;border-radius:10px;border:1px solid rgba(0,255,173,.2);">MÓDULO ${module.id} // ${module.title.toUpperCase()}</span>
             </div>
         </div>
@@ -472,6 +750,10 @@ function renderLesson(container, lesson, module) {
         <div id="lesson-body">
             ${lesson.sections.map(sec => renderSection(sec)).join('')}
         </div>
+
+        <!-- Centinela de "lección leída": cuando este nodo entra en pantalla,
+             el usuario ha llegado al final del contenido. Ver observarFinDeLeccion. -->
+        <div id="ac-lesson-end" style="height:1px;"></div>
 
         <!-- Bottom nav -->
         <div style="display:flex;justify-content:space-between;align-items:center;margin-top:2.5rem;padding-top:1.5rem;border-top:1px solid var(--color-border);">
@@ -489,25 +771,72 @@ function renderLesson(container, lesson, module) {
     container.querySelector('#btn-volver-mod').addEventListener('click', () => renderModuleDetail(container, module));
 
     container.querySelectorAll('.ac-nav-pill[data-key]').forEach(pill => {
-        pill.addEventListener('click', () => {
-            const key = pill.getAttribute('data-key');
-            const l = LESSONS[key];
-            if (l) renderLesson(container, l, module);
-        });
+        pill.addEventListener('click', () => abrirLeccion(container, pill.getAttribute('data-key'), module));
     });
 
     container.querySelectorAll('.ac-lesson-nav').forEach(btn => {
-        btn.addEventListener('click', () => {
-            const key = btn.getAttribute('data-key');
-            const l = LESSONS[key];
-            if (l) renderLesson(container, l, module);
-            else container.scrollTo && container.scrollTo(0,0);
-        });
+        btn.addEventListener('click', () => abrirLeccion(container, btn.getAttribute('data-key'), module));
     });
 
     // Scroll top
     const main = document.getElementById('main');
     if (main) main.scrollTop = 0;
+    window.scrollTo(0, 0);   // #main tiene overflow:auto pero no es quien scrollea (ver observarFinDeLeccion)
+
+    observarFinDeLeccion(container, lessonKey);
+}
+
+// Marca la lección como leída cuando el usuario llega al final del contenido.
+// Criterio deliberado: marcar al ABRIR habría inflado la barra de progreso con
+// lecciones que nadie llegó a leer -- el mismo tipo de dato plausible pero
+// falso que ya se eliminó del resto de la terminal.
+//
+// Se comprueba la posición del centinela a mano en vez de con
+// IntersectionObserver: #main tiene overflow:auto pero NO es el elemento que
+// scrollea (su scrollHeight es igual a su clientHeight — quien scrollea es el
+// documento), así que un observer con root:#main no delimita nada y su
+// resultado no es fiable. Los listeners van sobre window y sobre #main para
+// cubrir las dos posibilidades según el ancho de pantalla.
+function observarFinDeLeccion(container, lessonKey) {
+    detenerObservacion();
+    if (!lessonKey || _leidas.has(lessonKey)) return;
+
+    const centinela = container.querySelector('#ac-lesson-end');
+    if (!centinela) return;
+    const main = document.getElementById('main');
+
+    _finLeccion = () => {
+        if (!document.body.contains(centinela)) { detenerObservacion(); return; }
+        const alto = window.innerHeight || document.documentElement.clientHeight;
+        // Con un margen de 80px: llegar "al final" no exige clavar el píxel.
+        if (centinela.getBoundingClientRect().top - 80 <= alto) {
+            detenerObservacion();
+            marcarLeccionLeida(lessonKey);
+        }
+    };
+
+    window.addEventListener('scroll', _finLeccion, { passive: true });
+    window.addEventListener('resize', _finLeccion, { passive: true });
+    if (main) main.addEventListener('scroll', _finLeccion, { passive: true });
+    _finLeccionMain = main;
+
+    // Red de seguridad que NO depende de que lleguen eventos de scroll: se
+    // comprueba la posición una vez por segundo mientras la lección esté
+    // abierta. Cuesta nada y evita el peor fallo posible aquí -- que el
+    // progreso deje de registrarse en silencio si algún navegador (o un
+    // contenedor con scroll propio) no entrega los eventos esperados.
+    // Cubre además la lección corta que cabe entera en pantalla sin scroll.
+    _finLeccionTimer = setInterval(() => { if (_finLeccion) _finLeccion(); }, 1000);
+}
+
+function detenerObservacion() {
+    if (_finLeccionTimer) { clearInterval(_finLeccionTimer); _finLeccionTimer = null; }
+    if (!_finLeccion) return;
+    window.removeEventListener('scroll', _finLeccion);
+    window.removeEventListener('resize', _finLeccion);
+    if (_finLeccionMain) _finLeccionMain.removeEventListener('scroll', _finLeccion);
+    _finLeccion = null;
+    _finLeccionMain = null;
 }
 
 // ── RENDERIZAR SECCIÓN ────────────────────────────────────────────────────────
@@ -558,7 +887,7 @@ function renderBlock(block) {
             </div>`;
 
         case 'chart':
-            const chartFn = CHARTS[block.id];
+            const chartFn = _CHARTS && _CHARTS[block.id];
             if (!chartFn) return `<div style="color:var(--color-muted);font-size:11px;padding:8px;border:1px dashed var(--color-border);border-radius:4px;margin:12px 0;">Gráfico: ${block.id}</div>`;
             return `<div class="ac-chart">${chartFn()}</div>`;
 
