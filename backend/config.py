@@ -2,6 +2,28 @@ from pydantic import model_validator
 from pydantic_settings import BaseSettings
 from typing import List
 
+
+# Valores que delatan que una clave no se ha llegado a definir de verdad: los
+# defaults de este fichero y los textos de relleno de .env.example.
+#
+# Antes solo se comparaba contra los defaults literales, y eso dejaba abierto
+# el caso más probable de todos (detectado el 28/07/2026): alguien copia
+# .env.example, pone ENVIRONMENT=production y se olvida de cambiar las claves
+# -- la app arrancaba tan tranquila con unas credenciales que están escritas
+# en un fichero público del repositorio.
+#
+# Solo se buscan patrones inequívocos de relleno, NO una longitud mínima: un
+# umbral de longitud podría dejar la app sin arrancar en el próximo despliegue
+# si alguna clave real en producción resultara ser corta, y eso sería romper
+# producción para prevenir algo hipotético.
+_PREFIJOS_RELLENO = ("cambia_esto", "cambiar", "tu_", "your_", "xxx")
+_VALORES_RELLENO  = {"dev_secret", "changeme_admin_key", "changeme", "secret", "admin", ""}
+
+
+def _es_valor_de_relleno(valor: str) -> bool:
+    v = (valor or "").strip().lower()
+    return v in _VALORES_RELLENO or v.startswith(_PREFIJOS_RELLENO) or "changeme" in v
+
 class Settings(BaseSettings):
     app_name: str = "RSU Terminal"
     secret_key: str = "dev_secret"
@@ -83,30 +105,30 @@ class Settings(BaseSettings):
 
     class Config:
         env_file = ".env"
-        # Allows CORS_ORIGINS=https://x.com,https://y.com in .env
+        # CORS_ORIGINS solo admite formato JSON en el .env:
+        #     CORS_ORIGINS=["https://x.com","https://y.com"]
+        # El comentario anterior decía que valía separarlo por comas, y era
+        # FALSO -- comprobado el 28/07/2026: con comas lanza SettingsError y
+        # la app no arranca. Justo la trampa que alguien se encontraría al
+        # configurar el dominio propio para HTTPS.
         env_file_encoding = "utf-8"
 
     @model_validator(mode="after")
     def _block_default_secrets_in_production(self):
-        """Corta el arranque si en producción se ha quedado el SECRET_KEY o
-        la COMMUNITY_PASSWORD por defecto (p. ej. porque el .env no se ha
+        """Corta el arranque si en producción se han quedado SECRET_KEY o
+        ADMIN_KEY con su valor por defecto (p. ej. porque el .env no se ha
         cargado, tiene un typo en el nombre de variable, o el volumen/env
         del contenedor no está bien montado). Es mejor que la app no arranque
         a que arranque en producción con credenciales públicas y conocidas.
         """
         if self.environment == "production":
-            if self.secret_key == "dev_secret":
-                raise ValueError(
-                    "SECRET_KEY sigue en su valor por defecto ('dev_secret') "
-                    "con ENVIRONMENT=production. Define un SECRET_KEY propio "
-                    "en el .env antes de desplegar."
-                )
-            if self.admin_key == "changeme_admin_key":
-                raise ValueError(
-                    "ADMIN_KEY sigue en su valor por defecto "
-                    "('changeme_admin_key') con ENVIRONMENT=production. Define una "
-                    "clave de administrador propia en el .env antes de desplegar."
-                )
+            for nombre, valor in (("SECRET_KEY", self.secret_key), ("ADMIN_KEY", self.admin_key)):
+                if _es_valor_de_relleno(valor):
+                    raise ValueError(
+                        f"{nombre} sigue con un valor de relleno ('{valor}') y "
+                        "ENVIRONMENT=production. Define una clave propia, larga y "
+                        "aleatoria, en el .env antes de desplegar."
+                    )
         return self
 
 settings = Settings()
