@@ -25,6 +25,7 @@ const ROUTES = {
     '/research':   () => import('/pages/research.js'),
     '/insider':    () => import('/pages/insider.js'),
     '/congress':   () => import('/pages/congress.js'),
+    '/track-record': () => import('/pages/track_record.js'),
     '/newsfeed':   () => import('/pages/newsfeed.js'),
     '/canslim':    () => import('/pages/canslim.js'),
     '/options':    () => import('/pages/options.js'),
@@ -261,7 +262,7 @@ function trackPageView(cleanPath) {
 export function navigate(path, options = {}) {
     const isPopState = !!options.isPopState;
     const cleanPath = path.split('?')[0];
-    const protectedRoutes = ['/', '/manifiesto', '/market', '/cartera', '/rsrw', '/scanner', '/watchlist', '/account', '/community', '/newsfeed', '/spxl', '/btc-stratum', '/roadmap', '/academy', '/tesis', '/equipo', '/options', '/research', '/disclaimer', '/canslim', '/algoritmo', '/insider', '/congress', '/admin', '/mobile'];
+    const protectedRoutes = ['/', '/manifiesto', '/market', '/cartera', '/rsrw', '/scanner', '/watchlist', '/account', '/community', '/newsfeed', '/spxl', '/btc-stratum', '/roadmap', '/academy', '/tesis', '/equipo', '/options', '/research', '/disclaimer', '/canslim', '/algoritmo', '/insider', '/congress', '/track-record', '/admin', '/mobile'];
     const needsAuth = protectedRoutes.includes(cleanPath);
 
     if (needsAuth && isAuthenticated()) trackPageView(cleanPath);

@@ -22,6 +22,7 @@ export const NAV_ITEMS = [
     { path: '/community', label: 'Comunidad', icon: '👥' },
     { path: '/canslim',   label: 'CANSLIM',      icon: 'K' },
     { path: '/algoritmo', label: 'RSU Algoritmo',icon: 'A' },
+    { path: '/track-record', label: 'Track Record', icon: '📓' },
     { path: '/disclaimer', label: 'Disclaimer', icon: '⚖' },
 ];
 

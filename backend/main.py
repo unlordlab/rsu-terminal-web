@@ -8,7 +8,7 @@ from config import settings
 from auth import verify_token, require_tier, verify_admin_key
 from middleware.rate_limit import rate_limit
 from middleware.analytics import AnalyticsMiddleware
-from routers import auth, market, cartera, canslim, rsu_algoritmo, research, newsfeed, tesis, spxl, rsrw, ws, options, btc_stratum, insider, scanner, analytics, watchlist, community, chat, academy, academy_review, laia_ethics, meeting_room, congress
+from routers import auth, market, cartera, canslim, rsu_algoritmo, research, newsfeed, tesis, spxl, rsrw, ws, options, btc_stratum, insider, scanner, analytics, watchlist, community, chat, academy, academy_review, laia_ethics, meeting_room, congress, track_record
 
 # Proxy global para yfinance — se aplica UNA vez aquí y afecta a TODAS las
 # llamadas a yfinance en cualquier archivo del backend (Algoritmo, Cartera,
@@ -118,6 +118,11 @@ app.include_router(chat.router,         dependencies=rl)
 # Progreso de Academy (lecciones leídas + quizzes). Academy es GRATUITA para
 # cualquier usuario registrado, por eso `rl` y no `paid`.
 app.include_router(academy.router,      dependencies=rl)
+# Track record: el registro de lo que hicieron las señales de verdad. Abierto
+# a cualquier usuario registrado a propósito -- es exactamente lo que hay que
+# poder enseñar antes de pedirle dinero a nadie. El día que exista landing
+# pública, este es el primer candidato a salir del muro de autenticación.
+app.include_router(track_record.router, dependencies=rl)
 # /track es "fire and forget" desde el frontend (rate limit general para
 # evitar abuso); /summary va protegido con X-Admin-Key dentro del propio
 # router, igual que los endpoints /admin/* de auth.py.
