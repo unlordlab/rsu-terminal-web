@@ -1,4 +1,5 @@
 import re
+import math
 import html as _html
 import requests
 import xml.etree.ElementTree as ET
@@ -428,12 +429,36 @@ def _get_prices() -> list:
     result = []
     def _fetch(name, ticker):
         try:
-            t    = yf.Ticker(ticker)
-            hist = t.history(period="2d", interval="1d")
-            if len(hist) < 2: return None
-            prev  = float(hist['Close'].iloc[-2])
-            last  = float(hist['Close'].iloc[-1])
-            chg   = (last - prev) / prev * 100
+            t = yf.Ticker(ticker)
+            # period="5d" (antes "2d") + descartar las filas sin Close real:
+            # con el mercado ABIERTO, Yahoo devuelve la fila del día en curso
+            # con Close=NaN, así que iloc[-1] daba NaN y el widget mostraba
+            # "NaN" como precio y como % durante toda la sesión. Con solo 2
+            # días descargados, quitar esa fila dejaba 1 sola y el `len < 2`
+            # descartaba el ticker entero -- de ahí los 5 días, para que
+            # siempre queden al menos 2 cierres REALES. Mismo patrón de fondo
+            # ya corregido en cartera_service._get_daily_bars() (25/07/2026).
+            hist = t.history(period="5d", interval="1d")
+            hist = hist[hist['Close'].notna()]
+            if len(hist) < 2:
+                return None
+            prev = float(hist['Close'].iloc[-2])
+            last = float(hist['Close'].iloc[-1])
+            if not prev:
+                return None
+            # Con el mercado abierto, `last` es el cierre de AYER (la sesión
+            # de hoy aún no ha cerrado). fast_info sí trae el precio en vivo,
+            # que es lo que este widget quiere mostrar -- se usa si está
+            # disponible, cayendo al cierre real si no. Mismo criterio que
+            # Cartera: un snapshot aproximado de ahora vale más que un cierre
+            # exacto de ayer para un ticker de precios en vivo.
+            try:
+                vivo = float(getattr(t.fast_info, 'last_price', 0) or 0)
+                if vivo and math.isfinite(vivo):
+                    last = vivo
+            except Exception:
+                pass
+            chg = (last - prev) / prev * 100
             return {"name": name, "price": round(last, 4), "chg": round(chg, 2)}
         except Exception:
             return None

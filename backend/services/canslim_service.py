@@ -637,6 +637,22 @@ def _scan_single(ticker: str) -> dict | None:
     try:
         tk   = yf.Ticker(ticker)
         hist = tk.history(period="2y")  # antes "1y" -- necesario para iloc[-252] real, ver _perf_12m
+
+        # Con el mercado ABIERTO, Yahoo devuelve la fila del día en curso con
+        # Close=NaN (la sesión aún no ha cerrado). Como _safe() convierte NaN
+        # en 0.0, `price` salía 0.0 y el `if price < 5` de abajo descartaba el
+        # ticker EN SILENCIO -- y le pasaba a todos a la vez, así que el scan
+        # se vaciaba entero durante toda la sesión sin ningún error. Mismo
+        # patrón de fondo ya corregido en cartera_service._get_daily_bars()
+        # (25/07/2026); aquí se limpia la fila una sola vez, al principio, en
+        # vez de parchear cada uso: `price`, `perf_12m`, `vol_today` y
+        # `acc_dis_rating` leen todos iloc[-1] y se arreglan de golpe.
+        #
+        # Para un screener basado en cierres (medias de 50/150/200, RS a 12
+        # meses) el último cierre REAL es además el dato correcto -- no hace
+        # falta el relleno con fast_info que sí necesita Cartera, donde el
+        # precio intradía de hoy sí importa para el P&L en vivo.
+        hist = hist[hist['Close'].notna()]
         if len(hist) < 100:
             return None
 
