@@ -9,8 +9,9 @@ import sys
 import json
 import time
 import requests
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
+from concurrent.futures import ThreadPoolExecutor
 import yfinance as yf
 import numpy as np
 import pandas as pd
@@ -84,7 +85,12 @@ SCANNER_GIST_ID = "cb9d69cbf6ca741b4fd86765a41813a7"
 SCANNER_GIST_FILE = "scanner_scan.json"
 
 FINNHUB_KEY = os.environ.get("FINNHUB_API_KEY", "")
-ALPHA_VANTAGE_KEY = os.environ.get("ALPHA_VANTAGE_API_KEY", "")
+# ALPHA_VANTAGE_API_KEY se leía aquí para el respaldo de titulares, pero el
+# secret nunca llegó a configurarse en el Action y el respaldo era papel
+# mojado. Sustituido por RSS directo de los medios (ver
+# get_rss_fallback_headlines) — coherente además con PRECIOS_Y_APIS.md, que
+# dice de Alpha Vantage "eliminar, no mejorar". Sigue en uso en
+# backend/services/research_service.py (earnings trimestrales), eso no se toca.
 
 # Insider Flow vive en SQLite dentro del backend (insider_history.db), no
 # en un Gist -- así que solo es alcanzable desde este script contactando
@@ -413,10 +419,18 @@ def get_major_outlet_headlines(max_items: int = 8) -> list:
         # que aunque aquí solo se hace UNA petición, puede coincidir con una
         # ráfaga de otro trabajo completamente distinto usando una IP cercana
         # en ese mismo instante. GDELT pide explícitamente esperar 5s entre
-        # peticiones — con 8s de margen y hasta 2 reintentos debería bastar
-        # para una colisión puntual sin arriesgar el timeout de 20 min del Action.
+        # peticiones.
+        #
+        # Backoff EXPONENCIAL (5s, 15s, 45s) en vez de tres esperas fijas de
+        # 8s: los días 26-28/07/2026 los 3 reintentos de 8s fallaron seguidos,
+        # lo que dice que el bloqueo dura bastante más que la ventana de 24s
+        # que cubrían. Con 65s totales se cubre una congestión real sin
+        # acercarse al timeout de 10 min del Action. Y si aun así falla, el
+        # respaldo RSS (que no comparte infraestructura con GDELT) ya no es
+        # papel mojado como lo era Alpha Vantage sin clave.
         r = None
-        for attempt in range(3):
+        esperas = [5, 15, 45]
+        for attempt, espera in enumerate(esperas):
             r = requests.get(
                 "https://api.gdeltproject.org/api/v2/doc/doc",
                 params=gdelt_params,
@@ -425,8 +439,9 @@ def get_major_outlet_headlines(max_items: int = 8) -> list:
             )
             if r.status_code != 429:
                 break
-            print(f"⚠️  GDELT devolvió 429 (límite de tasa compartido) — reintento {attempt + 1}/3 en 8s...")
-            time.sleep(8)
+            if attempt < len(esperas) - 1:
+                print(f"⚠️  GDELT devolvió 429 (límite de tasa compartido) — reintento {attempt + 1}/{len(esperas)} en {espera}s...")
+                time.sleep(espera)
 
         if r.status_code != 200:
             print(f"⚠️  GDELT devolvió status {r.status_code}: {r.text[:200]}")
@@ -462,65 +477,105 @@ def get_major_outlet_headlines(max_items: int = 8) -> list:
         return []
 
 
-def get_alphavantage_headlines(max_items: int = 8) -> list:
-    """Respaldo cuando GDELT falla (ver get_major_outlet_headlines) — usa el
-    endpoint NEWS_SENTIMENT de Alpha Vantage, que ya está configurado en este
-    proyecto para otras cosas (cero fricción de setup nueva). No es un feed de
-    Reuters/Bloomberg específico, es un agregador de noticias financieras y
-    macro con fuentes variadas — cubre menos "geopolítico puro" que GDELT
-    pero es una fuente completamente distinta, con su propia infraestructura,
-    así que si GDELT falla por un bloqueo de IP compartida, esta normalmente
-    no se ve afectada por el mismo problema al mismo tiempo.
-    Límite gratuito: 25 peticiones/día — de sobra para 1 vez al día."""
-    if not ALPHA_VANTAGE_KEY:
-        print("⚠️  ALPHA_VANTAGE_API_KEY no configurado — sin respaldo de Alpha Vantage (revisa los secrets del Action)")
-        return []
-    try:
-        r = requests.get(
-            "https://www.alphavantage.co/query",
-            params={
-                "function": "NEWS_SENTIMENT",
-                "topics": "economy_macro,financial_markets,economy_fiscal,economy_monetary",
-                "apikey": ALPHA_VANTAGE_KEY,
-                "limit": max_items * 2,
-                "sort": "LATEST",
-            },
-            timeout=15,
-        )
-        if r.status_code != 200:
-            print(f"⚠️  Alpha Vantage (respaldo GDELT): status HTTP {r.status_code}")
+# Respaldo de GDELT: RSS directo de los propios medios. Verificado en vivo
+# (28/07/2026) cuáles responden de verdad, en vez de asumirlo:
+#   - feeds.reuters.com  -> MUERTO (ni siquiera resuelve DNS; Reuters cerró
+#     sus RSS públicos). Ojo: backend/services/newsfeed_service.py TODAVÍA lo
+#     lista en SOURCES -- hallazgo aparte, no se toca aquí.
+#   - apnews.com/index.rss -> HTTP 401 (ya requiere autenticación)
+#   - feeds.a.dj.com (WSJ/Dow Jones) -> responde 200 con 20 artículos... pero
+#     el más reciente es de enero de 2025, CONGELADO hace ~547 días. Es peor
+#     que un 404: parece vivo y sirve contenido plausible pero obsoleto. Solo
+#     se detectó porque el filtro de recencia de abajo lo dejó en 0 titulares.
+#     OJO: backend/services/newsfeed_service.py usa el feed hermano
+#     (RSSMarketsMain.xml), igual de congelado -- hallazgo aparte, no se toca aquí.
+# Los 3 de abajo se verificaron VIVOS (artículo más reciente de hace <3h) y se
+# eligen por cobertura complementaria: BBC (geopolítica global), CNBC
+# (financiero internacional), Al Jazeera (Oriente Medio -- justo el caso de uso
+# que motivó esta sección: un ataque en Ormuz que mueve el petróleo).
+RSS_FALLBACK_FEEDS = [
+    ("BBC",        "http://feeds.bbci.co.uk/news/world/rss.xml"),
+    ("CNBC",       "https://www.cnbc.com/id/100727362/device/rss/rss.html"),
+    ("Al Jazeera", "https://www.aljazeera.com/xml/rss/all.xml"),
+]
+
+
+def get_rss_fallback_headlines(max_items: int = 8, max_age_hours: int = 30) -> list:
+    """Respaldo cuando GDELT falla (ver get_major_outlet_headlines).
+
+    Antes esto usaba Alpha Vantage, pero nunca llegó a funcionar: el secret
+    ALPHA_VANTAGE_API_KEY no está configurado en el Action, así que el
+    respaldo era papel mojado justo los días en que GDELT fallaba (26-28/07/
+    2026, tres briefings seguidos sin titulares de alto impacto). Y el propio
+    PRECIOS_Y_APIS.md dice explícitamente de Alpha Vantage "eliminar, no
+    mejorar" -- así que en vez de pedirle al usuario que configure una clave
+    que no debería contratar, se va directamente a la fuente: el RSS público
+    de los propios medios. Sin API key, sin cuota, y no comparte
+    infraestructura con GDELT (que es lo que un respaldo tiene que cumplir).
+
+    Se leen los 3 feeds en paralelo: si uno falla, los otros dos siguen
+    valiendo -- a diferencia del respaldo anterior, que era un único punto
+    de fallo."""
+    from email.utils import parsedate_to_datetime
+    import xml.etree.ElementTree as ET
+
+    corte = datetime.now(timezone.utc) - timedelta(hours=max_age_hours)
+
+    def _leer(feed):
+        etiqueta, url = feed
+        try:
+            r = requests.get(url, timeout=12, headers={"User-Agent": "RSU-Terminal-Briefing/1.0"})
+            if r.status_code != 200:
+                print(f"⚠️  RSS {etiqueta}: HTTP {r.status_code}")
+                return []
+            root  = ET.fromstring(r.content)
+            items = root.findall(".//item")
+            out   = []
+            for it in items:
+                titulo = (it.findtext("title") or "").strip()
+                if not titulo:
+                    continue
+                # Descartar lo viejo: un titular de hace 3 días en un briefing
+                # de "qué ha pasado hoy" es peor que no tener titular.
+                hora = ""
+                pub  = it.findtext("pubDate")
+                if pub:
+                    try:
+                        dt = parsedate_to_datetime(pub)
+                        if dt.tzinfo is None:
+                            dt = dt.replace(tzinfo=timezone.utc)
+                        if dt < corte:
+                            continue
+                        hora = dt.astimezone(timezone.utc).strftime("%H:%M UTC")
+                    except Exception:
+                        pass  # sin fecha parseable: se conserva, mejor que descartarlo
+                out.append({"headline": titulo[:180], "source": etiqueta, "time": hora})
+            print(f"🔁 RSS {etiqueta}: {len(out)} titulares dentro de la ventana de {max_age_hours}h")
+            return out
+        except Exception as e:
+            print(f"⚠️  RSS {etiqueta}: {type(e).__name__}: {str(e)[:80]}")
             return []
-        data = r.json()
-        feed = data.get("feed", [])
-        if not feed:
-            # Alpha Vantage devuelve 200 con un mensaje de error/límite dentro
-            # del body en vez de un status HTTP de error — hay que revisar
-            # explícitamente, si no, un límite agotado se ve igual que "sin noticias hoy"
-            print(f"⚠️  Alpha Vantage (respaldo GDELT): 0 artículos — body: {str(data)[:200]}")
-            return []
-        print(f"🔁 Alpha Vantage (respaldo GDELT): {len(feed)} artículos recibidos")
-        out = []
-        for a in feed:
-            title = (a.get("title") or "").strip()
-            if not title:
+
+    with ThreadPoolExecutor(max_workers=len(RSS_FALLBACK_FEEDS)) as ex:
+        por_feed = list(ex.map(_leer, RSS_FALLBACK_FEEDS))
+
+    # Intercalar en vez de concatenar: con 8 huecos y concatenación, el primer
+    # feed se los quedaría todos y el briefing vería un solo medio.
+    out, vistos = [], set()
+    for i in range(max(len(f) for f in por_feed) if por_feed else 0):
+        for feed in por_feed:
+            if i >= len(feed):
                 continue
-            time_str = ""
-            try:
-                time_str = datetime.strptime(a.get("time_published", ""), "%Y%m%dT%H%M%S").strftime("%H:%M UTC")
-            except Exception:
-                pass
-            out.append({
-                "headline": title[:180],
-                "source":   a.get("source", "?"),
-                "time":     time_str,
-            })
+            t = feed[i]["headline"].lower()
+            if t in vistos:
+                continue
+            vistos.add(t)
+            out.append(feed[i])
             if len(out) >= max_items:
-                break
-        print(f"🔁 Alpha Vantage (respaldo GDELT): {len(out)} titulares tras filtrar")
-        return out
-    except Exception as e:
-        print(f"⚠️  Alpha Vantage (respaldo GDELT): error inesperado ({type(e).__name__}: {e})")
-        return []
+                print(f"🔁 Respaldo RSS: {len(out)} titulares de {len(RSS_FALLBACK_FEEDS)} medios")
+                return out
+    print(f"🔁 Respaldo RSS: {len(out)} titulares de {len(RSS_FALLBACK_FEEDS)} medios")
+    return out
 
 
 # ── EARNINGS NOTABLES PRÓXIMOS 2 DÍAS (Finnhub) ───────────────────────────────
@@ -1187,8 +1242,8 @@ def main():
     print("🌍 Recopilando titulares de alto impacto (Reuters/Bloomberg/WSJ/AP/FT vía GDELT)...")
     major_headlines = get_major_outlet_headlines()
     if not major_headlines:
-        print("🔁 GDELT no devolvió nada — probando respaldo con Alpha Vantage...")
-        major_headlines = get_alphavantage_headlines()
+        print("🔁 GDELT no devolvió nada — probando respaldo con RSS directo (BBC/WSJ/Al Jazeera)...")
+        major_headlines = get_rss_fallback_headlines()
 
     print("📅 Recopilando earnings notables (próximas 48h)...")
     earnings = get_notable_earnings()

@@ -30,7 +30,10 @@ jobs:
           GIST_TOKEN:           ${{ secrets.GIST_TOKEN }}
           GIST_ID:              ${{ secrets.GIST_ID }}
           FINNHUB_API_KEY:      ${{ secrets.FINNHUB_API_KEY }}
-          ALPHA_VANTAGE_API_KEY: ${{ secrets.ALPHA_VANTAGE_API_KEY }}
+          # ALPHA_VANTAGE_API_KEY retirado (28/07/2026): el secret nunca se
+          # configuró, así que el respaldo de titulares que dependía de él
+          # nunca funcionó. Sustituido por RSS directo de los medios, sin
+          # clave (ver get_rss_fallback_headlines en daily_briefing.py).
           RSU_BACKEND_URL:      ${{ secrets.RSU_BACKEND_URL }}
           BRIEFING_AUTH_TOKEN:  ${{ secrets.BRIEFING_AUTH_TOKEN }}
         run: |
