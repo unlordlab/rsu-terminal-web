@@ -98,14 +98,35 @@ def init_db():
             underlying_price REAL,
             is_block        INTEGER DEFAULT 0,
             is_sweep        INTEGER DEFAULT 0,
-            near_earnings   INTEGER DEFAULT 0
+            near_earnings   INTEGER DEFAULT 0,
+            bid             REAL,
+            ask             REAL,
+            price_opt       REAL
         )
     ''')
     # Añadir columnas nuevas si no existen (migracion segura)
+    #
+    # bid/ask/price_opt (28/07/2026): ya se descargaban en option_chain y se
+    # usaban para clasificar compra/venta (Lee-Ready, ver _process_chain),
+    # pero se tiraban al guardar. Son IRRECUPERABLES: yfinance da la cadena
+    # de "ahora"; en cuanto pasa el día esa foto desaparece y no existe
+    # ninguna fuente gratuita de histórico de cadenas de opciones (los
+    # proveedores que sí lo venden cobran miles al año, precisamente porque
+    # no se puede reconstruir). Guardarlos cuesta cero llamadas extra.
+    # Con bid/ask se puede recalcular a posteriori el spread, revisar la
+    # clasificación de dirección con otro criterio, o estimar el precio
+    # medio real de ejecución -- nada de eso es posible con lo guardado
+    # hasta ahora. price_opt es el lastPrice del propio contrato: el INSERT
+    # guardaba el precio del SUBYACENTE dos veces (en price y en
+    # underlying_price) y el del contrato en ninguna.
+    # Ver DATOS_IRREPRODUCIBLES_PLAN.md, nivel 1.1.
     for col, typedef in [
         ("is_block",    "INTEGER DEFAULT 0"),
         ("is_sweep",    "INTEGER DEFAULT 0"),
         ("near_earnings","INTEGER DEFAULT 0"),
+        ("bid",         "REAL"),
+        ("ask",         "REAL"),
+        ("price_opt",   "REAL"),
     ]:
         try:
             conn.execute(f"ALTER TABLE options_flow ADD COLUMN {col} {typedef}")
@@ -132,8 +153,8 @@ def save_flow_to_db(flow_items: list, scan_ts: str):
             INSERT INTO options_flow
             (scan_date,scan_ts,ticker,strike,exp,type,action,premium,premium_fmt,
              volume,oi,vol_oi_ratio,score,signal,price,strike_pct,iv,underlying_price,
-             is_block,is_sweep,near_earnings)
-            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+             is_block,is_sweep,near_earnings,bid,ask,price_opt)
+            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
         ''', (
             scan_date, scan_ts,
             item['ticker'], item['strike'], item['exp'],
@@ -146,6 +167,7 @@ def save_flow_to_db(flow_items: list, scan_ts: str):
             int(item.get('is_block', False)),
             int(item.get('is_sweep', False)),
             int(item.get('near_earnings', False)),
+            item.get('bid'), item.get('ask'), item.get('price_opt'),
         ))
         inserted += 1
     conn.commit()
@@ -995,6 +1017,16 @@ def _process_chain(ticker: str, min_premium: float = 100_000, min_score: int = 4
                         "premium":      premium,
                         "premium_fmt":  _fmt_premium(premium),
                         "iv":           round(iv * 100, 1),
+                        # Se guardan CRUDOS, no como spread ya calculado: si
+                        # mañana se quiere revisar la clasificación de
+                        # dirección con otro criterio, o estimar el precio de
+                        # ejecución, hará falta bid y ask por separado -- el
+                        # spread siempre se puede derivar, al revés no.
+                        # 0 significa "Yahoo no dio cotización para este
+                        # contrato" (pasa en los muy ilíquidos), y hay que
+                        # poder distinguirlo de un spread real de 0.
+                        "bid":          round(bid, 4) if bid else None,
+                        "ask":          round(ask, 4) if ask else None,
                         "type":         opt_type,
                         "action":       "buy" if is_buy else "sell",
                         "score":        score,
