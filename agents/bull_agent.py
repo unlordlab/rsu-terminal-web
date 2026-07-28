@@ -559,15 +559,21 @@ def main():
 
     provider = args.provider
 
+    # Los abortos ANÓMALOS salen con código 1 para que cron_alert.sh avise por
+    # Telegram. Antes todos los caminos hacían `return` (código 0), así que el
+    # cron terminaba "con éxito" y nadie se enteraba: Gael estuvo días
+    # generando tesis y perdiéndolas al guardarlas (bases de datos en solo
+    # lectura, incidente del 28/07/2026) sin un solo aviso.
+    # OJO: "hoy no hay candidatos" NO es anómalo — ese sigue saliendo con 0.
     if provider == "gemini" and not settings.gemini_api_key:
         print("[Bull] Falta GEMINI_API_KEY en el .env — abortando.")
-        return
+        sys.exit(1)
     if provider == "claude" and not settings.anthropic_api_key:
         print("[Bull] Falta ANTHROPIC_API_KEY en el .env — abortando.")
-        return
+        sys.exit(1)
     if provider == "groq" and not settings.groq_api_key:
         print("[Bull] Falta GROQ_API_KEY en el .env — abortando.")
-        return
+        sys.exit(1)
 
     generadas_meeting_room = procesar_meeting_room(provider)
     cupo_restante = max(0, args.max - generadas_meeting_room)
@@ -584,6 +590,7 @@ def main():
 
     print(f"[Bull] Proveedor: {provider}. {len(candidatos)} candidatos: {[c['ticker'] for c in candidatos]}")
 
+    fallos = []
     for i, c in enumerate(candidatos):
         ticker = c["ticker"]
 
@@ -611,9 +618,17 @@ def main():
             print(f"[Bull] Tesis #{tesis_id} para {ticker} creada — pendiente de aprobación en /admin.")
         except Exception as e:
             print(f"[Bull] ERROR generando tesis para {ticker}: {type(e).__name__}: {e}")
+            fallos.append(f"{ticker}: {type(e).__name__}: {e}")
 
         if i < len(candidatos) - 1:
             time.sleep(LIMITS[provider]["pausa_entre_tickers_seg"])
+
+    # Había candidatos y NINGUNO salió: eso no es "hoy no tocaba", es que algo
+    # está roto (proveedor de IA caído, base de datos sin permisos de
+    # escritura, cuota agotada). Sale con error para que llegue el aviso.
+    if candidatos and len(fallos) == len(candidatos):
+        print(f"[Bull] Los {len(fallos)} candidatos fallaron. Nada que revisar en /admin.")
+        sys.exit(1)
 
 
 if __name__ == "__main__":

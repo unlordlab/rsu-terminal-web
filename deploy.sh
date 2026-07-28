@@ -96,13 +96,26 @@ echo "=== 5/7: Ejecutando la suite de tests (red de seguridad, ~35 tests) ==="
 # (además de pelearse con pip ausente / PEP 668 "externally-managed", el
 # import de cualquier servicio real habría fallado por falta de fastapi).
 # Se corre en un contenedor EFÍMERO (--rm, se descarta al terminar) desde
-# la MISMA imagen que se acaba de reconstruir arriba si hacía falta --
-# --user root solo para poder instalar pytest en site-packages dentro de
-# ese contenedor desechable (la imagen real sigue corriendo como usuario
-# sin privilegios, esto no la toca). -T desactiva la pseudo-TTY, necesario
-# para correr sin terminal interactiva adjunta (cron, SSH no interactivo).
-if ! docker compose run --rm -T --user root app sh -c \
-    "pip install --no-cache-dir -q -r ../requirements-dev.txt && python -m pytest tests/ -q"; then
+# la MISMA imagen que se acaba de reconstruir arriba si hacía falta. -T
+# desactiva la pseudo-TTY, necesario para correr sin terminal interactiva
+# adjunta (cron, SSH no interactivo).
+#
+# NO se corre como root, y esto importa (incidente del 28/07/2026): antes
+# llevaba --user root "solo para instalar pytest", con un comentario que
+# afirmaba que eso no tocaba nada real. Era falso -- el repo va montado en
+# vivo (`.:/app`), así que todo lo que root escribiera ahí quedaba en el
+# disco del VPS con propietario root. Y al importar cualquier servicio se
+# ejecuta su init_db(), o sea que SQLite abría las bases REALES y dejaba
+# sus ficheros -wal/-shm siendo de root. A partir de ahí el contenedor
+# normal (USER app) ya no podía escribir: "attempt to write a readonly
+# database" -- Gael y Elia llevaban días generando propuestas y
+# perdiéndolas al guardarlas, sin que nadie se enterara.
+#
+# Solución: correr como el usuario normal (app) e instalar pytest en /tmp,
+# que sí es escribible sin privilegios. Cualquier fichero que toquen los
+# tests queda con el mismo propietario que usa la app.
+if ! docker compose run --rm -T app sh -c \
+    "pip install --no-cache-dir -q --target /tmp/devdeps -r ../requirements-dev.txt && PYTHONPATH=/tmp/devdeps python -m pytest tests/ -q"; then
     echo "✗ La suite de tests ha fallado con el código ya en disco (commit $AFTER_COMMIT)."
     echo "  Abortando ANTES de recrear el contenedor en marcha -- el contenedor viejo"
     echo "  sigue corriendo intacto, producción no se ha tocado todavía."
@@ -110,6 +123,19 @@ if ! docker compose run --rm -T --user root app sh -c \
     exit 1
 fi
 echo "✓ Suite de tests en verde."
+
+# Red de seguridad del incidente del 28/07/2026: si por lo que sea vuelve a
+# aparecer algún fichero propiedad de root dentro del repo (un contenedor
+# lanzado a mano con --user root, un script suelto...), la app dejaría de
+# poder escribir en sus propias bases de datos y los agentes fallarían en
+# silencio. Se avisa aquí, que es cuando alguien está mirando la pantalla.
+ROOT_FILES=$(find backend agents -maxdepth 1 -user root 2>/dev/null | head -5)
+if [ -n "$ROOT_FILES" ]; then
+    echo "⚠ ATENCIÓN: hay ficheros propiedad de root dentro del repo:"
+    echo "$ROOT_FILES" | sed 's/^/    /'
+    echo "  La app corre como usuario sin privilegios y NO podrá escribirlos."
+    echo "  Arreglar con:  sudo chown -R \$(id -u):\$(id -g) backend agents"
+fi
 
 echo "=== 6/7: Recreando el contenedor ==="
 docker compose up -d --force-recreate

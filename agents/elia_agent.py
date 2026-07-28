@@ -227,9 +227,13 @@ def main():
     parser.add_argument("--tipo", choices=["revision", "nueva", "random"], default="random")
     args = parser.parse_args()
 
+    # Sale con código 1 para que cron_alert.sh avise por Telegram. Antes hacía
+    # `return` (código 0) y el cron terminaba "con éxito": Elia estuvo días
+    # fallando al guardar sus propuestas (base de datos en solo lectura,
+    # incidente del 28/07/2026) sin un solo aviso.
     if not settings.groq_api_key:
         print("[Elia] Falta GROQ_API_KEY en el .env — abortando.")
-        return
+        sys.exit(1)
 
     tipo = args.tipo
     if tipo == "random":
@@ -264,7 +268,10 @@ def main():
             )
             print(f"[Elia] Propuesta de revisión #{review_id} para '{leccion['title']}' creada — pendiente de aprobación en /admin.")
     except Exception as e:
+        # A diferencia de Gael, Elia genera UNA propuesta por ejecución: si
+        # esta falla, la ejecución entera no ha producido nada.
         print(f"[Elia] ERROR: {type(e).__name__}: {e}")
+        sys.exit(1)
 
 
 if __name__ == "__main__":

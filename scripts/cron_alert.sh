@@ -39,16 +39,45 @@ Hora: $(date '+%Y-%m-%d %H:%M')
 Últimas líneas:
 ${ULTIMO}"
 
-    # Enviar vía el contenedor (reutiliza credenciales y servicio existentes).
-    # Si el propio envío falla, se anota en el log — no hay mucho más que
-    # hacer si Telegram no responde.
-    docker exec -i rsu-terminal-web-app-1 python3 - <<PY || echo "[cron_alert] No se pudo enviar el aviso a Telegram"
+    # Vía 1: a través del contenedor (reutiliza credenciales y servicio).
+    ENVIADO=0
+    if docker exec -i rsu-terminal-web-app-1 python3 - <<PY
 import sys
 sys.path.insert(0, '/app/backend')
 from services.telegram_service import enviar_telegram
-ok = enviar_telegram("""$MENSAJE""")
-print("[cron_alert] Aviso enviado a Telegram" if ok else "[cron_alert] enviar_telegram devolvio False")
+sys.exit(0 if enviar_telegram("""$MENSAJE""") else 1)
 PY
+    then
+        ENVIADO=1
+        echo "[cron_alert] Aviso enviado a Telegram"
+    fi
+
+    # Vía 2: curl directo desde el host, leyendo las credenciales del .env.
+    #
+    # Hace falta porque la vía 1 depende del propio contenedor: si lo que ha
+    # fallado ES el contenedor (caído, reiniciándose, a medio desplegar), el
+    # `docker exec` falla también y te quedas SIN aviso justo en el caso en
+    # que más falta hace. Visto en producción el 28/07/2026:
+    #   "Error response from daemon: container ... is not running"
+    #   "[cron_alert] No se pudo enviar el aviso a Telegram"
+    if [ "$ENVIADO" -eq 0 ]; then
+        ENV_FILE="$(dirname "${BASH_SOURCE[0]}")/../backend/.env"
+        if [ -f "$ENV_FILE" ]; then
+            TOKEN=$(grep -m1 -E '^TELEGRAM_BOT_TOKEN=' "$ENV_FILE" | cut -d= -f2- | tr -d '"'"'"' \r')
+            CHAT=$(grep -m1 -E '^TELEGRAM_CHAT_ID='  "$ENV_FILE" | cut -d= -f2- | tr -d '"'"'"' \r')
+            if [ -n "${TOKEN:-}" ] && [ -n "${CHAT:-}" ]; then
+                if curl -s -f -X POST "https://api.telegram.org/bot${TOKEN}/sendMessage" \
+                        -d chat_id="$CHAT" \
+                        --data-urlencode "text=${MENSAJE}
+(aviso enviado desde el host: el contenedor no respondia)" > /dev/null; then
+                    ENVIADO=1
+                    echo "[cron_alert] Aviso enviado a Telegram (via host, contenedor no disponible)"
+                fi
+            fi
+        fi
+    fi
+
+    [ "$ENVIADO" -eq 0 ] && echo "[cron_alert] No se pudo enviar el aviso a Telegram por ninguna via"
 fi
 
 exit $CODIGO
