@@ -29,3 +29,9 @@ jobs:
           SECTOR_MEDIANS_GIST_ID: ${{ secrets.SECTOR_MEDIANS_GIST_ID }}
         run: |
           python scripts/sector_medians.py
+
+      - name: Avisar por Telegram si falló
+        if: failure()
+        continue-on-error: true
+        run: |
+          curl -s -X POST "https://api.telegram.org/bot${{ secrets.TELEGRAM_BOT_TOKEN }}/sendMessage"             -d chat_id="${{ secrets.TELEGRAM_CHAT_ID }}"             -d text="⚠️ Medianas Sectoriales: el calculo semanal ha fallado. Research cae a los benchmarks estaticos. (run ${{ github.run_id }})."

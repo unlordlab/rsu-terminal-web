@@ -1,0 +1,99 @@
+name: Scans Nocturnos (bloque unico)
+
+# Pendiente 2.10 de TODO_RSU_TERMINAL.md, cerrado el 28/07/2026.
+#
+# Antes eran 4 workflows separados apilados en 45 minutos (22:00 Thematic,
+# 22:15 Scanner, 22:30 RS/RW, 22:45 CANSLIM), y TRES de ellos descargaban
+# exactamente los mismos ~503 tickers del S&P 500 cada noche, cada uno por su
+# cuenta: tres veces el mismo trabajo contra Yahoo desde el mismo runner, en
+# la ventana en la que un fallo parcial es más probable — y sin el proxy
+# residencial que hacía de red de seguridad (se dio de baja).
+#
+# Ahora corren en un único job, en orden, compartiendo un caché de precios en
+# disco (RSU_PRICE_CACHE, ver shared/price_cache.py): el primero descarga y
+# los siguientes se sirven de ahí. Verificado con datos reales que el caché no
+# cambia ningún número — las diferencias residuales (~0,001 sobre scores de
+# 3-18) son del mismo orden que las de dos descargas directas consecutivas con
+# el mercado abierto.
+#
+# ORDEN, y no es arbitrario: primero el que pide el periodo más largo y el
+# universo más grande (Scanner, 2y sobre S&P 500 + Russell 2000), para que los
+# demás encuentren ya descargado todo lo que necesitan. Un periodo más corto
+# se sirve recortando; uno más largo obligaría a volver a bajar el ticker.
+#
+# Los 4 workflows individuales siguen existiendo para lanzarlos a mano desde
+# la pestaña Actions, pero ya no tienen cron propio.
+
+on:
+  schedule:
+    # L-V a las 22:15 UTC (00:15 CEST), con el mercado cerrado desde hace 2h.
+    - cron: '15 22 * * 1-5'
+  workflow_dispatch:
+
+jobs:
+  scans:
+    runs-on: ubuntu-latest
+    # Los 4 en serie: antes eran 4 jobs de 20 min como mucho, pero ahora
+    # comparten runner. Con el caché, los 3 últimos van muy por debajo de su
+    # tiempo habitual porque apenas descargan.
+    timeout-minutes: 60
+
+    env:
+      RSU_PRICE_CACHE: ${{ github.workspace }}/.price-cache
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: pip install requests yfinance pandas numpy
+
+      # 1º — el más grande: llena el caché para los tres siguientes.
+      - name: Scanner Universo S&P 500
+        id: scanner
+        env:
+          GIST_TOKEN:      ${{ secrets.GIST_TOKEN }}
+          SCANNER_GIST_ID: ${{ secrets.SCANNER_GIST_ID }}
+        run: python scripts/scanner_universe.py
+
+      # 2º — mismo periodo (2y) y subconjunto del universo: cero descargas.
+      - name: CANSLIM Scanner
+        id: canslim
+        if: always()
+        env:
+          GIST_TOKEN:      ${{ secrets.GIST_TOKEN }}
+          CANSLIM_GIST_ID: ${{ secrets.CANSLIM_GIST_ID }}
+        run: python scripts/canslim_scan.py
+
+      # 3º — periodo más corto (260d): se sirve recortando lo ya cacheado,
+      # solo descarga los ETFs sectoriales que Scanner no pide.
+      - name: RS/RW Scanner
+        id: rsrw
+        if: always()
+        env:
+          GIST_TOKEN:   ${{ secrets.GIST_TOKEN }}
+          RSRW_GIST_ID: ${{ secrets.RSRW_GIST_ID }}
+        run: python scripts/rsrw_scan.py
+
+      # 4º — universo propio con solapamiento parcial (cestas temáticas que
+      # incluyen nombres fuera del S&P 500): descarga solo lo que falte.
+      - name: Thematic Sector Scan
+        id: thematic
+        if: always()
+        env:
+          GIST_TOKEN:       ${{ secrets.GIST_TOKEN }}
+          THEMATIC_GIST_ID: ${{ secrets.THEMATIC_GIST_ID }}
+        run: python scripts/thematic_scan.py
+
+      - name: Avisar por Telegram si algún scan falló
+        if: failure()
+        continue-on-error: true
+        run: |
+          curl -s -X POST "https://api.telegram.org/bot${{ secrets.TELEGRAM_BOT_TOKEN }}/sendMessage" \
+            -d chat_id="${{ secrets.TELEGRAM_CHAT_ID }}" \
+            -d text="⚠️ Scans nocturnos: Scanner=${{ steps.scanner.outcome }} · CANSLIM=${{ steps.canslim.outcome }} · RS/RW=${{ steps.rsrw.outcome }} · Thematic=${{ steps.thematic.outcome }} (run ${{ github.run_id }}). Los que fallaron dejan su Gist con los datos de ayer."

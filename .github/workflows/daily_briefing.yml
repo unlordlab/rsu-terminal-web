@@ -38,3 +38,9 @@ jobs:
           BRIEFING_AUTH_TOKEN:  ${{ secrets.BRIEFING_AUTH_TOKEN }}
         run: |
           python scripts/daily_briefing.py
+
+      - name: Avisar por Telegram si falló
+        if: failure()
+        continue-on-error: true
+        run: |
+          curl -s -X POST "https://api.telegram.org/bot${{ secrets.TELEGRAM_BOT_TOKEN }}/sendMessage"             -d chat_id="${{ secrets.TELEGRAM_CHAT_ID }}"             -d text="⚠️ Daily Market Briefing: el briefing diario ha fallado. Sin él, el Dashboard muestra el de ayer. (run ${{ github.run_id }})."

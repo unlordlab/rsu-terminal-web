@@ -24,3 +24,9 @@ jobs:
           GIST_TOKEN:       ${{ secrets.GIST_TOKEN }}
           CONGRESS_GIST_ID: ${{ secrets.CONGRESS_GIST_ID }}
         run: python scripts/congress_scan.py
+
+      - name: Avisar por Telegram si falló
+        if: failure()
+        continue-on-error: true
+        run: |
+          curl -s -X POST "https://api.telegram.org/bot${{ secrets.TELEGRAM_BOT_TOKEN }}/sendMessage"             -d chat_id="${{ secrets.TELEGRAM_CHAT_ID }}"             -d text="⚠️ Congress Trading: el scan ha fallado. El Gist se queda con los datos de ayer. (run ${{ github.run_id }})."

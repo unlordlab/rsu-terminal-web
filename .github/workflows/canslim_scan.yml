@@ -1,12 +1,11 @@
 name: CANSLIM Scanner S&P 500
 
 on:
-  schedule:
-    # Lunes a viernes a las 00:45 CET (22:45 UTC) — 15 min después de
-    # RS/RW, siguiente hueco libre en la misma secuencia escalonada
-    # (Thematic 22:00, Scanner 22:15, RS/RW 22:30), para no competir por
-    # rate limit de Yahoo con los otros 3 scans nocturnos.
-    - cron: '45 22 * * 1-5'
+  # Sin cron propio desde el 28/07/2026: la ejecución programada la hace
+  # nightly_scans.yml, que corre los 4 scans en un único job compartiendo el
+  # caché de precios (pendiente 2.10 -- tres de ellos bajaban los mismos ~503
+  # tickers cada noche por separado). Este workflow se conserva para poder
+  # lanzarlo suelto a mano desde la pestaña Actions.
   workflow_dispatch:  # Permite ejecutar manualmente desde la pestaña Actions
 
 jobs:
@@ -33,3 +32,9 @@ jobs:
           CANSLIM_GIST_ID: ${{ secrets.CANSLIM_GIST_ID }}
         run: |
           python scripts/canslim_scan.py
+
+      - name: Avisar por Telegram si falló
+        if: failure()
+        continue-on-error: true
+        run: |
+          curl -s -X POST "https://api.telegram.org/bot${{ secrets.TELEGRAM_BOT_TOKEN }}/sendMessage"             -d chat_id="${{ secrets.TELEGRAM_CHAT_ID }}"             -d text="⚠️ CANSLIM (lanzado a mano): el scan ha fallado. (run ${{ github.run_id }})."

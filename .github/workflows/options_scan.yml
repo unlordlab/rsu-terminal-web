@@ -28,3 +28,9 @@ jobs:
             echo "::error::El disparo del scan de Options Flow falló (HTTP $status)"
             exit 1
           fi
+
+      - name: Avisar por Telegram si falló
+        if: failure()
+        continue-on-error: true
+        run: |
+          curl -s -X POST "https://api.telegram.org/bot${{ secrets.TELEGRAM_BOT_TOKEN }}/sendMessage"             -d chat_id="${{ secrets.TELEGRAM_CHAT_ID }}"             -d text="⚠️ Options Flow: el scan diario ha fallado. Hoy no se guardan cadenas de opciones -- ese dato NO se puede recuperar despues. (run ${{ github.run_id }})."

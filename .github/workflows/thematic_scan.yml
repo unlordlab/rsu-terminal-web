@@ -1,9 +1,11 @@
 name: Thematic Sector Scan
 
 on:
-  schedule:
-    # Lunes a viernes a las 23:00 CET (22:00 UTC) — tras el cierre del mercado US
-    - cron: '0 22 * * 1-5'
+  # Sin cron propio desde el 28/07/2026: la ejecución programada la hace
+  # nightly_scans.yml, que corre los 4 scans en un único job compartiendo el
+  # caché de precios (pendiente 2.10 -- tres de ellos bajaban los mismos ~503
+  # tickers cada noche por separado). Este workflow se conserva para poder
+  # lanzarlo suelto a mano desde la pestaña Actions.
   workflow_dispatch:  # Permite ejecutar manualmente desde la pestaña Actions
 
 jobs:
@@ -30,3 +32,9 @@ jobs:
           THEMATIC_GIST_ID: ${{ secrets.THEMATIC_GIST_ID }}
         run: |
           python scripts/thematic_scan.py
+
+      - name: Avisar por Telegram si falló
+        if: failure()
+        continue-on-error: true
+        run: |
+          curl -s -X POST "https://api.telegram.org/bot${{ secrets.TELEGRAM_BOT_TOKEN }}/sendMessage"             -d chat_id="${{ secrets.TELEGRAM_CHAT_ID }}"             -d text="⚠️ Thematic Sector (lanzado a mano): el scan ha fallado. (run ${{ github.run_id }})."
