@@ -317,7 +317,9 @@ if (token) {
             }
         };
         if (me && me.disclaimer_accepted === false) {
-            showDisclaimerModal(mostrarPricingSiHaceFalta);
+            // disclaimer_actualizado = ya aceptó una versión anterior del
+            // texto (no es un usuario nuevo) -- el modal se lo explica.
+            showDisclaimerModal(mostrarPricingSiHaceFalta, me.disclaimer_actualizado === true);
         } else {
             mostrarPricingSiHaceFalta();
         }

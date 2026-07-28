@@ -64,7 +64,12 @@ function footer() {
         + '<p style="color:var(--color-muted);font-size:12px;line-height:1.7;max-width:640px;">'
         + 'Al utilizar RSU Terminal y participar en la comunidad, declaras comprender y aceptar los riesgos inherentes al trading y liberas a RSU de cualquier responsabilidad legal o financiera derivada del uso de este contenido.'
         + '</p>'
-        + '<div style="color:var(--color-muted);font-size:10px;letter-spacing:0.05em;margin-top:1rem;opacity:0.6;">Última actualización: febrero 2025</div>'
+        // La versión debe coincidir con users_service.DISCLAIMER_VERSION: al
+        // cambiar este texto hay que subir aquel número, y entonces a todos
+        // los usuarios se les vuelve a pedir la aceptación con el texto nuevo
+        // (antes solo se guardaba la fecha, así que un cambio de texto dejaba
+        // a los usuarios existentes bajo condiciones que nunca vieron).
+        + '<div style="color:var(--color-muted);font-size:10px;letter-spacing:0.05em;margin-top:1rem;opacity:0.6;">Versión 1 · Última actualización: febrero 2025</div>'
         + '</div>';
 }
 

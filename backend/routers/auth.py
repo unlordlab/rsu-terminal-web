@@ -100,12 +100,20 @@ async def me(payload: dict = Depends(verify_token)):
     email = payload.get("sub")
     user  = users_service.get_user_by_email(email) if email else None
     tier  = user["tier"] if user else payload.get("tier", "free")
-    disclaimer_accepted = bool(user and user.get("disclaimer_accepted_at"))
+    # Aceptado = aceptó la versión VIGENTE. Si el texto del descargo cambia
+    # (users_service.DISCLAIMER_VERSION sube), esto pasa a False y el modal
+    # vuelve a salir — ver users_service.disclaimer_al_dia().
+    disclaimer_accepted = users_service.disclaimer_al_dia(user)
     pricing_message_seen = bool(user and user.get("pricing_message_seen_at"))
     telegram_linked = bool(user and user.get("telegram_chat_id"))
     return {
         "email": email, "tier": tier,
         "disclaimer_accepted": disclaimer_accepted,
+        # True solo si aceptó una versión ANTERIOR (distinto de no haberlo
+        # aceptado nunca): el modal lo usa para explicar por qué se lo vuelve
+        # a pedir a alguien que lleva meses usando la terminal.
+        "disclaimer_actualizado": users_service.disclaimer_desactualizado(user),
+        "disclaimer_version": users_service.DISCLAIMER_VERSION,
         "pricing_message_seen": pricing_message_seen,
         "telegram_linked": telegram_linked,
     }

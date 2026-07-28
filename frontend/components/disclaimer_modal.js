@@ -1,12 +1,16 @@
 // ── MODAL DE ACEPTACIÓN DEL DISCLAIMER ───────────────────────────────────────
 //
-// Se muestra una sola vez por usuario (queda guardado en el backend, no en
-// el navegador — así sigue pidiéndose aunque cambie de dispositivo, y deja
-// de pedirse en cuanto lo acepta una vez). Bloquea el resto de la app hasta
-// que el usuario marca la casilla y confirma — no se puede cerrar con Esc
-// ni haciendo clic fuera, a diferencia del command palette.
+// Se muestra una vez por VERSIÓN del texto (queda guardado en el backend, no
+// en el navegador — así sigue pidiéndose aunque cambie de dispositivo, y deja
+// de pedirse en cuanto acepta la versión vigente). Bloquea el resto de la app
+// hasta que el usuario marca la casilla y confirma — no se puede cerrar con
+// Esc ni haciendo clic fuera, a diferencia del command palette.
+//
+// `esActualizacion` = ya había aceptado una versión anterior. Se le dice
+// explícitamente, porque a alguien que lleva meses usando la terminal le
+// reaparece un modal que creía haber cerrado para siempre.
 
-export function showDisclaimerModal(onAccepted) {
+export function showDisclaimerModal(onAccepted, esActualizacion = false) {
     if (document.getElementById('disclaimer-modal-overlay')) return;
 
     const overlay = document.createElement('div');
@@ -16,9 +20,15 @@ export function showDisclaimerModal(onAccepted) {
         '<div style="width:480px;max-width:100%;max-height:85vh;display:flex;flex-direction:column;background:var(--color-surface);border:1px solid var(--color-accent);border-radius:var(--radius);overflow:hidden;box-shadow:0 12px 40px rgba(0,0,0,0.6);">'
         + '<div style="padding:16px 20px;border-bottom:1px solid var(--color-border);">'
         + '<div style="color:var(--color-accent);font-size:14px;letter-spacing:0.08em;text-shadow:var(--glow-text);">DESCARGO DE RESPONSABILIDAD</div>'
-        + '<div style="color:var(--color-muted);font-size:11px;margin-top:2px;">Antes de continuar, un momento</div>'
+        + '<div style="color:var(--color-muted);font-size:11px;margin-top:2px;">' + (esActualizacion ? 'Hemos actualizado el texto' : 'Antes de continuar, un momento') + '</div>'
         + '</div>'
         + '<div style="padding:18px 20px;overflow-y:auto;flex:1;">'
+        + (esActualizacion
+            ? '<div style="background:rgba(255,152,0,.08);border-left:3px solid #ff9800;border-radius:0 6px 6px 0;padding:10px 14px;margin-bottom:14px;">'
+              + '<div style="color:#ff9800;font-size:10px;letter-spacing:0.1em;margin-bottom:4px;">TEXTO ACTUALIZADO</div>'
+              + '<div style="color:var(--color-text);font-size:12px;line-height:1.6;">Ya habías aceptado una versión anterior. El descargo ha cambiado desde entonces, así que te pedimos que lo leas y lo aceptes de nuevo.</div>'
+              + '</div>'
+            : '')
         + '<p style="color:var(--color-muted);font-size:12.5px;line-height:1.7;margin:0 0 12px;">'
         + 'Todo el contenido de RSU Terminal — análisis, señales, gráficos y comentarios — tiene una finalidad estrictamente educativa e informativa. '
         + '<b style="color:var(--color-text);">No es asesoría financiera ni una recomendación de inversión.</b>'

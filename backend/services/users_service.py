@@ -17,6 +17,22 @@ DB_PATH = os.path.join(os.path.dirname(__file__), '..', 'users.db')
 TIER_ORDER  = {"free": 0, "tier1": 1, "tiers": 2}
 VALID_TIERS = set(TIER_ORDER.keys())
 
+# ── VERSIÓN DEL DESCARGO DE RESPONSABILIDAD ──────────────────────────────────
+# SUBIR ESTE NÚMERO CADA VEZ QUE CAMBIE EL TEXTO del descargo, en cualquiera de
+# sus dos sitios: el modal de aceptación (frontend/components/disclaimer_modal.js)
+# y la página completa (frontend/pages/disclaimer.js). Al subirlo, a TODOS los
+# usuarios se les vuelve a pedir la aceptación con el texto nuevo, y queda
+# constancia de qué versión firmó cada uno y cuándo.
+#
+# Por qué importa: antes solo se guardaba la fecha de aceptación, así que
+# cambiar el texto dejaba a los ~100 usuarios existentes operando bajo unas
+# condiciones que nunca vieron — con constancia de que aceptaron ALGO, pero no
+# de qué. Es especialmente relevante de cara a la monetización: las condiciones
+# de pago, cancelación y reembolsos van a cambiar este texto sí o sí.
+#
+# Versión 1 = el texto vigente desde el lanzamiento (nunca ha cambiado).
+DISCLAIMER_VERSION = 1
+
 
 def _conn():
     conn = sqlite3.connect(DB_PATH)
@@ -42,6 +58,26 @@ def init_db():
         conn.execute("ALTER TABLE users ADD COLUMN disclaimer_accepted_at TEXT")
     except sqlite3.OperationalError:
         pass  # la columna ya existe
+    # Versión del texto aceptado (ver DISCLAIMER_VERSION más abajo). Antes
+    # solo se guardaba la fecha, así que al cambiar el texto del descargo
+    # nadie volvía a verlo: quedaba constancia de que aceptaron ALGO, pero
+    # no de qué. Con dinero de por medio (condiciones de pago, cancelación,
+    # reembolsos) eso no se sostiene. Ver auditoría de páginas de contenido
+    # 21/07/2026, hallazgo #14.
+    try:
+        conn.execute("ALTER TABLE users ADD COLUMN disclaimer_version INTEGER")
+    except sqlite3.OperationalError:
+        pass  # la columna ya existe
+    # Migración de una sola vez: quien ya aceptó antes de que existiera el
+    # versionado aceptó EXACTAMENTE el texto vigente (no ha cambiado desde
+    # entonces), así que se etiqueta como versión 1. No es una suposición
+    # cómoda: si el texto cambia, cambia DISCLAIMER_VERSION y a esos mismos
+    # usuarios se les vuelve a pedir. Lo que no se hace es forzar una
+    # re-aceptación hoy por un cambio puramente técnico.
+    conn.execute(
+        "UPDATE users SET disclaimer_version = 1 "
+        "WHERE disclaimer_accepted_at IS NOT NULL AND disclaimer_version IS NULL"
+    )
     # token_version -- permite revocar TODAS las sesiones activas de un
     # usuario (JWT de hasta 30 días, sin esto no había forma de invalidar
     # uno filtrado antes de que caducara solo). Se incluye en el payload
@@ -133,7 +169,7 @@ def get_user_by_email(email: str) -> dict | None:
     conn = _conn()
     try:
         row = conn.execute(
-            "SELECT id, email, tier, disclaimer_accepted_at, pricing_message_seen_at, token_version, telegram_chat_id FROM users WHERE email = ?", (email,)
+            "SELECT id, email, tier, disclaimer_accepted_at, disclaimer_version, pricing_message_seen_at, token_version, telegram_chat_id FROM users WHERE email = ?", (email,)
         ).fetchone()
         return dict(row) if row else None
     finally:
@@ -173,13 +209,33 @@ def accept_disclaimer(user_id: int) -> dict:
     conn = _conn()
     try:
         conn.execute(
-            "UPDATE users SET disclaimer_accepted_at = ? WHERE id = ?",
-            (datetime.now(timezone.utc).isoformat(), user_id)
+            "UPDATE users SET disclaimer_accepted_at = ?, disclaimer_version = ? WHERE id = ?",
+            (datetime.now(timezone.utc).isoformat(), DISCLAIMER_VERSION, user_id)
         )
         conn.commit()
-        return {"ok": True}
+        return {"ok": True, "disclaimer_version": DISCLAIMER_VERSION}
     finally:
         conn.close()
+
+
+def disclaimer_al_dia(user: dict | None) -> bool:
+    """¿Este usuario ha aceptado la versión VIGENTE del descargo?
+
+    Falso si nunca lo aceptó o si aceptó una versión anterior — en ese
+    segundo caso el modal vuelve a salir con el texto nuevo. Es lo que
+    convierte "aceptó algo alguna vez" en constancia de qué aceptó."""
+    if not user or not user.get("disclaimer_accepted_at"):
+        return False
+    return (user.get("disclaimer_version") or 0) >= DISCLAIMER_VERSION
+
+
+def disclaimer_desactualizado(user: dict | None) -> bool:
+    """Aceptó una versión ANTERIOR (distinto de no haberlo aceptado nunca).
+    El modal lo usa para explicar por qué se lo vuelve a pedir a alguien
+    que lleva meses usando la terminal."""
+    if not user or not user.get("disclaimer_accepted_at"):
+        return False
+    return not disclaimer_al_dia(user)
 
 
 def acknowledge_pricing_message(user_id: int) -> dict:
