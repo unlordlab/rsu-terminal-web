@@ -576,15 +576,66 @@ _BLACKLIST = {
     'WTF','OMG','GG','GE','F','T','X','V','D','C','K','M','R','S',
     'PRE','POST','AH','PM','AM','EST','PST','UTC','USD','EUR','CAD',
     'WELL','WORK','TAKE','GIVE','BACK','COME','WANT','SHOW','ONLY','VERY',
+    # Palabras corrientísimas en estos foros que ADEMÁS son tickers reales,
+    # así que el filtro por universo no las descarta: TECH (Bio-Techne),
+    # OPEN (Opendoor), CASH (Pathward), REAL (The RealReal), TRUE (TrueCar).
+    # En un hilo de bolsa, "tech" o "open" casi nunca hablan de esas
+    # empresas -- si alguien las menciona de verdad, normalmente escribe
+    # "$TECH", y el "$" sigue contando (salta el filtro, ver _extract_tickers).
+    'TECH','OPEN','CASH','REAL','TRUE',
 }
+
+_UNIVERSO_TICKERS = None
+
+
+def _universo_tickers() -> set:
+    """Universo de tickers REALES conocidos, para separar una mención de
+    verdad de una palabra corriente en mayúsculas.
+
+    La lista negra de arriba solo puede enumerar las palabras que a alguien
+    se le ocurrieron: sobre títulos reales de Reddit se colaban igualmente
+    STOCK, JULY, CAPEX, BREAK, DOWN... Mientras StockTwits funcionaba,
+    aportaba tickers buenos y ese ruido quedaba diluido; desde que
+    StockTwits está tras un challenge de Cloudflare (verificado en el VPS,
+    28/07/2026) Reddit es la única fuente y el ruido pasaría a dominar la
+    tabla. Se valida contra el universo que el proyecto ya mantiene, en vez
+    de seguir alargando la lista negra a mano para siempre."""
+    global _UNIVERSO_TICKERS
+    if _UNIVERSO_TICKERS is None:
+        universo = set()
+        try:
+            from sp500_universe import SP500_SECTOR_MAP
+            universo |= set(SP500_SECTOR_MAP.keys())
+        except Exception as e:
+            print(f"[RedditPulse] No se pudo cargar el universo S&P500: {type(e).__name__}: {e}")
+        try:
+            # WATCHLIST de Options Flow: S&P500 + una selección curada a mano
+            # (mega caps, ETFs, nombres de la cartera RSU) -- añade los
+            # tickers fuera del índice que sí se comentan en estos subreddits.
+            from services.options_service import WATCHLIST
+            universo |= set(WATCHLIST)
+        except Exception as e:
+            print(f"[RedditPulse] No se pudo cargar la watchlist de Options: {type(e).__name__}: {e}")
+        _UNIVERSO_TICKERS = universo
+    return _UNIVERSO_TICKERS
+
 
 def _extract_tickers(text: str):
     import re as _re
     found = {}
+    universo = _universo_tickers()
     for m in _re.finditer(r'\$([A-Z]{1,6})\b|\b([A-Z]{2,5})\b', text):
+        con_dolar = bool(m.group(1))
         t = (m.group(1) or m.group(2) or '').strip()
-        if t and t not in _BLACKLIST and 2 <= len(t) <= 6:
-            found[t] = found.get(t, 0) + (2 if m.group(1) else 1)
+        if not t or t in _BLACKLIST or not (2 <= len(t) <= 6):
+            continue
+        # Con "$" delante es inequívocamente un ticker (así se escriben en
+        # estos foros); sin "$", solo cuenta si es un ticker real conocido --
+        # si el universo no se pudo cargar, no se filtra nada, para no
+        # vaciar el widget por un fallo de import.
+        if not con_dolar and universo and t not in universo:
+            continue
+        found[t] = found.get(t, 0) + (2 if con_dolar else 1)
     return sorted(found.items(), key=lambda x: -x[1])[:30]
 
 def _enrich_ticker(ticker, mention_count, max_mentions, st_tickers):
@@ -657,60 +708,64 @@ def _get_reddit_token() -> str | None:
     except Exception:
         return None
 
-def _fetch_reddit_and_stocktwits_via_browser(need_reddit: bool, need_stocktwits: bool):
-    """Navegador headless real (Playwright) -- reddit.com/*.json y
-    api.stocktwits.com devuelven 403 (challenge JS anti-bot) desde la IP
-    del VPS a peticiones HTTP normales, verificado 23/07/2026; un
-    navegador real lo resuelve solo. Import diferido: si Playwright/
-    Chromium no está instalado (p.ej. un entorno local sin
-    `playwright install`), no rompe el arranque de la app, solo esta
-    función deja de aportar datos -- mismo criterio "sin dato real, sin
-    fabricar nada" del resto del proyecto.
+REDDIT_SUBS = ['wallstreetbets', 'stocks', 'investing', 'options', 'StockMarket']
 
-    IMPORTANTE: NO añadir playwright-stealth ni ningún parche de
-    anti-detección -- probado y descartado explícitamente, Reddit lo
-    detecta y bloquea MÁS que un Chromium headless sin modificar
-    (fingerprint "demasiado perfecto"). Usa old.reddit.com (HTML clásico)
-    en vez de www.reddit.com (Shreddit) -- trae más posts de golpe sin
-    necesitar simular scroll."""
-    sources, titles, symbols = [], [], []
+
+def _fetch_reddit_titles_via_rss():
+    """Títulos de los posts "hot" de los subreddits de bolsa, vía el RSS
+    público de Reddit.
+
+    Sustituye al scraping con navegador headless (Playwright) que se montó
+    el 23/07/2026. Aquel enfoque funcionó mientras el bloqueo de Reddit era
+    un *challenge* JavaScript -- que un Chromium real resolvía. Verificado
+    en producción el 28/07/2026 que ya NO es así: old.reddit.com devuelve
+    HTTP 403 con título "Blocked" y el texto "Your request has been blocked
+    due to a network policy" ANTES de servir página alguna. Es un bloqueo de
+    RED por IP de datacenter, previo a cualquier JS, así que el navegador no
+    aporta nada -- solo ~180MB de imagen y varios segundos por petición.
+
+    El RSS, en cambio, sí responde 200 desde esa misma IP (verificado en el
+    propio VPS). Y los 5 subreddits caben en UNA sola petición usando la
+    sintaxis multi-subreddit de Reddit (`r/a+b+c`), lo que además esquiva el
+    429 que aparecía al pedirlos uno a uno seguidos.
+
+    Devuelve [] si falla -- el llamador ya trata la ausencia sin fabricar
+    nada, mismo criterio que el resto del proyecto."""
+    import time as _time
+    import xml.etree.ElementTree as ET
+    # limit=100 (el RSS sirve 25 por defecto): con solo 25 posts salían 3-4
+    # tickers con 1-2 menciones cada uno, muy poco para llenar la tabla ahora
+    # que StockTwits ya no aporta. Verificado que Reddit lo respeta y devuelve
+    # los 100 en la misma petición única.
+    url = f"https://www.reddit.com/r/{'+'.join(REDDIT_SUBS)}/hot/.rss?limit=100"
+    cabeceras = {"User-Agent": "Mozilla/5.0 (compatible; RSUTerminal/1.0)"}
     try:
-        from playwright.sync_api import sync_playwright
-        import json as _json
-        with sync_playwright() as p:
-            browser = p.chromium.launch(headless=True)
-            page = browser.new_page(user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36")
-            if need_reddit:
-                for sub in ['wallstreetbets', 'stocks', 'investing', 'options', 'StockMarket']:
-                    try:
-                        page.goto(f'https://old.reddit.com/r/{sub}/hot/', timeout=15000, wait_until='domcontentloaded')
-                        page.wait_for_timeout(1500)
-                        els = page.query_selector_all('a.title')
-                        if els:
-                            titles.extend(e.inner_text() for e in els)
-                            sources.append('Reddit')
-                            break
-                    except Exception:
-                        continue
-            if need_stocktwits:
-                try:
-                    page.goto('https://api.stocktwits.com/api/2/trending/symbols.json', timeout=10000, wait_until='domcontentloaded')
-                    body = page.evaluate("() => document.body.innerText")
-                    data = _json.loads(body)
-                    symbols = data.get('symbols', [])[:20]
-                    if symbols:
-                        sources.append('StockTwits')
-                except Exception as e:
-                    print(f"[RedditBrowser] StockTwits vía navegador falló: {type(e).__name__}: {e}")
-            browser.close()
+        # Reddit limita el ritmo también en el RSS: dos peticiones seguidas
+        # devuelven 429 (verificado). Con la caché de 5 min esto no debería
+        # darse en producción, pero un reintento cubre la colisión puntual
+        # (p.ej. dos workers pidiéndolo a la vez al caducar la caché) sin
+        # insistir hasta hacerse pesado -- mismo criterio que el ritmo hacia
+        # SEC EDGAR y el backoff de GDELT.
+        r = None
+        for intento, espera in enumerate((4, 10)):
+            r = requests.get(url, headers=cabeceras, timeout=15)
+            if r.status_code != 429:
+                break
+            if intento == 0:
+                print(f"[RedditRSS] 429 (límite de ritmo) — reintento en {espera}s")
+                _time.sleep(espera)
+        if r.status_code != 200:
+            print(f"[RedditRSS] HTTP {r.status_code} al pedir {len(REDDIT_SUBS)} subreddits")
+            return []
+        root = ET.fromstring(r.content)
+        ns = {"a": "http://www.w3.org/2005/Atom"}
+        titulos = [(e.findtext("a:title", "", ns) or "").strip() for e in root.findall("a:entry", ns)]
+        titulos = [t for t in titulos if t]
+        print(f"[RedditRSS] {len(titulos)} títulos de r/{'+'.join(REDDIT_SUBS)}")
+        return titulos
     except Exception as e:
-        # Se registra explícitamente -- antes se tragaba en silencio, lo
-        # que hizo indiagnosticable el fallo real en producción (23/07/2026:
-        # el binario chromium-headless-shell no había quedado instalado
-        # del todo tras el build, y el widget mostraba "sin datos" sin
-        # ningún rastro en los logs).
-        print(f"[RedditBrowser] Navegador headless falló por completo: {type(e).__name__}: {e}")
-    return sources, titles, symbols
+        print(f"[RedditRSS] Falló: {type(e).__name__}: {e}")
+        return []
 
 def get_reddit_pulse():
     from services.cache import cache, TTL
@@ -763,32 +818,24 @@ def get_reddit_pulse():
     except Exception:
         pass
 
-    if not reddit_ok or not st_ok:
-        b_sources, b_titles, b_symbols = _fetch_reddit_and_stocktwits_via_browser(
-            need_reddit=not reddit_ok, need_stocktwits=not st_ok,
-        )
-        if 'Reddit' in b_sources:
+    # Sin OAuth (o si falló), el RSS público es la vía que SÍ responde desde
+    # la IP del VPS -- ver _fetch_reddit_titles_via_rss para por qué se
+    # abandonó el navegador headless.
+    if not reddit_ok:
+        titulos = _fetch_reddit_titles_via_rss()
+        if titulos:
             sources.append('Reddit')
-            for title in b_titles:
+            for title in titulos:
                 for ticker, count in _extract_tickers(title.upper()):
                     ticker_mentions[ticker] = ticker_mentions.get(ticker, 0) + count
-        if 'StockTwits' in b_sources:
-            sources.append('StockTwits')
-            for i, item in enumerate(b_symbols):
-                t = item.get('symbol', '').upper()
-                if t and 2 <= len(t) <= 6:
-                    st_tickers.append(t)
-                    weight = max(1, 20 - i)
-                    ticker_mentions[t] = ticker_mentions.get(t, 0) + weight
 
     if not ticker_mentions:
         fallback = _reddit_fallback()
         # Cachear también el fallo (TTL más corto que el éxito, ver
         # TTL["reddit_fail"] en cache.py) -- sin esto, cada petición durante
         # una caída de Reddit/StockTwits relanzaba la cadena completa desde
-        # cero (OAuth + StockTwits + fallback de navegador headless, ~4-5s)
-        # para CADA usuario que abriera Market, sin ninguna caché compartida
-        # de "esto está fallando ahora mismo".
+        # cero para CADA usuario que abriera Market, sin ninguna caché
+        # compartida de "esto está fallando ahora mismo".
         cache.set("market:reddit", fallback, TTL["reddit_fail"])
         return fallback
 

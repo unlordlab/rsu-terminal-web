@@ -30,5 +30,9 @@ pytz==2024.1
 markdown==3.7
 xhtml2pdf==0.2.16
 
-# Scraping (Reddit Pulse -- ver sesion 23/07/2026)
-playwright==1.61.0
+# playwright: retirado el 28/07/2026. Se uso para Reddit Pulse entre el
+# 23/07 y el 28/07, mientras el bloqueo de Reddit era un challenge JS que un
+# navegador real resolvia. Paso a ser un bloqueo de red por IP (403
+# "Blocked"), previo a cualquier JS, asi que el navegador dejo de servir de
+# nada. Reddit Pulse usa ahora el RSS publico. Ver Dockerfile y
+# market_service._fetch_reddit_titles_via_rss.
