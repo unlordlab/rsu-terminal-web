@@ -43,6 +43,38 @@ BIAS_HISTORY_DAYS = 14
 # ::get_nightly_briefing() lo lee por nombre exacto para el frontend.
 BRIEFING_HISTORY_FILE = "briefing_history.json"
 BRIEFING_HISTORY_DAYS = 3
+# Presupuesto TOTAL de caracteres del bloque de memoria narrativa dentro del
+# prompt (ver format_briefing_history) -- no por entrada. Con ~3.5 chars por
+# token son ~860 tokens, quepan 1 o 3 briefings dentro.
+BRIEFING_HISTORY_CHARS_BUDGET = 3000
+
+# ── Presupuesto de tokens de Groq ─────────────────────────────────────────────
+# El tier gratuito limita a 8000 tokens/minuto (prompt + respuesta) para este
+# modelo. El 26-28/07/2026 el briefing falló 3 días seguidos con HTTP 413
+# ("Limit 8000, Requested 8317") porque max_tokens estaba fijo en 3000
+# mientras el prompt había crecido hasta ~5300 tokens.
+#
+# Medido con datos reales antes de tocar nada (no estimado a ojo):
+#   - Plantilla + reglas del prompt, sin datos de mercado: ~10.900 chars
+#   - Bloque de memoria narrativa + sesgo:                 ~3.100 chars
+#   - El briefing más largo REALMENTE generado:             4.709 chars (~1.350 tokens)
+# Es decir, max_tokens=3000 reservaba MÁS DEL DOBLE de lo que el modelo
+# llega a escribir, y ese espacio muerto era justo lo que desbordaba el
+# límite. Ahora el techo de salida se calcula a partir de lo que queda libre
+# tras el prompt, con la reserva de 1800 como máximo.
+GROQ_TPM_LIMIT     = 8000
+GROQ_TPM_SAFETY    = 350   # colchón: mi estimación por caracteres nunca coincide exactamente con el tokenizador real
+GROQ_MAX_OUTPUT    = 1800  # ~33% por encima del briefing más largo observado
+GROQ_MIN_OUTPUT    = 1200  # por debajo de esto el briefing saldría cortado a medias
+CHARS_POR_TOKEN    = 3.5   # calibrado contra el 413 real de Groq (español con tildes tokeniza peor que inglés)
+
+
+def estimar_tokens(texto: str) -> int:
+    """Estimación por caracteres — deliberadamente conservadora (divisor bajo
+    = estima de más). No hace falta el tokenizador exacto: solo sirve para
+    decidir cuánto espacio de respuesta pedir sin pasarse del límite."""
+    import math
+    return math.ceil(len(texto) / CHARS_POR_TOKEN)
 
 # Mismo Gist que ya publica scanner_universe.py — lectura pública, sin token,
 # para traer al briefing las señales de amplitud REALES de RSU (McClellan,
@@ -663,7 +695,16 @@ def format_briefing_history(history: list) -> str:
     if not history:
         return "Sin briefings anteriores registrados todavía."
     ordered = sorted(history, key=lambda h: h["date"])
-    return "\n\n".join(f"[{h['date']} — sesgo {h.get('bias', 'N/D')}]\n{h['text'][:2000]}" for h in ordered)
+    # Presupuesto TOTAL de caracteres repartido entre las entradas, en vez de
+    # un tope FIJO POR ENTRADA (antes 2000 c/u). Con el tope fijo, el bloque
+    # crecía linealmente con el historial (1 entrada = 2000 chars, 3 = 6000,
+    # ~1600 tokens) y el prompt acababa reventando el límite de 8000 TPM de
+    # Groq -- exactamente el 413 del 26-28/07/2026. Con presupuesto total, el
+    # bloque ocupa lo mismo tenga 1 o 3 entradas: cuantas más haya, menos
+    # texto de cada una, que es el reparto correcto (lo más reciente importa
+    # más, pero todas aportan contexto).
+    por_entrada = max(600, BRIEFING_HISTORY_CHARS_BUDGET // len(ordered))
+    return "\n\n".join(f"[{h['date']} — sesgo {h.get('bias', 'N/D')}]\n{h['text'][:por_entrada]}" for h in ordered)
 
 
 # ── CONSTRUIR PROMPT ──────────────────────────────────────────────────────────
@@ -970,6 +1011,24 @@ def generate_briefing(prompt: str) -> str:
     if not GROQ_KEY:
         raise ValueError("GROQ_API_KEY no configurada")
 
+    # Techo de salida calculado a partir de lo que queda libre tras el prompt,
+    # en vez de un 3000 fijo que ignoraba el tamaño del prompt y desbordaba el
+    # límite de 8000 TPM (ver comentario en GROQ_TPM_LIMIT). Si algún día el
+    # prompt crece tanto que no cabe ni el mínimo, se falla AQUÍ con un
+    # mensaje que dice exactamente qué recortar — no con un 413 opaco de Groq.
+    prompt_tokens = estimar_tokens(prompt)
+    disponible    = GROQ_TPM_LIMIT - GROQ_TPM_SAFETY - prompt_tokens
+    max_salida    = min(GROQ_MAX_OUTPUT, disponible)
+    print(f"🧮 Presupuesto Groq: prompt ~{prompt_tokens} tokens · respuesta hasta {max_salida} "
+          f"(límite {GROQ_TPM_LIMIT} TPM)")
+    if max_salida < GROQ_MIN_OUTPUT:
+        raise ValueError(
+            f"El prompt (~{prompt_tokens} tokens) deja solo {max_salida} tokens para la respuesta, "
+            f"por debajo del mínimo de {GROQ_MIN_OUTPUT} para un briefing completo. "
+            f"Recorta BRIEFING_HISTORY_CHARS_BUDGET (hoy {BRIEFING_HISTORY_CHARS_BUDGET}) "
+            f"o alguna sección del prompt antes de volver a ejecutar."
+        )
+
     r = requests.post(
         "https://api.groq.com/openai/v1/chat/completions",
         headers={
@@ -979,7 +1038,7 @@ def generate_briefing(prompt: str) -> str:
         json={
             "model":            MODEL,
             "messages":         [{"role": "user", "content": prompt}],
-            "max_tokens":       3000,
+            "max_tokens":       max_salida,
             "temperature":      0.45,
             # Qwen3.6-27B soporta modo "pensador" (reasoning) y modo directo.
             # Esta tarea es sintetizar datos ya dados en prosa fluida en un
@@ -995,9 +1054,10 @@ def generate_briefing(prompt: str) -> str:
             #      real (de ahí un briefing de 0 palabras en un intento).
             #   2) Groq limita a 8000 tokens/minuto (entrada+salida) para
             #      este modelo en el tier gratuito — sin pensamiento interno
-            #      de por medio, el total (prompt ~2900 + esta respuesta)
-            #      cabe con margen, sin tener que competir por presupuesto
-            #      entre "pensar" y "escribir".
+            #      de por medio no hay que competir por presupuesto entre
+            #      "pensar" y "escribir". (El prompt ha crecido bastante
+            #      desde que se escribió esto: el reparto del presupuesto
+            #      lo lleva ahora max_salida, calculado arriba.)
             "reasoning_effort": "none",
             "reasoning_format": "hidden",  # inofensivo con reasoning_effort=none, pero no estorba dejarlo
         },
