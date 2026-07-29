@@ -305,6 +305,41 @@ def _obtener_sector(ticker: str) -> str:
 
 # ── Llamada a Gemini (prueba gratuita) ──────────────────────────────────
 
+# ── Errores transitorios de los proveedores ────────────────────────────
+# Hasta el 29/07/2026 los tres proveedores solo reintentaban ante un "429"
+# (cuota). El 503 UNAVAILABLE de Gemini ("this model is currently
+# experiencing high demand... please try again later") es literalmente una
+# invitación a reintentar, pero caía en el `raise` del primer intento —
+# así que Gael llevaba DÍAS fallando a la primera, todos los días, sin
+# reintentar ni una sola vez. Se veía en su log:
+#     [Bull] ERROR generando tesis para ANET: ServerError: 503 UNAVAILABLE
+#
+# Esperas más largas que las de antes (30/60/120s en vez de 15/30/45): un
+# pico de demanda no se pasa en 15 segundos, y a Gael no le corre prisa —
+# genera una tesis al día desde un cron nocturno.
+_ERRORES_TRANSITORIOS = ("429", "503", "502", "504", "unavailable",
+                          "overloaded", "high demand", "try again later",
+                          "temporarily", "timeout")
+_ESPERAS = (30, 60, 120)
+
+
+def _es_transitorio(e: Exception) -> bool:
+    return any(p in str(e).lower() for p in _ERRORES_TRANSITORIOS)
+
+
+def _reintentar(e: Exception, intentos: int, proveedor: str) -> bool:
+    """True si merece la pena reintentar (y espera lo que toque antes de
+    devolver el control). False si el error es definitivo o se acabaron
+    los intentos."""
+    if not _es_transitorio(e) or intentos > len(_ESPERAS):
+        return False
+    espera = _ESPERAS[intentos - 1]
+    print(f"[Bull] {proveedor} no disponible ({type(e).__name__}), esperando {espera}s "
+          f"(intento {intentos}/{len(_ESPERAS)})...")
+    time.sleep(espera)
+    return True
+
+
 def _generar_con_gemini(ticker: str, datos_verificados: str = "") -> str:
     from google import genai
     from google.genai import types
@@ -343,10 +378,7 @@ def _generar_con_gemini(ticker: str, datos_verificados: str = "") -> str:
                       f"— es posible que el informe esté cortado (revísalo antes de aprobar).")
             return response.text
         except Exception as e:
-            if "429" in str(e) and intentos < 4:
-                espera = 15 * intentos
-                print(f"[Bull] Rate limit de Gemini, esperando {espera}s (intento {intentos}/3)...")
-                time.sleep(espera)
+            if _reintentar(e, intentos, "Gemini"):
                 continue
             raise
 
@@ -380,10 +412,8 @@ def _generar_con_groq(ticker: str, datos_verificados: str = "") -> str:
                 },
                 timeout=120,
             )
-            if r.status_code == 429 and intentos < 4:
-                espera = 15 * intentos
-                print(f"[Bull] Rate limit de Groq, esperando {espera}s (intento {intentos}/3)...")
-                time.sleep(espera)
+            if r.status_code in (429, 500, 502, 503, 504) and _reintentar(
+                    Exception(f"HTTP {r.status_code}"), intentos, "Groq"):
                 continue
             r.raise_for_status()
             data = r.json()
@@ -391,8 +421,7 @@ def _generar_con_groq(ticker: str, datos_verificados: str = "") -> str:
         except requests.HTTPError:
             raise
         except Exception as e:
-            if intentos < 4:
-                time.sleep(10)
+            if _reintentar(e, intentos, "Groq"):
                 continue
             raise
 
@@ -421,23 +450,36 @@ def _generar_con_claude(ticker: str, datos_verificados: str = "") -> str:
             )
             return "".join(block.text for block in response.content if block.type == "text")
         except Exception as e:
-            if "429" in str(e) and intentos < 4:
-                espera = 15 * intentos
-                print(f"[Bull] Rate limit de Claude, esperando {espera}s (intento {intentos}/3)...")
-                time.sleep(espera)
+            if _reintentar(e, intentos, "Claude"):
                 continue
             raise
 
 
-def generar_tesis(ticker: str, provider: str) -> dict:
+def _llamar_proveedor(proveedor: str, ticker: str, datos_verificados: str) -> str:
+    if proveedor == "gemini":
+        return _generar_con_gemini(ticker, datos_verificados)
+    if proveedor == "groq":
+        return _generar_con_groq(ticker, datos_verificados)
+    return _generar_con_claude(ticker, datos_verificados)
+
+
+def generar_tesis(ticker: str, provider: str, fallback: str = "") -> dict:
     datos_verificados, precio_actual = _obtener_datos_verificados(ticker)
 
-    if provider == "gemini":
-        texto = _generar_con_gemini(ticker, datos_verificados)
-    elif provider == "groq":
-        texto = _generar_con_groq(ticker, datos_verificados)
-    else:
-        texto = _generar_con_claude(ticker, datos_verificados)
+    try:
+        texto = _llamar_proveedor(provider, ticker, datos_verificados)
+    except Exception as e:
+        # El fallback está APAGADO por defecto y se activa con --fallback:
+        # Claude cuesta dinero real y Gemini se eligió por ser gratuito, así
+        # que cambiar de proveedor solo, en silencio y de madrugada, sería
+        # tomar una decisión de gasto que no me corresponde. Con el flag
+        # puesto en el cron, es una decisión tomada a propósito.
+        if not fallback or fallback == provider or not _es_transitorio(e):
+            raise
+        print(f"[Bull] {provider} sigue sin responder tras los reintentos "
+              f"({type(e).__name__}) — probando con {fallback}.")
+        texto = _llamar_proveedor(fallback, ticker, datos_verificados)
+        provider = fallback   # para que `fuente` refleje quién la escribió de verdad
 
     if not texto or not texto.strip():
         raise ValueError("Respuesta vacía de la API (revisa si los tools fallaron)")
@@ -456,7 +498,7 @@ def generar_tesis(ticker: str, provider: str) -> dict:
     precio_objetivo = _extraer_precio_objetivo(texto, ticker, precio_actual_conocido=precio_actual)
 
     return {"contenido": texto, "titulo": titulo, "nombre": nombre, "resumen": resumen,
-            "sector": sector, "precio_objetivo": precio_objetivo}
+            "sector": sector, "precio_objetivo": precio_objetivo, "proveedor_real": provider}
 
 
 def _extraer_ticker_de_instruccion(mensaje: str) -> str | None:
@@ -524,7 +566,7 @@ def procesar_meeting_room(provider: str, max_mensajes: int = 3) -> int:
 
         print(f"[Bull] Instrucción del Meeting Room: generar tesis de {ticker} (pedido por Marc).")
         try:
-            resultado = generar_tesis(ticker, provider)
+            resultado = generar_tesis(ticker, provider, fallback)
             tesis_id = create_tesis(
                 ticker=ticker,
                 contenido=resultado["contenido"],
@@ -534,8 +576,8 @@ def procesar_meeting_room(provider: str, max_mensajes: int = 3) -> int:
                 sector=resultado["sector"],
                 resumen=resultado["resumen"],
                 precio_objetivo=resultado["precio_objetivo"],
-                autor=f"Gael ({provider}) — a petición",
-                fuente=f"agente_bull_{provider}",
+                autor=f"Gael ({resultado.get('proveedor_real', provider)}) — a petición",
+                fuente=f"agente_bull_{resultado.get('proveedor_real', provider)}",
                 criterio=f"Petición directa vía Meeting Room: \"{msg['mensaje']}\"",
                 status="pending",
             )
@@ -555,9 +597,20 @@ def main():
     parser.add_argument("--max", type=int, default=1, help="Número máximo de tesis a generar en esta ejecución")
     parser.add_argument("--provider", choices=["gemini", "claude", "groq"], default="gemini",
                          help="gemini = prueba gratuita (por defecto), claude = producción real, groq = experimental (groq/compound, con búsqueda web)")
+    parser.add_argument("--fallback", choices=["gemini", "claude", "groq"], default="",
+                         help="Proveedor de reserva si el principal sigue caído tras los reintentos. "
+                              "APAGADO por defecto: Claude cuesta dinero y esa decisión es del usuario, "
+                              "no del agente. Para activarlo en el cron: --fallback claude")
     args = parser.parse_args()
 
     provider = args.provider
+    fallback = args.fallback
+    _CLAVES = {"gemini": settings.gemini_api_key, "claude": settings.anthropic_api_key,
+               "groq": settings.groq_api_key}
+    if fallback and not _CLAVES.get(fallback):
+        print(f"[Bull] Se pidió --fallback {fallback} pero no hay clave configurada para ese "
+              f"proveedor — se ignora el fallback.")
+        fallback = ""
 
     # Los abortos ANÓMALOS salen con código 1 para que cron_alert.sh avise por
     # Telegram. Antes todos los caminos hacían `return` (código 0), así que el
@@ -600,7 +653,7 @@ def main():
         criterio = f"CANSLIM score {c['score']}, {c['pct_from_high']:.1f}% desde máximo de 52 semanas"
         print(f"[Bull] Generando tesis para {ticker} ({criterio})...")
         try:
-            resultado = generar_tesis(ticker, provider)
+            resultado = generar_tesis(ticker, provider, fallback)
             tesis_id = create_tesis(
                 ticker=ticker,
                 contenido=resultado["contenido"],
@@ -610,8 +663,8 @@ def main():
                 sector=resultado["sector"],
                 resumen=resultado["resumen"],
                 precio_objetivo=resultado["precio_objetivo"],
-                autor=f"Gael ({provider})",
-                fuente=f"agente_bull_{provider}",
+                autor=f"Gael ({resultado.get('proveedor_real', provider)})",
+                fuente=f"agente_bull_{resultado.get('proveedor_real', provider)}",
                 criterio=criterio,
                 status="pending",
             )
