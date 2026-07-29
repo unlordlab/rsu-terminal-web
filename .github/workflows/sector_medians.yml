@@ -24,9 +24,13 @@ jobs:
           pip install requests yfinance
 
       - name: Run Medianas Sectoriales
+        # SECTOR_MEDIANS_GIST_ID ya no se pasa: apuntaba a un Gist distinto
+        # del que lee el backend, así que este job llevaba semanas saliendo
+        # en verde sin que Research viera una sola mediana real (29/07/2026).
+        # El ID sale ahora de shared/gist_ids.py, la misma constante que
+        # importan los dos lados. El secret puede borrarse de GitHub.
         env:
           GIST_TOKEN: ${{ secrets.GIST_TOKEN }}
-          SECTOR_MEDIANS_GIST_ID: ${{ secrets.SECTOR_MEDIANS_GIST_ID }}
         run: |
           python scripts/sector_medians.py
 

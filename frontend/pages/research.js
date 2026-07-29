@@ -431,6 +431,7 @@ function metricsSection(data) {
     const p = data.profitability;
     const sc = (data.sector_comparison && data.sector_comparison.ok) ? data.sector_comparison.items : {};
     const sectorName = data.sector || 'el sector';
+    const scMeta = data.sector_comparison || {};
 
     // Construye el objeto de comparación para una métrica, con tooltip legible.
     // Si no hay benchmark para esa métrica (ej. Current Ratio, FCF), devuelve undefined
@@ -476,7 +477,36 @@ function metricsSection(data) {
             ['Payout Ratio' + tt('payout-ratio'), p.payout_ratio, v => v != null ? payoutFmt(v) : 'N/A'],
             ['N. Analistas' + tt('n-analysts'), data.n_analysts, v => v ? v + ' analistas' + (data.latest_rating_date ? ' (últ. ' + data.latest_rating_date + ')' : '') : 'N/A'],
         ])
-        + '</div>';
+        + '</div>'
+        + sectorSourceNote(scMeta, sectorName);
+}
+
+// De dónde salen los "vs sector" que colorean cada métrica de arriba. Mismo
+// criterio de transparencia que el método del Breadth en Algoritmo o el
+// periodo evaluado del backtest de BTC Stratum: cuando hay dos fuentes de
+// distinta calidad, se dice cuál se está usando. Sin esta línea, unas
+// medianas reales calculadas sobre las 503 empresas del S&P 500 y unos
+// valores de referencia escritos a mano se veían exactamente igual -- y así
+// pasaron semanas comparando contra los estáticos sin que nadie lo notara
+// (el job semanal escribía en un Gist distinto del que leía el backend,
+// 29/07/2026).
+function sectorSourceNote(meta, sectorName) {
+    if (!meta.fuente) return '';
+    const base = 'font-size:10px;color:var(--color-muted);margin:-0.5rem 0 1rem;';
+    if (meta.fuente === 'real') {
+        const n     = meta.n_tickers ? esc(meta.n_tickers) + ' empresas del sector' : 'el sector';
+        const fecha = meta.generated_at ? esc(String(meta.generated_at).slice(0, 10)) : null;
+        const edad  = meta.edad_dias === 0 ? 'hoy'
+                     : meta.edad_dias === 1 ? 'ayer'
+                     : meta.edad_dias != null ? 'hace ' + esc(meta.edad_dias) + ' días' : null;
+        return '<div style="' + base + '">Comparado con medianas <span style="color:var(--color-accent);">reales</span> de '
+            + esc(sectorName) + ', calculadas sobre ' + n
+            + (fecha ? ' · actualizadas ' + (edad || '') + ' (' + fecha + ')' : '')
+            + '</div>';
+    }
+    return '<div style="' + base + '">Comparado con valores de referencia <span style="color:#ffb800;">estáticos</span> de '
+        + esc(sectorName) + ' — aproximados y sin fecha. Las medianas reales del sector no están disponibles '
+        + 'ahora mismo (el cálculo semanal no ha llegado a publicarse o está caducado).</div>';
 }
 
 function payoutFmt(v) {

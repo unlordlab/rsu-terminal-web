@@ -17,6 +17,11 @@ from services.turnover_service import get_turnover_comparison, get_absorption_si
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "..", "shared"))
 from weinstein_phases import _ema_slope, classify_phase_debounced, classify_phase_weekly  # noqa: E402
 from time_utils import get_timestamp  # noqa: E402
+from gist_ids import (  # noqa: E402
+    SECTOR_MEDIANS_GIST_ID,
+    SECTOR_MEDIANS_GIST_FILE,
+    SECTOR_MEDIANS_MAX_EDAD_DIAS,
+)
 
 def _safe(val, default=None):
     try:
@@ -1943,47 +1948,83 @@ def get_research(ticker: str) -> dict:
 # Se usan como benchmark relativo, no como datos de un proveedor en tiempo real,
 # para poder colorear cada métrica como favorable/desfavorable frente a su sector.
 # Gist con las medianas sectoriales REALES, calculadas semanalmente por
-# scripts/sector_medians.py (Fase 3.1 del Plan Maestro, 20/07/2026). Igual
-# que scanner_service.py, el ID es público (solo el token de escritura es
-# secreto) -- rellenar tras crear el Gist la primera vez.
-SECTOR_MEDIANS_GIST_ID = "9a8f96a19c239a0be18aaded30d56de1"
-SECTOR_MEDIANS_GIST_FILE = "sector_medians.json"
+# scripts/sector_medians.py (Fase 3.1 del Plan Maestro, 20/07/2026). El ID
+# ya no se hardcodea aquí: se importa de shared/gist_ids.py (arriba), la
+# MISMA constante que usa el script que escribe. Antes estaban duplicados
+# (aquí a mano, allí vía secret de GitHub) y divergieron -- el job salía
+# verde escribiendo en un Gist mientras esta función leía otro que seguía
+# vacío. Ver shared/gist_ids.py para el relato completo.
 
 
-def _get_sector_medians_reales(sector: str) -> dict | None:
-    """Lee las medianas reales del sector desde el Gist semanal, con caché
-    de 12h local (el dato en sí solo cambia una vez por semana, no hace
-    falta pedirlo en cada research). Devuelve None si el Gist no está
-    configurado, no responde, o no tiene datos fiables para este sector
-    concreto -- en cualquiera de esos casos, el llamador cae al valor
-    estático de SECTOR_BENCHMARKS sin que el usuario note la diferencia."""
-    if not SECTOR_MEDIANS_GIST_ID:
-        return None
-
+def _get_sector_medians_data() -> dict:
+    """Descarga (y cachea 12h) el Gist semanal completo. Devuelve `{}` si no
+    hay dato utilizable: Gist ilegible, sin sectores, o CADUCADO -- unas
+    medianas de hace meses no son "reales", son un fósil, y presentarlas
+    como fuente viva es el mismo autoengaño que el job en verde sin escribir
+    nada. El llamador cae entonces a SECTOR_BENCHMARKS, pero ahora lo dice
+    en voz alta en vez de disimularlo."""
     from services.cache import cache
     cache_key = "sector_medians:all"
     data = cache.get(cache_key)
-    if data is None:
-        try:
-            r = requests.get(
-                f"https://api.github.com/gists/{SECTOR_MEDIANS_GIST_ID}",
-                timeout=10,
-                headers={"Accept": "application/vnd.github.v3+json"},
-            )
-            r.raise_for_status()
-            content = r.json()["files"][SECTOR_MEDIANS_GIST_FILE]["content"]
-            data = json.loads(content)
-            if not data.get("ok") or not data.get("sectores"):
-                data = {}
-        except Exception as e:
-            print(f"[Research] No se pudo leer el Gist de medianas sectoriales: {e}")
-            data = {}
-        cache.set(cache_key, data, 43200)  # 12h
+    if data is not None:
+        return data
 
+    try:
+        r = requests.get(
+            f"https://api.github.com/gists/{SECTOR_MEDIANS_GIST_ID}",
+            timeout=10,
+            headers={"Accept": "application/vnd.github.v3+json"},
+        )
+        r.raise_for_status()
+        ficheros = r.json().get("files", {})
+        if SECTOR_MEDIANS_GIST_FILE not in ficheros:
+            raise ValueError(
+                f"el Gist {SECTOR_MEDIANS_GIST_ID} no contiene {SECTOR_MEDIANS_GIST_FILE} "
+                f"(ficheros presentes: {list(ficheros.keys())}) -- ¿el job semanal escribe en otro Gist?"
+            )
+        data = json.loads(ficheros[SECTOR_MEDIANS_GIST_FILE]["content"])
+        if not data.get("ok") or not data.get("sectores"):
+            raise ValueError("el fichero no trae sectores con medianas")
+
+        generado = data.get("generated_at")
+        edad_dias = None
+        if generado:
+            from datetime import datetime, timezone
+            gen_dt = datetime.fromisoformat(generado.replace("Z", "+00:00"))
+            if gen_dt.tzinfo is None:
+                gen_dt = gen_dt.replace(tzinfo=timezone.utc)
+            edad_dias = (datetime.now(timezone.utc) - gen_dt).days
+        if edad_dias is None or edad_dias > SECTOR_MEDIANS_MAX_EDAD_DIAS:
+            raise ValueError(
+                f"medianas caducadas o sin fecha (generated_at={generado}, "
+                f"{edad_dias} días, máximo {SECTOR_MEDIANS_MAX_EDAD_DIAS}) -- "
+                "el job semanal lleva sin regenerarlas más de la cuenta"
+            )
+        data["edad_dias"] = edad_dias
+    except Exception as e:
+        print(f"[Research] Medianas sectoriales reales NO disponibles, se usan los "
+              f"benchmarks estáticos: {e}")
+        data = {}
+
+    cache.set(cache_key, data, 43200)  # 12h
+    return data
+
+
+def _get_sector_medians_reales(sector: str) -> tuple:
+    """(medianas, meta) del sector, o (None, meta) si no hay dato real para
+    este sector concreto. `meta` siempre describe la fuente que se acabará
+    usando, para que _get_sector_comparison() pueda decirlo en la respuesta
+    en vez de dejarlo implícito."""
+    data = _get_sector_medians_data()
     sector_data = (data.get("sectores") or {}).get(sector)
     if not sector_data or not sector_data.get("medianas"):
-        return None
-    return sector_data["medianas"]
+        return None, {"fuente": "estatica"}
+    return sector_data["medianas"], {
+        "fuente":       "real",
+        "generated_at": data.get("generated_at"),
+        "edad_dias":    data.get("edad_dias"),
+        "n_tickers":    sector_data.get("n_tickers"),
+    }
 
 
 SECTOR_BENCHMARKS = {
@@ -2086,13 +2127,21 @@ def _get_sector_comparison(sector: str, metrics: dict, profitability: dict) -> d
     20/07/2026) -- si el Gist no responde, no tiene datos para este sector
     concreto, o no hay suficientes tickers con muestra fiable, se cae al
     diccionario estático SECTOR_BENCHMARKS (valores de referencia
-    aproximados, sin fecha, mejor que nada pero no ideales). El usuario no
-    necesita saber cuál de las dos fuentes se usó -- el formato de salida
-    es idéntico en ambos casos.
+    aproximados, escritos a mano, sin fecha ni fuente documentada).
+
+    La respuesta dice SIEMPRE cuál de las dos fuentes se usó. El comentario
+    anterior sostenía justo lo contrario ("el usuario no necesita saber
+    cuál de las dos se usó, el formato es idéntico") y eso es exactamente
+    lo que dejó pasar semanas de comparaciones contra números inventados a
+    mano sin que nadie lo notara: el job semanal escribía en un Gist
+    distinto del que se lee aquí, así que la rama "real" no se ejecutó ni
+    una vez desde que se construyó (descubierto el 29/07/2026). Un dato de
+    peor calidad es aceptable; disfrazarlo del bueno, no.
     """
-    bench = _get_sector_medians_reales(sector) or SECTOR_BENCHMARKS.get(sector)
+    medianas, meta = _get_sector_medians_reales(sector)
+    bench = medianas or SECTOR_BENCHMARKS.get(sector)
     if not bench:
-        return {"ok": False, "sector": sector, "items": {}}
+        return {"ok": False, "sector": sector, "items": {}, **meta}
 
     combined = {**metrics, **profitability}
     items = {}
@@ -2110,4 +2159,4 @@ def _get_sector_comparison(sector: str, metrics: dict, profitability: dict) -> d
             "favorable":    is_favorable,
         }
 
-    return {"ok": True, "sector": sector, "items": items}
+    return {"ok": True, "sector": sector, "items": items, **meta}

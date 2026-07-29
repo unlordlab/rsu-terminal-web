@@ -45,10 +45,16 @@ import yfinance as yf
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "shared"))
 from sp500_universe import SP500_SECTOR_MAP  # noqa: E402 -- solo para la LISTA de tickers, no para el sector
+from gist_ids import SECTOR_MEDIANS_GIST_ID, SECTOR_MEDIANS_GIST_FILE  # noqa: E402
 
 GIST_TOKEN = os.environ.get("GIST_TOKEN", "")
-GIST_ID    = os.environ.get("SECTOR_MEDIANS_GIST_ID", "")
-GIST_FILE  = "sector_medians.json"
+# El ID ya NO se lee del secret SECTOR_MEDIANS_GIST_ID: venía de ahí y
+# apuntaba a un Gist distinto del que lee el backend, así que este job
+# terminaba en verde mientras Research no veía ni una sola mediana real
+# (29/07/2026). Ahora sale de shared/gist_ids.py, la misma constante que
+# importa research_service.py -- no pueden volver a divergir.
+GIST_ID    = SECTOR_MEDIANS_GIST_ID
+GIST_FILE  = SECTOR_MEDIANS_GIST_FILE
 
 # Mismos 14 campos que SECTOR_BENCHMARKS en research_service.py -- si se
 # añade/quita alguno ahí, replicar aquí también.
@@ -163,8 +169,6 @@ def run_scan() -> dict:
 def save_to_gist(result: dict):
     if not GIST_TOKEN:
         raise ValueError("GIST_TOKEN no configurado")
-    if not GIST_ID:
-        raise ValueError("SECTOR_MEDIANS_GIST_ID no configurado")
     r = requests.patch(
         f"https://api.github.com/gists/{GIST_ID}",
         headers={"Authorization": f"token {GIST_TOKEN}", "Accept": "application/vnd.github+json"},
@@ -172,13 +176,49 @@ def save_to_gist(result: dict):
         timeout=30,
     )
     r.raise_for_status()
-    print(f"💾 Guardado en Gist {GIST_ID}")
+    print(f"💾 Guardado en Gist {GIST_ID} (fichero {GIST_FILE})")
+
+    # Releer lo que acabamos de escribir, exactamente igual que lo lee el
+    # backend. Un 200 del PATCH dice que GitHub aceptó la petición, no que
+    # el consumidor vaya a encontrar el dato -- y este job ya estuvo
+    # semanas dando "éxito" sin que Research viera nada (29/07/2026). El
+    # único final aceptable es haber comprobado la lectura.
+    v = requests.get(
+        f"https://api.github.com/gists/{GIST_ID}",
+        headers={"Accept": "application/vnd.github+json"},
+        timeout=30,
+    )
+    v.raise_for_status()
+    fichero = v.json().get("files", {}).get(GIST_FILE)
+    if not fichero:
+        raise ValueError(
+            f"El Gist {GIST_ID} no contiene {GIST_FILE} tras escribirlo "
+            f"(ficheros presentes: {list(v.json().get('files', {}).keys())})"
+        )
+    releido = json.loads(fichero["content"])
+    if releido.get("generated_at") != result["generated_at"]:
+        raise ValueError(
+            f"El {GIST_FILE} del Gist no es el que se acaba de subir "
+            f"(generated_at leído: {releido.get('generated_at')}, esperado: {result['generated_at']})"
+        )
+    print(f"✅ Verificado: {len(releido.get('sectores', {}))} sectores legibles desde el Gist")
 
 
 def main():
     result = run_scan()
     for sector, datos in result["sectores"].items():
         print(f"  {sector}: {datos['n_tickers']} tickers, {len(datos['medianas'])} métricas con mediana fiable")
+
+    # Sin sectores no hay nada que publicar: subir un fichero vacío
+    # sobrescribiría las medianas buenas de la semana pasada con nada, y
+    # además el job saldría en verde. Mejor fallar y que salte el aviso de
+    # Telegram conservando el último dato válido.
+    if not result["sectores"]:
+        raise ValueError(
+            f"Ningún sector con muestra suficiente ({result['ok_count']}/{result['universe_size']} "
+            f"tickers con datos, {result['fail_count']} fallidos) -- no se sobrescribe el Gist"
+        )
+
     save_to_gist(result)
 
 
