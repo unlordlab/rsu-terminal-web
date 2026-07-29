@@ -696,6 +696,12 @@ def _generate_suggestions(yf_data: dict) -> list:
 
     return suggestions or ["ℹ Datos insuficientes para generar sugerencias."]
 
+# Mínimo de categorías (de las 5) con datos para que el RSU Score se publique.
+# Ver el bloque TOTAL de _compute_rsu_score() para el porqué y el caso real de
+# los ETF que lo motivó.
+MIN_CATEGORIAS_RSU_SCORE = 3
+
+
 def _compute_rsu_score(yf_data: dict, piotroski: dict = None, sector_comparison: dict = None,
                         insider_summary: dict = None, technical: dict = None) -> dict:
     """
@@ -867,13 +873,41 @@ def _compute_rsu_score(yf_data: dict, piotroski: dict = None, sector_comparison:
     # Si falta alguna categoría (datos no disponibles), se reescala sobre las
     # categorías sí disponibles para no penalizar por ausencia de datos.
     available_cats = [p for p in [fund_pts, pio_pts, val_pts, sent_pts, tech_pts] if p is not None]
-    score = round(sum(available_cats) / len(available_cats) / 20 * 100) if available_cats else 0
+    n_categorias = len(available_cats)
     max_score = 100
 
+    # Por debajo de MIN_CATEGORIAS no se publica score. El reescalado sobre las
+    # categorías disponibles es correcto de por sí, pero antes no se decía
+    # sobre cuántas se había medido, y con una sola deja de ser un score
+    # compuesto: es un indicador suelto disfrazado de veredicto.
+    #
+    # Medido el 29/07/2026 y no es un caso raro: los ETF no tienen
+    # fundamentales (ni Piotroski, ni márgenes, ni consenso de analistas), así
+    # que solo sobrevive la Fase Técnica. SPY y QQQ salían con 100/100
+    # "COMPRA FUERTE" sostenido por un único indicador, y GLD con un 0
+    # "EVITAR" de la misma nada -- indistinguibles en pantalla de un score
+    # construido con las 5. Y son de los tickers más tecleados de la terminal.
+    if n_categorias < MIN_CATEGORIAS_RSU_SCORE:
+        return {
+            "score": None, "max": max_score, "color": "var(--color-muted)",
+            "label": None, "breakdown": breakdown,
+            "n_categorias": n_categorias, "min_categorias": MIN_CATEGORIAS_RSU_SCORE,
+            "motivo": (
+                f"Solo {n_categorias} de las 5 categorías del RSU Score tienen datos "
+                f"para este activo. Hacen falta al menos {MIN_CATEGORIAS_RSU_SCORE} para "
+                "que el resultado sea un score compuesto y no la lectura de un único "
+                "indicador. Es lo habitual en ETF y fondos: no publican cuentas, así "
+                "que no hay fundamentales, ni salud financiera, ni consenso de analistas."
+            ),
+        }
+
+    score = round(sum(available_cats) / n_categorias / 20 * 100)
     color = "#00ffad" if score >= 70 else "#ffb800" if score >= 50 else "#f23645"
     label = "COMPRA FUERTE" if score >= 80 else "COMPRA" if score >= 65 else "NEUTRAL" if score >= 50 else "PRECAUCIÓN" if score >= 35 else "EVITAR"
 
-    return {"score": score, "max": max_score, "color": color, "label": label, "breakdown": breakdown}
+    return {"score": score, "max": max_score, "color": color, "label": label,
+            "breakdown": breakdown, "n_categorias": n_categorias,
+            "min_categorias": MIN_CATEGORIAS_RSU_SCORE}
 
 def _translate_description(text: str) -> str:
     if not text: return text

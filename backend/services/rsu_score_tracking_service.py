@@ -59,8 +59,18 @@ def registrar_score(ticker: str, rsu_score: dict, price: float):
     """Llamada desde get_research() en cada cache-miss. INSERT OR IGNORE
     sobre UNIQUE(ticker, fecha) -- si ya se registró hoy este ticker
     (aunque venga de otra petición concurrente), no hace nada. No se
-    fabrica un registro si falta score/breakdown/precio."""
+    fabrica un registro si falta score/breakdown/precio.
+
+    Tampoco se registra lo que la ficha NO publica: desde el 29/07/2026,
+    _compute_rsu_score() devuelve score=None cuando hay menos de 3 de las 5
+    categorías con datos (caso típico de los ETF, que no tienen
+    fundamentales). Guardarlos aquí contaminaría el propio track record: la
+    pregunta que este historial existe para responder -- "¿un 90 le gana a un
+    40?" -- no tiene sentido si en la muestra hay SPY y QQQ con un 100 salido
+    de un único indicador técnico."""
     if not price or not rsu_score or not rsu_score.get("breakdown"):
+        return
+    if rsu_score.get("score") is None:
         return
     fecha = datetime.now(timezone.utc).strftime("%Y-%m-%d")
     ahora = datetime.now(timezone.utc).isoformat()

@@ -328,16 +328,36 @@ function descriptionSection(data) {
 }
 
 function rsuScoreSection(score, scoreColor) {
+    // Sin score publicable (menos de 3 de las 5 categorías con datos) se
+    // explica por qué en vez de enseñar un número. Pasa de verdad con los
+    // ETF: SPY y QQQ salían con 100/100 "COMPRA FUERTE" sostenido por un
+    // único indicador técnico, y GLD con un 0 "EVITAR" de la misma nada,
+    // indistinguibles de un score construido con las 5. Ver sesión
+    // 29/07/2026 y MIN_CATEGORIAS_RSU_SCORE en research_service.py.
+    const sinScore = score.score == null;
+
     return '<div style="background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius);padding:1.25rem;margin-bottom:1rem;">'
         + '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">'
         + '<span style="color:var(--color-muted);font-size:11px;letter-spacing:0.08em;">RSU SCORE ' + tt('rsu-score') + '</span>'
-        + '<div style="display:flex;align-items:center;gap:10px;">'
-        + '<span style="color:' + scoreColor + ';font-size:20px;font-weight:500;">' + score.score + '/100</span>'
-        + '<span style="color:' + scoreColor + ';font-size:12px;padding:2px 10px;border:1px solid ' + scoreColor + '33;border-radius:4px;">' + score.label + '</span>'
-        + '</div></div>'
-        + '<div style="background:var(--color-bg,#0a0a0a);border-radius:4px;height:6px;margin-bottom:8px;">'
-        + '<div style="height:100%;width:' + score.score + '%;background:' + scoreColor + ';border-radius:4px;transition:width 0.8s;"></div>'
+        + (sinScore
+            ? '<span style="color:var(--color-muted);font-size:12px;padding:2px 10px;border:1px solid var(--color-border);border-radius:4px;">No calculable</span>'
+            : '<div style="display:flex;align-items:center;gap:10px;">'
+              + '<span style="color:' + scoreColor + ';font-size:20px;font-weight:500;">' + esc(score.score) + '/100</span>'
+              + '<span style="color:' + scoreColor + ';font-size:12px;padding:2px 10px;border:1px solid ' + scoreColor + '33;border-radius:4px;">' + esc(score.label) + '</span>'
+              + '</div>')
         + '</div>'
+        + (sinScore
+            ? '<div style="color:#ffb800;font-size:11px;margin-bottom:8px;">' + esc(score.motivo || '') + '</div>'
+            : '<div style="background:var(--color-bg,#0a0a0a);border-radius:4px;height:6px;margin-bottom:8px;">'
+              + '<div style="height:100%;width:' + score.score + '%;background:' + scoreColor + ';border-radius:4px;transition:width 0.8s;"></div>'
+              + '</div>')
+        // Con 3 o 4 categorías el score SÍ se publica, pero no es comparable
+        // con uno medido sobre las 5 -- y hasta ahora se veían idénticos.
+        + (!sinScore && score.n_categorias != null && score.n_categorias < 5
+            ? '<div style="color:#ffb800;font-size:10px;margin-bottom:8px;">Calculado sobre '
+              + esc(score.n_categorias) + ' de las 5 categorías: las demás no tienen datos para este activo, '
+              + 'así que el score se reescala sobre lo medido y no es del todo comparable con el de un valor con las 5.</div>'
+            : '')
         + '<div style="display:flex;gap:1rem;flex-wrap:wrap;">'
         + (score.breakdown || []).map(b => {
             const pct = b.max > 0 ? Math.round(b.pts / b.max * 100) : 0;
