@@ -41,26 +41,47 @@ def _get_shares_outstanding(tk_obj) -> float | None:
 
 
 def _get_daily_turnover(ticker: str, days: int = 180) -> pd.Series | None:
-    """Serie diaria de rotación: volumen / acciones en circulación."""
-    try:
-        tk = yf.Ticker(ticker)
-        hist = tk.history(period=f"{days}d")
-        if hist.empty:
-            return None
-        shares = _get_shares_outstanding(tk)
-        if not shares:
-            return None
-        turnover = hist["Volume"] / shares
-        turnover.index = turnover.index.tz_localize(None)
-        return turnover
-    except Exception:
+    """Serie diaria de rotación: volumen / acciones en circulación.
+
+    Se deriva de _get_price_volume_data() en vez de descargar por su cuenta.
+    Antes eran dos descargas independientes de los MISMOS 180 días del MISMO
+    ticker: Research llama a get_turnover_comparison() y a
+    get_absorption_signal() en paralelo, y cada una bajaba su propia copia
+    (más su propia consulta de acciones en circulación). Con la caché de
+    _get_price_volume_data(), la segunda ya no toca la red.
+    """
+    df = _get_price_volume_data(ticker, days)
+    if df is None or "turnover" not in df:
         return None
+    return df["turnover"]
+
+
+# Caché de proceso: get_turnover_comparison() y get_absorption_signal() se
+# piden a la vez en cada research, y el benchmark (SPY) es además el mismo
+# para TODOS los tickers -- sin esto se redescargaba por cada consulta de
+# cualquier usuario. TTL corto: son datos diarios, no intradía.
+_PV_CACHE: dict = {}
+_PV_TTL = 900   # 15 min, mismo horizonte que la caché de research
 
 
 def _get_price_volume_data(ticker: str, days: int = 180) -> pd.DataFrame | None:
     """DataFrame con precio, volumen, retorno diario, rotación e impacto de
     precio (Amihud) -- una sola descarga reutilizada tanto para el
     indicador de Rotación como para el de Absorción."""
+    import time
+    clave = (ticker.upper(), days)
+    guardado = _PV_CACHE.get(clave)
+    if guardado and (time.time() - guardado[0]) < _PV_TTL:
+        return guardado[1]
+    df = _descargar_price_volume(ticker, days)
+    _PV_CACHE[clave] = (time.time(), df)   # se cachea también el None: si no
+                                            # hay datos, el segundo llamador
+                                            # del mismo request tampoco los va
+                                            # a encontrar
+    return df
+
+
+def _descargar_price_volume(ticker: str, days: int = 180) -> pd.DataFrame | None:
     try:
         tk = yf.Ticker(ticker)
         hist = tk.history(period=f"{days}d")

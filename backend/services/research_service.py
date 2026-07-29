@@ -47,12 +47,44 @@ def _fmt_pct(val):
     try: return f"{float(val)*100:.1f}%"
     except Exception: return "N/A"
 
+def _info_de(ticker: str) -> dict:
+    """`.info` de yfinance, una sola vez por ticker y ventana de caché.
+
+    Se pedía TRES veces en cada research -- perfil (_get_yfinance),
+    participación institucional e interés corto --, cada una con su propio
+    yf.Ticker y su propia descarga del payload completo de quoteSummary, que
+    es la llamada más pesada y más propensa a rate-limit de toda la librería.
+    Y las tres corren en paralelo dentro del mismo request, así que ni
+    siquiera se aprovechaban entre ellas.
+
+    Se cachea con el MISMO TTL que el resultado de research (15 min): el
+    research entero ya se sirve cacheado durante ese rato, así que no
+    introduce ningún desfase que no existiera ya, y en cambio evita 2 de
+    cada 3 descargas también en los cache-miss.
+
+    Devuelve {} si falla, igual que hacía cada sitio por su cuenta -- ningún
+    llamador puede quedarse sin respuesta por esto.
+    """
+    from services.cache import cache, TTL
+    clave = f"research:info:{ticker.upper()}"
+    datos = cache.get(clave)
+    if datos is not None:
+        return datos
+    try:
+        datos = yf.Ticker(ticker).info or {}
+    except Exception:
+        datos = {}
+    # También se cachea el {} de un fallo: si Yahoo no responde para este
+    # ticker, las otras dos funciones del mismo request no van a tener más
+    # suerte reintentándolo tres veces seguidas.
+    cache.set(clave, datos, TTL["research"])
+    return datos
+
+
 def _get_yfinance(ticker: str) -> dict:
     try:
         stock = yf.Ticker(ticker)
-        info  = {}
-        try: info = stock.info or {}
-        except Exception: pass
+        info  = _info_de(ticker)
 
         # Fallback precio
         cp = (_safe(info.get('currentPrice')) or
@@ -845,6 +877,30 @@ def _compute_rsu_score(yf_data: dict, piotroski: dict = None, sector_comparison:
 
 def _translate_description(text: str) -> str:
     if not text: return text
+
+    # La descripción de una empresa no cambia nunca en la práctica, pero esto
+    # es una llamada a un LLM (Groq, hasta 10s de timeout) que corría SÍNCRONA
+    # en el camino principal de cada research y sin caché propia: en cada
+    # cache-miss se volvía a pagar. Se cachea aparte del research, con TTL
+    # largo y clave por contenido, así que sobrevive a la expiración de los 15
+    # min del research y solo se recalcula si el texto de origen cambia.
+    from services.cache import cache
+    import hashlib
+    clave = "research:desc_es:" + hashlib.sha1(text[:1500].encode("utf-8")).hexdigest()
+    guardado = cache.get(clave)
+    if guardado is not None:
+        return guardado
+
+    traducido = _traducir_con_llm(text)
+    # Solo se cachea una traducción de verdad. Si el LLM falla, _traducir_con_llm
+    # devuelve el texto original en inglés -- guardarlo dejaría la ficha en
+    # inglés durante días por un fallo puntual de red.
+    if traducido != text:
+        cache.set(clave, traducido, 2592000)   # 30 días
+    return traducido
+
+
+def _traducir_con_llm(text: str) -> str:
     try:
         import requests as _req
         # xai_api_key (Grok) casi seguro nunca se ha configurado -- si no
@@ -1348,9 +1404,7 @@ def _get_institutional_ownership(ticker: str) -> dict:
     """% del capital en manos de institucionales y principales accionistas."""
     try:
         stock = yf.Ticker(ticker)
-        info = {}
-        try: info = stock.info or {}
-        except Exception: pass
+        info = _info_de(ticker)   # compartido con _get_yfinance/_get_short_interest
         pct = _safe(info.get('heldPercentInstitutions'))
 
         holders = []
@@ -1431,7 +1485,7 @@ def _get_institutional_ownership(ticker: str) -> dict:
 def _get_short_interest(ticker: str) -> dict:
     try:
         stock     = yf.Ticker(ticker)
-        info      = stock.info or {}
+        info      = _info_de(ticker)   # compartido, ver _info_de()
         short_pct = _safe(info.get('shortPercentOfFloat'))
         short_int = _safe(info.get('sharesShort'))
         short_ratio = _safe(info.get('shortRatio'))  # días para cubrir
@@ -1893,7 +1947,15 @@ def _get_research_crypto(ticker: str) -> dict:
     from services.cache import cache, TTL
     yf_data = _get_yfinance(ticker)
     if not yf_data.get('ok'):
-        return {"ok": False, "error": yf_data.get('error', 'Sin datos')}
+        # Caché negativa: antes solo se cacheaba el éxito, así que un ticker
+        # inexistente o retirado volvía a disparar el pipeline ENTERO en cada
+        # petición -- justo el caso que más se repite (alguien tecleando mal,
+        # o un enlace viejo a un ticker que ya no cotiza). TTL corto a
+        # propósito: si el ticker aparece o Yahoo se recupera, se reintenta
+        # en un par de minutos, no dentro de 15.
+        fallo = {"ok": False, "error": yf_data.get('error', 'Sin datos')}
+        cache.set(f"research:{ticker}", fallo, 120)
+        return fallo
 
     symbol  = ticker.replace("-USD", "").upper()
     coin_id = _resolve_coingecko_id(symbol)
@@ -1974,7 +2036,15 @@ def get_research(ticker: str) -> dict:
         absorption = f_absorption.result()
 
     if not yf_data.get('ok'):
-        return {"ok": False, "error": yf_data.get('error', 'Sin datos')}
+        # Caché negativa: antes solo se cacheaba el éxito, así que un ticker
+        # inexistente o retirado volvía a disparar el pipeline ENTERO en cada
+        # petición -- justo el caso que más se repite (alguien tecleando mal,
+        # o un enlace viejo a un ticker que ya no cotiza). TTL corto a
+        # propósito: si el ticker aparece o Yahoo se recupera, se reintenta
+        # en un par de minutos, no dentro de 15.
+        fallo = {"ok": False, "error": yf_data.get('error', 'Sin datos')}
+        cache.set(f"research:{ticker}", fallo, 120)
+        return fallo
 
     sector_comparison = _get_sector_comparison(yf_data['sector'], yf_data['metrics'], yf_data['profitability'])
 
