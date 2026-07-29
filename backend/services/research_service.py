@@ -1063,10 +1063,21 @@ def _get_piotroski_score(ticker: str) -> dict:
             missing_lines.append(names[0])
             return None
 
+        def valor_linea(df, i, *names):
+            """Importe del ejercicio `i` en la primera de `names` que exista Y
+            traiga dato. None si ninguna lo tiene. A diferencia de line(), mira
+            el VALOR y no solo si el nombre está en el índice -- yfinance
+            incluye filas enteras a NaN, que line() daba por buenas."""
+            for n in names:
+                if n in df.index:
+                    v = _safe(df.loc[n].iloc[i])
+                    if v is not None:
+                        return v
+            return None
+
         total_assets   = line(bs, 'Total Assets')
         net_income     = line(fin, 'Net Income')
         op_cf          = line(cf, 'Operating Cash Flow', 'Total Cash From Operating Activities')
-        lt_debt        = line(bs, 'Long Term Debt', 'Long Term Debt And Capital Lease Obligation')
         current_assets = line(bs, 'Current Assets', 'Total Current Assets')
         current_liab   = line(bs, 'Current Liabilities', 'Total Current Liabilities')
         shares_out     = line(bs, 'Ordinary Shares Number', 'Share Issued')
@@ -1125,14 +1136,37 @@ def _get_piotroski_score(ticker: str) -> dict:
         c4 = (cfo0 > ni0) if (cfo0 is not None and ni0 is not None) else None
         add_criterion(c4, "Beneficio de buena calidad (CFO > Bº Neto)", "Beneficio de baja calidad (CFO < Bº Neto)", "Calidad del beneficio no disponible")
 
-        # 5. Apalancamiento estable o decreciente
+        # 5. Apalancamiento estable o decreciente.
+        # Piotroski (2000) define este criterio sobre la deuda a LARGO PLAZO
+        # entre activos totales -- no sobre los pasivos totales. La distinción
+        # no es menor: los pasivos totales incluyen ingresos diferidos (cobros
+        # por adelantado de clientes), que al crecer son señal de demanda, no
+        # de apalancamiento. ANET es el caso de libro: sus pasivos/activos
+        # suben del 28,8% al 36,4%, pero 2.276M de esos 3.029M son ingresos
+        # diferidos.
+        def deuda_largo_plazo(i):
+            """0.0 -- no None -- cuando la empresa sencillamente no tiene deuda.
+            yfinance deja la línea a NaN (o ni la incluye) tanto si el dato
+            falta como si el importe es cero, y confundir ambos casos restaba
+            un punto en silencio justo a los balances más sanos: ANET, MNST y
+            ERIE salían con "Apalancamiento no disponible" teniendo cero deuda
+            (ANET: totalDebt=0 y 12.400M en caja). El cero se da por real solo
+            si TAMPOCO hay deuda total; si la hay pero falta el desglose a
+            largo plazo, entonces sí es un dato genuinamente desconocido.
+            Verificado 29/07/2026: el parser lee bien a quien sí tiene deuda
+            (AAPL 78.328M, KO 42.119M, 42/42 de una muestra del S&P 500)."""
+            v = valor_linea(bs, i, 'Long Term Debt', 'Long Term Debt And Capital Lease Obligation')
+            if v is not None:
+                return v
+            return 0.0 if valor_linea(bs, i, 'Total Debt') is None else None
+
         c5 = None
-        if lt_debt is not None and ta0 and ta1:
-            ld0 = _safe(lt_debt.iloc[0])
-            ld1 = _safe(lt_debt.iloc[1])
-            if ld0 is not None and ld1 is not None:
-                c5 = (ld0 / ta0) <= (ld1 / ta1)
-        add_criterion(c5, "Apalancamiento estable o ha bajado", "El apalancamiento ha aumentado", "Apalancamiento no disponible")
+        ld0, ld1 = deuda_largo_plazo(0), deuda_largo_plazo(1)
+        if ld0 is not None and ld1 is not None and ta0 and ta1:
+            c5 = (ld0 / ta0) <= (ld1 / ta1)
+        etiqueta_ok = ("Sin deuda a largo plazo" if (c5 and not ld0 and not ld1)
+                       else "Apalancamiento estable o ha bajado")
+        add_criterion(c5, etiqueta_ok, "El apalancamiento ha aumentado", "Apalancamiento no disponible")
 
         # 6. Liquidez (current ratio) en mejora
         c6 = None

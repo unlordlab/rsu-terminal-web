@@ -123,3 +123,98 @@ def test_piotroski_datos_insuficientes_devuelve_vacio(mock_ticker_factory):
         result = _get_piotroski_score("TESTEMPTY")
 
     assert result == {}, f"Con datos vacíos se esperaba {{}}, salió {result}"
+
+# ── Criterio 5 (apalancamiento) con empresas SIN deuda ───────────────────────
+# Hallazgo del 29/07/2026, encontrado revisando ANET a mano en la terminal:
+# el criterio salía "Apalancamiento no disponible" en empresas que
+# sencillamente NO TIENEN deuda. yfinance deja la línea a NaN (o ni la
+# incluye) tanto si el dato falta como si el importe es cero, y el código
+# trataba los dos casos igual -- así que ANET, MNST y ERIE perdían un punto
+# en silencio justo por tener el balance más sano posible (ANET: totalDebt=0
+# y 12.400M en caja). No era un fallo del parser: AAPL (78.328M) y KO
+# (42.119M) se leían bien, igual que 42 de 42 tickers de una muestra del
+# S&P 500.
+#
+# Ojo con el criterio correcto: Piotroski (2000) mide la deuda a LARGO PLAZO
+# sobre activos totales, NO los pasivos totales. En ANET los pasivos/activos
+# sí suben (28,8% -> 36,4%), pero 2.276M de esos 3.029M son ingresos
+# diferidos -- cobros por adelantado de clientes, señal de demanda y no de
+# apalancamiento.
+
+def _bs_base(extra: dict = None) -> pd.DataFrame:
+    """Balance con todo lo necesario para que el resto de criterios corran,
+    para poder aislar el criterio 5."""
+    rows = {
+        "Total Assets":           [120, 100],
+        "Current Assets":         [60, 45],
+        "Current Liabilities":    [30, 30],
+        "Ordinary Shares Number": [100, 105],
+    }
+    rows.update(extra or {})
+    return _build_df(rows)
+
+
+_FIN_BASE = {"Net Income": [12, 8], "Total Revenue": [200, 150], "Gross Profit": [80, 55]}
+_CF_BASE  = {"Operating Cash Flow": [20, 15]}
+
+
+def _criterio_apalancamiento(mock_ticker_factory, balance_sheet):
+    fake = mock_ticker_factory(balance_sheet, _build_df(_FIN_BASE), _build_df(_CF_BASE))
+    with patch("services.research_service.yf.Ticker", return_value=fake):
+        result = _get_piotroski_score("TEST")
+    return result["criteria"][4], result
+
+
+def test_sin_ninguna_linea_de_deuda_se_lee_como_cero_no_como_dato_ausente(mock_ticker_factory):
+    """El caso ANET: ni 'Long Term Debt' ni 'Total Debt' en el balance."""
+    c5, result = _criterio_apalancamiento(mock_ticker_factory, _bs_base())
+    assert c5["pass"] is True, (
+        "Una empresa sin deuda debe PASAR el criterio de apalancamiento: su "
+        f"ratio no ha subido. Salió {c5['pass']} ({c5['label']})."
+    )
+    assert c5["label"] == "Sin deuda a largo plazo", (
+        "Merece etiqueta propia: 'estable o ha bajado' no describe a quien "
+        "nunca tuvo deuda."
+    )
+
+
+def test_linea_de_deuda_presente_pero_toda_a_nan_tambien_es_cero(mock_ticker_factory):
+    """Forma exacta en la que yfinance devuelve ANET: la fila existe en el
+    índice, con NaN en todos los ejercicios. El line() original la daba por
+    buena por estar el nombre presente."""
+    bs = _bs_base({
+        "Long Term Debt And Capital Lease Obligation": [float("nan"), float("nan")],
+        "Total Debt":                                  [float("nan"), float("nan")],
+    })
+    c5, _ = _criterio_apalancamiento(mock_ticker_factory, bs)
+    assert c5["pass"] is True and c5["label"] == "Sin deuda a largo plazo"
+
+
+def test_con_deuda_total_pero_sin_desglose_a_largo_plazo_si_es_dato_ausente(mock_ticker_factory):
+    """Aquí el 'no disponible' SÍ es la respuesta honesta: la empresa tiene
+    deuda, pero no sabemos cuánta es a largo plazo. No se puede asumir cero."""
+    bs = _bs_base({"Total Debt": [50, 40]})
+    c5, _ = _criterio_apalancamiento(mock_ticker_factory, bs)
+    assert c5["pass"] is None, (
+        "Con deuda total conocida y sin desglose a largo plazo no se puede "
+        f"inventar un cero. Salió {c5['pass']} ({c5['label']})."
+    )
+    assert c5["label"] == "Apalancamiento no disponible"
+
+
+def test_apalancamiento_que_sube_sigue_suspendiendo(mock_ticker_factory):
+    """Que el fix no convierta en aprobado lo que debe suspender: la deuda
+    crece más rápido que los activos (25% vs 20%)."""
+    bs = _bs_base({"Long Term Debt": [30, 20]})
+    c5, _ = _criterio_apalancamiento(mock_ticker_factory, bs)
+    assert c5["pass"] is False
+    assert c5["label"] == "El apalancamiento ha aumentado"
+
+
+def test_deuda_que_baja_a_cero_no_se_etiqueta_como_sin_deuda(mock_ticker_factory):
+    """Caso MNST: llegó a cero este año pero venía de tener deuda. Pasa el
+    criterio, pero la etiqueta correcta es 'ha bajado', no 'sin deuda'."""
+    bs = _bs_base({"Long Term Debt": [0, 20]})
+    c5, _ = _criterio_apalancamiento(mock_ticker_factory, bs)
+    assert c5["pass"] is True
+    assert c5["label"] == "Apalancamiento estable o ha bajado"
