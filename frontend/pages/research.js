@@ -1,6 +1,37 @@
 import { tt } from '/components/tooltip.js';
 import { errorMessage, esc, safeUrl } from '/core/ui.js';
 
+// Los 6 canvas de Chart.js de esta página, por id. Se destruyen desde
+// cleanup(), que el router llama justo antes de tirar el contenedor
+// (frontend/core/router.js, convención de la sesión 3).
+//
+// Ninguno se destruía: ni al navegar fuera, ni al buscar otro ticker dentro
+// de la misma visita. Cada búsqueda dejaba atrás su gráfico anterior con sus
+// listeners y su animación, y bastaba con mirar unos cuantos valores seguidos
+// para ir acumulando. Market ya usa este mismo patrón desde la sesión 3;
+// Research se quedó sin enganchar.
+//
+// Se destruye por ID y no guardando la instancia a propósito: renderResearch()
+// reescribe el innerHTML entero, así que el <canvas> anterior desaparece del
+// DOM y la referencia que hubiéramos guardado apuntaría a un elemento
+// huérfano. Chart.getChart(id) resuelve siempre el gráfico realmente vivo.
+const _RESEARCH_CHART_IDS = [
+    'crypto-chart', 'sparkline-chart', 'turnover-chart',
+    'earnings-chart', 'income-statement-chart', 'insider-volume-chart',
+];
+
+function _destruirGraficos() {
+    _RESEARCH_CHART_IDS.forEach(id => {
+        const c = window.Chart && window.Chart.getChart && window.Chart.getChart(id);
+        if (c) { try { c.destroy(); } catch (_) {} }
+    });
+}
+
+// Llamado por el router antes de destruir el contenedor de Research.
+export function cleanup() {
+    _destruirGraficos();
+}
+
 export async function render(container) {
     container.innerHTML = pageHeader();
 
@@ -11,6 +42,21 @@ export async function render(container) {
     async function doResearch() {
         const ticker = input.value.trim().toUpperCase();
         if (!ticker) return;
+
+        // Que la barra de direcciones diga qué estás mirando. Hasta ahora el
+        // deep-link ?ticker= funcionaba al ENTRAR pero no al buscar: te
+        // pasabas veinte minutos analizando un valor y no podías compartir el
+        // enlace ni recargar sin perderlo. replaceState y no pushState a
+        // propósito: cada búsqueda no es un paso de navegación, y llenar el
+        // historial obligaría a dar 15 veces atrás para salir de Research.
+        try {
+            const url = new URL(window.location.href);
+            if (url.searchParams.get('ticker') !== ticker) {
+                url.searchParams.set('ticker', ticker);
+                history.replaceState(history.state, '', url);
+            }
+        } catch (_) { /* si el navegador no deja, la búsqueda sigue igual */ }
+
         btn.textContent   = 'ANALIZANDO...';
         btn.style.opacity = '0.7';
         result.innerHTML  = '<div style="color:var(--color-muted);font-size:12px;padding:1rem;">Cargando datos de ' + esc(ticker) + '...</div>';
@@ -21,6 +67,9 @@ export async function render(container) {
             });
             const data  = await res.json();
             if (!data.ok) throw new Error(data.error || 'Sin datos');
+            // Antes de reescribir el innerHTML: si no, los gráficos de la
+            // búsqueda anterior quedan colgando aunque su <canvas> ya no exista.
+            _destruirGraficos();
             result.innerHTML = renderResearch(data);
             renderSparkline(data);
             renderEarningsChart(data);
