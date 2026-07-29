@@ -1492,7 +1492,18 @@ def _get_short_interest(ticker: str) -> dict:
         if short_pct is None and short_int is None:
             return {}
 
-        short_pct_fmt = round(short_pct * 100, 2) if short_pct else None
+        # Yahoo devuelve shortPercentOfFloat como FRACCIÓN (0.1354 = 13,54%).
+        # Comprobado el 29/07/2026 en AAPL/TSLA/GME/KO/ANET/CVNA, y contrastado
+        # con shortRatio (días para cubrir): GME 13,54% con 12,78 DTC y CVNA
+        # 14,34% con 6,61 DTC, coherente en todos. Pero un cambio de unidad al
+        # otro lado de la API multiplicaría el dato por 100 sin avisar, y
+        # "GME: 1354% del float en corto" se colaría hasta el squeeze score.
+        # Un short interest por encima del 100% del float es imposible por
+        # definición, así que sirve de discriminador exacto.
+        if short_pct is not None and short_pct > 1:
+            short_pct_fmt = round(short_pct, 2)   # ya venía en porcentaje
+        else:
+            short_pct_fmt = round(short_pct * 100, 2) if short_pct else None
 
         # Squeeze score 0-100: combina % del float en corto (peso 60) y
         # días para cubrir (peso 40). Umbrales calibrados sobre referencias
@@ -1539,8 +1550,22 @@ def _get_next_earnings(ticker: str) -> dict:
         )
         if r.status_code != 200: return {}
         items = r.json().get('earningsCalendar', [])
-        if not items: return {}
-        next_e = items[0]
+        # Finnhub no documenta ningún orden, así que se ordena aquí en vez de
+        # confiar en items[0]. Hoy la ventana de 90 días devuelve un único
+        # elemento por ticker (comprobado con AAPL/JPM/WMT/NKE/KO el
+        # 29/07/2026), así que es una defensa, no un fallo activo -- pero
+        # basta con que una empresa publique dos veces en la ventana (un
+        # retraso más la siguiente programada) para que "próxima
+        # presentación" muestre la equivocada. También se descartan fechas ya
+        # pasadas: from_date es HOY, así que una compañía que haya publicado
+        # esta misma mañana seguiría apareciendo como "próxima".
+        hoy = now.strftime('%Y-%m-%d')
+        futuros = sorted(
+            (i for i in items if (i.get('date') or '') >= hoy),
+            key=lambda i: i.get('date') or '',
+        )
+        if not futuros: return {}
+        next_e = futuros[0]
         return {
             "date":     next_e.get('date', ''),
             "eps_est":  _safe(next_e.get('epsEstimate')),
@@ -1554,7 +1579,18 @@ def _get_seasonality(ticker: str) -> list:
         import yfinance as yf
         from datetime import datetime, timezone
         stock = yf.Ticker(ticker)
-        hist  = stock.history(period="5y", interval="1mo")
+        # auto_adjust EXPLÍCITO. Antes se dejaba al valor por defecto de
+        # yfinance, que además ha cambiado entre versiones de la librería: la
+        # estacionalidad de un valor con dividendo saldría distinta solo por
+        # actualizar una dependencia, sin que nadie tocara este código. Se fija
+        # en True a propósito -- con ajuste, cada mes mide RETORNO TOTAL
+        # (precio + dividendo), que es lo que de verdad se lleva alguien que
+        # estuviera invertido ese mes; sin ajustar, los meses de pago de
+        # dividendo saldrían artificialmente peores. Ver también el máximo de
+        # 52 semanas en _get_technical_levels: allí el convenio es el
+        # contrario (sin ajustar), y por eso conviene que los dos estén
+        # escritos y razonados en vez de heredados.
+        hist  = stock.history(period="5y", interval="1mo", auto_adjust=True)
         if hist.empty or len(hist) < 12: return []
 
         # Excluir el mes en curso si está a medias -- si el último dato es
@@ -1610,8 +1646,38 @@ def _get_technical_levels(ticker: str) -> dict:
         sma50  = round(float(close.tail(50).mean()), 2)
         sma200 = round(float(close.tail(200).mean()), 2) if len(close) >= 200 else None
         sma20  = round(float(close.tail(20).mean()), 2)
-        high52 = round(float(close.tail(252).max()), 2) if len(close) >= 252 else round(float(close.max()), 2)
-        low52  = round(float(close.tail(252).min()), 2) if len(close) >= 252 else round(float(close.min()), 2)
+
+        # Máximo/mínimo de 52 semanas: MISMA fuente que la tarjeta de cabecera
+        # de la ficha, que ya usa info['fiftyTwoWeekHigh'/'Low'].
+        #
+        # Antes se calculaban aquí aparte con close.tail(252).max(), y las dos
+        # cifras convivían en la misma pantalla discrepando hasta un 5,9% (KO:
+        # 90,22 en la tarjeta contra 84,92 en Niveles Técnicos, medido el
+        # 29/07/2026). Eran DOS diferencias apiladas, no una:
+        #   1. cierre vs. máximo INTRADÍA -- el convenio universal de "máximo
+        #      de 52 semanas" es el intradía, que es lo que da Yahoo;
+        #   2. precios AJUSTADOS por dividendos vs. crudos -- history() ajusta
+        #      por defecto, así que a más dividendo más se hunde el histórico
+        #      (por eso KO, con 2,5% de yield, era el caso peor).
+        # Verificado que info['fiftyTwoWeekHigh'] coincide EXACTAMENTE con el
+        # máximo intradía sin ajustar en KO, AAPL y NKE.
+        #
+        # El precio actual no necesita corrección equivalente: el ajuste por
+        # dividendos deja intacta la última vela, así que ajustado y crudo
+        # coinciden en el precio de hoy.
+        info52  = _info_de(ticker)
+        high52  = _safe(info52.get('fiftyTwoWeekHigh'))
+        low52   = _safe(info52.get('fiftyTwoWeekLow'))
+        if high52 is None or low52 is None:
+            # Sin el dato de Yahoo se reconstruye con el mismo convenio
+            # (intradía, sin ajustar), no con cierres ajustados.
+            crudo = stock.history(period="1y", interval="1d", auto_adjust=False).dropna()
+            if not crudo.empty:
+                high52 = high52 if high52 is not None else round(float(crudo['High'].tail(252).max()), 2)
+                low52  = low52  if low52  is not None else round(float(crudo['Low'].tail(252).min()), 2)
+        if high52 is None or low52 is None:
+            return {}
+        high52, low52 = round(float(high52), 2), round(float(low52), 2)
 
         # ── EMAs ──────────────────────────────────────────────────────────────
         ema10_s  = close.ewm(span=10,  adjust=False).mean()
@@ -1851,11 +1917,20 @@ def _resolve_coingecko_id(symbol: str):
         )
         if r.status_code == 200:
             coins = r.json().get("coins", [])
-            for c in coins:
-                if (c.get("symbol") or "").upper() == symbol:
-                    return c.get("id")
-            if coins:
-                return coins[0].get("id")
+            # Puede haber VARIAS monedas con el mismo símbolo exacto: "DOT"
+            # devuelve polkadot (rank 56), dot (rank 2364) y más
+            # (comprobado el 29/07/2026). Se desempata por capitalización, no
+            # por el orden en que vengan -- coger la primera coincidencia era
+            # quedarse con lo que decidiera CoinGecko ese día, y ahí una
+            # moneda residual con el símbolo copiado puede colarse por delante
+            # de la de verdad.
+            exactas = [c for c in coins if (c.get("symbol") or "").upper() == symbol]
+            if exactas:
+                exactas.sort(key=lambda c: c.get("market_cap_rank") or 10**9)
+                return exactas[0].get("id")
+            # Sin coincidencia exacta de símbolo NO se devuelve nada: coger
+            # coins[0] era resolver a una moneda distinta de la que se pidió y
+            # presentar su perfil como si fuera la buena.
     except Exception:
         pass
     return None
