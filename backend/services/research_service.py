@@ -181,23 +181,8 @@ def _get_yfinance(ticker: str) -> dict:
         _tpe = _safe(info.get('trailingPE'))
         _eg  = _safe(info.get('earningsGrowth'))
 
-        # PEG manual: P/E (forward si existe, si no trailing) ÷ crecimiento earnings (%)
-        # El campo pegRatio de Yahoo viene roto/desfasado con mucha frecuencia.
-        _peg_calc = None
-        _pe_for_peg = _fpe if (_fpe and _fpe > 0) else _tpe
-        if _pe_for_peg and _eg and _eg > 0:
-            _peg_calc = _pe_for_peg / (_eg * 100)
-
-        # Sanity check: si el cálculo manual falla o sale fuera de rango razonable,
-        # caemos al dato de Yahoo solo si éste también pasa el filtro; si no, N/A.
-        def _peg_sane(v):
-            return v is not None and 0 < v <= 15
-
-        peg_final = _peg_calc if _peg_sane(_peg_calc) else None
-        if peg_final is None:
-            _peg_yahoo = _safe(info.get('pegRatio'))
-            if _peg_sane(_peg_yahoo):
-                peg_final = _peg_yahoo
+        peg_final = calcular_peg(_safe(info.get('trailingPegRatio')),
+                                  _safe(info.get('pegRatio')), _tpe, _eg)
 
         metrics = {
             "trailing_pe":    _tpe,
@@ -731,9 +716,27 @@ def _compute_rsu_score(yf_data: dict, piotroski: dict = None, sector_comparison:
     # Tendencia interanual real (no nivel absoluto). Folded in directamente:
     # ya no es un score aparte que pueda "contradecir" al RSU Score.
     if piotroski and piotroski.get('max'):
-        pio_pts = round(piotroski['score'] / piotroski['max'] * 20)
+        # Se reescala sobre los criterios REALMENTE evaluables, no sobre 9
+        # fijos. Bancos y aseguradoras nunca pueden pasar de 7/9 porque su
+        # balance no trae activo/pasivo corriente ni margen bruto (ver
+        # _get_piotroski_score), así que dividir por 9 les recortaba este
+        # componente a un máximo de 15,6/20 por su forma de presentar las
+        # cuentas y no por su salud financiera -- un sesgo contra todo el
+        # sector financiero, que además arrastraba el RSU Score entero
+        # (Piotroski es el 20%). Mismo criterio de reescalado que ya usan
+        # fund_score, tech_score y el total de más abajo.
+        # `or piotroski['max']` no es adorno: al exigir 'evaluables' sin más,
+        # cualquier llamador que no lo trajera perdía el componente ENTERO en
+        # silencio (lo cazaron dos tests de test_rsu_score.py al introducir el
+        # campo). Un campo nuevo no puede tirar abajo un componente ya
+        # existente.
+        _evaluables = piotroski.get('evaluables') or piotroski['max']
+        pio_pts = round(piotroski['score'] / _evaluables * 20)
+        _val = f"{piotroski['score']}/{piotroski['max']} criterios"
+        if _evaluables < piotroski['max']:
+            _val += f" ({_evaluables} evaluables)"
         breakdown.append({"label": "Salud Financiera (Piotroski)", "pts": pio_pts, "max": 20,
-                           "val": f"{piotroski['score']}/{piotroski['max']} criterios"})
+                           "val": _val})
     else:
         pio_pts = None
 
@@ -1042,6 +1045,57 @@ def _row_get(row, *names):
             return row[lower_map[key]]
     return None
 
+def _peg_plausible(v) -> bool:
+    """El SUELO importa tanto como el techo, y antes no existía: un PEG de
+    0,02 no es una ganga histórica, es el artefacto de un crecimiento
+    interanual disparado desde una base hundida. Con el filtro viejo
+    (0 < v <= 15) esos valores se colaban tal cual y en pantalla gritaban
+    "chollo" -- MLM salía 0,02 (real 2,79) e IRM 0,05 (real 2,70)."""
+    return v is not None and 0.1 <= v <= 15
+
+
+def calcular_peg(peg_trailing_yahoo, peg_yahoo, trailing_pe, earnings_growth):
+    """PEG = P/E dividido por el crecimiento ESPERADO del beneficio.
+
+    La versión anterior calculaba forwardPE / earningsGrowth, y eso rompía dos
+    reglas a la vez:
+
+      1. Un P/E forward YA descuenta el crecimiento -- es más bajo justamente
+         porque anticipa que el beneficio va a subir. Volver a dividirlo por el
+         crecimiento lo cuenta DOS VECES, así que el PEG sale sistemáticamente
+         bajo.
+      2. `earningsGrowth` de Yahoo es el crecimiento del último trimestre
+         interanual: un dato TRAILING. Emparejarlo con un P/E forward mezcla
+         dos horizontes distintos.
+
+    Medido el 29/07/2026 sobre una muestra del S&P 500: el 67% de los tickers
+    salían por debajo del PEG de Yahoo, con un ratio mediano de 0,54 -- la
+    mitad del valor real. En ANET daba 1,52 ("valoración razonable, PEG < 2")
+    cuando el real ronda 2,2 ("cara"): un cambio cualitativo de lectura, no un
+    decimal.
+    """
+    # 1) El de Yahoo primero: usa crecimiento esperado a largo plazo, que es la
+    #    definición de manual del PEG y la que el usuario puede contrastar con
+    #    Yahoo web, GuruFocus o FactSet. El comentario que había aquí lo daba
+    #    por "roto/desfasado con mucha frecuencia", y en la muestra no se
+    #    sostiene: era el cálculo propio el que divergía.
+    for candidato in (peg_trailing_yahoo, peg_yahoo):
+        if _peg_plausible(candidato):
+            return candidato
+
+    # 2) Si Yahoo no lo trae, o trae un disparate (PGR daba 61,8), cálculo
+    #    propio COHERENTE: P/E trailing con crecimiento trailing, mismo
+    #    horizonte arriba y abajo. Se descartan crecimientos interanuales por
+    #    encima del 100%, que casi siempre son un rebote desde una base
+    #    deprimida y no crecimiento sostenible que un PEG pueda representar.
+    if trailing_pe and earnings_growth and 0 < earnings_growth <= 1.0:
+        candidato = trailing_pe / (earnings_growth * 100)
+        if _peg_plausible(candidato):
+            return candidato
+
+    return None
+
+
 def _get_piotroski_score(ticker: str) -> dict:
     """Piotroski F-Score (0-9): salud financiera fundamental vs. el ejercicio anterior."""
     try:
@@ -1207,7 +1261,21 @@ def _get_piotroski_score(ticker: str) -> dict:
         elif score >= 4:  label, color = "NEUTRAL", "#ffb800"
         else:             label, color = "DÉBIL", "#f23645"
 
-        return {"score": score, "max": 9, "label": label, "color": color, "criteria": criteria, "missing_lines": missing_lines}
+        # Cuántos criterios se han podido evaluar de verdad. No siempre son 9:
+        # bancos y aseguradoras presentan el balance SIN CLASIFICAR (no hay
+        # activo/pasivo corriente) y sin margen bruto, así que los criterios 6
+        # y 8 no son calculables para todo el sector financiero -- verificado
+        # el 29/07/2026 en ERIE y JPM, y son ~69 tickers solo en el S&P 500.
+        # No es un fallo de datos que se pueda arreglar: Piotroski diseñó el
+        # F-Score explícitamente para empresas NO financieras.
+        #
+        # El score sigue publicándose sobre 9, que es la escala conocida, pero
+        # quien lo consuma necesita saber sobre cuántos criterios se ha medido:
+        # un 5/9 con 9 evaluables y un 5/9 con 7 no son el mismo dato.
+        evaluables = sum(1 for c in criteria if c["pass"] is not None)
+
+        return {"score": score, "max": 9, "evaluables": evaluables, "label": label,
+                "color": color, "criteria": criteria, "missing_lines": missing_lines}
     except Exception as e:
         print(f"[Piotroski:{ticker}] Error inesperado al calcular: {e}")
         return {}

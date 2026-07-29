@@ -218,3 +218,58 @@ def test_deuda_que_baja_a_cero_no_se_etiqueta_como_sin_deuda(mock_ticker_factory
     c5, _ = _criterio_apalancamiento(mock_ticker_factory, bs)
     assert c5["pass"] is True
     assert c5["label"] == "Apalancamiento estable o ha bajado"
+
+
+def test_evaluables_refleja_los_criterios_realmente_calculables(mock_ticker_factory):
+    """Bancos y aseguradoras presentan el balance SIN CLASIFICAR (no hay
+    activo/pasivo corriente) y sin margen bruto, así que 2 de los 9 criterios
+    no son calculables para todo el sector financiero -- comprobado en ERIE y
+    JPM el 29/07/2026. Piotroski diseñó el F-Score para empresas NO
+    financieras, así que no es un hueco de datos que se pueda rellenar.
+
+    El problema estaba en el consumidor: _compute_rsu_score dividía por 9
+    fijos, así que un banco tenía el componente topado en 15,6/20 por su forma
+    de presentar las cuentas y no por su salud. Exponer `evaluables` es lo que
+    permite reescalar sobre lo que de verdad se ha medido."""
+    balance_sheet = _build_df({
+        "Total Assets":           [120, 100],
+        "Long Term Debt":         [30, 40],
+        "Ordinary Shares Number": [100, 105],
+        # sin Current Assets ni Current Liabilities, igual que ERIE/JPM
+    })
+    financials = _build_df({
+        "Net Income":    [12, 8],
+        "Total Revenue": [200, 150],
+        # sin Gross Profit, igual que ERIE/JPM
+    })
+    cashflow = _build_df({"Operating Cash Flow": [20, 15]})
+
+    fake = mock_ticker_factory(balance_sheet, financials, cashflow)
+    with patch("services.research_service.yf.Ticker", return_value=fake):
+        result = _get_piotroski_score("TESTBANK")
+
+    assert result["evaluables"] == 7, (
+        f"Sin activo/pasivo corriente ni margen bruto quedan 7 criterios "
+        f"evaluables, salió {result['evaluables']}"
+    )
+    assert result["max"] == 9, "La escala publicada sigue siendo la estándar 0-9"
+    sin_dato = [c["label"] for c in result["criteria"] if c["pass"] is None]
+    assert len(sin_dato) == 2
+
+
+def test_una_empresa_normal_declara_los_9_evaluables(mock_ticker_factory):
+    balance_sheet = _build_df({
+        "Total Assets":           [120, 100],
+        "Long Term Debt":         [30, 40],
+        "Current Assets":         [60, 45],
+        "Current Liabilities":    [30, 30],
+        "Ordinary Shares Number": [100, 105],
+    })
+    financials = _build_df({"Net Income": [12, 8], "Total Revenue": [200, 150], "Gross Profit": [80, 55]})
+    cashflow = _build_df({"Operating Cash Flow": [20, 15]})
+
+    fake = mock_ticker_factory(balance_sheet, financials, cashflow)
+    with patch("services.research_service.yf.Ticker", return_value=fake):
+        result = _get_piotroski_score("TESTNORMAL")
+
+    assert result["evaluables"] == 9

@@ -361,6 +361,17 @@ function piotroskiSection(data) {
         + '<span style="color:' + p.color + ';font-size:12px;padding:2px 10px;border:1px solid ' + p.color + '33;border-radius:4px;">' + p.label + '</span>'
         + '</div></div>'
         + '<div style="color:var(--color-muted);font-size:9px;margin-bottom:10px;">Este score es uno de los 5 componentes que forman el RSU Score (20% del total).</div>'
+        // Un 5/9 medido sobre 9 criterios y un 5/9 medido sobre 7 no son
+        // comparables, y hasta ahora se veían idénticos. Pasa en todo el
+        // sector financiero: bancos y aseguradoras presentan el balance sin
+        // clasificar (sin activo/pasivo corriente) y sin margen bruto, así
+        // que 2 de los 9 criterios no se pueden calcular -- Piotroski diseñó
+        // el F-Score para empresas no financieras. Ver sesión 29/07/2026.
+        + (p.evaluables != null && p.evaluables < p.max
+            ? '<div style="color:#ffb800;font-size:10px;margin-bottom:10px;">Solo ' + esc(p.evaluables) + ' de los ' + esc(p.max)
+              + ' criterios son evaluables con las cuentas publicadas de esta empresa — habitual en bancos y aseguradoras, '
+              + 'que presentan el balance sin separar corriente de no corriente. El score se compara con eso en mente.</div>'
+            : '')
         + '<div style="background:var(--color-bg,#0a0a0a);border-radius:4px;height:6px;margin-bottom:10px;">'
         + '<div style="height:100%;width:' + (p.score / p.max * 100) + '%;background:' + p.color + ';border-radius:4px;transition:width 0.8s;"></div>'
         + '</div>'
