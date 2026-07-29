@@ -100,6 +100,7 @@ FINNHUB_KEY = os.environ.get("FINNHUB_API_KEY", "")
 # sesión 23/07/2026) -- el endpoint exige Authorization: Bearer, así que
 # sin el token la llamada da 403 aunque la URL esté bien configurada.
 RSU_BACKEND_URL     = os.environ.get("RSU_BACKEND_URL", "").rstrip("/")
+FRED_KEY = os.environ.get("FRED_API_KEY", "")
 BRIEFING_AUTH_TOKEN = os.environ.get("BRIEFING_AUTH_TOKEN", "")
 
 # Tickers de mega/large-cap conocidos — para filtrar el calendario de earnings
@@ -768,6 +769,138 @@ def format_briefing_history(history: list) -> str:
 # ── CONSTRUIR PROMPT ──────────────────────────────────────────────────────────
 
 
+
+# ── INDICADORES MACRO PUBLICADOS (FRED) ───────────────────────────────────────
+# Lo que faltaba para que el briefing hable de datos macro REALES y no solo de
+# precios. Nace de comparar con el Morning Briefing de Yardeni (29/07/2026):
+# media nota suya son prints exactos con su secuencia ("el M-PMI cayo a 48,7
+# desde 49,2, la 18a vez bajo 50 en 19 meses"), y nosotros no bajabamos ni uno.
+#
+# Dos decisiones que importan:
+#
+# 1. NUNCA se pasa el nivel del indice en crudo. CPIAUCSL vale 332,568 y eso no
+#    significa nada para nadie: si se lo damos tal cual al modelo, escribe "el
+#    IPC esta en 332,568". Se calculan aqui las transformaciones que de verdad
+#    se citan (m/m, a/a, cambio en miles de empleos) y se le pasan ya hechas.
+#
+# 2. Se pasa la EDAD del dato. Un IPC de hace tres semanas no es noticia de hoy,
+#    y sin la fecha el modelo lo presentaria como si acabara de salir. El
+#    prompt usa esa antiguedad para decidir si lo destaca o solo lo usa de
+#    contexto.
+#
+# El ISM (el indicador estrella de Yardeni) NO esta: es propietario y no lo
+# publica FRED. No se sustituye por nada que se le parezca.
+FRED_SERIES = [
+    # (id, nombre, tipo de transformacion)
+    ("ICSA",     "Peticiones semanales de paro", "nivel_miles"),
+    ("UNRATE",   "Tasa de paro",                 "nivel_pct"),
+    ("PAYEMS",   "Nóminas no agrícolas",         "cambio_miles"),
+    ("CPIAUCSL", "IPC general",                  "mm_aa"),
+    ("CPILFESL", "IPC subyacente",               "mm_aa"),
+    ("PCEPILFE", "PCE subyacente",               "mm_aa"),
+    ("RSAFS",    "Ventas minoristas",            "mm_aa"),
+    ("INDPRO",   "Producción industrial",        "mm_aa"),
+]
+
+
+def _fred_observaciones(series_id: str, n: int = 14) -> list:
+    """Ultimas n observaciones (fecha, valor), mas reciente primero."""
+    try:
+        r = requests.get(
+            "https://api.stlouisfed.org/fred/series/observations",
+            params={"series_id": series_id, "api_key": FRED_KEY, "file_type": "json",
+                    "sort_order": "desc", "limit": n},
+            timeout=12,
+        )
+        if r.status_code != 200:
+            return []
+        return [(o["date"], float(o["value"]))
+                for o in r.json().get("observations", [])
+                if o.get("value") not in (".", "", None)]
+    except Exception:
+        return []
+
+
+def _fred_publicado_el(series_id: str):
+    """Fecha en que FRED publicó por última vez esta serie.
+
+    Hace falta porque la fecha de la OBSERVACIÓN y la de PUBLICACIÓN son cosas
+    distintas y para decidir si algo es noticia manda la segunda: el IPC de
+    junio (observación 2026-06-01) se publicó el 14 de julio. Medir la
+    antigüedad por la observación decía "hace 58 días" de un dato de hace dos
+    semanas, y la marca de RECIÉN PUBLICADO no se activaba NUNCA en las series
+    mensuales -- justo las que mueven mercado el día que salen.
+    """
+    try:
+        r = requests.get(
+            "https://api.stlouisfed.org/fred/series",
+            params={"series_id": series_id, "api_key": FRED_KEY, "file_type": "json"},
+            timeout=12,
+        )
+        if r.status_code != 200:
+            return None
+        return (r.json().get("seriess") or [{}])[0].get("last_updated", "")[:10] or None
+    except Exception:
+        return None
+
+
+def get_macro_indicators() -> list:
+    """Ultimo dato publicado de cada indicador, ya transformado a algo citable.
+
+    Devuelve [] si no hay clave de FRED -- el briefing se genera igual, solo
+    que sin esta seccion. Ningun indicador se rellena ni se aproxima: el que
+    falle, se omite.
+    """
+    if not FRED_KEY:
+        print("⚠️  FRED_API_KEY no configurada — briefing sin indicadores macro")
+        return []
+
+    from datetime import datetime as _dt
+    hoy = _dt.now().date()
+    salida = []
+
+    for series_id, nombre, tipo in FRED_SERIES:
+        obs = _fred_observaciones(series_id)
+        if len(obs) < 2:
+            continue
+        fecha, valor = obs[0]
+        previo = obs[1][1]
+        publicado = _fred_publicado_el(series_id)
+        try:
+            edad = (hoy - _dt.strptime(publicado, "%Y-%m-%d").date()).days if publicado else None
+        except Exception:
+            edad = None
+
+        if tipo == "nivel_miles":
+            media4 = sum(v for _, v in obs[:4]) / 4
+            dato   = f"{valor:,.0f}".replace(",", ".")
+            extra  = f"previo {previo:,.0f}".replace(",", ".") +                      f" · media 4 semanas {media4:,.0f}".replace(",", ".")
+        elif tipo == "nivel_pct":
+            dato  = f"{valor:.1f}%"
+            extra = f"previo {previo:.1f}%"
+        elif tipo == "cambio_miles":
+            cambio      = valor - previo
+            cambio_prev = previo - obs[2][1] if len(obs) > 2 else None
+            dato  = f"{cambio:+,.0f}k empleos".replace(",", ".")
+            extra = (f"mes anterior {cambio_prev:+,.0f}k".replace(",", ".")
+                     if cambio_prev is not None else "sin mes anterior")
+        elif tipo == "mm_aa":
+            mm = (valor / previo - 1) * 100
+            aa = (valor / obs[12][1] - 1) * 100 if len(obs) > 12 else None
+            dato  = f"{mm:+.2f}% m/m"
+            extra = f"{aa:+.2f}% interanual" if aa is not None else "sin interanual"
+        else:
+            continue
+
+        salida.append({
+            "nombre": nombre, "fecha": fecha, "dato": dato,
+            "extra": extra, "publicado": publicado, "edad_dias": edad,
+        })
+
+    print(f"📈 Indicadores macro (FRED): {len(salida)}/{len(FRED_SERIES)} disponibles")
+    return salida
+
+
 # -- VERSIONES DEL PROMPT ----------------------------------------------------
 # El v1 se conserva INTEGRO, y no por nostalgia: este job corre desatendido
 # cada manana y lo que publica lo leen ~100 personas. Si el v2 no convence,
@@ -775,7 +908,10 @@ def format_briefing_history(history: list) -> str:
 # en los secrets de GitHub y relanzar el workflow --, no un commit, una
 # revision y un despliegue. Ver sesion 29/07/2026: el usuario pidio
 # explicitamente poder volver atras.
-PROMPT_VERSION = os.environ.get("BRIEFING_PROMPT_VERSION", "v2").strip().lower()
+# El `or "v2"` no sobra: GitHub Actions pasa los secrets INEXISTENTES como
+# cadena vacía, no como ausentes, así que sin él el log diría version='' aunque
+# el comportamiento fuera el correcto.
+PROMPT_VERSION = (os.environ.get("BRIEFING_PROMPT_VERSION") or "v2").strip().lower()
 
 _ESTILO_V1 = """Eres un trader macro-discrecional escribiendo tu propia nota de mercado de cada mañana, para tu comunidad de trading. No es un informe institucional de un banco — es tu lectura personal, en primera persona, con tu propio posicionamiento incluido ("mi cartera", "he cerrado las coberturas", "mantengo el objetivo de..."). El tono es directo, seguro, con opiniones claras — no un informe neutro que evita mojarse.
 
@@ -859,6 +995,8 @@ ESTRUCTURA OBLIGATORIA. Escribe estas cuatro partes, en este orden. Donde se ind
 
    EL CALENDARIO MACRO DE HOY NO ES OPCIONAL. Si en el CALENDARIO ECONÓMICO de abajo hay algún evento de impacto ALTO (decisión de tipos, IPC, empleo, comparecencia del presidente de la Fed), es lo que va a mandar en la sesión y TIENES que abordarlo: qué se espera según el consenso que viene en la tabla, qué está descontando el mercado según los datos que sí tienes (yields, VIX, futuros, oro, dólar) y qué pasaría en cada escenario. Un briefing que no menciona que hoy hay decisión de tipos ha fallado, por muy bien que estén los bloques técnicos. Cíñete al consenso y al previo de la tabla: no inventes lo que va a decidir ni lo que va a decir nadie.
 
+   LOS INDICADORES MACRO YA PUBLICADOS son tu munición para argumentar. Cuando defiendas una tesis sobre inflación, empleo o consumo, ánclala a un dato REAL de esa tabla con su cifra y su fecha — "el IPC subyacente sigue en el 2,8% interanual" vale, "la inflación se está moderando" a secas no. Da la secuencia cuando aporte (último frente a previo, o frente a la media de 4 semanas en las peticiones de paro): un dato aislado dice mucho menos que su dirección. No los enumeres todos ni montes una sección de indicadores: usa los 2-3 que sostengan lo que estás diciendo hoy.
+
 4. Encabezado literal **MI CONCLUSIÓN**, en su propio bloque separado. Qué haces tú con esto: postura concreta y el nivel exacto que te haría cambiar de opinión (uno de los niveles técnicos reales proporcionados: SMA20, SMA50, SMA200 o el rango de 20 días, nunca uno inventado). Es la parte por la que te leen — no la conviertas en un resumen de lo anterior.
 
 LONGITUD: 700-900 palabras. Se lee en 4-5 minutos. Ni una nota de dos párrafos ni un informe de banco de inversión.
@@ -882,7 +1020,8 @@ REGLAS ANTI-ALUCINACIÓN — ESTRICTAS, SIN EXCEPCIONES. Están por encima de cu
 8. Tipos de bancos centrales: usa el proxy de Fed Funds proporcionado, nunca MRO/discount/prime. No menciones tipos del BCE si no están en los datos.
 9. Variaciones porcentuales: usa la cifra ya calculada, no la recalcules ni la redondees distinto.
 10. Datos sectoriales: son de CIERRE, no intradía.
-11. Futuros: la hora (ET) viene junto al dato. Cítala si mencionas el gap."""
+11. Futuros: la hora (ET) viene junto al dato. Cítala si mencionas el gap.
+12. Indicadores macro: las variaciones (m/m, interanual, cambio en miles de empleos) vienen ya CALCULADAS. Cítalas tal cual y NUNCA el nivel del índice en crudo — "el IPC está en 332,568" no significa nada para quien lee. Respeta la FECHA de cada dato: lo que no está marcado "RECIÉN PUBLICADO" puede tener semanas, así que es contexto de fondo y no puedes presentarlo como si hubiera salido hoy. Y no mezcles un dato ya publicado con una previsión del calendario: son cosas distintas."""
 
 _CIERRE_V2 = """Escribe la nota de hoy siguiendo la ESTRUCTURA OBLIGATORIA de arriba (titular temático, EN DOS LÍNEAS, 2-3 bloques con encabezado propio, MI CONCLUSIÓN).
 
@@ -906,7 +1045,8 @@ def _cierre_y_estructura() -> str:
 
 
 def build_prompt(market_data: dict, news: list, major_headlines: list, earnings: list, breadth: dict,
-                  insider_clusters: list, briefing_history: list, bias_history: list) -> str:
+                  insider_clusters: list, briefing_history: list, bias_history: list,
+                  macro_indicators: list = None) -> str:
     d = market_data
 
     # Formatear índices
@@ -1099,6 +1239,16 @@ REGLAS DE CONTINUIDAD NARRATIVA:
         "No hay briefings anteriores disponibles (primera ejecución, o el histórico está vacío) — escribe sin referencias a días anteriores.\n"
     )
 
+    macro_lines = ""
+    for m in (macro_indicators or []):
+        pub = (f"publicado {m['publicado']}, hace {m['edad_dias']} días"
+               if m.get("publicado") and m.get("edad_dias") is not None
+               else "fecha de publicación desconocida")
+        reciente = " ← RECIÉN PUBLICADO" if (m.get("edad_dias") if m.get("edad_dias") is not None else 99) <= 8 else ""
+        macro_lines += f"| {m['nombre']} | {m['fecha']} | {pub}{reciente} | {m['dato']} | {m['extra']} |\n"
+    if not macro_lines:
+        macro_lines = "| — | Sin indicadores macro disponibles | — | — |\n"
+
     bias_history_str = format_bias_history(bias_history)
 
     # HECHOS ACTUALES QUE EL MODELO PUEDE TENER DESACTUALIZADOS: bloque de
@@ -1160,6 +1310,10 @@ SEÑALES PROPIAS DE RSU (amplitud calculada sobre vuestro propio universo — S&
 INSIDER FLOW — CLUSTERS DE COMPRA RECIENTES:
 {insider_lines}
 
+ÚLTIMOS INDICADORES MACRO PUBLICADOS (FRED — datos REALES ya publicados, no previsiones). Las variaciones vienen ya calculadas: cítalas tal cual, nunca el nivel del índice en crudo. Ojo a las DOS fechas, que no son lo mismo: el PERIODO al que se refiere el dato y el día en que se PUBLICÓ. El IPC de junio salió a mediados de julio. Lo marcado "RECIÉN PUBLICADO" es noticia reciente y puedes tratarlo como tal; el resto es contexto de fondo y NO puedes presentarlo como si acabara de salir:
+| Indicador | Periodo del dato | Publicación | Último | Referencia |
+|-----------|------------------|-------------|--------|------------|
+{macro_lines}
 CALENDARIO ECONÓMICO HOY:
 | Hora | Evento | Consenso | Previo | Impacto |
 |------|--------|----------|--------|---------|
@@ -1377,7 +1531,12 @@ def main():
     insider_clusters = get_insider_clusters()
 
     print("🤖 Construyendo prompt...")
-    prompt = build_prompt(market_data, news, major_headlines, earnings, breadth, insider_clusters, briefing_history, bias_history)
+    print("📈 Descargando indicadores macro publicados (FRED)...")
+    macro_indicators = get_macro_indicators()
+
+    prompt = build_prompt(market_data, news, major_headlines, earnings, breadth,
+                          insider_clusters, briefing_history, bias_history,
+                          macro_indicators)
 
     print(f"🧠 Llamando a {MODEL} via Groq...")
     raw_briefing = generate_briefing(prompt)

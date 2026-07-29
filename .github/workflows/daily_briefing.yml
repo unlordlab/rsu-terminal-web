@@ -36,6 +36,14 @@ jobs:
           # clave (ver get_rss_fallback_headlines en daily_briefing.py).
           RSU_BACKEND_URL:      ${{ secrets.RSU_BACKEND_URL }}
           BRIEFING_AUTH_TOKEN:  ${{ secrets.BRIEFING_AUTH_TOKEN }}
+          # Indicadores macro ya publicados (IPC, paro, nóminas, ventas
+          # minoristas...). Sin esta clave el briefing se genera igual, solo
+          # que sin esa sección -- ver get_macro_indicators().
+          FRED_API_KEY:         ${{ secrets.FRED_API_KEY }}
+          # Elige el prompt: v2 por defecto (ver PROMPT_VERSION en
+          # daily_briefing.py). Poner el secret a "v1" revierte al anterior
+          # sin tocar código ni desplegar.
+          BRIEFING_PROMPT_VERSION: ${{ secrets.BRIEFING_PROMPT_VERSION }}
         run: |
           python scripts/daily_briefing.py
 
