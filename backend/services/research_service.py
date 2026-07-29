@@ -593,31 +593,59 @@ def _translate_grade(grade) -> str:
     if not grade or not isinstance(grade, str): return grade or "—"
     return GRADE_TRANSLATIONS.get(grade.strip().lower(), grade)
 
-def _get_alpha_vantage(ticker: str) -> dict:
-    key = settings.alpha_vantage_api_key
-    if not key:
-        return {}
+def _get_quarterly_earnings(ticker: str) -> dict:
+    """Sorpresas de resultados trimestrales: EPS reportado vs. estimado.
+
+    Antes venía de Alpha Vantage y estaba roto la mayor parte del día sin que
+    nadie lo viera. Su plan gratuito son 25 peticiones AL DÍA: con ~100
+    usuarios ese presupuesto se agota a primera hora y, a partir de ahí, la
+    API devuelve un aviso de límite en vez de datos, `quarterly_earnings`
+    llega vacío y el frontend deja de pintar la sección entera. Es decir, el
+    MISMO ticker enseñaba el gráfico o no según la hora a la que miraras, y
+    desaparecía en silencio. Comprobado el 29/07/2026.
+
+    yfinance da lo mismo gratis y mejor: 24 trimestres en vez de 8, sin clave
+    ni límite diario, y sin una petición de red extra (el objeto Ticker ya se
+    crea aquí). Trae exactamente las tres columnas que consume el gráfico.
+
+    Matiz que conviene saber: la fecha es la de PUBLICACIÓN de resultados, no
+    el cierre del trimestre fiscal que daba Alpha Vantage (`fiscalDateEnding`).
+    Se mantienen 8 trimestres para no cambiar la densidad del gráfico, aunque
+    haya 24 disponibles si algún día se quiere más histórico.
+    """
     try:
-        r = requests.get(
-            "https://www.alphavantage.co/query",
-            params={"function": "EARNINGS", "symbol": ticker, "apikey": key},
-            timeout=10
-        )
-        if r.status_code != 200:
+        df = yf.Ticker(ticker).earnings_dates
+        if df is None or df.empty:
             return {}
-        data = r.json()
-        quarterly = data.get('quarterlyEarnings', [])[:8]
-        earnings  = []
-        for q in quarterly:
+        cols = {c.lower().strip(): c for c in df.columns}
+        col_rep = cols.get("reported eps")
+        col_est = cols.get("eps estimate")
+        col_sur = cols.get("surprise(%)")
+        if not col_rep:
+            return {}
+
+        # Solo trimestres YA publicados: earnings_dates incluye las fechas
+        # futuras ya anunciadas, con el EPS reportado a NaN.
+        publicados = df.dropna(subset=[col_rep])
+        if publicados.empty:
+            return {}
+
+        earnings = []
+        for fecha, fila in publicados.head(8).iterrows():
+            try:
+                fecha_str = fecha.strftime("%Y-%m-%d")
+            except Exception:
+                fecha_str = str(fecha)[:10]
             earnings.append({
-                "date":      q.get('fiscalDateEnding', ''),
-                "reported":  _safe(q.get('reportedEPS')),
-                "estimated": _safe(q.get('estimatedEPS')),
-                "surprise":  _safe(q.get('surprisePercentage')),
+                "date":      fecha_str,
+                "reported":  _safe(fila.get(col_rep)),
+                "estimated": _safe(fila.get(col_est)) if col_est else None,
+                "surprise":  _safe(fila.get(col_sur)) if col_sur else None,
             })
         return {"quarterly_earnings": earnings}
     except Exception:
         return {}
+
 
 def _generate_suggestions(yf_data: dict) -> list:
     suggestions = []
@@ -2117,7 +2145,7 @@ def get_research(ticker: str) -> dict:
         # relación con el riesgo de bloqueo de Yahoo.
         f_yf      = yf_executor.submit(_get_yfinance, ticker)
         f_fh      = ex.submit(_get_finnhub, ticker)
-        f_av      = ex.submit(_get_alpha_vantage, ticker)
+        f_av      = ex.submit(_get_quarterly_earnings, ticker)
         f_analyst_chg = ex.submit(_get_finnhub_analyst_changes, ticker)
         f_insider = ex.submit(_get_insider_trading, ticker)
         f_short   = ex.submit(_get_short_interest, ticker)

@@ -50,7 +50,19 @@ class Settings(BaseSettings):
     xai_api_key: str = ""
     fmp_api_key: str = ""
     finnhub_api_key: str = ""
-    alpha_vantage_api_key: str = ""  # uso marginal (1 función en Research) -- se mantiene, es funcional, no muerta
+    # YA NO SE USA EN NINGÚN SITIO desde el 29/07/2026: la única función que
+    # la usaba (sorpresas de resultados en Research) pasó a yfinance, porque
+    # el plan gratuito de Alpha Vantage son 25 peticiones AL DÍA y con ~100
+    # usuarios el gráfico desaparecía a media mañana sin avisar.
+    #
+    # PERO EL CAMPO SE QUEDA, y no es por si acaso: la clave sigue en el .env
+    # real del VPS, y Settings valida el fichero .env de forma estricta --
+    # cualquier variable sin campo correspondiente tumba el arranque entero.
+    # Quitar este campo sin quitar antes la línea del .env de producción
+    # provocaría un 502, exactamente como ya pasó el 20/07/2026 con
+    # openrouter_api_key. Para retirarla de verdad: primero el .env del VPS,
+    # después este campo.
+    alpha_vantage_api_key: str = ""
     groq_api_key: str = ""
     # openrouter_api_key: SÍ está configurada en el .env real (con clave
     # válida) aunque el código no la lea todavía en ningún sitio -- se
