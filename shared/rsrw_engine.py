@@ -22,6 +22,10 @@ WEIGHTS    = {21: 0.20, 63: 0.35, 126: 0.45}
 EMA_SMOOTH = 10
 TREND_WIN  = 21
 
+# Desviación típica mínima para que la pendiente de la RS se considere
+# significativa -- ver rs_trend_slope().
+EPSILON_PENDIENTE = 1e-4
+
 # SECTOR_ETFS/GICS_MAP -- promovidos aquí en la sesión 19 (dedup de
 # universos S&P500): estaban duplicados carácter por carácter en
 # scripts/rsrw_scan.py y backend/services/rsrw_service.py. NO confundir
@@ -58,7 +62,17 @@ def rs_trend_slope(rs_series: pd.Series) -> float:
     x     = np.arange(len(recent), dtype=float)
     slope = float(np.polyfit(x, recent.values, 1)[0])
     std   = float(recent.std())
-    return round(slope / std if std > 0 else 0.0, 4)
+
+    # El umbral NO es `std > 0`, y la diferencia importa: con una RS muy
+    # estable la desviación típica se acerca a cero sin llegar a serlo, la
+    # división la dispara y sale una flecha de tendencia ▲/▼ rotunda a partir
+    # de ruido de redondeo. Justo cuando el mensaje correcto es "aquí no pasa
+    # nada". Ver auditoría RS/RW, #8.
+    #
+    # EPSILON va en las unidades de la propia RS (diferencial de retorno
+    # suavizado, típicamente unidades enteras), así que 1e-4 descarta solo lo
+    # que es indistinguible de una recta plana.
+    return round(slope / std if std > EPSILON_PENDIENTE else 0.0, 4)
 
 
 def rs_percentile(scores: pd.Series) -> pd.Series:

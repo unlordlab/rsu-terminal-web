@@ -1,6 +1,35 @@
 import { tt } from '/components/tooltip.js';
 import { isRateLimitMessage, errorMessage, esc } from '/core/ui.js';
 
+
+// Gráficos vivos de Chart.js de esta página. Se destruyen desde cleanup(),
+// que el router llama antes de tirar el contenedor (frontend/core/router.js,
+// convención de la sesión 3), y al empezar cada análisis nuevo.
+//
+// Es el MISMO fallo que se corrigió en Market en la sesión 3 y en Research el
+// 29/07/2026 (a1a0931): el gráfico se creaba y no se destruía nunca, ni al
+// navegar fuera ni al volver a renderizar. RS/RW se quedó sin enganchar las
+// dos veces. Ver auditoría RS/RW, #9.
+//
+// Se guardan las INSTANCIAS, no los ids -- y esa diferencia es la que hace que
+// esto funcione. Chart.getChart(id) resuelve el id a través del DOM
+// (document.getElementById por dentro), pero doAnalyze() vacía el contenedor
+// con el mensaje "Calculando..." ANTES del fetch, así que para cuando toca
+// limpiar el canvas anterior ya no está en el documento y getChart devuelve
+// undefined -- el gráfico seguía vivo y huérfano. Verificado en navegador
+// el 30/07/2026: con el registro por id quedaba 1 instancia huérfana por cada
+// ticker analizado.
+let _rsrwCharts = [];
+
+function _destruirGraficos() {
+    _rsrwCharts.forEach(c => { try { c.destroy(); } catch (_) {} });
+    _rsrwCharts = [];
+}
+
+export function cleanup() {
+    _destruirGraficos();
+}
+
 export async function render(container) {
     container.innerHTML = pageHeader()
         + '<div id="rsrw-sectors" style="margin-bottom:1.5rem;"></div>'
@@ -65,10 +94,26 @@ async function loadGist(container) {
 function renderSectors(el, sectors) {
     if (!el || !sectors || !sectors.length) return;
     const sorted = [...sectors].sort((a, b) => (b.rs || 0) - (a.rs || 0));
+    // Escala FIJA con suelo, no relativa al máximo del día.
+    //
+    // Antes el denominador era `maxAbs` a secas, así que el sector más extremo
+    // llenaba la barra al 100% SIEMPRE: en una sesión de rotación plana, un
+    // sector con RS 0,8 se veía idéntico a uno con RS 8 en un día de
+    // dispersión fuerte. El número está al lado y no se perdía información,
+    // pero la lectura visual —que es para lo que existe una barra— mentía
+    // entre días. Ver auditoría RS/RW, #13.
+    //
+    // El suelo de 12 sale de medir el dato real, no de inventarlo: el 30/07 el
+    // rango sectorial iba de 1,16 a 10,66. Con 12, un día normal deja la barra
+    // del líder en torno al 85-90% y un día plano se ve corto, que es lo
+    // correcto. Si algún día se supera, `Math.max` deja que la escala crezca en
+    // vez de desbordar.
+    const ESCALA_MIN_RS = 12;
     const maxAbs = Math.max(...sorted.map(s => Math.abs(s.rs || 0)));
+    const escala = Math.max(maxAbs, ESCALA_MIN_RS);
 
     el.innerHTML = '<div style="background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius);padding:1rem;">'
-        + '<div style="color:var(--color-accent);font-size:12px;letter-spacing:0.08em;margin-bottom:0.75rem;">ROTACIÓN SECTORIAL · RS vs SPY ' + tt('rsrw-sector-rotation') + ' <span style="color:var(--color-muted);font-weight:normal;letter-spacing:0;">(blend 21/63/126d, igual que las acciones)</span></div>'
+        + '<div style="color:var(--color-accent);font-size:12px;letter-spacing:0.08em;margin-bottom:0.75rem;">ROTACIÓN SECTORIAL · RS vs SPY ' + tt('rsrw-sector-rotation') + ' <span style="color:var(--color-muted);font-weight:normal;letter-spacing:0;">(blend 21/63/126d, igual que las acciones · barras a escala fija ±' + escala.toFixed(0) + ', comparables entre días)</span></div>'
         + '<div style="display:flex;flex-direction:column;gap:6px;">'
         + '<div style="display:grid;grid-template-columns:140px 1fr 50px 20px 60px;gap:8px;padding-bottom:2px;">'
         + '<div></div><div></div>'
@@ -80,7 +125,7 @@ function renderSectors(el, sectors) {
             const rs     = s.rs || 0;
             const name   = s.ticker || s.sector || s.index || 'N/A';
             const color  = rs > 0 ? 'var(--color-accent)' : '#f23645';
-            const w      = maxAbs > 0 ? Math.abs(rs) / maxAbs * 100 : 0;
+            const w      = escala > 0 ? Math.abs(rs) / escala * 100 : 0;
             const trendV = s.rs_trend || 0;
             const trend  = trendV > 0.01 ? '▲' : trendV < -0.01 ? '▼' : '→';
             const tColor = trend === '▲' ? 'var(--color-accent)' : trend === '▼' ? '#f23645' : 'var(--color-muted)';
@@ -203,6 +248,11 @@ function setupTicker(container) {
         if (!ticker) return;
         btn.textContent   = 'ANALIZANDO...';
         btn.style.opacity = '0.7';
+        // Aquí, y no al pintar el resultado: la línea de abajo se lleva por
+        // delante el canvas del análisis anterior, y hay que destruir su
+        // gráfico antes. Además cubre el caso de que el fetch falle (se sale
+        // por errorMessage y nunca se llega a repintar).
+        _destruirGraficos();
         result.innerHTML  = '<div style="color:var(--color-muted);font-size:12px;padding:0.5rem;">Calculando RS/RW para ' + esc(ticker) + '...</div>';
 
         try {
@@ -268,7 +318,7 @@ function renderTickerChart(data) {
         const ctx = document.getElementById(chartId);
         if (!ctx) return;
         const color = (data.rs_score || 0) >= 0 ? '#00ffad' : '#f23645';
-        new Chart(ctx, {
+        _rsrwCharts.push(new Chart(ctx, {
             type: 'line',
             data: {
                 labels: data.chart.dates,
@@ -290,7 +340,7 @@ function renderTickerChart(data) {
                     y: { ticks: { color: '#555', font: { size: 9 } }, grid: { color: 'rgba(255,255,255,0.03)' } }
                 }
             }
-        });
+        }));
     }
 
     if (window.Chart) { draw(); return; }

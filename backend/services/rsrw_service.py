@@ -33,6 +33,22 @@ BATCH_SLEEP = 1.8
 # ── GIST ──────────────────────────────────────────────────────────────────────
 
 def _load_gist() -> dict | None:
+    """El Gist del scan nocturno, cacheado 10 min.
+
+    Sin caché, CADA carga de la página RS/RW era una petición a la API de
+    GitHub, que limita a 60 por hora y por IP a los clientes sin autenticar.
+    Con ~100 usuarios eso se agota en minutos y a partir de ahí el módulo
+    entero se queda sin datos -- y no solo este: Market lee otro Gist desde la
+    misma IP del VPS y comparte ese presupuesto. Ver auditoría RS/RW, #2.
+
+    10 min es de sobra: el contenido lo reescribe un scan NOCTURNO, así que
+    durante la sesión de mercado no cambia nunca.
+    """
+    from services.cache import cache
+    cacheado = cache.get("rsrw:gist")
+    if cacheado is not None:
+        return cacheado or None      # {} cacheado = fallo reciente, no reintentar
+
     try:
         r = requests.get(
             f"https://api.github.com/gists/{GIST_ID}",
@@ -42,9 +58,14 @@ def _load_gist() -> dict | None:
         r.raise_for_status()
         content = r.json()["files"][GIST_FILE]["content"]
         data    = json.loads(content)
-        return data if data.get("stocks") and len(data["stocks"]) > 10 else None
+        bueno   = data if data.get("stocks") and len(data["stocks"]) > 10 else None
     except Exception:
-        return None
+        bueno = None
+
+    # También se cachea el fallo, con TTL corto: si GitHub nos está limitando,
+    # machacarlo en cada carga de página solo alarga el bloqueo.
+    cache.set("rsrw:gist", bueno or {}, 600 if bueno else 60)
+    return bueno
 
 def _parse_gist(data: dict) -> tuple:
     meta    = data.get("meta", {})
@@ -111,107 +132,41 @@ def _get_sp500_tickers() -> tuple:
     print(f"[RS/RW scan] Universo S&P 500 (lista estática embebida): {len(tickers)} tickers")
     return tickers, SP500_SECTOR_MAP
 
-def _run_scan_engine(max_tickers: int = 500) -> tuple:
-    tickers, smap = _get_sp500_tickers()
-    tickers = tickers[:max_tickers]
-    all_syms = list(dict.fromkeys([BENCHMARK] + list(SECTOR_ETFS.values()) + tickers))
-
-    close_d, vol_d = download_batch(
-        all_syms, period="260d", batch_size=BATCH_SIZE, batch_sleep=BATCH_SLEEP,
-        max_retries=3, coverage_threshold=0.85, log_prefix="[RS/RW scan] ",
-    )
-    print(f"[RS/RW scan] Total con histórico suficiente: {len(close_d)}/{len(all_syms)} símbolos solicitados")
-
-    if BENCHMARK not in close_d:
-        return pd.DataFrame(), pd.DataFrame(), {}
-
-    spy   = close_d[BENCHMARK]
-    rows  = []
-
-    for ticker in tickers:
-        if ticker not in close_d: continue
-        prices = close_d[ticker]
-        if len(prices) < 130: continue
-        aligned_spy = spy.reindex(prices.index).ffill()
-
-        try:
-            rs_vals = {}
-            for p in PERIODS:
-                sm = _rs_smooth(prices, aligned_spy, p)
-                rs_vals[p] = float(sm.iloc[-1]) if not sm.empty else 0.0
-
-            rs_score_raw = sum(rs_vals[p] * WEIGHTS[p] for p in PERIODS)
-            rs_trend     = _rs_trend_slope(_rs_smooth(prices, aligned_spy, 63))
-
-            vol_today = float(vol_d[ticker].iloc[-1]) if ticker in vol_d and len(vol_d[ticker]) > 0 else 0
-            vol_avg   = float(vol_d[ticker].tail(20).mean()) if ticker in vol_d and len(vol_d[ticker]) >= 20 else 1
-            rvol      = round(vol_today / vol_avg, 2) if vol_avg > 0 else 1.0
-
-            price = float(prices.iloc[-1])
-            sector_raw = smap.get(ticker, "")
-            sector     = GICS_MAP.get(sector_raw, sector_raw or "Otros")
-
-            rows.append({
-                "Ticker":      ticker,
-                "RS_Score":    round(rs_score_raw * 100, 2),
-                "RS_21d":      round(rs_vals[21] * 100, 2),
-                "RS_63d":      round(rs_vals[63] * 100, 2),
-                "RS_126d":     round(rs_vals[126] * 100, 2),
-                "RS_Trend":    rs_trend,
-                "RVOL":        rvol,
-                "Precio":      round(price, 2),
-                "Sector":      sector,
-            })
-        except Exception:
-            continue
-
-    if not rows:
-        return pd.DataFrame(), pd.DataFrame(), {}
-
-    df          = pd.DataFrame(rows).set_index("Ticker")
-    df["RS_Pct"] = rs_percentile(df["RS_Score"])
-    df["RS_Mom"] = df.apply(lambda r: rs_momentum(r["RS_21d"], r["RS_63d"]), axis=1)
-
-    sector_rs = df.groupby("Sector")["RS_Pct"].mean().to_dict()
-    df["RS_vs_Sector"] = df.apply(
-        lambda r: round(r["RS_Pct"] - sector_rs.get(r["Sector"], 50), 1), axis=1
-    )
-
-    sector_rows = []
-    for sec, etf in SECTOR_ETFS.items():
-        if etf in close_d:
-            p     = close_d[etf]
-            sp    = spy.reindex(p.index).ffill()
-            # Blend de 3 ventanas (21/63/126, mismos pesos que las acciones
-            # individuales) en vez de una única ventana fija de 63 días —
-            # antes había una asimetría metodológica entre esta parte del
-            # módulo y el resto (acciones sí usaban blend, sectores no).
-            sec_rs_raw = {}
-            for pp in PERIODS:
-                sm = _rs_smooth(p, sp, pp)
-                sec_rs_raw[pp] = float(sm.iloc[-1]) if not sm.empty else 0.0
-            rs_v  = sum(sec_rs_raw[pp] * WEIGHTS[pp] for pp in PERIODS) * 100
-            ret63 = float((p.iloc[-1] / p.iloc[-63] - 1) * 100) if len(p) >= 63 else 0
-            # La tendencia (flecha) se calcula sobre la componente de 63d
-            # específicamente — igual que se hace para acciones individuales,
-            # por coherencia entre ambas partes del módulo.
-            slope = _rs_trend_slope(_rs_smooth(p, sp, 63))
-            sector_rows.append({"Sector": sec, "RS": round(rs_v, 2),
-                                 "Return_63d": round(ret63, 2), "RS_trend": slope})
-
-    sdf  = pd.DataFrame(sector_rows).set_index("Sector") if sector_rows else pd.DataFrame()
-    meta = {"generated_at": datetime.now(timezone.utc).isoformat(),
-            "mode": "on_demand", "n_stocks": len(df), "n_requested": len(tickers)}
-
-    return df, sdf, meta
+# _run_scan_engine() eliminado el 30/07/2026 junto con get_rsrw_scan() y el
+# endpoint GET /rsrw/scan. Motivos, todos de la auditoría del módulo:
+#
+#   #3 -- El scan on-demand descargaba ~500 tickers de Yahoo DENTRO de una
+#         petición HTTP, bloqueando el event loop de FastAPI durante minutos.
+#         La propia UI ya decía "Scan nocturno automático, sin scan on-demand"
+#         y el frontend no lo llamaba desde hacía tiempo (verificado: cero
+#         referencias a /rsrw/scan en todo frontend/).
+#   #5 -- Aquí vivía `tickers[:max_tickers]` con max_tickers=500 sobre un
+#         universo de 503: recortaba ALFABÉTICAMENTE, así que los percentiles
+#         se calculaban sobre un universo incompleto al que siempre le
+#         faltaban los mismos tres valores del final del abecedario.
+#   #14 -- Y aquí se repetían los umbrales 80/20 y los límites 50/30 de
+#         leaders/laggards, ya escritos en get_rsrw_from_gist().
+#
+# El cálculo de verdad vive en scripts/rsrw_scan.py (GitHub Actions, nocturno,
+# universo completo) sobre shared/rsrw_engine.py. Si algún día hace falta un
+# scan bajo demanda, el sitio correcto es disparar el workflow, no recalcular
+# dentro de una petición.
 
 # ── MAIN ENDPOINTS ────────────────────────────────────────────────────────────
 
 def _df_to_records(df: pd.DataFrame, limit: int = 500) -> list:
     if df.empty: return []
+    # El nombre del índice decide cómo se llama la clave: "Ticker" para las
+    # acciones, "Sector" para la tabla sectorial. Antes se escribía "ticker"
+    # SIEMPRE, así que "Tecnología" o "Energía" viajaban en un campo llamado
+    # ticker -- el frontend lo tapaba con un `s.ticker || s.sector`, pero
+    # cualquier consumidor que se fíe del nombre del campo (el tagging de
+    # cartera/watchlist, un deep-link ?ticker=) intentaría buscar un sector
+    # como si fuera un símbolo. Ver auditoría RS/RW, #12.
+    clave = (df.index.name or "ticker").strip().lower()
     records = []
     for ticker, row in df.iterrows():
-        r = {"ticker": str(ticker)}
+        r = {clave: str(ticker)}
         for col in df.columns:
             val = row[col]
             try:
@@ -279,28 +234,6 @@ def get_rsrw_from_gist() -> dict:
         }
     except Exception as e:
         return {"ok": False, "error": str(e), "mode": "gist"}
-
-def get_rsrw_scan(max_tickers: int = 500) -> dict:
-    try:
-        df, sdf, meta = _run_scan_engine(max_tickers)
-        if df.empty:
-            return {"ok": False, "error": "Sin resultados del scan"}
-
-        leaders  = df[df["RS_Pct"] >= 80].sort_values("RS_Pct", ascending=False)
-        laggards = df[df["RS_Pct"] <= 20].sort_values("RS_Pct", ascending=True)
-
-        return {
-            "ok":       True,
-            "mode":     "on_demand",
-            "meta":     meta,
-            "total":    len(df),
-            "leaders":  _tag_cartera(_df_to_records(leaders, 50)),
-            "laggards": _tag_cartera(_df_to_records(laggards, 30)),
-            "sectors":  _df_to_records(sdf) if not sdf.empty else [],
-            "timestamp": get_timestamp(),
-        }
-    except Exception as e:
-        return {"ok": False, "error": str(e)}
 
 def get_rsrw_ticker(ticker: str) -> dict:
     try:

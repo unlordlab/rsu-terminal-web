@@ -1,7 +1,7 @@
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends
 from auth import verify_token
 from services import users_service, watchlist_service
-from services.rsrw_service import get_rsrw_from_gist, get_rsrw_scan, get_rsrw_ticker
+from services.rsrw_service import get_rsrw_from_gist, get_rsrw_ticker
 
 router = APIRouter(prefix="/api/v1/rsrw", tags=["rsrw"])
 
@@ -22,12 +22,10 @@ def _tag_watchlist(result: dict, user) -> dict:
 async def rsrw_gist(user=Depends(verify_token)):
     return _tag_watchlist(get_rsrw_from_gist(), user)
 
-@router.get("/scan")
-async def rsrw_scan(
-    max_tickers: int = Query(500, ge=10, le=510),
-    user=Depends(verify_token)
-):
-    return _tag_watchlist(get_rsrw_scan(max_tickers), user)
+# GET /scan retirado el 30/07/2026: descargaba ~500 tickers dentro de la
+# petición, bloqueando el event loop. Nadie lo llamaba (cero referencias en
+# frontend/) y la propia UI ya anunciaba "scan nocturno automático, sin scan
+# on-demand". El cálculo vive en scripts/rsrw_scan.py. Ver auditoría RS/RW #3.
 
 @router.get("/ticker/{ticker}")
 async def rsrw_ticker(ticker: str, user=Depends(verify_token)):
