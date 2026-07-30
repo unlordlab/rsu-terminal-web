@@ -31,12 +31,16 @@ parecería completo y sería engañoso.
 
 - **379 hallazgos** extraídos de los 16 documentos de auditoría.
 - **64 son críticos (🔴)**: todos revisados en la primera pasada.
-  31 cerrados · 13 abiertos ·
+  33 cerrados · 11 abiertos ·
   1 ya no aplican ·
   19 pendientes de verificar.
 - **Segunda pasada (30/07), parcial**: verificado además el tier ALTO/MEDIO de
   Research, RS/RW y Scanner. Los demás módulos siguen sin revisar en ese tier.
-- Los **303 restantes** están extraídos y clasificados por
+- **RS/RW cerrado del todo (30/07, `34a659f`)**: los 22 hallazgos del módulo
+  revisados uno a uno, seis arreglados en esa sesión. Quedan 3 abiertos (#6
+  festivos, #7 universo, #20 histórico de percentil) y 4 sin comprobar del
+  tier UX/NUEVO.
+- Los **297 restantes** están extraídos y clasificados por
   severidad, pero marcados ❓ SIN VERIFICAR: aparecen aquí para no perderlos de
   vista, **no como lista de trabajo fiable**. Verificarlos es la segunda pasada.
 
@@ -46,7 +50,7 @@ parecería completo y sería engañoso.
 del proyecto — 2.597 líneas que son la única fuente que sabe qué se cerró en
 las últimas sesiones. Hay pendientes que SOLO viven ahí: el fallback `^ADV`/
 `^DEC` de Market caído en silencio, el walk-forward del Algoritmo, la
-reponderación 4.5 del RSU Score, la longitud del briefing diario, RS/RW #20.
+reponderación 4.5 del RSU Score, la longitud del briefing diario.
 
 | Marca | Significado |
 |-------|-------------|
@@ -81,10 +85,6 @@ De los críticos verificados como abiertos:
    `bloque legal Fase 1, nunca empezado. Bloquea la monetización`
 1. **PAGINAS_CONTENIDO #2** — El JWT se guarda en `localStorage` cuando marcas "recordarme" — persistente e indefinido
    `mismo bloque legal`
-1. **RSRW #2** — El Gist se pide a GitHub sin caché — con el límite de 60 req/hora por IP sin autenticar
-   `_load_gist() sin caché: el límite de 60 req/hora por IP de GitHub sigue expuesto`
-1. **RSRW #3** — El endpoint `/scan` on-demand sigue expuesto — y la propia UI dice que ya no existe
-   `rsrw.py:25 GET /scan sigue registrado`
 1. **SPXL #4** — Ni `/live` ni `/backtest` tienen caché: cada visita descarga 17 años y ejecuta el motor completo
    `0 usos de cache.get en spxl_service.py: cada visita descarga 17 años y corre el motor`
 
@@ -417,30 +417,34 @@ exposición: con ~100 usuarios reales, no hay política de privacidad.
 | ❓ | 25 | 🟢 | Histórico del RSU Score | *sin comprobar* |
 | ❓ | 26 | 🟢 | Alertas de cambio de fase | *sin comprobar* |
 
-## Rsrw  (22 hallazgos — ❌7 · ✅5 · ❓10)
+## Rsrw  (22 hallazgos — ❌3 · ✅15 · ❓4)
+
+**Pasada completa el 30/07** (commit `34a659f`): los 22 hallazgos revisados uno
+a uno contra el código, seis cerrados en esa sesión. Es, junto a Research, el
+único módulo con el tier completo verificado.
 
 | | # | Sev | Hallazgo | Estado / evidencia |
 |-|---|-----|----------|--------------------|
 | ✅ | 1 | 🔴 | El motor de cálculo está duplicado y YA HA DIVERGIDO — el bug corregido del `rs_momentum` sigue vivo en el backend | shared/rsrw_engine.py; el fix de rs_momentum llegó a los 4 sitios |
-| ❌ | 2 | 🔴 | El Gist se pide a GitHub sin caché — con el límite de 60 req/hora por IP sin autenticar | _load_gist() sin caché: el límite de 60 req/hora por IP de GitHub sigue expuesto |
-| ❌ | 3 | 🔴 | El endpoint `/scan` on-demand sigue expuesto — y la propia UI dice que ya no existe | rsrw.py:25 GET /scan sigue registrado |
+| ✅ | 2 | 🔴 | El Gist se pide a GitHub sin caché — con el límite de 60 req/hora por IP sin autenticar | 30/07: `_load_gist()` cacheado 10 min (el fallo, 60s). Medido: 9,79s → 1,95s en la segunda llamada |
+| ✅ | 3 | 🔴 | El endpoint `/scan` on-demand sigue expuesto — y la propia UI dice que ya no existe | 30/07: `GET /rsrw/scan`, `get_rsrw_scan()` y `_run_scan_engine()` eliminados. Cero referencias en frontend/ antes de quitarlo |
 | ✅ | 4 | 🔴 | `get_rsrw_ticker` devuelve un RS Score que no es comparable con el de las tablas, y `rs_pct` siempre es `None` | rs_pct real desde el Gist en get_rsrw_ticker() |
-| ❌ | 5 | 🟠 | `max_tickers` recorta el universo alfabéticamente → percentiles sin sentido | verificado 30/07: rsrw_service.py:116 tickers[:max_tickers] con max_tickers=500 sobre un universo de 503 — recorta alfabéticamente |
-| ❌ | 6 | 🟠 | Los festivos del mercado US reescriben el Gist con datos del día anterior, y "freshness" los presenta como frescos | verificado 30/07: cero menciones de festivos/holiday/calendar en scripts/rsrw_scan.py |
-| ❓ | 7 | 🟠 | El universo es solo S&P 500 — tu propia cartera queda fuera | *sin comprobar* |
-| ❌ | 8 | 🟠 | `_rs_trend_slope` puede producir flechas espurias cuando la RS es muy estable | verificado 30/07: rsrw_engine.py:61 slope/std sin epsilon — con std minúscula la pendiente se dispara y produce flechas espurias |
-| ❌ | 9 | 🟠 | Instancias de Chart.js nunca destruidas + Chart.js reinyectado | verificado 30/07: rsrw.js tiene 1 new Chart y 0 export cleanup — MISMO bug que se arregló en research.js el 29/07 (a1a0931), aquí sigue |
+| ✅ | 5 | 🟠 | `max_tickers` recorta el universo alfabéticamente → percentiles sin sentido | 30/07: desaparece con #3 (vivía en `_run_scan_engine`). El `[:525]` gemelo de `rsrw_scan.py` no recorta nada — universo de 503 |
+| ❌ | 6 | 🟠 | Los festivos del mercado US reescriben el Gist con datos del día anterior, y "freshness" los presenta como frescos | verificado 30/07: cero menciones de festivos/holiday/calendar en scripts/rsrw_scan.py. Necesita un calendario de mercado, no una línea |
+| ❌ | 7 | 🟠 | El universo es solo S&P 500 — tu propia cartera queda fuera | verificado 30/07: `rsrw_scan.py:52` `tickers = list(SP500_SECTOR_MAP.keys())`, sin cruce con Cartera. Es decisión de producto (ampliar el universo cuesta descargas), no un bug |
+| ✅ | 8 | 🟠 | `_rs_trend_slope` puede producir flechas espurias cuando la RS es muy estable | 30/07: `EPSILON_PENDIENTE = 1e-4`. Demostrado antes del fix: ruido con std 6,2e-09 daba 0,1612 — idéntico a una tendencia real del 5% por periodo |
+| ✅ | 9 | 🟠 | Instancias de Chart.js nunca destruidas + Chart.js reinyectado | 30/07: registro de INSTANCIAS (no de ids: `getChart(id)` resuelve por DOM y el canvas ya no está al limpiar) + `export cleanup()`. Verificado en navegador: 3 análisis seguidos → 1 gráfico vivo, 0 huérfanos |
 | ✅ | 10 | 🟠 | `timestamp` naive (novena aparición del bug de timezone) | shared/time_utils.py |
 | ✅ | 11 | 🟠 | Si el workflow nocturno falla, nadie se entera | RS/RW corre dentro de nightly_scans.yml, que avisa por Telegram por paso |
-| ❓ | 12 | 🟡 | El nombre del sector viaja en el campo `ticker` | *sin comprobar* |
-| ❌ | 13 | 🟡 | Las barras sectoriales se normalizan al máximo del día | verificado 29/07: rsrw.js:83 w = \|rs\|/maxAbs*100 — el sector más extremo siempre llena la barra, no comparable entre días |
-| ❓ | 14 | 🟡 | `leaders`/`laggards` duplicados entre las dos funciones de salida | *sin comprobar* |
+| ✅ | 12 | 🟡 | El nombre del sector viaja en el campo `ticker` | 30/07: `_df_to_records` toma la clave del nombre del índice — `ticker` para acciones, `sector` para sectores. Confirmado con datos reales del Gist |
+| ✅ | 13 | 🟡 | Las barras sectoriales se normalizan al máximo del día | 30/07: escala fija ±12, medida sobre el rango real (1,16–10,66 el 30/07) y declarada en la leyenda. El líder llena 88,8%, no el 100% |
+| ✅ | 14 | 🟡 | `leaders`/`laggards` duplicados entre las dos funciones de salida | 30/07: desaparece con #3 — la copia duplicada vivía en `get_rsrw_scan()` |
 | ✅ | 15 | 🟡 | Escapado en el frontend | esc()/safeUrl() aplicados en rsrw.js |
 | ❓ | 16 | 🔵 | Amplitud RS del universo | *sin comprobar* |
-| ❓ | 17 | 🔵 | Badge 💼/⭐ de Cartera y Watchlist | *sin comprobar* |
-| ❓ | 18 | 🔵 | Deep-link `?ticker=` | *sin comprobar* |
+| ✅ | 17 | 🔵 | Badge 💼/⭐ de Cartera y Watchlist | `_tag_cartera()` en el servicio + `in_watchlist` en el router (sesión 16) |
+| ✅ | 18 | 🔵 | Deep-link `?ticker=` | `rsrw.js` lee `?ticker=` y auto-analiza (sesión 16) |
 | ❓ | 19 | 🔵 | Columna de fase Weinstein | *sin comprobar* |
-| ❓ | 20 | 🟢 | Histórico del percentil RS | *sin comprobar* |
+| ❌ | 20 | 🟢 | Histórico del percentil RS | verificado 30/07: la persistencia YA EXISTE — `snapshot_ticker` de `snapshots.db` guarda `rs_pct` de ~500 tickers a diario. Solo falta el lado de LECTURA (detección de cruces). Es el pendiente de RS/RW con mejor relación valor/coste |
 | ❓ | 21 | 🟢 | Rotación sectorial en el tiempo | *sin comprobar* |
 | ❓ | 22 | 🟢 | Alerta de entrada en el top decil | *sin comprobar* |
 
