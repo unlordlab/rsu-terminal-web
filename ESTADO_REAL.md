@@ -30,11 +30,13 @@ parecería completo y sería engañoso.
 ## Cobertura de esta versión — leer antes de usarlo
 
 - **379 hallazgos** extraídos de los 16 documentos de auditoría.
-- **64 son críticos (🔴)**, y son los ÚNICOS verificados en esta pasada:
+- **64 son críticos (🔴)**: todos revisados en la primera pasada.
   31 cerrados · 13 abiertos ·
   1 ya no aplican ·
   19 pendientes de verificar.
-- Los **334 restantes** están extraídos y clasificados por
+- **Segunda pasada (30/07), parcial**: verificado además el tier ALTO/MEDIO de
+  Research, RS/RW y Scanner. Los demás módulos siguen sin revisar en ese tier.
+- Los **303 restantes** están extraídos y clasificados por
   severidad, pero marcados ❓ SIN VERIFICAR: aparecen aquí para no perderlos de
   vista, **no como lista de trabajo fiable**. Verificarlos es la segunda pasada.
 
@@ -384,7 +386,7 @@ exposición: con ~100 usuarios reales, no hay política de privacidad.
 | ❓ | 24 | 🟢 | Roadmap con registro de aciertos | *sin comprobar* |
 | ❓ | 25 | 🟢 | Página pública de landing | *sin comprobar* |
 
-## Research  (26 hallazgos — ✅4 · ❓22)
+## Research  (26 hallazgos — ❌1 · ✅17 · ❓8)
 
 | | # | Sev | Hallazgo | Estado / evidencia |
 |-|---|-----|----------|--------------------|
@@ -392,20 +394,20 @@ exposición: con ~100 usuarios reales, no hay política de privacidad.
 | ✅ | 2 | 🔴 | Alpha Vantage: 25 peticiones/día quemadas en horas | sustituido por yfinance.earnings_dates (0f10243) |
 | ✅ | 3 | 🔴 | Traducción con Groq repetida infinitamente para el mismo texto estático | traducción cacheada 30 días por contenido (841b977) |
 | ✅ | 4 | 🔴 | XSS reflejado vía `?ticker=` + contenido externo sin escapar (mismo patrón que Newsfeed) | esc() + validación de ticker con regex en el backend |
-| ❓ | 5 | 🟠 | Los fallos no se cachean → un ticker inválido dispara la avalancha completa cada vez | *sin comprobar* |
-| ❓ | 6 | 🟠 | El RSU Score puede dar "COMPRA FUERTE" con una sola categoría de cinco | *sin comprobar* |
-| ❓ | 7 | 🟠 | `_get_next_earnings` puede mostrar la fecha equivocada | *sin comprobar* |
-| ❓ | 8 | 🟠 | Dos "máximos de 52 semanas" distintos en la misma página | *sin comprobar* |
-| ❓ | 9 | 🟠 | `short_pct` sin la defensa de formato que ya aplicaste al dividend yield | *sin comprobar* |
-| ❓ | 10 | 🟠 | El pipeline de medianas sectoriales reales está muerto por configurar | *sin comprobar* |
-| ❓ | 11 | 🟠 | Umbrales de absorción incoherentes entre Research y Scanner | *sin comprobar* |
-| ❓ | 12 | 🟠 | Latencia de research en frío: 10-20 segundos con un "Cargando..." plano | *sin comprobar* |
-| ❓ | 13 | 🟠 | Instancias de Chart.js nunca destruidas | *sin comprobar* |
-| ❓ | 14 | 🟠 | `timestamp` con hora del contenedor (UTC) | *sin comprobar* |
-| ❓ | 15 | 🟡 | La URL no refleja las búsquedas manuales | *sin comprobar* |
-| ❓ | 16 | 🟡 | Turnover y absorción no comparten la descarga | *sin comprobar* |
-| ❓ | 17 | 🟡 | `_resolve_coingecko_id`: el fallback `coins[0]` puede elegir el token equivocado | *sin comprobar* |
-| ❓ | 18 | 🟡 | Estacionalidad con `auto_adjust` implícito | *sin comprobar* |
+| ✅ | 5 | 🟠 | Los fallos no se cachean → un ticker inválido dispara la avalancha completa cada vez | caché negativa de 120s para ok:False (841b977) |
+| ✅ | 6 | 🟠 | El RSU Score puede dar "COMPRA FUERTE" con una sola categoría de cinco | MIN_CATEGORIAS_RSU_SCORE=3; por debajo no se publica score (42ae09e) |
+| ✅ | 7 | 🟠 | `_get_next_earnings` puede mostrar la fecha equivocada | earnings ordenados por fecha y filtrados a futuro (ffe16bd) |
+| ✅ | 8 | 🟠 | Dos "máximos de 52 semanas" distintos en la misma página | Niveles Técnicos usa el mismo fiftyTwoWeekHigh que la tarjeta (ffe16bd) |
+| ✅ | 9 | 🟠 | `short_pct` sin la defensa de formato que ya aplicaste al dividend yield | guarda fracción/porcentaje en short_pct (ffe16bd) |
+| ✅ | 10 | 🟠 | El pipeline de medianas sectoriales reales está muerto por configurar | shared/gist_ids.py: mismo ID para quien escribe y quien lee (0555f15) |
+| ✅ | 11 | 🟠 | Umbrales de absorción incoherentes entre Research y Scanner | shared/absorption.py compartido con Scanner, mismo umbral 0.75 |
+| ❌ | 12 | 🟠 | Latencia de research en frío: 10-20 segundos con un "Cargando..." plano | el paquete de rendimiento (841b977) quitó descargas duplicadas, pero un research en frío sigue en ~11s medidos y el 'Cargando...' sigue siendo plano, sin progreso |
+| ✅ | 13 | 🟠 | Instancias de Chart.js nunca destruidas | cleanup() + destrucción antes de repintar en research.js (a1a0931) |
+| ✅ | 14 | 🟠 | `timestamp` con hora del contenedor (UTC) | shared/time_utils.py |
+| ✅ | 15 | 🟡 | La URL no refleja las búsquedas manuales | history.replaceState al buscar (a1a0931) |
+| ✅ | 16 | 🟡 | Turnover y absorción no comparten la descarga | _get_daily_turnover deriva de _get_price_volume_data, con caché (841b977) |
+| ✅ | 17 | 🟡 | `_resolve_coingecko_id`: el fallback `coins[0]` puede elegir el token equivocado | desempate por market_cap_rank; sin match exacto no resuelve (ffe16bd) |
+| ✅ | 18 | 🟡 | Estacionalidad con `auto_adjust` implícito | auto_adjust=True explícito y razonado (ffe16bd) |
 | ❓ | 19 | 🔵 | Badge "en Cartera" / "en Watchlist" | *sin comprobar* |
 | ❓ | 20 | 🔵 | Métricas del scan nocturno gratis: | *sin comprobar* |
 | ❓ | 21 | 🔵 | Botón "Generar tesis con Gael" | *sin comprobar* |
@@ -415,7 +417,7 @@ exposición: con ~100 usuarios reales, no hay política de privacidad.
 | ❓ | 25 | 🟢 | Histórico del RSU Score | *sin comprobar* |
 | ❓ | 26 | 🟢 | Alertas de cambio de fase | *sin comprobar* |
 
-## Rsrw  (22 hallazgos — ❌2 · ✅2 · ❓18)
+## Rsrw  (22 hallazgos — ❌7 · ✅5 · ❓10)
 
 | | # | Sev | Hallazgo | Estado / evidencia |
 |-|---|-----|----------|--------------------|
@@ -423,17 +425,17 @@ exposición: con ~100 usuarios reales, no hay política de privacidad.
 | ❌ | 2 | 🔴 | El Gist se pide a GitHub sin caché — con el límite de 60 req/hora por IP sin autenticar | _load_gist() sin caché: el límite de 60 req/hora por IP de GitHub sigue expuesto |
 | ❌ | 3 | 🔴 | El endpoint `/scan` on-demand sigue expuesto — y la propia UI dice que ya no existe | rsrw.py:25 GET /scan sigue registrado |
 | ✅ | 4 | 🔴 | `get_rsrw_ticker` devuelve un RS Score que no es comparable con el de las tablas, y `rs_pct` siempre es `None` | rs_pct real desde el Gist en get_rsrw_ticker() |
-| ❓ | 5 | 🟠 | `max_tickers` recorta el universo alfabéticamente → percentiles sin sentido | *sin comprobar* |
-| ❓ | 6 | 🟠 | Los festivos del mercado US reescriben el Gist con datos del día anterior, y "freshness" los presenta como frescos | *sin comprobar* |
+| ❌ | 5 | 🟠 | `max_tickers` recorta el universo alfabéticamente → percentiles sin sentido | verificado 30/07: rsrw_service.py:116 tickers[:max_tickers] con max_tickers=500 sobre un universo de 503 — recorta alfabéticamente |
+| ❌ | 6 | 🟠 | Los festivos del mercado US reescriben el Gist con datos del día anterior, y "freshness" los presenta como frescos | verificado 30/07: cero menciones de festivos/holiday/calendar en scripts/rsrw_scan.py |
 | ❓ | 7 | 🟠 | El universo es solo S&P 500 — tu propia cartera queda fuera | *sin comprobar* |
-| ❓ | 8 | 🟠 | `_rs_trend_slope` puede producir flechas espurias cuando la RS es muy estable | *sin comprobar* |
-| ❓ | 9 | 🟠 | Instancias de Chart.js nunca destruidas + Chart.js reinyectado | *sin comprobar* |
-| ❓ | 10 | 🟠 | `timestamp` naive (novena aparición del bug de timezone) | *sin comprobar* |
-| ❓ | 11 | 🟠 | Si el workflow nocturno falla, nadie se entera | *sin comprobar* |
+| ❌ | 8 | 🟠 | `_rs_trend_slope` puede producir flechas espurias cuando la RS es muy estable | verificado 30/07: rsrw_engine.py:61 slope/std sin epsilon — con std minúscula la pendiente se dispara y produce flechas espurias |
+| ❌ | 9 | 🟠 | Instancias de Chart.js nunca destruidas + Chart.js reinyectado | verificado 30/07: rsrw.js tiene 1 new Chart y 0 export cleanup — MISMO bug que se arregló en research.js el 29/07 (a1a0931), aquí sigue |
+| ✅ | 10 | 🟠 | `timestamp` naive (novena aparición del bug de timezone) | shared/time_utils.py |
+| ✅ | 11 | 🟠 | Si el workflow nocturno falla, nadie se entera | RS/RW corre dentro de nightly_scans.yml, que avisa por Telegram por paso |
 | ❓ | 12 | 🟡 | El nombre del sector viaja en el campo `ticker` | *sin comprobar* |
-| ❓ | 13 | 🟡 | Las barras sectoriales se normalizan al máximo del día | *sin comprobar* |
+| ❌ | 13 | 🟡 | Las barras sectoriales se normalizan al máximo del día | verificado 29/07: rsrw.js:83 w = \|rs\|/maxAbs*100 — el sector más extremo siempre llena la barra, no comparable entre días |
 | ❓ | 14 | 🟡 | `leaders`/`laggards` duplicados entre las dos funciones de salida | *sin comprobar* |
-| ❓ | 15 | 🟡 | Escapado en el frontend | *sin comprobar* |
+| ✅ | 15 | 🟡 | Escapado en el frontend | esc()/safeUrl() aplicados en rsrw.js |
 | ❓ | 16 | 🔵 | Amplitud RS del universo | *sin comprobar* |
 | ❓ | 17 | 🔵 | Badge 💼/⭐ de Cartera y Watchlist | *sin comprobar* |
 | ❓ | 18 | 🔵 | Deep-link `?ticker=` | *sin comprobar* |
@@ -460,22 +462,22 @@ exposición: con ~100 usuarios reales, no hay política de privacidad.
 | ❓ | 12 | 🟡 | El backtest recalcula el baseline completo en cada ejecución | *sin comprobar* |
 | ❓ | 13 | 🟡 | `df_vix` a 3 meses limita la ventana del VIX | *sin comprobar* |
 
-## Scanner  (20 hallazgos — ❓20)
+## Scanner  (20 hallazgos — ✅9 · ❓11)
 
 | | # | Sev | Hallazgo | Estado / evidencia |
 |-|---|-----|----------|--------------------|
-| ❓ | 1 | 🟠 | La columna "Absorción" muestra 0/10 para casi todo el universo — sabes que el umbral es provisional, pero el frontend lo presenta  | *sin comprobar* |
-| ❓ | 2 | 🟠 | `_fetch_batch` no reintenta lotes incompletos — a diferencia del scan de RS/RW, que sí lo hace | *sin comprobar* |
-| ❓ | 3 | 🟠 | Si el scan nocturno falla, el Gist queda con datos rancios y solo `_freshness` lo delata | *sin comprobar* |
-| ❓ | 4 | 🟠 | La amplitud de mercado hereda tickers muertos del export de Russell 2000 | *sin comprobar* |
-| ❓ | 5 | 🟠 | `new_high` con `>=` marca como "nuevo máximo" cualquier día lateral en máximos | *sin comprobar* |
-| ❓ | 6 | 🟠 | El percentil RS del Scanner y el de RS/RW son el mismo cálculo con dos códigos distintos | *sin comprobar* |
-| ❓ | 7 | 🟠 | `timestamp` naive en `run_filter` (undécima aparición del bug de timezone) | *sin comprobar* |
-| ❓ | 8 | 🟡 | El `score_tecnico` es puramente técnico pero se llama igual que el RSU Score fundamental | *sin comprobar* |
+| ✅ | 1 | 🟠 | La columna "Absorción" muestra 0/10 para casi todo el universo — sabes que el umbral es provisional, pero el frontend lo presenta  | umbral 0.75 restaurado y unificado en shared/absorption.py |
+| ✅ | 2 | 🟠 | `_fetch_batch` no reintenta lotes incompletos — a diferencia del scan de RS/RW, que sí lo hace | reintentos reales en _fetch_batch vía shared/yf_batch.py |
+| ✅ | 3 | 🟠 | Si el scan nocturno falla, el Gist queda con datos rancios y solo `_freshness` lo delata | aviso Telegram en scanner_scan.yml / nightly_scans.yml |
+| ✅ | 4 | 🟠 | La amplitud de mercado hereda tickers muertos del export de Russell 2000 | ABX eliminado + log de tickers muertos |
+| ✅ | 5 | 🟠 | `new_high` con `>=` marca como "nuevo máximo" cualquier día lateral en máximos | new_high/new_low excluyen el día evaluado |
+| ✅ | 6 | 🟠 | El percentil RS del Scanner y el de RS/RW son el mismo cálculo con dos códigos distintos | shared/rsrw_engine.py::rs_percentile, un solo cálculo |
+| ✅ | 7 | 🟠 | `timestamp` naive en `run_filter` (undécima aparición del bug de timezone) | shared/time_utils.py |
+| ✅ | 8 | 🟡 | El `score_tecnico` es puramente técnico pero se llama igual que el RSU Score fundamental | verificado 30/07: scanner_service.py:22 documenta explícitamente que el score_tecnico NO es el RSU Score fundamental |
 | ❓ | 9 | 🟡 | El `rvol_pts` del score satura a RVOL=3x, pero RVOL extremos siguen siendo informativos | *sin comprobar* |
 | ❓ | 10 | 🟡 | `run_filter` no valida coherencia entre criterios | *sin comprobar* |
 | ❓ | 11 | 🟡 | `absorcion_min` filtra sobre un dato provisional (ligado al #1) | *sin comprobar* |
-| ❓ | 12 | 🟡 | Escapado en el frontend | *sin comprobar* |
+| ✅ | 12 | 🟡 | Escapado en el frontend | verificado 30/07: 11 usos de esc() en scanner.js |
 | ❓ | 13 | 🔵 | Enriquecimiento on-demand con el RSU Score v2 | *sin comprobar* |
 | ❓ | 14 | 🔵 | Badge 💼/⭐ de Cartera y Watchlist | *sin comprobar* |
 | ❓ | 15 | 🔵 | Presets de filtros | *sin comprobar* |
