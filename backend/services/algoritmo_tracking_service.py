@@ -100,8 +100,34 @@ def init_db():
             actualizado_en TEXT
         )
     ''')
+    # fecha_sesion: qué sesión de mercado se procesó por última vez. Es lo que
+    # hace idempotente la decisión diaria (ver procesar_cierre_si_toca) — sin
+    # esto, cada pasada del bucle de 30 min volvería a evaluar la misma sesión.
+    cols_estado = {row['name'] for row in conn.execute("PRAGMA table_info(estado_actual)").fetchall()}
+    if 'fecha_sesion' not in cols_estado:
+        conn.execute("ALTER TABLE estado_actual ADD COLUMN fecha_sesion TEXT")
     conn.commit()
     conn.close()
+
+
+def obtener_estado_oficial():
+    """Último estado oficial del semáforo, o None si todavía no hay ninguno."""
+    conn = _conn()
+    try:
+        row = conn.execute("SELECT estado FROM estado_actual WHERE id = 1").fetchone()
+        return row['estado'] if row else None
+    finally:
+        conn.close()
+
+
+def sesion_ya_procesada(fecha_sesion: str) -> bool:
+    """¿Ya se tomó la decisión oficial de esta sesión de mercado?"""
+    conn = _conn()
+    try:
+        row = conn.execute("SELECT fecha_sesion FROM estado_actual WHERE id = 1").fetchone()
+        return bool(row and row['fecha_sesion'] == fecha_sesion)
+    finally:
+        conn.close()
 
 
 # Envío de Telegram ahora vive en telegram_service.py (compartido con Cartera,
@@ -142,7 +168,7 @@ def _construir_mensaje(estado_anterior, resultado):
     return cabecera + cuerpo + pie
 
 
-def procesar_resultado_algoritmo(resultado):
+def procesar_resultado_algoritmo(resultado, fecha_sesion=None):
     """
     Punto de entrada principal — se llama cada vez que se recalcula el
     algoritmo en vivo (get_rsu_algoritmo). Detecta si el semáforo cambió desde
@@ -162,12 +188,19 @@ def procesar_resultado_algoritmo(resultado):
         return
 
     conn = _conn()
+    conn.execute("INSERT OR IGNORE INTO estado_actual (id, estado, actualizado_en) VALUES (1, NULL, NULL)")
     row = conn.execute("SELECT estado FROM estado_actual WHERE id = 1").fetchone()
     estado_anterior = row['estado'] if row else None
 
     if estado_anterior == estado_nuevo:
+        # Sin cambio de color, pero la sesión SÍ queda marcada como procesada:
+        # si no, procesar_cierre_si_toca() volvería a evaluarla en cada pasada
+        # del bucle de 30 min y nunca se daría por cerrada.
+        if fecha_sesion:
+            conn.execute("UPDATE estado_actual SET fecha_sesion = ? WHERE id = 1", (fecha_sesion,))
+            conn.commit()
         conn.close()
-        return  # sin cambios, nada que hacer
+        return
 
     ahora = datetime.utcnow().isoformat()
 
@@ -185,11 +218,10 @@ def procesar_resultado_algoritmo(resultado):
     # envío ocurría ANTES de este chequeo atómico. Ver reporte del usuario
     # 24/07/2026 (mismo patrón corregido también en
     # cartera_tracking_service.py::procesar_cartera_notificaciones).
-    conn.execute("INSERT OR IGNORE INTO estado_actual (id, estado, actualizado_en) VALUES (1, NULL, NULL)")
     cur = conn.execute(
-        "UPDATE estado_actual SET estado = ?, actualizado_en = ? "
+        "UPDATE estado_actual SET estado = ?, actualizado_en = ?, fecha_sesion = ? "
         "WHERE id = 1 AND (estado IS NULL OR estado != ?)",
-        (estado_nuevo, ahora, estado_nuevo)
+        (estado_nuevo, ahora, fecha_sesion, estado_nuevo)
     )
     conn.commit()
     if cur.rowcount == 0:

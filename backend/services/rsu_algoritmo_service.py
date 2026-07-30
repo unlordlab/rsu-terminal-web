@@ -2,7 +2,8 @@ import pandas as pd
 import numpy as np
 import yfinance as yf
 import sys, os
-from datetime import datetime
+from datetime import datetime, time as dt_time
+from zoneinfo import ZoneInfo
 from concurrent.futures import ThreadPoolExecutor
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "..", "shared"))
 from time_utils import get_timestamp  # noqa: E402
@@ -41,6 +42,43 @@ VENTANA = 10
 # corriendo con datos reales de BAA10Y.
 CREDIT_SPREAD_ELEVADO = 3.0
 CREDIT_SPREAD_CRITICO = 4.0
+
+# ── Histéresis del semáforo ───────────────────────────────────────────────────
+# Para ENTRAR en verde hace falta el umbral pleno; para SALIR hay que caer
+# MARGEN_HISTERESIS puntos por debajo. Sin esto, un score pegado al umbral
+# (el 30/07/2026 estaba en 52 con umbral 54) hace que el semáforo cambie de
+# color con cualquier oscilación mínima, y cada cambio es un aviso de Telegram
+# y una fila en el histórico.
+#
+# 3 puntos es deliberadamente pequeño: no pretende ser un filtro de calidad
+# —de eso ya se encargan el score y los gatekeepers—, solo evitar el parpadeo
+# en la frontera. Un cambio de verdad supera 3 puntos sin problema.
+MARGEN_HISTERESIS = 3
+ESTADOS_VERDES = {"VERDE", "VERDE-VOL"}
+
+
+def aplicar_histeresis(estado_crudo, score, umbral, gatekeeper_ok, estado_anterior):
+    """Estado OFICIAL a partir del estado crudo de hoy y del oficial de ayer.
+
+    Solo actúa en una dirección: dificulta SALIR de verde, nunca facilita
+    entrar. Y no retiene el verde si lo que se ha caído es el soporte
+    estructural (gatekeeper) — eso no es ruido en la frontera, es que la
+    condición que justificaba la señal ha dejado de cumplirse.
+
+    Es una función pura y sin estado a propósito: la usan tanto el cierre
+    diario en vivo como el backtest, para que no vuelvan a medir sistemas
+    distintos (hallazgo #1 de la auditoría del módulo, ya corregido una vez
+    con el McClellan — no reintroducirlo por la puerta de atrás).
+    """
+    if estado_anterior not in ESTADOS_VERDES:
+        return estado_crudo          # no veníamos de verde: sin red, entrar exige el umbral pleno
+    if estado_crudo in ESTADOS_VERDES:
+        return estado_crudo          # seguimos en verde por derecho propio
+    if not gatekeeper_ok:
+        return estado_crudo          # se cayó el soporte estructural: salida inmediata
+    if score >= umbral - MARGEN_HISTERESIS:
+        return estado_anterior       # solo roza el umbral por debajo: se mantiene
+    return estado_crudo
 
 def _parsear_csv_fred(texto):
     """Parsea el CSV de FRED a (fechas, valores) — tolerante a las dos
@@ -643,25 +681,44 @@ def _calcular_score_punto(df_spy, df_vix, sector_data=None, df_vix3m=None, credi
                           "rvol_minimo": round(rvol_min, 2),
                           "fecha_minimo": _fmt_fecha(fecha_min)}
 
-    # 5. EMA200 semanal — soporte/resistencia de largo plazo (+20)
-    # Rangos ampliados para que el factor sea alcanzable en correcciones reales:
-    # ±25% → 20pts (antes ±12%), ±40% → 10pts (antes -25%/-12%).
-    # La EMA200W semanal en bull market suele estar 20-35% bajo el precio —
-    # la versión anterior requería estar tan cerca que casi nunca se activaba.
+    # 5. EMA200 semanal — ¿ha vuelto el precio a su media secular? (+20)
+    #
+    # La banda es ASIMÉTRICA a propósito, y esto es lo que estaba mal hasta el
+    # 30/07/2026. Antes era `abs(dist) <= 25`, que trata igual dos situaciones
+    # opuestas: estar un 24% POR ENCIMA de la media de 200 semanas (mercado
+    # estirado, la media queda lejísimos por debajo y no sostiene nada) y estar
+    # un 24% POR DEBAJO (capitulación, el precio ha vuelto a su media larga).
+    # Solo la segunda es una condición de suelo.
+    #
+    # Medido sobre SPY ajustado, en los 7 suelos mayores desde 1997:
+    #   2002 −27,5% · 2009 −41,7% · 2011 −0,9% · 2016 +6,9%
+    #   2018 +4,3%  · 2020 −11,2% · 2022 +1,3%
+    # Ninguno superó +6,9%; la mediana fue −0,9%. Y el `abs()` fallaba en los
+    # dos extremos: se encendía el 62,5% de las semanas (cualquier alcista
+    # normal lo cumplía) y se APAGABA en 2002 y 2009 — los dos suelos más
+    # profundos del histórico — porque el corte inferior de −25% los dejaba
+    # fuera justo cuando debía gritar.
+    #
+    # Con `dist <= +10%`: captura los 7 de 7 y baja la activación al 26,8%.
+    # El +10 deja holgura sobre el máximo observado (+6,9%) en vez de ajustarse
+    # al dato. Por debajo NO hay límite inferior: cuanto más profunda la caída,
+    # más claramente se ha vuelto a la media.
+    MARGEN_SUELO_EMA200W    = 10   # ≤ +10% sobre la media semanal = zona de suelo
+    MARGEN_CERCANIA_EMA200W = 20   # ≤ +20% = acercándose, crédito parcial
     ema200w, pendiente_ema200w = _ema200_semanal(df_spy)
     ema200w_score = 0
     cerca_ema200w = False
     if ema200w is not None and ema200w > 0:
         dist_ema200w = (price - ema200w) / ema200w * 100
-        cerca_ema200w = abs(dist_ema200w) <= 25
+        cerca_ema200w = dist_ema200w <= MARGEN_SUELO_EMA200W
         if cerca_ema200w:
             ema200w_score = 20
-            detalles.append(f"✓ Precio a {dist_ema200w:+.1f}% de EMA200 semanal (+20)")
-        elif abs(dist_ema200w) <= 40:
+            detalles.append(f"✓ Precio a {dist_ema200w:+.1f}% de su media de 200 semanas — ha vuelto a la media secular (+20)")
+        elif dist_ema200w <= MARGEN_CERCANIA_EMA200W:
             ema200w_score = 10
-            detalles.append(f"~ Precio a {dist_ema200w:+.1f}% de EMA200 semanal (+10)")
+            detalles.append(f"~ Precio a {dist_ema200w:+.1f}% sobre su media de 200 semanas — acercándose (+10)")
         else:
-            detalles.append(f"• Precio a {dist_ema200w:+.1f}% de EMA200 semanal (0)")
+            detalles.append(f"• Precio a {dist_ema200w:+.1f}% sobre su media de 200 semanas — lejos de zona de suelo (0)")
         if pendiente_ema200w is not None and pendiente_ema200w < 0:
             advertencias.append("⚠ EMA200 semanal con pendiente negativa — soporte débil, no fuerte")
     else:
@@ -670,7 +727,11 @@ def _calcular_score_punto(df_spy, df_vix, sector_data=None, df_vix3m=None, credi
     metricas['EMA200W'] = {"score": ema200w_score, "max": 20, "color": "#00d9ff",
                            "valor": round(ema200w, 2) if ema200w is not None else None,
                            "pendiente_negativa": bool(pendiente_ema200w is not None and pendiente_ema200w < 0),
-                           "cerca": cerca_ema200w}
+                           "cerca": cerca_ema200w,
+                           # La distancia real, para que el frontend pueda decir
+                           # el número en vez de un "cerca/lejos" sin contexto.
+                           "distancia_pct": round(dist_ema200w, 1) if ema200w is not None and ema200w > 0 else None,
+                           "margen_suelo": MARGEN_SUELO_EMA200W}
 
     # 6. Régimen de mercado — SMA200 diaria (+10)
     # RÉGIMEN DE MERCADO — decide el UMBRAL de VERDE (60 alcista / 70 bajista),
@@ -713,7 +774,10 @@ def _calcular_score_punto(df_spy, df_vix, sector_data=None, df_vix3m=None, credi
     # VERDE-VOL (igual tratamiento visual que "sin volumen", mismo mensaje de
     # cautela). Esto ataca directamente el caso de 2020-03-02 del backtest: score
     # alto en plena caída en curso, sin ningún soporte estructural real cerca.
-    gatekeeper_a = cerca_ema200w  # condición A: precio cerca de EMA200 semanal
+    # Condición A: el precio ha vuelto a su media de 200 semanas (dist ≤ +10%,
+    # sin límite por abajo). Ver el bloque del factor 5 para por qué es
+    # asimétrica y de dónde sale el +10%.
+    gatekeeper_a = cerca_ema200w
     gatekeeper_b = rvol_min > 1.5  # bajado de >2.0 a >1.5
     gatekeeper_ok = gatekeeper_a or gatekeeper_b
 
@@ -853,7 +917,17 @@ def get_rsu_algoritmo():
         # f_breadth se quedan en el pool local, no son yfinance (FRED / Gist).
         from services.yf_pool import yf_executor
         with ThreadPoolExecutor(max_workers=3) as ex:
-            f_spy     = yf_executor.submit(lambda: yf.Ticker("SPY").history(period="5y"))
+            # 15 años, no 5: la EMA200 SEMANAL necesita mucho más histórico del
+            # que parece para converger. Con 5 años son ~262 semanas para una
+            # EMA de span=200, y como pandas usa adjust=True el valor sigue
+            # arrastrando el arranque de la serie. Medido el 30/07/2026 con SPY
+            # a 729,46: 5y → 584,99 (+24,7%), 10y → 565,65 (+29,0%), 20y →
+            # 563,46, convergido → 563,45 (+29,5%). Casi 5 puntos porcentuales
+            # de error, y el gatekeeper compara justo contra un corte —
+            # el valor mal calculado lo dejaba ACTIVO cuando no debía estarlo.
+            # min_periods=200 (sesión 13) evita publicar un valor prematuro,
+            # pero no hace que converja. Ver también BUFFER_YEARS del backtest.
+            f_spy     = yf_executor.submit(lambda: yf.Ticker("SPY").history(period="15y"))
             f_vix     = yf_executor.submit(lambda: yf.Ticker("^VIX").history(period="3mo"))
             f_vix3m   = yf_executor.submit(lambda: yf.Ticker("^VIX3M").history(period="5d"))
             f_sect    = ex.submit(_descargar_sectores)
@@ -888,15 +962,27 @@ def get_rsu_algoritmo():
         resultado = _calcular_score_punto(df_spy, df_vix, sector_data, df_vix3m, credit_spread=credit_spread, breadth_real=breadth_real)
         resultado['precio'] = round(float(df_spy['Close'].iloc[-1]), 2)
 
-        # Registro de cambios de semáforo + notificación Telegram. Envuelto en
-        # su propio try/except: un fallo aquí (Telegram caído, BD bloqueada)
-        # no debe tumbar el cálculo del algoritmo en vivo, que es lo que ve
-        # el usuario en la página.
-        try:
-            from services.algoritmo_tracking_service import procesar_resultado_algoritmo
-            procesar_resultado_algoritmo(resultado)
-        except Exception as e:
-            print(f"[AlgoritmoTracking] Error procesando resultado: {type(e).__name__}: {e}")
+        # AQUÍ YA NO SE REGISTRA NI SE NOTIFICA NADA (30/07/2026).
+        #
+        # Antes, cada recálculo en vivo llamaba a procesar_resultado_algoritmo():
+        # si el estado había cambiado, escribía en cambios_semaforo, mandaba un
+        # Telegram y — si era VERDE — abría una fila en senales_tracked con el
+        # precio de ese instante. Como el recálculo ocurre cada 10 min (caché) y
+        # el precio intradía se mueve, el semáforo oscilaba dentro de la misma
+        # sesión: el 30/07 el usuario recibió TRES avisos en un día, y un VERDE
+        # que duró cinco minutos quedó grabado como señal accionable con un
+        # precio de entrada que nadie habría ejecutado.
+        #
+        # Lo incoherente de fondo es que este algoritmo es de CIERRE, no
+        # intradía: el Breadth sale del scan nocturno (congelado todo el día),
+        # el RSI es diario, el RVOL es "del día del mínimo" y la EMA es
+        # semanal. Lo único que se movía era el precio y el VIX — o sea, el
+        # semáforo cambiaba por ruido, no por información nueva.
+        #
+        # La decisión oficial vive ahora en procesar_cierre_si_toca(), una vez
+        # al día tras el cierre de Nueva York. Este cálculo en vivo se sigue
+        # mostrando en la web, pero es PROVISIONAL: no notifica ni deja huella.
+        resultado['provisional'] = True
 
         # Mismo criterio que arriba (hallazgo #3): sin filtro de percentiles --
         # un desplome real no debe recortarse visualmente del propio gráfico.
@@ -918,6 +1004,81 @@ def get_rsu_algoritmo():
 
     except Exception as e:
         return {"ok": False, "error": str(e)}
+
+
+# ── Decisión oficial del semáforo: una vez al día, tras el cierre ─────────────
+
+def _ultima_sesion_cerrada(df_spy):
+    """Fecha (YYYY-MM-DD) de la última vela de SPY que ya está CERRADA.
+
+    Durante la sesión de Nueva York, yfinance incluye la vela de hoy todavía
+    en curso: usarla sería decidir el semáforo con un cierre que aún no
+    existe. Se descarta mientras el mercado esté abierto.
+    """
+    if df_spy is None or df_spy.empty:
+        return None
+    ultima = df_spy.index[-1].date()
+    ahora_ny = datetime.now(ZoneInfo("America/New_York"))
+    mercado_abierto = (
+        ahora_ny.weekday() < 5
+        and dt_time(9, 30) <= ahora_ny.time() < dt_time(16, 0)
+        and ultima == ahora_ny.date()
+    )
+    if mercado_abierto:
+        return df_spy.index[-2].date().isoformat() if len(df_spy) >= 2 else None
+    return ultima.isoformat()
+
+
+def procesar_cierre_si_toca():
+    """Decide el estado OFICIAL del semáforo una vez por sesión cerrada.
+
+    Llamada desde ws.py::algoritmo_check_loop() (cada 30 min). Idempotente por
+    fecha de sesión: en la inmensa mayoría de las pasadas no hace nada porque
+    la sesión de hoy ya se procesó. Deliberadamente NO es un bucle de 24h —
+    ese patrón ancla la hora real a cuándo se reinició el contenedor, error ya
+    cometido y corregido en Options Flow (sesión 35).
+
+    Aquí es donde se aplica la histéresis y donde se notifica/registra; el
+    cálculo en vivo de get_rsu_algoritmo() es solo para mostrar.
+    """
+    try:
+        from services.algoritmo_tracking_service import (
+            procesar_resultado_algoritmo, obtener_estado_oficial, sesion_ya_procesada,
+        )
+        resultado = get_rsu_algoritmo()
+        if not resultado.get("ok"):
+            print(f"[AlgoritmoCierre] Sin resultado válido, se reintenta: {resultado.get('error')}")
+            return {"procesado": False, "motivo": "sin_resultado"}
+
+        # La fecha de sesión sale del propio DataFrame de SPY, no del reloj del
+        # contenedor: así un festivo o un fin de semana no inventan una sesión
+        # que no existió (mismo criterio que snapshots_service).
+        df_spy = yf.Ticker("SPY").history(period="5d")
+        fecha_sesion = _ultima_sesion_cerrada(df_spy)
+        if not fecha_sesion:
+            return {"procesado": False, "motivo": "sin_sesion_cerrada"}
+        if sesion_ya_procesada(fecha_sesion):
+            return {"procesado": False, "motivo": "ya_procesada", "fecha": fecha_sesion}
+
+        estado_crudo = resultado.get("estado")
+        oficial = aplicar_histeresis(
+            estado_crudo,
+            resultado.get("score") or 0,
+            resultado.get("umbral_verde") or 0,
+            bool(resultado.get("gatekeeper_a")) or bool(resultado.get("gatekeeper_b")),
+            obtener_estado_oficial(),
+        )
+        if oficial != estado_crudo:
+            print(f"[AlgoritmoCierre] Histéresis: {estado_crudo} -> se mantiene {oficial} "
+                  f"(score {resultado.get('score')}, umbral {resultado.get('umbral_verde')})")
+
+        resultado = {**resultado, "estado": oficial, "provisional": False}
+        procesar_resultado_algoritmo(resultado, fecha_sesion=fecha_sesion)
+        return {"procesado": True, "fecha": fecha_sesion, "estado": oficial}
+    except Exception as e:
+        print(f"[AlgoritmoCierre] Error: {type(e).__name__}: {e}")
+        return {"procesado": False, "motivo": "error"}
+
 
 def _retornos_con_stop(closes_full, lows_full, pos, horizontes, precio_entrada, stop_pct=-7.0):
     """
@@ -996,15 +1157,29 @@ def get_rsu_algoritmo_backtest(years: int = 10) -> dict:
       si el algoritmo aporta ventaja sobre simplemente estar invertido siempre.
     """
     from services.cache import cache
-    cache_key = f"algoritmo:backtest:{years}y:v17"  # v17 — McClellan del backtest pasa de proxy de momentum SPY a oscilador de amplitud sectorial (9 ETFs), invalida caché v16
+    # v18 (30/07/2026) — tres cambios que alteran qué días califican como VERDE
+    # en todo el histórico: EMA200 semanal convergida (buffer 5→15 años), banda
+    # asimétrica del gatekeeper (dist ≤ +10% en vez de abs ≤ 25%) e histéresis
+    # en las transiciones. Subir la versión es lo que invalida la caché ya
+    # guardada en el VPS al desplegar; sin esto, producción seguiría sirviendo
+    # el backtest del sistema anterior durante horas.
+    cache_key = f"algoritmo:backtest:{years}y:v18"
     cached = cache.get(cache_key)
     if cached:
         return cached
 
     try:
-        # Buffer de 5 años antes del periodo real medido, para que la EMA200
-        # semanal tenga histórico suficiente desde el primer día evaluado.
-        BUFFER_YEARS = 5
+        # Buffer antes del periodo real medido, para que la EMA200 semanal
+        # tenga histórico suficiente desde el primer día evaluado.
+        #
+        # 15 años, no 5: con 5 la EMA200 semanal NO ha convergido (~262 semanas
+        # para un span de 200, con adjust=True todavía pesa el arranque), así
+        # que cada día evaluado del backtest usaba una EMA sistemáticamente
+        # alta → distancia al precio sistemáticamente baja → gatekeeper A
+        # activándose más de la cuenta durante todo el histórico. El backtest
+        # validaba un gate más permisivo que el que se pretendía. Medido el
+        # 30/07/2026: 5y da +24,7% de distancia donde lo convergido da +29,5%.
+        BUFFER_YEARS = 15
         period_str = f"{years + BUFFER_YEARS}y"
         # Mismo criterio que en get_rsu_algoritmo(): SPY/VIX/VIX3M (y los ETFs
         # sectoriales, dentro de _descargar_sectores) van al pool compartido
@@ -1040,7 +1215,7 @@ def get_rsu_algoritmo_backtest(years: int = 10) -> dict:
         if hy_spread_full is not None and not hy_spread_full.empty and df_spy_full.index.tz is not None:
             hy_spread_full.index = hy_spread_full.index.tz_localize(df_spy_full.index.tz)
 
-        BUFFER = 252 * BUFFER_YEARS  # ~5 años de días de trading
+        BUFFER = 252 * BUFFER_YEARS  # días de trading del buffer (ver arriba)
         if len(df_spy_full) <= BUFFER + 60:
             return {"ok": False, "error": "Histórico insuficiente tras aplicar buffer"}
 
@@ -1061,6 +1236,7 @@ def get_rsu_algoritmo_backtest(years: int = 10) -> dict:
 
         senales = []
         fue_verde_ayer = False
+        estado_oficial_ayer = None   # memoria secuencial para la histéresis
 
         # Recorrer día a día desde el final del buffer hasta el final del histórico
         for pos in range(BUFFER, len(df_spy_full)):
@@ -1080,13 +1256,26 @@ def get_rsu_algoritmo_backtest(years: int = 10) -> dict:
                 resultado = _calcular_score_punto(spy_slice, vix_slice, sector_data=None, df_vix3m=vix3m_slice, credit_spread=credit_spread, mcclellan_precalculado=mcclellan_precalculado)
             except Exception:
                 fue_verde_ayer = False
+                estado_oficial_ayer = None   # sin dato del día, la histéresis no arrastra nada
                 continue
 
             # Solo el estado 'VERDE' puro cuenta como señal accionable real —
             # 'VERDE-VOL' ahora cubre tanto "sin volumen" como "sin gatekeeper
             # estructural", ambos casos de cautela explícita que el propio
             # sistema marca como NO accionables.
-            es_verde_hoy = resultado['estado'] == 'VERDE'
+            # Misma histéresis que aplica el semáforo en vivo (ver
+            # aplicar_histeresis): si no se aplicara aquí, el backtest volvería
+            # a medir un sistema distinto del que corre en producción — que es
+            # exactamente el hallazgo #1 de la auditoría de este módulo, ya
+            # corregido una vez con el McClellan. `estado_oficial_ayer` hace de
+            # memoria secuencial, igual que la tabla estado_actual en vivo.
+            estado_oficial = aplicar_histeresis(
+                resultado['estado'], resultado['score'], resultado['umbral_verde'],
+                bool(resultado.get('gatekeeper_a')) or bool(resultado.get('gatekeeper_b')),
+                estado_oficial_ayer,
+            )
+            estado_oficial_ayer = estado_oficial
+            es_verde_hoy = estado_oficial == 'VERDE'
 
             if es_verde_hoy and not fue_verde_ayer:
                 senales.append({

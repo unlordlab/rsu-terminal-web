@@ -414,6 +414,20 @@ async def algoritmo_check_loop():
             await loop.run_in_executor(None, get_rsu_algoritmo)
         except Exception as e:
             print(f"[AlgoritmoCheck] Error: {e}")
+        # Decisión OFICIAL del semáforo (la que notifica y deja huella), en su
+        # propio try/except para que un fallo aquí no rompa el calentado de
+        # caché de arriba. Es idempotente por fecha de sesión: en casi todas
+        # las pasadas no hace nada porque la sesión de hoy ya se procesó, y
+        # solo actúa la primera vez que ve una sesión cerrada nueva. Por eso
+        # no hace falta un bucle propio de 24h -- ver el comentario de
+        # procesar_cierre_si_toca() y el mismo error ya corregido en Options
+        # Flow (sesión 35), donde "cada 24h desde que arrancó" derivaba con
+        # cada reinicio del contenedor.
+        try:
+            from services.rsu_algoritmo_service import procesar_cierre_si_toca
+            await loop.run_in_executor(None, procesar_cierre_si_toca)
+        except Exception as e:
+            print(f"[AlgoritmoCierre] Error: {type(e).__name__}: {e}")
 
 
 # Una vez al día, rellena el retorno real (5/10/20/60d) de las señales

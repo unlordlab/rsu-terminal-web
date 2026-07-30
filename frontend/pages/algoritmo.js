@@ -39,7 +39,7 @@ export async function render(container) {
             + luz('yel', isAmbar)
             + luz('grn', isGreen)
             + '<div style="color:' + data.color + ';font-size:16px;letter-spacing:0.12em;margin-top:12px;font-weight:500;">' + data.estado + '</div>'
-            + '<div style="color:var(--color-muted);font-size:12px;margin-top:4px;">' + data.score + ' / 100</div>'
+            + '<div style="color:var(--color-muted);font-size:12px;margin-top:4px;">' + data.score + ' / ' + (data.max_score || 90) + '</div>'
             + '</div>';
 
         const factores = Object.entries(data.metricas)
@@ -81,17 +81,30 @@ export async function render(container) {
         const creditTxt   = data.credit_spread_valor == null
             ? 'BAA10Y: sin datos'
             : 'BAA10Y: ' + data.credit_spread_valor + '% (' + (data.credit_spread_nivel === 'critico' ? 'CRÍTICO' : data.credit_spread_nivel === 'elevado' ? ('elevado, ' + (data.credit_spread_empeorando ? 'empeorando' : 'mejorando')) : 'normal') + ')';
+        const emaMetrica = (data.metricas || {})['EMA200W'] || {};
+        const emaDist    = emaMetrica.distancia_pct;
+        const emaMargen  = emaMetrica.margen_suelo == null ? 10 : emaMetrica.margen_suelo;
         const abiColor = data.abi_estado === 'ALTA DISPERSIÓN' ? '#ff9800' : 'var(--color-muted)';
         const abiTxt   = data.abi_valor == null ? 'ABI: sin datos (requiere scan nocturno)' : 'ABI: ' + data.abi_valor + '% (' + data.abi_estado + ')';
         const gatekeepersHtml = '<div style="margin-top:1rem;padding:1rem;background:var(--color-bg,#0a0a0a);border-radius:var(--radius);border:1px solid var(--color-border);">'
-            + '<div style="color:var(--color-muted);font-size:11px;letter-spacing:0.08em;margin-bottom:8px;">GATEKEEPERS ' + tt('algoritmo-gatekeepers') + ' (umbral VERDE: ' + data.umbral_verde + '/100)</div>'
+            + '<div style="color:var(--color-muted);font-size:11px;letter-spacing:0.08em;margin-bottom:8px;">GATEKEEPERS ' + tt('algoritmo-gatekeepers') + ' (umbral VERDE: ' + data.umbral_verde + '/' + (data.max_score || 90) + ')</div>'
             + '<div style="display:flex;gap:1.5rem;flex-wrap:wrap;font-size:12px;">'
-            + '<div style="color:' + gkColor(data.gatekeeper_a) + ';">' + gkIcon(data.gatekeeper_a) + ' Cerca de EMA200 semanal</div>'
+            // Se dice la distancia real, no un "cerca" a secas: la condición es
+            // asimétrica (≤ +10% sobre la media de 200 semanas, sin límite por
+            // abajo) y antes la etiqueta afirmaba "cerca" estando un +24% por
+            // encima, que es justo lo contrario de una zona de suelo.
+            + '<div style="color:' + gkColor(data.gatekeeper_a) + ';">' + gkIcon(data.gatekeeper_a) + ' Vuelta a la media de 200 semanas'
+            + (emaDist == null ? '' : ' <span style="color:var(--color-muted);">(' + (emaDist >= 0 ? '+' : '') + emaDist + '%, exige ≤ +' + emaMargen + '%)</span>')
+            + '</div>'
             + '<div style="color:' + gkColor(data.gatekeeper_b) + ';">' + gkIcon(data.gatekeeper_b) + ' RVOL extremo en el mínimo</div>'
             + '<div style="color:' + gkColor(data.ftd_confirmado) + ';">' + gkIcon(data.ftd_confirmado) + ' FTD confirmado</div>'
             + '<div style="color:var(--color-muted);">Drawdown 52w: <span style="color:' + (data.drawdown_52w_pct <= -15 ? '#f23645' : 'var(--color-text)') + ';">' + data.drawdown_52w_pct + '%</span></div>'
             + '<div style="color:' + creditColor + ';">' + creditTxt + '</div>'
-            + '<div style="color:' + abiColor + ';" title="Contexto — no puntúa en el score. ' + tt('abi-absolute-breadth') + '">' + abiTxt + '</div>'
+            // tt() devuelve HTML (un <span> con comillas dentro), así que NO puede ir
+            // dentro de un atributo: la primera comilla cerraba el title= y el resto
+            // se derramaba a la página como texto ('?">ABI: 38.8%'). Va fuera, como
+            // el icono ? del resto de la terminal.
+            + '<div style="color:' + abiColor + ';" title="Contexto — no puntúa en el score">' + abiTxt + ' ' + tt('abi-absolute-breadth') + '</div>'
             + '</div>'
             + '</div>';
 
@@ -112,11 +125,23 @@ export async function render(container) {
 
             + '<div style="background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius);padding:1.5rem;">'
             + '<div style="display:flex;align-items:baseline;gap:10px;margin-bottom:0.75rem;">'
+            // El denominador es el máximo REALMENTE alcanzable (90), no 100:
+            // la SMA200 aporta 10 al total nominal pero no puntúa, solo decide
+            // el umbral. Decir /100 hacía parecer más flojo cualquier score —
+            // un 52 es el 58% de lo alcanzable, no el 52%. Hallazgo #5.
             + '<span style="color:' + data.color + ';font-size:56px;font-weight:500;line-height:1;">' + data.score + '</span>'
-            + '<span style="color:var(--color-muted);font-size:18px;">/100</span>'
+            + '<span style="color:var(--color-muted);font-size:18px;">/' + (data.max_score || 90) + '</span>'
+            // El semáforo OFICIAL (el que avisa por Telegram y entra en el
+            // track record) se decide una vez al día, con los cierres. Lo que
+            // se ve aquí durante la sesión es un cálculo en curso, y hay que
+            // decirlo: antes cambiaba de color intradía y el usuario recibía
+            // tres avisos en un día por puro ruido.
+            + (data.provisional
+                ? '<span style="color:var(--color-muted);font-size:11px;margin-left:auto;" title="El estado oficial se fija con el cierre de Nueva York. Este cálculo se actualiza durante la sesión y puede variar.">· en curso, se fija al cierre</span>'
+                : '')
             + '</div>'
             + '<div style="background:var(--color-bg,#0a0a0a);border-radius:4px;height:8px;margin-bottom:1rem;">'
-            + '<div style="height:100%;width:' + data.score + '%;background:' + data.color + ';border-radius:4px;transition:width 1s;"></div>'
+            + '<div style="height:100%;width:' + Math.min(100, data.score / (data.max_score || 90) * 100) + '%;background:' + data.color + ';border-radius:4px;transition:width 1s;"></div>'
             + '</div>'
             + '<div style="color:' + data.color + ';font-size:18px;letter-spacing:0.15em;margin-bottom:0.75rem;font-weight:500;">' + data.senal + '</div>'
             + '<div style="color:var(--color-text);font-size:13px;line-height:1.7;padding:1rem;background:var(--color-bg,#0a0a0a);border-radius:var(--radius);border-left:3px solid ' + data.color + ';">'
@@ -164,7 +189,11 @@ export async function render(container) {
             + '<select id="backtest-years" style="background:var(--color-bg,#0a0a0a);color:var(--color-text);border:1px solid var(--color-border);border-radius:var(--radius);padding:5px 8px;font-family:var(--font-mono);font-size:11px;">'
             + '<option value="10">10 años</option>'
             + '<option value="15">15 años</option>'
-            + '<option value="20">20 años (incluye 2008)</option>'
+            // "máximo" y no "20 años" a secas: la EMA200 semanal necesita 15
+            // años de buffer previo para converger, y SPY solo cotiza desde
+            // 1993 — así que lo evaluable arranca en 2008. El periodo real se
+            // imprime debajo del resultado, esto solo evita prometer de más.
+            + '<option value="20">Máximo (desde 2008, incluye la Gran Crisis)</option>'
             + '</select>'
             + '<button id="run-backtest-btn" style="background:var(--color-bg,#0a0a0a);color:var(--color-accent);border:1px solid var(--color-accent);border-radius:var(--radius);padding:6px 14px;font-family:var(--font-mono);font-size:11px;cursor:pointer;letter-spacing:0.05em;">EJECUTAR BACKTEST</button>'
             + '</div>'
@@ -309,7 +338,7 @@ function renderBacktestResults(data) {
                   : '';
               return '<div style="display:grid;grid-template-columns:85px 55px 80px 70px 50px 50px 50px 50px;gap:6px;padding:6px 0;border-bottom:1px solid var(--color-border);font-size:10px;align-items:center;">'
                   + '<div style="color:var(--color-text);">' + s.fecha + '</div>'
-                  + '<div style="color:var(--color-muted);">' + s.score + '/100</div>'
+                  + '<div style="color:var(--color-muted);">' + s.score + '/' + (data.max_score || 90) + '</div>'
                   + '<div style="color:var(--color-secondary,#00d9ff);">' + gk + ftdTag + creditTag + '</div>'
                   + '<div style="color:' + (s.drawdown_pct <= -15 ? '#f23645' : 'var(--color-muted)') + ';">' + s.drawdown_pct + '%</div>'
                   + '<div>' + fmt(r.d5) + '</div><div>' + fmt(r.d10) + '</div><div>' + fmt(r.d20) + '</div><div>' + fmt(r.d60) + '</div>'
