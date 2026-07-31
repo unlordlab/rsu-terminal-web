@@ -29,8 +29,8 @@ parecería completo y sería engañoso.
 
 ## Cobertura de esta versión — leer antes de usarlo
 
-- **389 hallazgos**: 379 extraídos de los 16 documentos de auditoría, más 10
-  encontrados después con el sistema ya en producción (RSU Algoritmo #14–#18,
+- **392 hallazgos**: 379 extraídos de los 16 documentos de auditoría, más 13
+  encontrados después con el sistema ya en producción (RSU Algoritmo #14–#21,
   Newsfeed/briefing #27–#31).
 - **64 son críticos (🔴)**: todos revisados en la primera pasada.
   33 cerrados · 11 abiertos ·
@@ -465,7 +465,7 @@ a uno contra el código, seis cerrados en esa sesión. Es, junto a Research, el
 | ❓ | 21 | 🟢 | Rotación sectorial en el tiempo | *sin comprobar* |
 | ❓ | 22 | 🟢 | Alerta de entrada en el top decil | *sin comprobar* |
 
-## Rsu Algoritmo  (18 hallazgos — ❌1 · ✅15 · ❓0 · ⬜2)
+## Rsu Algoritmo  (21 hallazgos — ❌1 · ✅17 · ❓0 · ⬜3)
 
 **Módulo con el tier completo verificado** — el tercero, tras Research y RS/RW.
 Cero hallazgos sin comprobar.
@@ -496,6 +496,9 @@ Queda abierto #12, medido y descartado por marginal.
 | ✅ | 9 | 🟠 | `timestamp` naive (duodécima aparición) | verificado 30/07: ya usa `shared/time_utils.get_timestamp()` (Europe/Madrid). Cerrado en la sesión 2, mal contado como pendiente |
 | ✅ | 10 | 🟡 | `_descargar_sectores()` se ejecuta siempre aunque su resultado casi nunca se use | 31/07: era peor de lo que decía la auditoría — la sesión 44 cambió `period` de "1mo" a "max", así que el desperdicio pasó a ser el histórico COMPLETO de 9 ETFs. **Medido: 1,67s y 58.253 filas descargadas y tiradas** en cada cache-miss, porque la amplitud real (PRIORIDAD 1) gana y los descarta. Ahora solo se descargan si hacen falta: el cálculo en vivo baja de ~2,7s a 1,08s |
 | ⬜ | 11 | 🟡 | `q10`/`q90` mal nombrados | verificado 31/07: cero apariciones en el fichero. Los nombres desaparecieron con el filtro de percentiles del #3 — el código al que se refería ya no existe |
+| ✅ | 19 | 🔴 | El gatekeeper RVOL validaba la mitad de las señales, y eran las malas | **31/07: eliminado como validador.** Partiendo las 26 señales del periodo máximo por qué gatekeeper las validó: solo A (vuelta a la media de 200 semanas) 7 señales +12,90% a 60d · A y B 7 señales +9,97% · **solo B (RVOL>1,5) 12 señales +3,49%**. B validaba casi la mitad y eran con diferencia las peores. Al quitarlo: 26→16 señales, ventaja a 60d contra días de VIX>25 de +1,70pp → +5,94pp. Se sigue mostrando el RVOL como contexto |
+| ⬜ | 20 | 🟠 | Fusionar los tres factores redundantes en uno | **PROBADO Y DESCARTADO 31/07.** El diagnóstico era correcto (VIX vs distancia EMA200W r=0,67; RSI vs VIX r=0,51; ~60 de 90 puntos miden lo mismo) pero el remedio empeora: promediándolos la ventaja a 60d contra VIX>25 pasa de +1,70pp a **−1,90pp** y el acierto de 84,6% a 67,6%. Razón: sumar factores correlacionados EXIGE que varios estén altos a la vez — un "Y" accidental. Promediar deja que uno solo arrastre el score, y dispara 37 veces en vez de 26. La redundancia sostenía un requisito de acuerdo que nadie había diseñado |
+| ✅ | 21 | 🟠 | El backtest se comparaba solo contra "un día cualquiera", lo que infla el mérito | 31/07: el algoritmo solo se dispara cuando hay miedo, y el miedo ya rebota solo. Medido: la ventaja a 60d caía de +4,75pp contra un día normal a +1,70pp contra días de VIX>25 — más de la mitad era reversión a la media. Ahora se publican **las dos cifras** y la página explica cuál es la buena. Se elige VIX>25 y no drawdown aun siendo la comparación menos favorable |
 | ❌ | 12 | 🟡 | El backtest recalcula el baseline completo en cada ejecución | verificado 31/07: cierto — bucle Python con `.iloc[]` escalar sobre ~4.500 posiciones × 4 horizontes. Real pero **marginal**: el backtest hace además ~4.500 llamadas a `_calcular_score_punto` (minutos) y se cachea 12h, así que corre como mucho dos veces al día. Vectorizarlo es trivial pero no compensa tocar el motor por esto |
 | ⬜ | 13 | 🟡 | `df_vix` a 3 meses limita la ventana del VIX | verificado 31/07: **el hallazgo no aplica**. El factor VIX usa `df_vix['Close'].tail(VENTANA)` con `VENTANA = 10`, así que la ventana la fija esa constante, no la descarga. Los 3 meses (~63 sesiones) son 6× lo que se consume |
 | ✅ | 14 | 🔴 | **La EMA200 semanal no había convergido**: se calculaba sobre 5 años (~262 semanas) para un span de 200, y con `adjust=True` el valor arrastra el arranque de la serie | 30/07: 5y → 584,99 (+24,7%) vs convergido → 563,45 (+29,5%). Casi 5pp de error, justo sobre un corte del 25% → el gatekeeper quedaba ACTIVO sin deber estarlo. Arreglado a 15y en vivo y `BUFFER_YEARS` 5→15 en el backtest, donde el sesgo afectaba a TODOS los días evaluados |

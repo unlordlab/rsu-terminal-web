@@ -821,7 +821,63 @@ def _calcular_score_punto(df_spy, df_vix, sector_data=None, df_vix3m=None, credi
     # asimétrica y de dónde sale el +10%.
     gatekeeper_a = cerca_ema200w
     gatekeeper_b = rvol_min > 1.5  # bajado de >2.0 a >1.5
-    gatekeeper_ok = gatekeeper_a or gatekeeper_b
+    # Solo A abre la puerta. El B (RVOL > 1.5) se sigue calculando y mostrando
+    # como contexto, pero ya NO valida una señal.
+    #
+    # Medido el 31/07/2026 sobre las 26 señales del periodo máximo, partidas
+    # por qué gatekeeper las validó:
+    #     solo A (vuelta a la media de 200 semanas)   7 señales   +12,90% a 60d
+    #     A y B                                       7 señales    +9,97%
+    #     solo B (RVOL > 1.5)                        12 señales    +3,49%
+    # B validaba casi la MITAD de las señales y eran con diferencia las peores.
+    # Tiene sentido: "el precio ha vuelto a su media de cuatro años" es una
+    # condición estructural rara; "hubo un día de mucho volumen" pasa
+    # constantemente sin que sea un suelo.
+    #
+    # Efecto medido al quitarlo (periodo máximo, contra días de VIX>25, que es
+    # la comparación dura -- no contra un día cualquiera):
+    #     ventaja a 20d  +1,85pp -> +2,61pp
+    #     ventaja a 60d  +1,70pp -> +5,91pp
+    #     señales        26 -> 16
+    # El acierto a 60d sale 100% (16 de 16). NO se publica esa cifra: con 16
+    # señales no significa nada y no se va a mantener.
+    #
+    # Honestidad sobre el método: la mejora se mide con los mismos datos que
+    # destaparon el problema, así que parte será sobreajuste. Se adopta porque
+    # la razón (el reparto A vs B de arriba) se midió ANTES y por separado, y
+    # porque simplifica -- una puerta en vez de dos.
+    gatekeeper_ok = gatekeeper_a
+
+    # ── POR QUÉ LOS FACTORES NO SE FUSIONARON (medido 31/07/2026) ─────────────
+    # Se probó y se descartó, y la razón merece quedarse escrita porque el
+    # diagnóstico era correcto y el remedio no.
+    #
+    # El diagnóstico: los inputs de tres factores son casi la misma
+    # información. Sobre 4.673 sesiones desde 2008 — VIX vs distancia a la
+    # EMA200W r=0,67; VIX vs drawdown r=0,83; RSI vs VIX r=0,51 — mientras que
+    # el RVOL es independiente de todos (r entre -0,01 y 0,36). O sea que ~60
+    # de los 90 puntos miden "el mercado ha caído" por triplicado, y lo único
+    # ortogonal pesa 12. El score no son cinco votos, es un voto con eco.
+    #
+    # El remedio probado: promediar los tres redundantes en un solo factor de
+    # 40 puntos y repartir el peso liberado al RVOL (25) y a la amplitud (25).
+    #
+    # Resultado: PEOR, y de forma clara. Contra días de VIX>25 y a 60 días, la
+    # ventaja pasaba de +1,70pp a -1,90pp, con el acierto cayendo de 84,6% a
+    # 67,6%, y disparando 37 veces en vez de 26.
+    #
+    # Por qué falla: sumar tres cosas correlacionadas no es solo contarlas tres
+    # veces, es EXIGIR QUE LAS TRES ESTÉN ALTAS A LA VEZ. Es un "Y" accidental.
+    # Al promediarlas basta con que UNA esté extrema para arrastrar el score, y
+    # por eso se conforma con menos. La redundancia que parecía un defecto
+    # estadístico estaba sosteniendo un requisito de acuerdo entre señales que
+    # nadie había diseñado a propósito.
+    #
+    # Si alguien vuelve a proponerlo: el reparto de puntos no es el problema.
+    # Lo sería fusionar manteniendo la exigencia conjunta (p.ej. exigir un
+    # mínimo en CADA uno de los tres antes de promediar), que es otra cosa y
+    # no se ha probado.
+
 
     vol_confirmado = bool(vol_score >= 4)
 
@@ -890,18 +946,18 @@ def _calcular_score_punto(df_spy, df_vix, sector_data=None, df_vix3m=None, credi
             estado, senal, color = "VERDE-VOL", "CRÉDITO EN CRISIS", "#ff9800"
             motivo = "crítico" if credit_nivel == "critico" else "elevado y empeorando"
             rec = f"Setup técnico óptimo (score {score}/100) pero el crédito está {motivo} (BAA10Y {credit_valor}%) — el problema puede ser más profundo que un rebote técnico. Entrada muy reducida (10-15%) y vigilar si el spread empieza a comprimir antes de aumentar posición."
-        elif vol_confirmado or gatekeeper_a:
+        else:
+            # Llegar aquí implica gatekeeper_a=True (es el único que abre la
+            # puerta), así que la rama de "sin volumen" de antes era
+            # inalcanzable: se elimina en vez de dejar código muerto.
             estado, senal, color = "VERDE", "FONDO PROBABLE", "#00ffad"
             ftd_txt = "FTD ya confirmado — convicción institucional verificada." if ftd_confirmado else "FTD aún no confirmado — vigilar próximos 4-7 días para la confirmación de volumen."
             rec = (f"Setup óptimo. Score {score}/100 (umbral {umbral_verde}). {ftd_txt} "
                    "No es (ni pretende ser) el mínimo exacto — es el punto de EMPEZAR a construir posición de forma gradual. "
                    + ("Revisar advertencias antes de actuar." if advertencias else "Entrada gradual 25% con stop -7%; el resto se añade en tramos posteriores, no de golpe."))
-        else:
-            estado, senal, color = "VERDE-VOL", "SETUP SIN VOLUMEN", "#00ffad"
-            rec = f"Score alto ({score}) y gatekeeper cumplido, pero sin volumen de confirmación. Si se entra, primer tramo reducido (10-15%), no la entrada completa."
     elif score >= umbral_verde and not gatekeeper_ok:
         estado, senal, color = "VERDE-VOL", "SCORE ALTO SIN SOPORTE ESTRUCTURAL", "#ff9800"
-        rec = f"Score alto ({score}) pero sin gatekeeper estructural (ni cerca de EMA200 semanal, ni RVOL extremo en el mínimo). Posible falsa señal — tratar como AMBAR, no como VERDE: watchlist, no entrada."
+        rec = f"Score alto ({score}) pero el precio NO ha vuelto a su media de 200 semanas — sigue lejos de la zona donde históricamente se forman los suelos. Posible falsa señal: watchlist, no entrada."
     elif score >= 45:  # 50% del máximo real alcanzable (90) — reescalado, ver comentario junto a umbral_verde
         estado, senal, color = "AMBAR", "DESARROLLANDO", "#ff9800"
         rec = "Condiciones mejorando pero aún sin confirmar. Fase de watchlist: identifica y prioriza los candidatos ahora, para tener la decisión ya tomada cuando (si) llegue el VERDE. Todavía no es momento de construir posición."
@@ -1290,7 +1346,7 @@ def get_rsu_algoritmo_backtest(years: int = 10, umbrales: tuple = None) -> dict:
     # El sufijo de umbrales evita que un barrido experimental (ver la tarea de
     # evaluar el umbral dinámico) contamine la caché del backtest real.
     sufijo = "" if not umbrales else f":u{umbrales[0]}-{umbrales[1]}"
-    cache_key = f"algoritmo:backtest:{years}y:v18{sufijo}"
+    cache_key = f"algoritmo:backtest:{years}y:v19{sufijo}"
     cached = cache.get(cache_key)
     if cached:
         return cached
@@ -1453,14 +1509,42 @@ def get_rsu_algoritmo_backtest(years: int = 10, umbrales: tuple = None) -> dict:
         # Baseline: retorno medio de SPY en cada horizonte calculado sobre TODOS
         # los días del periodo medido (no solo los días de señal) — la comparación
         # honesta de "¿el algoritmo aporta algo sobre estar simplemente invertido?"
-        baseline = {}
+        # DOS baselines, y el segundo es el que importa.
+        #
+        # El de siempre compara las señales contra "el retorno medio de SPY en
+        # un día cualquiera". Pero este algoritmo NO se dispara un día
+        # cualquiera: se dispara cuando hay miedo. Y el miedo ya precede
+        # rebotes por sí solo — comprar en cualquier día de pánico ya funciona
+        # bastante bien sin ningún algoritmo. Comparar contra un día normal es
+        # como decir que un tratamiento funciona porque sus pacientes mejoran
+        # más que la población general, cuando todos tenían un resfriado.
+        #
+        # Medido el 31/07/2026: la ventaja a 60 días caía de +4,75pp contra un
+        # día cualquiera a +1,70pp contra días de VIX>25. Más de la mitad de lo
+        # que publicábamos era reversión a la media, no mérito del sistema.
+        #
+        # Se elige VIX>25 y no el drawdown, aun siendo VIX la comparación MENOS
+        # favorable (contra drawdown>10% la ventaja sale bastante mayor):
+        # elegir la condición que mejor deja al sistema sería exactamente el
+        # sesgo que este bloque existe para corregir.
+        vix_alineado = df_vix_full['Close'].reindex(df_spy_full.index, method='ffill')
+        UMBRAL_PANICO_VIX = 25
+
+        baseline, baseline_panico = {}, {}
         for h in horizontes:
-            rets = []
+            rets, rets_panico = [], []
             for pos in range(BUFFER, len(closes_full) - h):
                 precio_ini = closes_full.iloc[pos]
                 precio_fin = closes_full.iloc[pos + h]
-                rets.append((precio_fin - precio_ini) / precio_ini * 100)
+                r = (precio_fin - precio_ini) / precio_ini * 100
+                rets.append(r)
+                v = vix_alineado.iloc[pos]
+                if pd.notna(v) and v > UMBRAL_PANICO_VIX:
+                    rets_panico.append(r)
             baseline[f'd{h}'] = round(float(np.mean(rets)), 2) if rets else None
+            # Menos de 30 días comparables no da para una media honesta
+            baseline_panico[f'd{h}'] = (round(float(np.mean(rets_panico)), 2)
+                                        if len(rets_panico) >= 30 else None)
 
         # Estadísticas agregadas por horizonte: retorno medio de las señales,
         # tasa de éxito (% de señales con retorno positivo), y nº de señales válidas
@@ -1473,6 +1557,10 @@ def get_rsu_algoritmo_backtest(years: int = 10, umbrales: tuple = None) -> dict:
                     "retorno_medio_senal": round(float(np.mean(valid)), 2),
                     "retorno_baseline":    baseline[key],
                     "ventaja_pp":          round(float(np.mean(valid)) - (baseline[key] or 0), 2),
+                    # La cifra honesta: contra días que se PARECEN a una señal.
+                    "retorno_baseline_panico": baseline_panico[key],
+                    "ventaja_panico_pp":   (round(float(np.mean(valid)) - baseline_panico[key], 2)
+                                            if baseline_panico[key] is not None else None),
                     "tasa_exito_pct":      round(sum(1 for v in valid if v > 0) / len(valid) * 100, 1),
                     "n_senales":           len(valid),
                 }

@@ -42,26 +42,63 @@ export async function render(container) {
             + '<div style="color:var(--color-muted);font-size:12px;margin-top:4px;">' + data.score + ' / ' + (data.max_score || 90) + '</div>'
             + '</div>';
 
-        const factores = Object.entries(data.metricas)
-            .filter(([k]) => k !== 'FTD') // FTD ya no aporta score, se muestra aparte como confirmación
-            .map(([key, m]) => {
-                const pct = m.max > 0 ? Math.round(m.score / m.max * 100) : 0;
-                // SMA200 ya no suma al score total (solo decide el umbral de VERDE, 60/70) —
-                // se muestra igual como contexto, pero con la etiqueta clara para no dar a
-                // entender que puntúa como el resto.
-                const etiqueta = key === 'SMA200' ? key + ' (umbral, no puntúa)'
-                                : key === 'Breadth' && m.metodo ? key + ' — ' + m.metodo
-                                : key;
-                return '<div style="margin-bottom:10px;">'
-                    + '<div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:3px;">'
-                    + '<span style="color:var(--color-muted);">' + etiqueta + '</span>'
-                    + '<span style="color:' + m.color + ';font-weight:500;">' + m.score + ' / ' + m.max + '</span>'
-                    + '</div>'
-                    + '<div style="background:var(--color-bg,#0a0a0a);border-radius:3px;height:6px;">'
-                    + '<div style="height:100%;width:' + pct + '%;background:' + m.color + ';border-radius:3px;transition:width 0.8s;"></div>'
-                    + '</div>'
-                    + '</div>';
-            }).join('');
+        // Los cinco factores se AGRUPAN en tres bloques. El cálculo no cambia
+        // ni un punto: es solo cómo se presenta.
+        //
+        // El porqué (medido el 31/07/2026 sobre 4.673 sesiones): los inputs de
+        // RSI, VIX y EMA200W son casi la misma información — VIX vs distancia
+        // a la EMA200W r=0,67, RSI vs VIX r=0,51. Mostrarlos como tres barras
+        // separadas da una falsa sensación de confirmación múltiple: el
+        // usuario ve tres cosas coincidir y cree que son tres señales
+        // independientes, cuando es una repetida. Agrupadas bajo "¿ha caído de
+        // verdad?" se lee lo que son.
+        //
+        // Se probó FUSIONARLAS también en el cálculo y salió peor — ver la
+        // explicación larga en rsu_algoritmo_service.py. Aquí se agrupa solo
+        // de cara al usuario.
+        const BLOQUES = [
+            { titulo: '¿Ha caído de verdad?',      claves: ['RSI', 'VIX', 'EMA200W'],
+              nota: 'sobreventa, miedo y distancia a la media de largo plazo' },
+            { titulo: '¿Ha habido capitulación?',  claves: ['Volume'],
+              nota: 'volumen de pánico en el día del mínimo' },
+            { titulo: '¿Participa todo el mercado?', claves: ['Breadth'],
+              nota: 'amplitud: cuántas acciones acompañan, no solo el índice' },
+        ];
+
+        const barra = (key, m) => {
+            const pct = m.max > 0 ? Math.round(m.score / m.max * 100) : 0;
+            const etiqueta = key === 'Breadth' && m.metodo ? key + ' — ' + m.metodo : key;
+            return '<div style="margin-bottom:8px;">'
+                + '<div style="display:flex;justify-content:space-between;font-size:11px;margin-bottom:3px;">'
+                + '<span style="color:var(--color-muted);">' + etiqueta + '</span>'
+                + '<span style="color:' + m.color + ';font-weight:500;">' + m.score + ' / ' + m.max + '</span>'
+                + '</div>'
+                + '<div style="background:var(--color-bg,#0a0a0a);border-radius:3px;height:6px;">'
+                + '<div style="height:100%;width:' + pct + '%;background:' + m.color + ';border-radius:3px;transition:width 0.8s;"></div>'
+                + '</div>'
+                + '</div>';
+        };
+
+        const factores = BLOQUES.map(b => {
+            const presentes = b.claves.filter(k => data.metricas[k]);
+            if (!presentes.length) return '';
+            const suma = presentes.reduce((a, k) => a + (data.metricas[k].score || 0), 0);
+            const tope = presentes.reduce((a, k) => a + (data.metricas[k].max || 0), 0);
+            return '<div style="margin-bottom:14px;">'
+                + '<div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:2px;">'
+                + '<span style="color:var(--color-text);font-size:12px;font-weight:500;">' + b.titulo + '</span>'
+                + '<span style="color:var(--color-muted);font-size:12px;">' + suma + ' / ' + tope + '</span>'
+                + '</div>'
+                + '<div style="color:var(--color-muted);font-size:10px;margin-bottom:6px;">' + b.nota + '</div>'
+                + presentes.map(k => barra(k, data.metricas[k])).join('')
+                + '</div>';
+        }).join('')
+        // La SMA200 va aparte y al final: no puntúa, solo decide el umbral.
+        + (data.metricas['SMA200']
+            ? '<div style="border-top:1px solid var(--color-border);padding-top:10px;">'
+              + barra('SMA200 (umbral, no puntúa)', data.metricas['SMA200'])
+              + '</div>'
+            : '');
 
         const detallesHtml = data.detalles.map(d => {
             const c = d.startsWith('✓') ? 'var(--color-accent)' : d.startsWith('~') ? '#ffb800' : d.startsWith('✗') ? '#f23645' : 'var(--color-muted)';
@@ -96,7 +133,12 @@ export async function render(container) {
             + '<div style="color:' + gkColor(data.gatekeeper_a) + ';">' + gkIcon(data.gatekeeper_a) + ' Vuelta a la media de 200 semanas'
             + (emaDist == null ? '' : ' <span style="color:var(--color-muted);">(' + (emaDist >= 0 ? '+' : '') + emaDist + '%, exige ≤ +' + emaMargen + '%)</span>')
             + '</div>'
-            + '<div style="color:' + gkColor(data.gatekeeper_b) + ';">' + gkIcon(data.gatekeeper_b) + ' RVOL extremo en el mínimo</div>'
+            // El RVOL extremo ya NO valida una señal (31/07/2026): las que
+            // entraban solo por él rendían +3,49% a 60d frente a +12,90% de
+            // las validadas por la vuelta a la media. Se sigue mostrando
+            // porque es información útil, pero en gris y marcado como
+            // contexto, para no dar a entender que abre la puerta.
+            + '<div style="color:var(--color-muted);">' + gkIcon(data.gatekeeper_b) + ' RVOL extremo en el mínimo <span style="font-size:10px;">(contexto, ya no valida)</span></div>'
             + '<div style="color:' + gkColor(data.ftd_confirmado) + ';">' + gkIcon(data.ftd_confirmado) + ' FTD confirmado</div>'
             + '<div style="color:var(--color-muted);">Drawdown 52w: <span style="color:' + (data.drawdown_52w_pct <= -15 ? '#f23645' : 'var(--color-text)') + ';">' + data.drawdown_52w_pct + '%</span></div>'
             + '<div style="color:' + creditColor + ';">' + creditTxt + '</div>'
@@ -308,19 +350,33 @@ function renderBacktestResults(data) {
         { key: 'd60', label: '60 días' },
     ];
 
+    // DOS ventajas por horizonte, no una. La de siempre compara contra un día
+    // cualquiera de SPY; la nueva, contra días de pánico comparables (VIX>25).
+    // La segunda es la honesta: este algoritmo no se dispara un día
+    // cualquiera, y el pánico ya rebota solo. Enseñar solo la primera infla el
+    // mérito del sistema — medido, más de la mitad de la ventaja se evapora.
+    const pp = v => (v > 0 ? '+' : '') + v + ' pp';
     const statsRows = horizontes.map(h => {
         const s = data.stats[h.key];
         if (!s) return '';
-        const ventajaColor = s.ventaja_pp > 0 ? 'var(--color-accent)' : '#f23645';
-        const ventajaStr   = (s.ventaja_pp > 0 ? '+' : '') + s.ventaja_pp + ' pp';
-        return '<div style="display:grid;grid-template-columns:80px 1fr 1fr 1fr 1fr;gap:10px;padding:10px 0;border-bottom:1px solid var(--color-border);align-items:center;font-size:12px;">'
+        const cFacil = s.ventaja_pp > 0 ? 'var(--color-text)' : '#f23645';
+        const tieneDura = s.ventaja_panico_pp != null;
+        const cDura = !tieneDura ? 'var(--color-muted)'
+                    : s.ventaja_panico_pp > 0 ? 'var(--color-accent)' : '#f23645';
+        return '<div style="display:grid;grid-template-columns:70px 1fr 1fr 1fr 1fr;gap:10px;padding:10px 0;border-bottom:1px solid var(--color-border);align-items:center;font-size:12px;">'
             + '<div style="color:var(--color-text);font-weight:500;">' + h.label + '</div>'
             + '<div><span style="color:var(--color-muted);font-size:10px;">Señal: </span><span style="color:' + (s.retorno_medio_senal >= 0 ? 'var(--color-accent)' : '#f23645') + ';">' + (s.retorno_medio_senal >= 0 ? '+' : '') + s.retorno_medio_senal + '%</span></div>'
-            + '<div><span style="color:var(--color-muted);font-size:10px;">Baseline SPY: </span><span style="color:var(--color-text);">' + (s.retorno_baseline >= 0 ? '+' : '') + s.retorno_baseline + '%</span></div>'
-            + '<div><span style="color:var(--color-muted);font-size:10px;">Ventaja: </span><span style="color:' + ventajaColor + ';font-weight:600;">' + ventajaStr + '</span></div>'
-            + '<div><span style="color:var(--color-muted);font-size:10px;">Éxito: </span><span style="color:var(--color-text);">' + s.tasa_exito_pct + '% (' + s.n_senales + ')</span></div>'
+            + '<div><span style="color:var(--color-muted);font-size:10px;">vs día normal: </span><span style="color:' + cFacil + ';">' + pp(s.ventaja_pp) + '</span></div>'
+            + '<div><span style="color:var(--color-muted);font-size:10px;">vs día de pánico: </span><span style="color:' + cDura + ';font-weight:600;">' + (tieneDura ? pp(s.ventaja_panico_pp) : 'sin datos') + '</span></div>'
+            + '<div><span style="color:var(--color-muted);font-size:10px;">Aciertos: </span><span style="color:var(--color-text);">' + s.tasa_exito_pct + '% de ' + s.n_senales + '</span></div>'
             + '</div>';
-    }).join('');
+    }).join('')
+    + '<div style="color:var(--color-muted);font-size:10px;line-height:1.6;margin-top:8px;">'
+    + '<b style="color:var(--color-text);">Cómo leer esto.</b> "vs día normal" compara las señales contra comprar en un día cualquiera. '
+    + 'Es la cifra bonita, y engaña: el algoritmo solo se dispara cuando hay miedo, y el miedo ya rebota por sí solo. '
+    + '"vs día de pánico" compara contra días parecidos (VIX &gt; 25) — eso es lo que aporta el sistema de verdad. '
+    + 'Con pocas señales, un porcentaje de aciertos alto no es una promesa: mira siempre cuántas son.'
+    + '</div>';
 
     const senalesHtml = data.senales.length === 0
         ? '<div style="color:var(--color-muted);font-size:12px;padding:1rem 0;">No se detectaron señales VERDE en el periodo analizado — el nuevo sistema con gatekeepers obligatorios es considerablemente más selectivo que la versión anterior.</div>'
