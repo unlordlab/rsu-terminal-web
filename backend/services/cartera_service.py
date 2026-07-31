@@ -62,7 +62,21 @@ def _get_daily_bars(tk_obj, ticker: str) -> tuple[float, float]:
     if cached and (now - cached["updated"]) < _DAILY_BARS_TTL:
         return cached["last"], cached["prev"]
     try:
-        hist = tk_obj.history(period="5d", interval="1d")
+        # auto_adjust=False a propósito (auditoría de Cartera, #A2). Con el
+        # valor por defecto (True) yfinance reescala las barras antiguas para
+        # descontar los dividendos, así que en un día de ex-dividendo el cierre
+        # anterior baja y el "HOY %" sale mejor de lo que fue: pasa a ser
+        # retorno TOTAL en vez de variación de precio, y deja de cuadrar con lo
+        # que enseña el bróker. Medido sobre ex-dividendos reales: NEE mostraba
+        # +0,92% cuando el precio hizo +0,19%; PG +1,05% frente a +0,30%; KO
+        # -1,44% frente a -2,07%. Siempre hacia el lado favorable, y una vez por
+        # trimestre y posición.
+        #
+        # La columna `Close` con auto_adjust=False sigue estando ajustada por
+        # SPLITS (convención de Yahoo), que es justo lo que hace falta: sin eso
+        # un desdoblamiento aparecería como un -50%. Verificado sobre 9 splits
+        # reales de 2:1 a 50:1 — porcentaje idéntico con y sin ajuste.
+        hist = tk_obj.history(period="5d", interval="1d", auto_adjust=False)
         # Yahoo a veces incluye la fila más reciente con Close=NaN cuando esa
         # sesión todavía no ha asentado el dato del todo (verificado en vivo,
         # 25/07/2026: AAPL/NVDA devolvían NaN en la fila de "hoy" pese a
@@ -333,7 +347,10 @@ def _fetch_sparkline_single(ticker: str, days: int) -> dict | None:
         return cached
     try:
         import yfinance as yf
-        hist = yf.Ticker(ticker).history(period=f"{days}d", interval="1d")
+        # auto_adjust=False por el mismo motivo que en _get_daily_bars (#A2):
+        # el sparkline dibuja el precio que el usuario ve en su bróker, no una
+        # serie reescalada por dividendos. Sigue ajustado por splits.
+        hist = yf.Ticker(ticker).history(period=f"{days}d", interval="1d", auto_adjust=False)
         if hist.empty:
             return None
         closes = [round(float(v), 4) for v in hist["Close"].tolist()]
@@ -446,7 +463,14 @@ def get_portfolio_history(abiertas_rows: list, days: int = 180, cerradas_rows: l
 
     def _hist_for(ticker):
         try:
-            return ticker, yf.Ticker(ticker).history(period=f"{days}d", interval="1d")["Close"]
+            # auto_adjust=False, mismo motivo que en _get_daily_bars (#A2), y
+            # aquí además importa por otra razón: la curva multiplica precio
+            # por número de acciones. Con las barras antiguas reescaladas hacia
+            # abajo por los dividendos, el pasado parece más barato de lo que
+            # fue y la curva aparenta haber crecido más. El número de acciones
+            # no cambia con un dividendo; el precio de entonces tampoco debería.
+            return ticker, yf.Ticker(ticker).history(
+                period=f"{days}d", interval="1d", auto_adjust=False)["Close"]
         except Exception:
             return ticker, None
 
