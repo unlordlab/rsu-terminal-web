@@ -29,8 +29,8 @@ parecería completo y sería engañoso.
 
 ## Cobertura de esta versión — leer antes de usarlo
 
-- **388 hallazgos**: 379 extraídos de los 16 documentos de auditoría, más 9
-  encontrados después con el sistema ya en producción (RSU Algoritmo #14–#17,
+- **389 hallazgos**: 379 extraídos de los 16 documentos de auditoría, más 10
+  encontrados después con el sistema ya en producción (RSU Algoritmo #14–#18,
   Newsfeed/briefing #27–#31).
 - **64 son críticos (🔴)**: todos revisados en la primera pasada.
   33 cerrados · 11 abiertos ·
@@ -464,7 +464,7 @@ a uno contra el código, seis cerrados en esa sesión. Es, junto a Research, el
 | ❓ | 21 | 🟢 | Rotación sectorial en el tiempo | *sin comprobar* |
 | ❓ | 22 | 🟢 | Alerta de entrada en el top decil | *sin comprobar* |
 
-## Rsu Algoritmo  (17 hallazgos — ✅9 · ❓8)
+## Rsu Algoritmo  (18 hallazgos — ✅10 · ❓8)
 
 **Auditoría de datos el 30/07** (commits `34efe61` y `bb8106f`), a raíz de que
 el usuario recibiera tres avisos de semáforo en un día. Los valores en pantalla
@@ -492,6 +492,7 @@ en la auditoría original.
 | ✅ | 15 | 🔴 | **El gatekeeper de la EMA200W era simétrico** (`abs(dist) ≤ 25%`): trataba igual estar 24% por encima de la media secular que 24% por debajo | 30/07: se encendía el 62,5% de las semanas y se APAGABA en 2002 (−27,5%) y 2009 (−41,7%), los dos suelos más profundos. Los 7 suelos reales estuvieron todos ≤ +6,9%. Ahora `dist ≤ +10%`: 7 de 7, activo el 26,8% |
 | ✅ | 16 | 🔴 | **El semáforo se decidía con datos a medio refrescar**, y cada cambio notificaba y entraba en `senales_tracked` | 30/07: los 3 avisos del día llegaron de madrugada con el MISMO precio (729,46), score 51→55→52 — el scan nocturno reescribe la amplitud a las 22:15 UTC y FRED va por su cuenta. Decisión movida a una vez por sesión, atada a que la fecha de la amplitud coincida con la sesión, + histéresis de 3 puntos aplicada también en el backtest |
 | ✅ | 17 | 🟡 | `?">ABI: 38.8%` en pantalla: `tt()` devuelve HTML y estaba dentro de un `title="..."` | 30/07: la comilla del `<span>` cerraba el atributo y el resto se derramaba como texto |
+| ✅ | 18 | 🟠 | ¿Es correcto que estar sobre la SMA200 BAJE el umbral de VERDE a 54? Parece un sesgo optimista: es más fácil declarar un suelo con el mercado fuerte | **EVALUADO 31/07, la asimetría es correcta y se queda.** Cuatro configuraciones barridas con el backtest real en dos periodos. Ventaja a 60d: ACTUAL 54/63 → **+4,30pp (10a) y +4,76pp (máx)**; fijo 58/58 → +1,12 / +1,02; fijo 54/54 → +0,27 / +1,05; inverso 63/54 → +0,98 / +1,54. Mismo orden en ambos periodos. Matiz: a 10d el inverso rinde algo más y n=14-35, así que es direccional, no medición fina |
 
 ## Scanner  (20 hallazgos — ✅9 · ❓11)
 

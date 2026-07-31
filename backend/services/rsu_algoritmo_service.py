@@ -56,6 +56,13 @@ CREDIT_SPREAD_CRITICO = 4.0
 MARGEN_HISTERESIS = 3
 ESTADOS_VERDES = {"VERDE", "VERDE-VOL"}
 
+# Umbral de VERDE según el régimen (precio sobre/bajo la SMA200 diaria): 60% y
+# 70% del máximo real alcanzable, que son 90 puntos y no 100 (la SMA200 no
+# puntúa, solo decide este umbral). En constantes y no inline para poder
+# barrerlas desde el backtest — ver el comentario en _calcular_score_punto.
+UMBRAL_VERDE_ALCISTA = 54
+UMBRAL_VERDE_BAJISTA = 63
+
 # Semanas mínimas para dar por buena la EMA200 semanal. NO son 200.
 #
 # `min_periods=200` solo garantiza que pandas no emita un valor antes de tener
@@ -535,7 +542,7 @@ def _vix_vix3m_ratio(df_vix, df_vix3m=None):
     except Exception:
         return None
 
-def _calcular_score_punto(df_spy, df_vix, sector_data=None, df_vix3m=None, credit_spread=None, mcclellan_precalculado=None, breadth_real=None):
+def _calcular_score_punto(df_spy, df_vix, sector_data=None, df_vix3m=None, credit_spread=None, mcclellan_precalculado=None, breadth_real=None, umbrales=None):
     """
     Núcleo de scoring puro — recibe DataFrames ya recortados hasta un punto temporal
     dado y devuelve el score + desglose. Reutilizado tanto por get_rsu_algoritmo()
@@ -818,7 +825,32 @@ def _calcular_score_punto(df_spy, df_vix, sector_data=None, df_vix3m=None, credi
     # se hubieran dejado 60/70 fijos tras quitar esos 10 puntos del máximo
     # alcanzable, el listón real habría subido de golpe (70/100 → 70/90 es
     # más difícil que antes, no la misma exigencia).
-    umbral_verde = 54 if sobre_sma200 else 63
+    #
+    # LA ASIMETRÍA ESTÁ COMPROBADA (31/07/2026), no es una intuición heredada.
+    #
+    # Que el umbral BAJE en régimen alcista significa que es MÁS fácil declarar
+    # un suelo con el mercado fuerte, lo que parece un sesgo optimista. Se
+    # barrieron cuatro configuraciones con el backtest real, en dos periodos
+    # independientes, y la actual gana con claridad en el horizonte que
+    # importa para un detector de suelos:
+    #
+    #   ventaja vs SPY a 60 días (acierto)     10 años        periodo máximo
+    #   ACTUAL   54/63  (fácil en alcista)   +4,30pp (81%)   +4,76pp (85%)
+    #   FIJO     58/58                       +1,12pp (71%)   +1,02pp (72%)
+    #   FIJO     54/54                       +0,27pp (61%)   +1,05pp (71%)
+    #   INVERSO  63/54  (exigente en alcista)+0,98pp (67%)   +1,54pp (74%)
+    #
+    # O sea: un dip dentro de una tendencia alcista SÍ se compra mejor que uno
+    # dentro de un bear, y el sistema hace bien en rebajar el listón ahí.
+    # Matiz honesto: a 10 días el inverso rinde algo más, y las muestras son de
+    # 14-35 señales — la conclusión es direccional, no una medición fina. Lo
+    # que sostiene la decisión es que el mismo orden aparece en dos periodos
+    # distintos, no la magnitud exacta.
+    #
+    # Los valores viven en constantes de módulo para poder repetir el barrido
+    # sin tocar esta función.
+    umbrales = umbrales or (UMBRAL_VERDE_ALCISTA, UMBRAL_VERDE_BAJISTA)
+    umbral_verde = umbrales[0] if sobre_sma200 else umbrales[1]
 
     # ── FILTRO DE ESTRÉS DE CRÉDITO ─────────────────────────────────────────
     # Ver comentario junto a CREDIT_SPREAD_CRITICO más arriba. No es un
@@ -1197,7 +1229,7 @@ def _retornos_con_stop(closes_full, lows_full, pos, horizontes, precio_entrada, 
     return resultado, stopeada
 
 
-def get_rsu_algoritmo_backtest(years: int = 10) -> dict:
+def get_rsu_algoritmo_backtest(years: int = 10, umbrales: tuple = None) -> dict:
     """
     Backtest histórico del RSU Algoritmo sobre SPY (sistema reformulado: sin
     Divergencia, FTD como confirmación posterior, RSI diario+semanal, VIX con
@@ -1234,7 +1266,10 @@ def get_rsu_algoritmo_backtest(years: int = 10) -> dict:
     # en las transiciones. Subir la versión es lo que invalida la caché ya
     # guardada en el VPS al desplegar; sin esto, producción seguiría sirviendo
     # el backtest del sistema anterior durante horas.
-    cache_key = f"algoritmo:backtest:{years}y:v18"
+    # El sufijo de umbrales evita que un barrido experimental (ver la tarea de
+    # evaluar el umbral dinámico) contamine la caché del backtest real.
+    sufijo = "" if not umbrales else f":u{umbrales[0]}-{umbrales[1]}"
+    cache_key = f"algoritmo:backtest:{years}y:v18{sufijo}"
     cached = cache.get(cache_key)
     if cached:
         return cached
@@ -1324,7 +1359,7 @@ def get_rsu_algoritmo_backtest(years: int = 10) -> dict:
             mcclellan_precalculado = (mc_val, mc_val > mc_hace_n, mcclellan_metodo)
 
             try:
-                resultado = _calcular_score_punto(spy_slice, vix_slice, sector_data=None, df_vix3m=vix3m_slice, credit_spread=credit_spread, mcclellan_precalculado=mcclellan_precalculado)
+                resultado = _calcular_score_punto(spy_slice, vix_slice, sector_data=None, df_vix3m=vix3m_slice, credit_spread=credit_spread, mcclellan_precalculado=mcclellan_precalculado, umbrales=umbrales)
             except Exception:
                 fue_verde_ayer = False
                 estado_oficial_ayer = None   # sin dato del día, la histéresis no arrastra nada
