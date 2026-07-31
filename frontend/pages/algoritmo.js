@@ -401,15 +401,17 @@ function renderBacktestResults(data) {
         ? '<div style="color:var(--color-muted);font-size:12px;padding:1rem 0;">No se detectaron señales VERDE en el periodo analizado — el nuevo sistema con gatekeepers obligatorios es considerablemente más selectivo que la versión anterior.</div>'
         : '<div style="max-height:340px;overflow-y:auto;margin-top:0.5rem;">'
           + '<div style="display:grid;grid-template-columns:85px 55px 80px 70px 50px 50px 50px 50px;gap:6px;padding:6px 0;border-bottom:1px solid var(--color-border);font-size:9px;color:var(--color-muted);position:sticky;top:0;background:var(--color-surface);">'
-          + '<div>FECHA</div><div>SCORE</div><div>PUERTA</div><div>DRAWDOWN</div><div>+5d</div><div>+10d</div><div>+20d</div><div>+60d</div>'
+          + '<div>FECHA</div><div>SCORE</div><div>LLEGÓ A CAER</div><div>DRAWDOWN</div><div>+5d</div><div>+10d</div><div>+20d</div><div>+60d</div>'
           + '</div>'
           + data.senales.map(s => {
               const r = s.retornos;
               const fmt = v => v == null ? '<span style="color:#555;">—</span>' : '<span style="color:' + (v >= 0 ? 'var(--color-accent)' : '#f23645') + ';">' + (v >= 0 ? '+' : '') + v + '%</span>';
-              // Desde el 31/07/2026 solo valida la vuelta a la media de 200
-              // semanas. Las señales históricas guardan igualmente el flag del
-              // RVOL, pero ya no abre la puerta: no se muestra como validador.
-              const gk = s.gatekeeper_a ? 'media 200s' : '—';
+              // La columna "PUERTA" se quitó: desde que solo valida la vuelta
+              // a la media de 200 semanas, decía lo mismo en las 16 filas. En
+              // su sitio va lo que de verdad necesita saber quien entra SIN
+              // stop: cuánto llegó a estar la posición en rojo antes de
+              // funcionar.
+              const caida = (s.peor_caida || {}).d60;
               const ftdTag = s.ftd_confirmado ? ' <span style="color:var(--color-accent);" title="FTD confirmado">✓FTD</span>' : '';
               const creditTag = s.credit_spread_nivel === 'elevado'
                   ? ' <span style="color:#ff9800;" title="BAA10Y ' + s.credit_spread_valor + '% — elevado pero mejorando en el momento de la señal (si hubiera estado empeorando, se habría filtrado igual que crítico)">⚠BAA</span>'
@@ -417,7 +419,7 @@ function renderBacktestResults(data) {
               return '<div style="display:grid;grid-template-columns:85px 55px 80px 70px 50px 50px 50px 50px;gap:6px;padding:6px 0;border-bottom:1px solid var(--color-border);font-size:10px;align-items:center;">'
                   + '<div style="color:var(--color-text);">' + s.fecha + '</div>'
                   + '<div style="color:var(--color-muted);">' + s.score + '/' + (data.max_score || 100) + '</div>'
-                  + '<div style="color:var(--color-secondary,#00d9ff);">' + gk + ftdTag + creditTag + '</div>'
+                  + '<div style="color:' + (caida != null && caida <= -10 ? '#f23645' : 'var(--color-muted)') + ';">' + (caida != null ? caida + '%' : '—') + ftdTag + creditTag + '</div>'
                   + '<div style="color:' + (s.drawdown_pct <= -15 ? '#f23645' : 'var(--color-muted)') + ';">' + s.drawdown_pct + '%</div>'
                   + '<div>' + fmt(r.d5) + '</div><div>' + fmt(r.d10) + '</div><div>' + fmt(r.d20) + '</div><div>' + fmt(r.d60) + '</div>'
                   + '</div>';
@@ -440,8 +442,14 @@ function renderBacktestResults(data) {
             const corr = d.correlacion_d20;
             const corrColor = corr == null ? 'var(--color-muted)' : (corr > 0.3 ? 'var(--color-accent)' : corr < -0.3 ? '#f23645' : '#ffb800');
             const corrWidth = corr == null ? 0 : Math.min(100, Math.abs(corr) * 100);
+            // La EMA200W sale SIEMPRE sin variación desde que es condición
+            // obligatoria (31/07/2026): todas las señales la tienen al máximo,
+            // así que no hay dos grupos que comparar. Eso no es un fallo de
+            // datos y el mensaje genérico de "sin variación" lo parecía.
             const fiableTag = d.sin_variacion
-                ? ' <span style="color:#666;font-size:9px;" title="El factor tuvo el mismo valor en todas las señales de la muestra — no hay nada que comparar">— sin variación</span>'
+                ? (factor === 'EMA200W'
+                    ? ' <span style="color:#666;font-size:9px;" title="Es la condición obligatoria para dar VERDE, así que todas las señales la cumplen al máximo. Sin dos grupos distintos no hay correlación que calcular — no es un fallo de datos.">— obligatoria, siempre al máximo</span>'
+                    : ' <span style="color:#666;font-size:9px;" title="El factor tuvo el mismo valor en todas las señales de la muestra — no hay nada que comparar">— sin variación</span>')
                 : d.fiable
                     ? ''
                     : ' <span style="color:#ffb800;font-size:9px;" title="Grupo alto o bajo con menos de 2 señales — comparación no fiable">⚠ muestra pequeña</span>';
@@ -486,7 +494,7 @@ function renderBacktestResults(data) {
         + '</div>'
         + statsRows
 
-        + '<div style="margin-top:1rem;color:var(--color-muted);font-size:11px;letter-spacing:0.05em;">HISTORIAL DE SEÑALES <span style="font-weight:normal;text-transform:none;letter-spacing:0;">(PUERTA = la condición estructural que validó la señal · ✓FTD = el dinero institucional ya se había movido)</span></div>'
+        + '<div style="margin-top:1rem;color:var(--color-muted);font-size:11px;letter-spacing:0.05em;">HISTORIAL DE SEÑALES <span style="font-weight:normal;text-transform:none;letter-spacing:0;">(LLEGÓ A CAER = lo peor que se puso la posición antes de funcionar, con los mínimos intradía · ✓FTD = el dinero institucional ya se había movido)</span></div>'
         + senalesHtml
 
         + importanciaHtml;
@@ -575,13 +583,15 @@ async function loadCandidatos(container, enVerde) {
             ? 'El semáforo está en verde. Estos son los valores que mejor aguantaron la caída y ya están recuperando fuerza.'
             : 'Todavía NO es momento de entrar. Esta lista está aquí para que tengas la decisión tomada cuando llegue.';
 
+        // Mismo patrón de ticker que Scanner, RS/RW e Insider: clase
+        // ticker-link (cursor, hover y subrayado del tema) + goToResearch,
+        // que navega por el router del SPA en vez de recargar la página.
         const filas = data.candidatos.map(c =>
-            '<a href="/research?ticker=' + encodeURIComponent(c.ticker) + '" '
-            + 'style="display:grid;grid-template-columns:80px 1fr;gap:12px;padding:9px 0;border-bottom:1px solid var(--color-border);text-decoration:none;align-items:baseline;">'
-            + '<span style="color:' + (enVerde ? 'var(--color-accent)' : 'var(--color-text)') + ';font-size:14px;font-weight:500;">' + esc(c.ticker) + '</span>'
+            '<div style="display:grid;grid-template-columns:80px 1fr;gap:12px;padding:9px 0;border-bottom:1px solid var(--color-border);align-items:baseline;">'
+            + '<div onclick="goToResearch(\'' + esc(c.ticker) + '\')" class="ticker-link" style="color:var(--color-accent);font-weight:500;">' + esc(c.ticker) + '</div>'
             + '<span style="color:var(--color-muted);font-size:12px;">' + esc(c.porque)
             + '<span style="opacity:0.6;"> · ' + esc(c.sector) + '</span></span>'
-            + '</a>'
+            + '</div>'
         ).join('');
 
         caja.innerHTML = '<div style="background:var(--color-surface);border:1px solid ' + borde + ';border-radius:var(--radius);padding:1.25rem;">'

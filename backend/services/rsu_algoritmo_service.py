@@ -955,9 +955,28 @@ def _calcular_score_punto(df_spy, df_vix, sector_data=None, df_vix3m=None, credi
             # inalcanzable: se elimina en vez de dejar código muerto.
             estado, senal, color = "VERDE", "FONDO PROBABLE", "#00ffad"
             ftd_txt = "FTD ya confirmado — convicción institucional verificada." if ftd_confirmado else "FTD aún no confirmado — vigilar próximos 4-7 días para la confirmación de volumen."
+            # Entrada escalonada SIN stop, y con el número delante.
+            #
+            # Antes esto decía "entrada gradual 25% con stop -7%". Se cambió el
+            # 31/07/2026 al medir que ese stop habría cortado 5 de las 16
+            # señales históricas —incluidas las dos de marzo de 2020, que
+            # acabaron en +14,5% y +17,1%— dejando el retorno medio a 60 días
+            # en +5,8% frente a +10,6% sin stop. Con el stop, la ventaja sobre
+            # días de pánico comparables se iba a CERO: la herramienta
+            # recomendaba lo único que destruía su propia ventaja.
+            #
+            # Pero quitar el stop a secas sería peor consejo. Sin stop, el
+            # control de riesgo es el ESCALONADO y el tamaño, y para eso hay
+            # que decir cuánto duele: de media estas señales llegaron a estar
+            # un 6% en rojo antes de funcionar, y en el peor caso un 20%.
             rec = (f"Setup óptimo. Score {score}/100 (umbral {umbral_verde}). {ftd_txt} "
-                   "No es (ni pretende ser) el mínimo exacto — es el punto de EMPEZAR a construir posición de forma gradual. "
-                   + ("Revisar advertencias antes de actuar." if advertencias else "Entrada gradual 25% con stop -7%; el resto se añade en tramos posteriores, no de golpe."))
+                   "No es (ni pretende ser) el mínimo exacto — es el punto de EMPEZAR a construir, por tramos. "
+                   "Entrada escalonada y SIN stop: un stop del -7% habría cortado 5 de las 16 señales históricas, "
+                   "incluidas las dos mejores. Primer tramo pequeño y el resto SOLO si el precio sigue bajando, "
+                   "reservando capital para poder hacerlo. "
+                   "Estas señales llegaron a estar un 6% en rojo de media antes de funcionar, y un 20% en el peor caso "
+                   "(marzo 2020): si no puedes ver eso sin vender, la posición es demasiado grande. "
+                   + ("Revisar las advertencias antes de actuar." if advertencias else ""))
     elif score >= umbral_verde and not gatekeeper_ok:
         estado, senal, color = "VERDE-VOL", "SCORE ALTO SIN SOPORTE ESTRUCTURAL", "#ff9800"
         rec = f"Score alto ({score}) pero el precio NO ha vuelto a su media de 200 semanas — sigue lejos de la zona donde históricamente se forman los suelos. Posible falsa señal: watchlist, no entrada."
@@ -1263,51 +1282,42 @@ def procesar_cierre_si_toca():
         return {"procesado": False, "motivo": "error"}
 
 
-def _retornos_con_stop(closes_full, lows_full, pos, horizontes, precio_entrada, stop_pct=-7.0):
-    """
-    Retornos forward simulando un stop-loss de stop_pct% desde la entrada —
-    la estrategia que de verdad se recomienda en el texto de la señal VERDE
-    ("entrada gradual 25% con stop -7%"), no "mantener sin tocar nada" que es
-    lo que mide el retorno normal.
+def _peor_caida_intermedia(lows_full, pos, horizontes, precio_entrada):
+    """Cuánto llegó a caer la posición ANTES de que la señal tuviera razón.
 
-    Usa el MÍNIMO diario (Low), no el cierre — un stop se dispara en cuanto
-    el precio TOCA ese nivel intradía, cerrar por encima ese mismo día no lo
-    salva. Simplificación asumida: el stop se ejecuta exactamente al nivel
-    del stop, sin slippage por gap bajista (en la realidad, un hueco a la
-    baja podría ejecutar peor que el nivel exacto).
+    Sustituye a la antigua simulación de stop del -7% (31/07/2026). Se quitó
+    porque la herramienta dejó de recomendar stop, y por un motivo medido: ese
+    stop habría cortado 5 de las 16 señales históricas, incluidas las dos de
+    marzo de 2020 que acabaron en +14,5% y +17,1%. Con él, el retorno medio a
+    60 días caía de +10,6% a +5,8% y la ventaja sobre días de pánico
+    comparables se iba a CERO. El sistema entra pronto, en plena caída, y un
+    stop estrecho lo saca justo antes de que funcione.
 
-    Una vez disparado el stop en el día k, TODOS los horizontes >= k devuelven
-    ese mismo retorno (stop_pct) — estás fuera, no participas de ninguna
-    recuperación posterior salvo que reentres (estrategia distinta, no
-    simulada aquí). Los horizontes < k no se ven afectados, el stop aún no
-    había saltado en ese punto.
+    Pero quitar el stop sin más sería un consejo peor, no mejor: sin stop hay
+    que dimensionar la posición para poder aguantar la caída intermedia. Esta
+    función mide exactamente eso — el peor punto entre la entrada y cada
+    horizonte, usando el MÍNIMO diario (Low) y no el cierre, porque lo que
+    hace vender por pánico es el número que ves en rojo durante la sesión, no
+    el cierre de ese día.
+
+    Es el dato que el usuario necesita para decidir el tamaño: si no puedes
+    ver esta caída sin vender, la posición es demasiado grande.
     """
-    precio_stop = precio_entrada * (1 + stop_pct / 100)
     max_h = max(horizontes)
-    dia_stop = None
-    for k in range(1, max_h + 1):
-        if pos + k >= len(closes_full):
-            break
-        low_k = lows_full.iloc[pos + k]
-        if pd.notna(low_k) and low_k <= precio_stop:
-            dia_stop = k
-            break
-
-    resultado = {}
-    stopeada = {}
-    for h in horizontes:
-        if pos + h >= len(closes_full):
-            resultado[f'd{h}'] = None
-            stopeada[f'd{h}'] = False
-        elif dia_stop is not None and dia_stop <= h:
-            resultado[f'd{h}'] = round(stop_pct, 2)
-            stopeada[f'd{h}'] = True
+    peor = {}
+    minimo_visto = precio_entrada
+    k = 1
+    for h in sorted(horizontes):
+        while k <= h and pos + k < len(lows_full):
+            low_k = lows_full.iloc[pos + k]
+            if pd.notna(low_k) and low_k < minimo_visto:
+                minimo_visto = float(low_k)
+            k += 1
+        if pos + h >= len(lows_full):
+            peor[f'd{h}'] = None
         else:
-            precio_h = closes_full.iloc[pos + h]
-            resultado[f'd{h}'] = round((precio_h - precio_entrada) / precio_entrada * 100, 2)
-            stopeada[f'd{h}'] = False
-    return resultado, stopeada
-
+            peor[f'd{h}'] = round((minimo_visto - precio_entrada) / precio_entrada * 100, 2)
+    return peor
 
 def get_rsu_algoritmo_backtest(years: int = 10, umbrales: tuple = None) -> dict:
     """
@@ -1506,7 +1516,7 @@ def get_rsu_algoritmo_backtest(years: int = 10, umbrales: tuple = None) -> dict:
                     s['retornos'][f'd{h}'] = None  # fuera de rango (señal muy reciente)
             # Retornos siguiendo la estrategia realmente recomendada (stop -7%),
             # no "mantener sin tocar nada" — ver _retornos_con_stop.
-            s['retornos_con_stop'], s['stopeada'] = _retornos_con_stop(closes_full, lows_full, pos, horizontes, precio_entrada, stop_pct=-7.0)
+            s['peor_caida'] = _peor_caida_intermedia(lows_full, pos, horizontes, precio_entrada)
             del s['pos']  # no exponer el índice interno en la respuesta
 
         # Baseline: retorno medio de SPY en cada horizonte calculado sobre TODOS
@@ -1570,26 +1580,32 @@ def get_rsu_algoritmo_backtest(years: int = 10, umbrales: tuple = None) -> dict:
             else:
                 stats[key] = None
 
-        # Mismo cálculo pero con el stop -7% simulado — la estrategia que de
-        # verdad se recomienda, no "mantener sin tocar nada". El baseline es
-        # el mismo (comprar y mantener SPY sin stop es la comparación honesta
-        # en ambos casos — el stop es una particularidad de ESTA estrategia,
-        # no algo que también haría un inversor pasivo).
-        stats_con_stop = {}
+        # PEOR CAÍDA INTERMEDIA — el dato que sustituye a la simulación de stop.
+        #
+        # Antes aquí se simulaba la estrategia "entrada gradual 25% con stop
+        # -7%" que recomendaba el texto del VERDE. Se quitó el 31/07/2026 al
+        # medir que ese stop habría cortado 5 de las 16 señales, incluidas las
+        # dos de marzo de 2020 (+14,5% y +17,1% sin stop, -7% con él): el
+        # retorno medio a 60d caía de +10,6% a +5,8% y la ventaja sobre días
+        # de pánico comparables se iba a cero. La recomendación pasó a ser
+        # entrada escalonada SIN stop.
+        #
+        # Lo que el usuario necesita saber entonces no es "cuánto habría
+        # perdido con un stop" sino "cuánto voy a verme perdiendo antes de que
+        # esto funcione", para dimensionar la posición en consecuencia. Eso es
+        # esto: la peor caída intermedia, en media y en el peor caso.
+        stats_caida = {}
         for h in horizontes:
             key = f'd{h}'
-            valid = [s['retornos_con_stop'][key] for s in senales if s['retornos_con_stop'][key] is not None]
+            valid = [s['peor_caida'][key] for s in senales if s['peor_caida'].get(key) is not None]
             if valid:
-                stats_con_stop[key] = {
-                    "retorno_medio_senal": round(float(np.mean(valid)), 2),
-                    "retorno_baseline":    baseline[key],
-                    "ventaja_pp":          round(float(np.mean(valid)) - (baseline[key] or 0), 2),
-                    "tasa_exito_pct":      round(sum(1 for v in valid if v > 0) / len(valid) * 100, 1),
-                    "n_senales":           len(valid),
-                    "n_stopeadas":         sum(1 for s in senales if s['stopeada'][key]),
+                stats_caida[key] = {
+                    "media": round(float(np.mean(valid)), 2),
+                    "peor":  round(float(min(valid)), 2),
+                    "n":     len(valid),
                 }
             else:
-                stats_con_stop[key] = None
+                stats_caida[key] = None
 
         # ── ANÁLISIS DE IMPORTANCIA DE VARIABLES ────────────────────────────────
         # Para cada factor, mide su relación real con el retorno forward de las
@@ -1720,7 +1736,7 @@ def get_rsu_algoritmo_backtest(years: int = 10, umbrales: tuple = None) -> dict:
             "n_episodios":     n_episodios,
             "senales":         senales,
             "stats":           stats,
-            "stats_con_stop":  stats_con_stop,
+            "stats_caida":     stats_caida,
             "importancia":     importancia,
             "horizonte_importancia": horizonte_analisis,
             "credit_spread_disponible": credit_ok,

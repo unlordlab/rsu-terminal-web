@@ -29,8 +29,8 @@ parecería completo y sería engañoso.
 
 ## Cobertura de esta versión — leer antes de usarlo
 
-- **397 hallazgos**: 379 extraídos de los 16 documentos de auditoría, más 18
-  encontrados después con el sistema ya en producción (RSU Algoritmo #14–#26,
+- **399 hallazgos**: 379 extraídos de los 16 documentos de auditoría, más 20
+  encontrados después con el sistema ya en producción (RSU Algoritmo #14–#28,
   Newsfeed/briefing #27–#31).
 - **64 son críticos (🔴)**: todos revisados en la primera pasada.
   33 cerrados · 11 abiertos ·
@@ -465,7 +465,7 @@ a uno contra el código, seis cerrados en esa sesión. Es, junto a Research, el
 | ❓ | 21 | 🟢 | Rotación sectorial en el tiempo | *sin comprobar* |
 | ❓ | 22 | 🟢 | Alerta de entrada en el top decil | *sin comprobar* |
 
-## Rsu Algoritmo  (26 hallazgos — ❌1 · ✅22 · ❓0 · ⬜3)
+## Rsu Algoritmo  (28 hallazgos — ❌1 · ✅24 · ❓0 · ⬜3)
 
 **Módulo con el tier completo verificado** — el tercero, tras Research y RS/RW.
 Cero hallazgos sin comprobar.
@@ -504,6 +504,8 @@ Queda abierto #12, medido y descartado por marginal.
 | ✅ | 24 | 🟠 | El semáforo decía CUÁNDO pero no EN QUÉ — se ponía verde y el usuario se quedaba mirando un color | 31/07: caja nueva con los 5 valores que mejor aguantaron la caída y ya recuperan fuerza (percentil RS ≥ 80 con pendiente positiva), del scan nocturno de RS/RW — **no calcula nada nuevo**. Se muestra SIEMPRE, en gris cuando no es momento ("esto es lo que mirarías"), porque el sentido de la fase ámbar es llegar con la decisión tomada. Cada fila enlaza a Research |
 | ✅ | 25 | 🟡 | Las tres secciones hablaban en jerga: `~ McClellan -52 < -50 (+8)` | 31/07: 33 textos reescritos en lenguaje normal manteniendo el número entre paréntesis. "FACTORES · SCORES" → "CÓMO SE FORMA EL SCORE", "ANÁLISIS DE CONDICIONES" → "QUÉ ESTÁ PASANDO HOY, PUNTO POR PUNTO", "GATEKEEPERS" → "LA PUERTA". El FTD queda marcado como *contexto, no puntúa* en las cuatro variantes de su texto |
 | ✅ | 26 | 🟠 | Seis líneas anunciaban puntos distintos de los que sumaban | 31/07, **introducido por mí** al reescalar a 100 con reemplazos de texto: decían `(+11)` sumando 10, `(+6)` sumando 7, `(+7)` sumando 8, y los umbrales viejos 54/63. Arreglados y blindados con `test_algoritmo_coherencia_textos.py`, que lee el fuente y compara cada literal con la asignación de su línea — verificado que el test falla si se rompe a propósito |
+| ✅ | 27 | 🔴 | **La herramienta recomendaba un stop que destruía su propia ventaja** | 31/07: el texto del VERDE decía "entrada gradual 25% con stop −7%". El backtest ya simulaba ese stop pero **no lo enseñaba**. Medido: habría cortado **5 de las 16 señales**, incluidas las dos de marzo de 2020 (+14,5% y +17,1% sin stop → −7% con él). El retorno medio a 60d caía de +10,64% a +5,81%, y contra el baseline de pánico (~+6,04%) la ventaja pasaba de **+4,60pp a −0,23pp: desaparecía**. Ahora: entrada escalonada SIN stop, con los números en el propio texto |
+| ✅ | 28 | 🟠 | Sin stop hacía falta decir cuánto duele, o el consejo sería peor | 31/07: la simulación de stop se sustituye por la **peor caída intermedia** (máximos mínimos intradía entre entrada y horizonte), en el backtest y en el tracking en vivo. Medido: −6,06% de media y **−19,98% en el peor caso** (marzo 2020). Es el dato que determina el tamaño de posición cuando no hay stop, y ahora sale en el texto del VERDE y como columna del historial en vez de la de PUERTA, que decía lo mismo en las 16 filas |
 | ❌ | 12 | 🟡 | El backtest recalcula el baseline completo en cada ejecución | verificado 31/07: cierto — bucle Python con `.iloc[]` escalar sobre ~4.500 posiciones × 4 horizontes. Real pero **marginal**: el backtest hace además ~4.500 llamadas a `_calcular_score_punto` (minutos) y se cachea 12h, así que corre como mucho dos veces al día. Vectorizarlo es trivial pero no compensa tocar el motor por esto |
 | ⬜ | 13 | 🟡 | `df_vix` a 3 meses limita la ventana del VIX | verificado 31/07: **el hallazgo no aplica**. El factor VIX usa `df_vix['Close'].tail(VENTANA)` con `VENTANA = 10`, así que la ventana la fija esa constante, no la descarga. Los 3 meses (~63 sesiones) son 6× lo que se consume |
 | ✅ | 14 | 🔴 | **La EMA200 semanal no había convergido**: se calculaba sobre 5 años (~262 semanas) para un span de 200, y con `adjust=True` el valor arrastra el arranque de la serie | 30/07: 5y → 584,99 (+24,7%) vs convergido → 563,45 (+29,5%). Casi 5pp de error, justo sobre un corte del 25% → el gatekeeper quedaba ACTIVO sin deber estarlo. Arreglado a 15y en vivo y `BUFFER_YEARS` 5→15 en el backtest, donde el sesgo afectaba a TODOS los días evaluados |

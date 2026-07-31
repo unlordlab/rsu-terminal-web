@@ -88,6 +88,13 @@ def init_db():
         ('resultado_5d_stop', 'REAL'), ('resultado_10d_stop', 'REAL'),
         ('resultado_20d_stop', 'REAL'), ('resultado_60d_stop', 'REAL'),
         ('stopeada_dia', 'INTEGER'),
+        # Peor caída intermedia a 60 sesiones. Sustituye a la simulación de
+        # stop (31/07/2026): sin stop, lo que hay que saber es cuánto llega a
+        # estar la posición en rojo antes de funcionar, porque eso es lo que
+        # determina el tamaño que uno puede permitirse. Las *_stop se quedan
+        # en el esquema (SQLite no borra columnas con facilidad) pero ya no se
+        # escriben.
+        ('peor_caida_60d', 'REAL'),
     ]:
         if columna not in columnas_actuales:
             conn.execute(f"ALTER TABLE senales_tracked ADD COLUMN {columna} {tipo}")
@@ -270,10 +277,18 @@ def actualizar_resultados_pendientes():
     Job periódico (llamado ~1 vez al día es más que suficiente) — busca
     señales trackeadas cuya fecha ya tiene 5/10/20/60 días de trading
     cumplidos pero todavía no tienen ese resultado calculado, y lo rellena
-    con precios reales de SPY: el retorno "sin stop" (mantener) Y el
-    retorno "con stop -7%" (revisando el mínimo diario en el camino, misma
-    lógica que _retornos_con_stop en rsu_algoritmo_service.py — una vez
-    disparado el stop, no participa de recuperación en horizontes más largos).
+    con precios reales de SPY.
+
+    Desde el 31/07/2026 ya NO se simula el stop del -7%: la herramienta dejó
+    de recomendarlo al medir que habría cortado 5 de las 16 señales históricas
+    —incluidas las dos de marzo de 2020, que acabaron en +14,5% y +17,1%— y
+    que con él la ventaja sobre días de pánico comparables se iba a cero.
+
+    En su lugar se guarda la PEOR CAÍDA INTERMEDIA: cuánto llegó a estar la
+    posición en rojo antes de funcionar. Sin stop, ese es el dato que hay que
+    poder aguantar, y por tanto el que determina el tamaño de la posición.
+    Las columnas *_stop se dejan en el esquema (SQLite no borra columnas con
+    facilidad) pero ya no se escriben.
     """
     import yfinance as yf
 
@@ -296,7 +311,6 @@ def actualizar_resultados_pendientes():
     hist.index = hist.index.tz_localize(None) if hist.index.tz is not None else hist.index
     closes = hist['Close']
     lows   = hist['Low'].fillna(closes)
-    STOP_PCT = -7.0
 
     conn = _conn()
     actualizadas = 0
@@ -315,17 +329,20 @@ def actualizar_resultados_pendientes():
             continue
         pos_entrada = closes.index.get_loc(posiciones_validas[0])
 
-        precio_stop = precio_entrada * (1 + STOP_PCT / 100)
-        dia_stop = None
+        # Peor caída intermedia hasta 60 sesiones: se recorre el camino con
+        # los MÍNIMOS diarios, no los cierres, porque lo que hace vender por
+        # pánico es el número en rojo durante la sesión.
+        minimo_visto = precio_entrada
         for k in range(1, 61):
             if pos_entrada + k >= len(closes):
                 break
-            if lows.iloc[pos_entrada + k] <= precio_stop:
-                dia_stop = k
-                break
+            low_k = lows.iloc[pos_entrada + k]
+            if low_k < minimo_visto:
+                minimo_visto = float(low_k)
+        peor_caida = round((minimo_visto - precio_entrada) / precio_entrada * 100, 2)
 
         cambios = {}
-        for dias, campo, campo_stop in [
+        for dias, campo, _ in [
             (5, 'resultado_5d', 'resultado_5d_stop'), (10, 'resultado_10d', 'resultado_10d_stop'),
             (20, 'resultado_20d', 'resultado_20d_stop'), (60, 'resultado_60d', 'resultado_60d_stop'),
         ]:
@@ -335,9 +352,8 @@ def actualizar_resultados_pendientes():
                 continue  # todavía no ha pasado suficiente tiempo de trading para este horizonte
             precio_h = float(closes.iloc[pos_entrada + dias])
             cambios[campo] = round((precio_h - precio_entrada) / precio_entrada * 100, 2)
-            cambios[campo_stop] = round(STOP_PCT, 2) if (dia_stop is not None and dia_stop <= dias) else cambios[campo]
-        if dia_stop is not None:
-            cambios['stopeada_dia'] = dia_stop
+        if cambios:
+            cambios['peor_caida_60d'] = peor_caida
 
         if cambios:
             set_clause = ", ".join(f"{k} = ?" for k in cambios)
