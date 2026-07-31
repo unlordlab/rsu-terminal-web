@@ -18,6 +18,21 @@ _CACHE_TTL = 60
 _daily_bars_cache: dict = {}
 _DAILY_BARS_TTL = 6 * 3600
 
+# Resultado completo de get_cartera(). Hasta ahora NO había ninguna caché
+# aquí: cada llamada descargaba el Google Sheet entero con pd.read_csv(url).
+# Eso eran 3+ descargas por carga de la página de Cartera, pero desde que los
+# badges de cruce 💼 (Fase 3) llaman a get_cartera_tickers(), abrir Scanner,
+# RS/RW, Insider, Research u Options Flow también se traía la hoja completa
+# — más snapshots_service cada 4 min y el WebSocket cada 60 s. Ver auditoría
+# de Cartera, hallazgo #B5.
+#
+# 60 s es exactamente el mismo TTL que ya tienen los precios (_CACHE_TTL) y
+# el mismo intervalo del broadcast del WS, así que la respuesta no se queda
+# más rancia de lo que ya estaba: lo único que se evita es volver a bajar la
+# hoja para servir datos que no han cambiado.
+_cartera_cache: dict = {}
+_CARTERA_TTL = 60
+
 
 def _is_market_open() -> bool:
     """Mismo patrón que spxl_service.py::_is_market_open() -- sin llamada
@@ -445,7 +460,7 @@ def get_portfolio_history(abiertas_rows: list, days: int = 180) -> list:
     return result
 
 
-def simulate_tier_capital(df, col_fecha, col_estado, col_compra, col_actual, col_venta, col_tier, capital_total):
+def simulate_tier_capital(df, col_fecha, col_estado, col_compra, col_actual, col_venta, col_tier, capital_total, col_cierre=None):
     """Recorre TODAS las operaciones (abiertas + cerradas) en orden cronológico y
     dimensiona cada posición Core/High/Lottery como % de un capital que:
       - empieza en `capital_total`,
@@ -456,30 +471,77 @@ def simulate_tier_capital(df, col_fecha, col_estado, col_compra, col_actual, col
     Devuelve {indice_fila_df: inversion_real} — None si la fila no tiene nivel
     válido o no se puede dimensionar (para que el llamador caiga al cálculo
     antiguo Cantidad/Inversión en ese caso).
+
+    SIMULACIÓN POR EVENTOS, no por filas (auditoría de Cartera, #B4). Antes se
+    recorría `df.sort_values(col_fecha)` —la fecha de APERTURA— y una posición
+    cerrada se abría Y se cerraba dentro de la misma iteración. Es decir: una
+    posición abierta en enero y cerrada en diciembre devolvía su capital y
+    apuntaba su P&L en ENERO, antes de que existieran las de febrero a
+    noviembre. El capital disponible que veían todas esas posiciones
+    intermedias era falso, y con él el recorte por falta de capital.
+
+    Ahora cada fila genera hasta dos eventos —apertura en `col_fecha`, cierre
+    en `col_cierre`— y se procesan todos en orden real. En una misma fecha las
+    aperturas van antes que los cierres (criterio conservador: el capital no se
+    da por liberado hasta después de haber comprometido lo de ese día). Si una
+    fila cerrada no tiene fecha de cierre fiable —columna ausente, vacía, o
+    anterior a la de apertura— se cierra el mismo día que se abre, que es
+    exactamente el comportamiento antiguo: sin dato no se inventa una fecha.
     """
     if capital_total <= 0 or not col_tier:
         return {}
 
-    order = df.sort_values(col_fecha, ascending=True)
+    filas = {idx: row for idx, row in df.iterrows()}
+
+    eventos = []
+    for idx, row in filas.items():
+        f_apertura = row[col_fecha]
+        eventos.append((f_apertura, 0, "abrir", idx))
+        estado = str(row[col_estado]).upper()
+        if "CERRADA" in estado or "CLOSED" in estado:
+            f_cierre = row.get(col_cierre) if col_cierre else None
+            if f_cierre is None or pd.isna(f_cierre) or f_cierre < f_apertura:
+                f_cierre = f_apertura
+            eventos.append((f_cierre, 1, "cerrar", idx))
+    eventos.sort(key=lambda e: (e[0], e[1]))
+
     equity = capital_total
     open_committed = 0.0
     inv_by_idx = {}
 
-    for idx, row in order.iterrows():
-        tier = norm_tier(row.get(col_tier))
+    for _fecha, _orden, tipo, idx in eventos:
+        row    = filas[idx]
         compra = float(row[col_compra]) if row[col_compra] else 0.0
-        if not tier or compra <= 0:
-            inv_by_idx[idx] = None
-            continue
 
-        desired   = capital_total * TIER_WEIGHTS[tier] / 100
-        available = max(0.0, equity - open_committed)
-        actual_inv = round(min(desired, available), 2)
-        inv_by_idx[idx] = actual_inv
-        open_committed += actual_inv
-
-        estado = str(row[col_estado]).upper()
-        if "CERRADA" in estado or "CLOSED" in estado:
+        if tipo == "abrir":
+            tier = norm_tier(row.get(col_tier))
+            if not tier or compra <= 0:
+                inv_by_idx[idx] = None
+                continue
+            desired    = capital_total * TIER_WEIGHTS[tier] / 100
+            available  = max(0.0, equity - open_committed)
+            actual_inv = round(min(desired, available), 2)
+            # Sin capital para dimensionar: None, NO 0.0. Es lo que el
+            # docstring de esta función promete desde el principio ("None si
+            # ... no se puede dimensionar, para que el llamador caiga al
+            # cálculo antiguo Cantidad/Inversión"), pero el código devolvía
+            # 0.0, que sí es un valor y por tanto se usaba tal cual.
+            #
+            # Con la hoja de HOY esto no cambia ningún número, y conviene
+            # decirlo: las columnas Cantidad e Inversión están vacías en las
+            # 53 filas abiertas, así que no hay ningún cálculo alternativo al
+            # que caer. El valor de devolver None es que el llamador puede
+            # distinguir «no se pudo dimensionar» de «vale cero», y marcar la
+            # fila en consecuencia en vez de pintarla como una posición de $0.
+            if actual_inv <= 0:
+                inv_by_idx[idx] = None
+                continue
+            inv_by_idx[idx] = actual_inv
+            open_committed += actual_inv
+        else:
+            actual_inv = inv_by_idx.get(idx)
+            if not actual_inv:
+                continue  # fila sin nivel válido: nunca comprometió capital
             venta = float(row.get(col_venta, 0) or 0) if col_venta else 0.0
             actual_px = venta if venta > 0 else (float(row.get(col_actual, 0) or 0) if col_actual else 0.0) or compra
             pnl_dollar = (actual_px - compra) / compra * actual_inv if compra > 0 else 0.0
@@ -515,6 +577,16 @@ def get_cartera_tickers() -> set:
 
 
 def get_cartera():
+    # Caché de 60 s (ver _CARTERA_TTL). Se devuelve una copia profunda: el
+    # resultado lo consumen la página de Cartera, el WS, los badges de otros
+    # cinco módulos, snapshots y las notificaciones, y basta con que uno de
+    # ellos mute una fila para contaminar a todos los demás — es el mismo
+    # fallo que ya ocurrió con `in_watchlist` en las cachés compartidas.
+    now_ts = time.time()
+    cacheado = _cartera_cache.get("data")
+    if cacheado and (now_ts - _cartera_cache.get("updated", 0)) < _CARTERA_TTL:
+        import copy
+        return copy.deepcopy(cacheado)
     try:
         url = settings.url_cartera
         if not url:
@@ -584,7 +656,8 @@ def get_cartera():
         df = df[~df[col_ticker].str.upper().isin(["NAN", "NONE", ""])]
 
         sim = simulate_tier_capital(df, col_fecha, col_estado, col_compra, col_actual,
-                                     col_venta, col_tier, settings.capital_total)
+                                     col_venta, col_tier, settings.capital_total,
+                                     col_cierre=col_cierre)
         inv_by_idx = sim.get("inv_by_idx", {}) if sim else {}
 
         abiertas = df[df[col_estado].str.contains("ABIERTA|OPEN", case=False, na=False)].copy()
@@ -649,6 +722,15 @@ def get_cartera():
 
                 peso = round(inv / total_inv_ref * 100, 1) if total_inv_ref > 0 else 0.0
 
+                # Posición abierta real a la que no se le pudo asignar capital:
+                # la simulación de niveles está saturada (comprometido ≈ equity)
+                # y la hoja no trae Cantidad ni Inversión para esa fila. Hasta
+                # ahora se pintaba como «$0 invertidos, 0 acciones, 0% de peso»,
+                # indistinguible de una posición inexistente. Se marca para que
+                # la tabla pueda decir que existe pero está sin dimensionar, en
+                # vez de enseñar un cero que parece un dato.
+                sin_dimensionar = bool(is_open and inv == 0 and compra > 0)
+
                 comment = str(row[col_comment])[:60] if col_comment and col_comment in row.index else ""
                 if comment.lower() in ("nan", "none", ""):
                     comment = ""
@@ -686,6 +768,7 @@ def get_cartera():
                     "sector":   sec.get("sector", "Sin clasificar"),
                     "industry": sec.get("industry", ""),
                     "tier":     tier,
+                    "sin_dimensionar": sin_dimensionar,
                 })
             return rows
 
@@ -771,7 +854,7 @@ def get_cartera():
         except Exception:
             history = []
 
-        return _sanitize({
+        resultado = _sanitize({
             "ok":           True,
             "metrics":      metrics,
             "closed_stats": closed_stats,
@@ -784,6 +867,13 @@ def get_cartera():
             "mkt_color":    mkt_color,
             "last_update":  datetime.now(ZoneInfo("Europe/Madrid")).strftime("%d/%m/%Y %H:%M:%S"),
         })
+        # Solo se cachea un resultado bueno -- un fallo de red o de formato de
+        # la hoja no debe quedarse pegado 60 s, mismo criterio que el resto
+        # del proyecto con los `ok: False`.
+        _cartera_cache["data"]    = resultado
+        _cartera_cache["updated"] = time.time()
+        import copy
+        return copy.deepcopy(resultado)
 
     except Exception as e:
         import traceback

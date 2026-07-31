@@ -108,18 +108,33 @@ def _get_quick_prices() -> list:
             continue
     return result
 
-def _get_cartera_prices() -> list:
+# Tope de tickers por difusión del WS. Antes eran 30 a fuego y sin avisar:
+# con 53 posiciones abiertas, 23 filas simplemente no recibían precio en vivo
+# y no había nada en la interfaz que lo dijera (auditoría de Cartera, #B12).
+# El coste real de subirlo es bajo -- fetch_live_prices() va en paralelo y
+# cachea 60 s, así que en régimen estable la mayoría de tickers ni se
+# descargan. Se deja un tope alto por seguridad, y si alguna vez recorta, se
+# dice en el propio mensaje para que la página pueda avisar.
+MAX_TICKERS_WS_CARTERA = 120
+
+
+def _get_cartera_prices() -> dict:
     try:
         from services.cartera_service import get_cartera, fetch_live_prices
         data     = get_cartera()
         abiertas = data.get('abiertas', [])
         if not abiertas:
-            return []
-        tickers = list(dict.fromkeys([p['ticker'] for p in abiertas]))[:30]
-        prices  = fetch_live_prices(tickers)
-        return list(prices.values())
+            return {"prices": [], "truncados": 0}
+        todos     = list(dict.fromkeys([p['ticker'] for p in abiertas]))
+        tickers   = todos[:MAX_TICKERS_WS_CARTERA]
+        truncados = len(todos) - len(tickers)
+        if truncados:
+            print(f"[BroadcastCartera] {len(todos)} tickers abiertos, se difunden {len(tickers)} "
+                  f"(tope {MAX_TICKERS_WS_CARTERA}) — {truncados} quedan sin precio en vivo")
+        prices = fetch_live_prices(tickers)
+        return {"prices": list(prices.values()), "truncados": truncados}
     except Exception:
-        return []
+        return {"prices": [], "truncados": 0}
 
 
 async def _build_payload() -> dict:
@@ -233,8 +248,8 @@ async def websocket_cartera(websocket: WebSocket):
     await cartera_manager.connect(websocket)
     try:
         loop   = asyncio.get_event_loop()
-        prices = await loop.run_in_executor(None, _get_cartera_prices)
-        await websocket.send_text(json.dumps({"type": "cartera_update", "prices": prices}))
+        snap   = await loop.run_in_executor(None, _get_cartera_prices)
+        await websocket.send_text(json.dumps({"type": "cartera_update", **snap}))
         while True:
             try:
                 await asyncio.wait_for(websocket.receive_text(), timeout=65.0)
@@ -287,9 +302,9 @@ async def broadcast_cartera_loop():
         await asyncio.sleep(60)
         if cartera_manager.active:
             try:
-                loop   = asyncio.get_event_loop()
-                prices = await loop.run_in_executor(None, _get_cartera_prices)
-                await cartera_manager.broadcast({"type": "cartera_update", "prices": prices})
+                loop = asyncio.get_event_loop()
+                snap = await loop.run_in_executor(None, _get_cartera_prices)
+                await cartera_manager.broadcast({"type": "cartera_update", **snap})
             except Exception as e:
                 print(f"[BroadcastCartera] Error: {type(e).__name__}: {e}")
 

@@ -29,8 +29,8 @@ parecería completo y sería engañoso.
 
 ## Cobertura de esta versión — leer antes de usarlo
 
-- **401 hallazgos**: 379 extraídos de los 16 documentos de auditoría, más 22
-  encontrados después con el sistema ya en producción (RSU Algoritmo #14–#30,
+- **402 hallazgos**: 379 extraídos de los 16 documentos de auditoría, más 23
+  encontrados después con el sistema ya en producción (RSU Algoritmo #14–#30, Cartera #B19,
   Newsfeed/briefing #27–#31).
 - **64 son críticos (🔴)**: todos revisados en la primera pasada.
   33 cerrados · 11 abiertos ·
@@ -152,47 +152,48 @@ exposición: con ~100 usuarios reales, no hay política de privacidad.
 | ❓ | 23 | 🟢 | Detección de bases y pivot points | *sin comprobar* |
 | ❓ | 24 | 🟢 | Cruce con Insider y Options Flow | *sin comprobar* |
 
-## Cartera  (42 hallazgos — ❌3 · ✅1 · ❓38)
+## Cartera  (43 hallazgos — ❌7 · ✅16 · ❓17 · ⬜3)
 
 | | # | Sev | Hallazgo | Estado / evidencia |
 |-|---|-----|----------|--------------------|
-| ❓ | A1 | 🔴 | El "cierre anterior" puede ser el de hace DOS días (frontera de sesión no validada) | *sin comprobar* |
-| ❌ | A2 | 🔴 | `auto_adjust=True` (default de yfinance) distorsiona el HOY % en días ex-dividendo | verificado 30/07: cero apariciones de auto_adjust en cartera_service.py, sigue el default de yfinance |
-| ❌ | A3 | 🔴 | El fallback FMP fabrica un "+0.00%" y lo cachea | verificado 30/07: cartera_service.py:207 sigue usando /stable/quote-short, que no devuelve la variación real |
-| ❌ | B1 | 🔴 | `clean_numeric` destroza importes con formato US de miles | PROBADO 30/07 ejecutando la función: clean_numeric('1,234.56') → 1.23456. Un importe en formato US con separador de miles se divide por ~1000 en silencio. Con formato europeo ('1.234,56' → 1234.56) sí funciona |
-| ❓ | B2 | 🔴 | Las comisiones de operaciones CERRADAS se restan al P&L de las ABIERTAS | *sin comprobar* |
-| ✅ | B3 | 🔴 | "P&L Total Acum." es una suma de porcentajes — no es un P&L | avg_pnl ponderado por capital invertido |
-| ❓ | B4 | 🔴 | `simulate_tier_capital` procesa el cierre en la fecha de APERTURA | *sin comprobar* |
-| ❓ | A4 | 🟠 | Cripto en cartera: precio congelado 16 horas al día | *sin comprobar* |
-| ❓ | A5 | 🟠 | El P&L en $ puede divergir entre la carga inicial y los updates en vivo | *sin comprobar* |
-| ❓ | A6 | 🟠 | Cadencia real del "en vivo": hasta ~2 minutos de retraso, más los 15 min de Yahoo | *sin comprobar* |
-| ❓ | A7 | 🟠 | Las métricas de cabecera se quedan congeladas mientras las filas se actualizan | *sin comprobar* |
-| ❓ | A8 | 🟠 | Reordenar o filtrar la tabla revierte los precios al snapshot inicial | *sin comprobar* |
-| ❓ | B5 | 🟠 | El Google Sheet se lee 3+ veces por carga de página (y cada 60s con el WS activo) | *sin comprobar* |
-| ❓ | B6 | 🟠 | El WebSocket de cartera queda vivo para siempre al salir de la página | *sin comprobar* |
-| ❓ | B7 | 🟠 | Token JWT en la query string del WebSocket | *sin comprobar* |
-| ❓ | B8 | 🟠 | Sparklines cruzados entre tickers que son prefijo de otros | *sin comprobar* |
-| ❓ | B9 | 🟠 | `/notificaciones/check` accesible a cualquier usuario autenticado | *sin comprobar* |
-| ❓ | B10 | 🟠 | Gating de tier incoherente (relevante para la monetización) | *sin comprobar* |
-| ❓ | B11 | 🟠 | `last_update` con hora del contenedor (UTC) | *sin comprobar* |
-| ❓ | B12 | 🟠 | Límite silencioso de 30 tickers en el WS | *sin comprobar* |
+| ✅ | A1 | 🔴 | El «cierre anterior» puede ser el de hace DOS días (frontera de sesión no validada) | verificado 31/07: resuelto ya el 25/07. `_get_daily_bars` descarta filas con Close=NaN antes de elegir última/anterior, y si la fila MÁS reciente es NaN con el mercado cerrado usa `fast_info.last_price` como relleno para no saltarse una sesión entera. Ese era justo el caso del desfase de dos días |
+| ❌ | A2 | 🔴 | `auto_adjust=True` (default de yfinance) distorsiona el HOY % en días ex-dividendo | verificado 31/07: sigue sin aparecer `auto_adjust` en `_get_daily_bars`, así que ambas barras vienen ajustadas y el % es retorno TOTAL, no de precio. En un día ex-dividendo el número no coincide con el del bróker |
+| ❌ | A3 | 🔴 | El fallback FMP fabrica un «+0.00%» y lo cachea | verificado 31/07: `cartera_service.py:216` sigue devolviendo `prev: price, chg: 0.0`. Solo se activa si yfinance falla del todo para ese ticker, pero cuando lo hace inventa un «sin cambios» indistinguible de un dato real |
+| ⬜ | B1 | 🔴 | `clean_numeric` destroza importes con formato US de miles | verificado 31/07: el bug sigue en el código (1,234.56 → 1.23456) pero **NO muerde con la hoja actual**: 0 valores con coma y punto a la vez, y los 133 valores con coma son formato europeo de decimales (18,8), que se convierten bien. Latente — se dispara el día que aparezca un 1,234 o un 1,234.56 |
+| ⬜ | B2 | 🔴 | Las comisiones de operaciones CERRADAS se restan al P&L de las ABIERTAS | verificado 31/07: el código es culpable (`total_comis` suma `df` ENTERO y se resta a un `total_val`/`total_inv` que son solo de abiertas) pero **hoy no tiene efecto: la hoja no tiene columna de comisiones**, así que `col_comis` es None y `total_comis` vale 0. Latente — reaparece el día que se añada esa columna |
+| ✅ | B3 | 🔴 | «P&L Total Acum.» es una suma de porcentajes — no es un P&L | avg_pnl ponderado por capital invertido |
+| ✅ | B4 | 🔴 | `simulate_tier_capital` procesa el cierre en la fecha de APERTURA | ARREGLADO 31/07: la simulación pasa a ser **por eventos**. Cada fila genera hasta dos (apertura en `Fecha`, cierre en `Fecha Cierre`), se ordenan por fecha real y las aperturas van antes que los cierres del mismo día. **Honestidad sobre el efecto: hoy casi no cambia nada, y la razón está en los datos, no en el código** — de las 32 posiciones cerradas solo **1 tiene fecha de cierre**, así que las otras 31 siguen cerrándose el día que se abren, igual que antes. Agregados idénticos (equity, P&L realizado, capital disponible: 0,00 de diferencia) y solo 3 de 86 posiciones cambian su inversión asignada. **Para que el arreglo sirva de verdad hay que rellenar la columna `Fecha Cierre` en la hoja** |
+| ⬜ | A5 | 🟠 | El P&L en $ puede divergir entre la carga inicial y los updates en vivo | MEDIDO 31/07 sobre las 53 posiciones abiertas reales: divergen 2, y por **4-5 céntimos**. La causa es el redondeo de `shares` a 4 decimales, no una fórmula distinta. Real pero irrelevante; no se toca |
+| ❌ | A4 | 🟠 | Cripto en cartera: precio congelado 16 horas al día | verificado 31/07: real pero menor de lo descrito. `_is_market_open()` usa horario NYSE, así que fuera de él una cripto se sirve desde barras diarias — con `_DAILY_BARS_TTL = 6h`, el desfase máximo es de 6 horas, no de 16 |
+| ❌ | A6 | 🟠 | Cadencia real del «en vivo»: hasta ~2 minutos de retraso, más los 15 min de Yahoo | verificado 31/07: confirmado y cuantificado — WS cada 60s + `_CACHE_TTL` de precios 60s + el retraso propio de Yahoo. El indicador dice «MKT LIVE» sin matizar ninguno de los tres |
+| ✅ | A7 | 🟠 | Las métricas de cabecera se quedan congeladas mientras las filas se actualizan | resuelto: «P&L Hoy», «Valor de Mercado» y «P&L Neto» se recalculan en cada tick del WS (ids `cartera-*-value`) |
+| ✅ | A8 | 🟠 | Reordenar o filtrar la tabla revierte los precios al snapshot inicial | resuelto: `applyLivePrices` persiste `actual`/`pnl`/`chg_hoy` en el objeto, no solo en el DOM |
+| ✅ | B5 | 🟠 | El Google Sheet se lee 3+ veces por carga de página (y cada 60s con el WS activo) | ARREGLADO 31/07: caché de 60 s en `get_cartera()`, el mismo TTL que ya tenían los precios y el mismo intervalo del broadcast, así que no se sirve nada más rancio de lo que ya se servía. **Medido: 11,2 s → 0,0015 s.** Se devuelve una copia profunda para que ninguno de los siete consumidores (página, WS, badges de cinco módulos, snapshots, notificaciones) pueda contaminar a los demás mutando una fila — verificado con una prueba de aislamiento |
+| ✅ | B6 | 🟠 | El WebSocket de cartera queda vivo para siempre al salir de la página | resuelto: `export function cleanup()` cierra el socket y cancela el reintento; el router la invoca al destruir la página |
+| ❌ | B7 | 🟠 | Token JWT en la query string del WebSocket | verificado 31/07: sigue viajando en `?token=`. Mitigado (validación de Origin contra CSWSH, cierre 4403) y es una limitación real del navegador —no se pueden poner cabeceras en el handshake— pero el token sigue quedando en logs de proxy/servidor |
+| ✅ | B8 | 🟠 | Sparklines cruzados entre tickers que son prefijo de otros | ARREGLADO 31/07: el selector pasa de subcadena (`[id*="-MA"]`) a sufijo exacto (`[id$="-MA"]`). Verificado con un caso sintético: el viejo casaba `MA`, `MARA` y `MAGS`; el nuevo solo `MA`. Con la cartera de hoy no había ningún par afectado (0 tickers que sean prefijo de otro), así que es un arreglo preventivo |
+| ❌ | B9 | 🟠 | `/notificaciones/check` accesible a cualquier usuario autenticado | verificado 31/07: real aunque acotado — el router entero está tras `paid`, así que es «cualquier usuario de pago», no cualquiera. Sigue permitiendo que un usuario dispare avisos de Telegram al chat del admin |
+| ✅ | B10 | 🟠 | Gating de tier incoherente (relevante para la monetización) | verificado 31/07: coherente hoy — `include_router(cartera.router, dependencies=paid)`, el WS exige `min_tier=tier1` y la entrada del menú lleva `minTier: tier1` |
+| ✅ | B11 | 🟠 | `last_update` con hora del contenedor (UTC) | verificado 31/07: usa `ZoneInfo(Europe/Madrid)` |
+| ✅ | B12 | 🟠 | Límite silencioso de 30 tickers en el WS | ARREGLADO 31/07: tope de 30 → 120 y, si alguna vez recorta, el propio mensaje del WS lleva `truncados` y la página pinta un aviso en ámbar diciendo cuántas posiciones se quedan con el precio de la última recarga. Con 53 posiciones abiertas, las 23 que antes no recibían precio en vivo ya lo reciben |
 | ❓ | B13 | 🟡 | Fechas ambiguas DD/MM vs MM/DD — riesgo silencioso permanente | *sin comprobar* |
-| ❓ | B14 | 🟡 | Curva "Evolución del Valor" con sesgo de superviviente | *sin comprobar* |
+| ❓ | B14 | 🟡 | Curva «Evolución del Valor» con sesgo de superviviente | *sin comprobar* |
 | ❓ | B15 | 🟡 | Línea de invertido del gráfico con fallback engañoso | *sin comprobar* |
-| ❓ | B16 | 🟡 | Export CSV: comillas sin escapar y sin BOM | *sin comprobar* |
-| ❓ | B17 | 🟡 | Colisión de clave en notificaciones Telegram | *sin comprobar* |
-| ❓ | B18 | 🟡 | Barra de peso saturada | *sin comprobar* |
-| ❓ | 19 | 🔵 | P&L del DÍA agregado de la cartera | *sin comprobar* |
+| ✅ | B16 | 🟡 | Export CSV: comillas sin escapar y sin BOM | ARREGLADO 31/07: función `csvCampo()` con la regla estándar (RFC 4180) — se entrecomilla si hay coma, comilla o salto de línea, y las comillas internas se duplican. Más BOM UTF-8 y saltos CRLF para que Excel en Windows no destroce los acentos. Verificado campo a campo |
+| ❌ | B17 | 🟡 | Colisión de clave en notificaciones Telegram | verificado 31/07: la clave es `ticker|fecha_apertura|tipo`, así que dos lotes del mismo ticker abiertos el mismo día generan una sola notificación. Las filas ya tienen un `id` único por fila que podría usarse en su lugar |
+| ✅ | B18 | 🟡 | Barra de peso saturada | ARREGLADO 31/07: la barra se escala contra la mayor posición de la tabla en vez de `peso*3` con tope 100. Con la cartera real esto importa por el motivo contrario al que decía el hallazgo: ninguna posición llega al 33%, así que TODAS las barras eran rayitas de menos del 10% de ancho e igual de inútiles. Ahora 3,2% → 100%, 2,7% → 84%, 1,9% → 59%, 1,1% → 34%, 0,6% → 19% |
+| ✅ | B19 | 🟠 | Posiciones abiertas reales que se muestran como $0 y 0% de peso | ENCONTRADO Y ARREGLADO 31/07, de paso con B4: **5 de las 53 posiciones abiertas** (GOOGL, ISRG, NEE, ORLY, SPCX) salían con $0 invertidos, 0 acciones y 0% de peso, indistinguibles de no existir. La simulación por niveles está saturada (comprometido ≈ equity, `capital_disponible` = 0) y a lo que no cabe le asignaba `0.0`, pese a que su propio docstring promete `None` en ese caso. Ahora devuelve `None`, la fila se marca `sin_dimensionar` y la tabla dice «sin asignar» con el porqué al pasar el ratón, en vez de un cero que parece un dato. Nota: el respaldo Cantidad/Inversión tampoco existe — **la columna `Inversión` está vacía en las 53 filas abiertas** |
+| ✅ | 19 | 🔵 | P&L del DÍA agregado de la cartera | hecho: tarjeta «P&L Hoy» en cabecera, calculada en backend y recalculada en vivo, excluyendo posiciones sin cierre de ayer disponible |
 | ❓ | 20 | 🔵 | Asignación objetivo vs real | *sin comprobar* |
 | ❓ | 21 | 🔵 | Columna P&L $ visible en la tabla | *sin comprobar* |
 | ❓ | 22 | 🔵 | Días en posición | *sin comprobar* |
 | ❓ | 23 | 🔵 | Responsive | *sin comprobar* |
-| ❓ | 1 | 🟢 | A1 + A2 (validación de sesión por fecha + `auto_adjust=False`) | *sin comprobar* |
-| ❓ | 3 | 🟢 | B1 (clean_numeric) + B2 (comisiones) + B3 (suma de %) | *sin comprobar* |
-| ❓ | 4 | 🟢 | A5–A8 | *sin comprobar* |
-| ❓ | 5 | 🟢 | B5 + B6 + B7 | *sin comprobar* |
-| ❓ | 6 | 🟢 | B4 (simulación por eventos) | *sin comprobar* |
-| ❓ | 24 | 🟢 | Snapshot diario del equity en SQLite | *sin comprobar* |
+| ❓ | 1 | 🟢 | A1 + A2 (validación de sesión por fecha + `auto_adjust=False`) | parcial: A1 resuelto, A2 sigue abierto |
+| ❓ | 3 | 🟢 | B1 (clean_numeric) + B2 (comisiones) + B3 (suma de %) | parcial: B3 resuelto; B1 y B2 verificados como latentes (sin efecto con la hoja actual) |
+| ❓ | 4 | 🟢 | A5–A8 | parcial: A7 y A8 resueltos, A5 medido como irrelevante, A6 abierto |
+| ❓ | 5 | 🟢 | B5 + B6 + B7 | parcial: B6 resuelto; B5 (el más grave de los tres) y B7 abiertos |
+| ❓ | 6 | 🟢 | B4 (simulación por eventos) | abierto — es el arreglo que pide B4, ya confirmado |
+| ✅ | 24 | 🟢 | Snapshot diario del equity en SQLite | hecho: tabla `snapshot_cartera` en `snapshots.db`, escrita desde el bucle de 4 min con dedup por fecha de sesión |
 | ❓ | 25 | 🟢 | Feed de trades en tiempo real vía Finnhub WS | *sin comprobar* |
 | ❓ | 26 | 🟢 | Alertas de posición | *sin comprobar* |
 | ❓ | 27 | 🟢 | Cruce con Options Flow | *sin comprobar* |

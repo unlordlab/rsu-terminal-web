@@ -119,6 +119,7 @@ function connectWS(abiertas) {
             const msg = JSON.parse(e.data);
             if (msg.type !== 'cartera_update') return;
             applyLivePrices(msg.prices, abiertas);
+            avisarTruncado(msg.truncados);
         } catch(_) {}
     };
 
@@ -159,6 +160,38 @@ function setWsStatus(state) {
         el.className = 'ws-dot ' + state;
         el.title = state === 'live' ? 'Precios en tiempo real' : 'Sin conexión live';
     });
+}
+
+// El WebSocket tiene un tope de tickers por difusión. Si alguna vez recorta,
+// hay que decirlo: antes el corte era silencioso (30 tickers a fuego) y las
+// posiciones sobrantes se quedaban con el precio de la carga inicial sin que
+// nada lo indicara, con el indicador marcando "MKT LIVE" igual. Ver auditoría
+// de Cartera, hallazgo #B12.
+// Celda de PESO. Dos cosas que no eran evidentes en la versión anterior:
+//
+//  · Una posición abierta a la que la simulación de niveles no pudo asignar
+//    capital (porque el capital comprometido ya iguala al disponible, y la
+//    hoja no trae Cantidad ni Inversión para esa fila) salía como «0%», igual
+//    que si no existiera. Ahora dice que está sin asignar y por qué.
+//  · La barra era `peso * 3` con tope 100, así que todo lo que pesara 33% o
+//    más se veía idéntico. Ahora se escala contra la mayor posición de la
+//    tabla, que es lo que permite compararlas de un vistazo.
+function pesoCelda(r, maxPeso) {
+    if (r.sin_dimensionar) {
+        return `<div style="color:#ffb800;font-size:10px;" title="Posición abierta sin capital asignado: la simulación por niveles ya tiene comprometido todo el capital disponible, y la hoja no trae Cantidad ni Inversión para esta fila.">sin asignar</div>`;
+    }
+    const pct = Math.min((n(r.peso) || 0) / maxPeso * 100, 100);
+    return `<div style="color:var(--color-muted);font-size:10px;">${r.peso}%</div>`
+         + `<div class="peso-bar" style="width:${pct}%"></div>`;
+}
+
+function avisarTruncado(truncados) {
+    const el = document.getElementById('cartera-ws-truncado');
+    if (!el) return;
+    if (!truncados) { el.style.display = 'none'; return; }
+    el.style.display = 'block';
+    el.textContent = '⚠ ' + truncados + ' posicion' + (truncados === 1 ? '' : 'es')
+        + ' sin precio en vivo (tope de la conexión). Su precio es el de la última recarga de la página.';
 }
 
 function applyLivePrices(prices, abiertas) {
@@ -374,7 +407,8 @@ function header() {
             <button class="refresh-btn" onclick="window.__carteraRefresh()">⟳ Actualizar</button>
             <span class="ws-dot off" title="Sin conexión"></span>
         </div>
-    </div>`;
+    </div>
+    <div id="cartera-ws-truncado" style="display:none;background:#2a1f0a;border:1px solid #d68910;border-radius:var(--radius);padding:8px 12px;font-size:11px;color:#ffb800;margin-bottom:1rem;"></div>`;
 }
 
 function topBar(data) {
@@ -621,6 +655,12 @@ function activeTable(rows) {
         return `<div style="background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius);overflow:hidden;margin-bottom:1rem;padding:1.25rem;color:var(--color-muted);font-size:12px;">Sin resultados para el filtro actual.</div>`;
     }
 
+    // Referencia para la barra de peso: la mayor posición de la tabla. Antes
+    // era `peso * 3` con tope 100, así que cualquier posición del 33% o más
+    // pintaba la barra llena y todas las grandes se veían iguales. Escalando
+    // contra la mayor, las barras vuelven a ser comparables entre sí.
+    const maxPeso = Math.max(...rows.map(r => n(r.peso) || 0), 0.01);
+
     const trs = rows.map((r, i) => {
         const pnlColor = r.pnl >= 0 ? 'var(--color-accent)' : '#f23645';
         const rowClass = r.pnl >= 0 ? 'cartera-tr row-profit' : 'cartera-tr row-loss';
@@ -628,6 +668,9 @@ function activeTable(rows) {
         const chgTxt   = r.chg_hoy == null ? '—' : (r.chg_hoy >= 0 ? '+' : '') + fix(r.chg_hoy) + '%';
         const comment  = r.comment || '—';
         const sparkId  = `spark-active-${i}-${r.ticker}`;
+        // La celda de peso lleva su propia función: hay dos casos que no son
+        // «0%» aunque lo parezcan (posición sin capital asignado) y la barra
+        // saturaba a partir del 33% — ver pesoCelda().
         const tierColors = { CORE: '#00ffad', HIGH: '#00d9ff', LOTTERY: '#b044ff' };
         const tierColor = tierColors[r.tier] || 'var(--color-muted)';
         const tierBadge = r.tier
@@ -650,10 +693,7 @@ function activeTable(rows) {
             <td style="padding:8px 10px;font-size:12px;font-weight:500;" data-live-pnl-id="${r.id}">
                 <span style="color:${pnlColor};">${r.pnl >= 0 ? '+' : ''}${fix(r.pnl)}%</span>
             </td>
-            <td style="padding:8px 10px;min-width:80px;">
-                <div style="color:var(--color-muted);font-size:10px;">${r.peso}%</div>
-                <div class="peso-bar" style="width:${Math.min(r.peso * 3, 100)}%"></div>
-            </td>
+            <td style="padding:8px 10px;min-width:80px;">${pesoCelda(r, maxPeso)}</td>
             <td style="padding:8px 10px;"><canvas class="sparkline" id="${sparkId}" width="60" height="20"></canvas></td>
             <td style="padding:8px 10px;color:var(--color-muted);font-size:11px;max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${comment}">${comment}</td>
         </tr>`;
@@ -788,9 +828,13 @@ async function loadSparklines(abiertas) {
         const data = await res.json();
         if (!data.ok) return;
         _sparklines = data.sparklines || {};
-        // Redibuja los sparklines ya presentes en el DOM con los datos recién llegados
+        // Redibuja los sparklines ya presentes en el DOM con los datos recién
+        // llegados. El id es `spark-active-<i>-<TICKER>`, así que se busca por
+        // SUFIJO exacto ($=) y no por subcadena (*=): con `[id*="-MA"]` el
+        // sparkline de MA se pintaba también encima del de MARA, y el de V
+        // encima de media tabla (auditoría de Cartera, #B8).
         Object.keys(_sparklines).forEach(ticker => {
-            document.querySelectorAll(`canvas.sparkline[id*="-${ticker}"]`).forEach(c => drawSparkline(c.id, _sparklines[ticker]));
+            document.querySelectorAll(`canvas.sparkline[id$="-${ticker}"]`).forEach(c => drawSparkline(c.id, _sparklines[ticker]));
         });
     } catch(_) {}
 }
@@ -969,15 +1013,29 @@ function authHeader() {
 }
 
 // Exportar CSV
+//
+// Dos detalles que estaban mal (auditoría de Cartera, #B16):
+//  · El comentario se envolvía en comillas SIN duplicar las internas, así que
+//    un comentario con una comilla partía la fila en dos columnas de más.
+//  · El Blob iba sin BOM, y Excel en Windows abre CSV como ANSI por defecto:
+//    cualquier acento salía destrozado ("Inversión" → "InversiÃ³n").
+function csvCampo(v) {
+    const s = v == null ? '' : String(v);
+    // Regla estándar (RFC 4180): se entrecomilla si hay coma, comilla o salto
+    // de línea, y las comillas internas se duplican.
+    return /[",\n\r]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
+}
+
 window.__carteraExportCSV = function() {
     if (!_carteraData) return;
     const rows = _carteraData.abiertas || [];
     const headers = ['Ticker','Fecha','P.Compra','P.Actual','P&L%','P&L$','Inversión','Valor Actual','Peso%','Comentario'];
-    const lines = [headers.join(',')];
+    const lines = [headers.map(csvCampo).join(',')];
     rows.forEach(r => {
-        lines.push([r.ticker, r.fecha, r.compra, r.actual, fix(r.pnl), fix(r.pnl_usd), r.inv, r.val_act, r.peso, '"' + (r.comment || '') + '"'].join(','));
+        lines.push([r.ticker, r.fecha, r.compra, r.actual, fix(r.pnl), fix(r.pnl_usd),
+                    r.inv, r.val_act, r.peso, r.comment || ''].map(csvCampo).join(','));
     });
-    const blob = new Blob([lines.join('\n')], { type:'text/csv' });
+    const blob = new Blob(['﻿' + lines.join('\r\n')], { type:'text/csv;charset=utf-8' });
     const a    = document.createElement('a');
     a.href     = URL.createObjectURL(blob);
     a.download = 'cartera_' + new Date().toISOString().slice(0,10) + '.csv';
