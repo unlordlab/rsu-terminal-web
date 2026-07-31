@@ -152,7 +152,7 @@ exposición: con ~100 usuarios reales, no hay política de privacidad.
 | ❓ | 23 | 🟢 | Detección de bases y pivot points | *sin comprobar* |
 | ❓ | 24 | 🟢 | Cruce con Insider y Options Flow | *sin comprobar* |
 
-## Cartera  (46 hallazgos — ❌3 · ✅31 · ❓8 · ⬜4)
+## Cartera  (46 hallazgos — ❌3 · ✅32 · ❓7 · ⬜4)
 
 | | # | Sev | Hallazgo | Estado / evidencia |
 |-|---|-----|----------|--------------------|
@@ -197,7 +197,7 @@ exposición: con ~100 usuarios reales, no hay política de privacidad.
 | ❓ | 5 | 🟢 | B5 + B6 + B7 | parcial: B6 resuelto; B5 (el más grave de los tres) y B7 abiertos |
 | ❓ | 6 | 🟢 | B4 (simulación por eventos) | abierto — es el arreglo que pide B4, ya confirmado |
 | ✅ | 24 | 🟢 | Snapshot diario del equity en SQLite | hecho: tabla `snapshot_cartera` en `snapshots.db`, escrita desde el bucle de 4 min con dedup por fecha de sesión |
-| ❓ | 25 | 🟢 | Feed de trades en tiempo real vía Finnhub WS | *sin comprobar* |
+| ✅ | 25 | 🟢 | Feed de trades en tiempo real vía Finnhub WS | HECHO 31/07, **detrás de un flag apagado por defecto**. `services/finnhub_stream_service.py`: una conexión al WebSocket de trades suscrita a los tickers abiertos, que escribe en el MISMO `_price_cache` que ya usaba Cartera. El WS propio de la terminal lo distribuye sin enterarse del origen y **el frontend no cambia**. Revertir es `FINNHUB_REALTIME=false`; yfinance sigue vivo y es además quien aporta el CIERRE ANTERIOR (Finnhub manda trades, no el cierre de ayer), así que sin `prev` conocido el tick se descarta en vez de publicar un 0% inventado. **Medido con los 50 tickers reales**: conectado, 50/50 suscritos, 125 ticks aplicados, y los porcentajes contrastados contra el `pc` autoritativo de Finnhub (AMZN/MSFT/MSTR coinciden al céntimo). Degradación automática: si el stream cae, a los 60 s el caché envejece y `fetch_live_prices` vuelve a yfinance solo. Tope de 50 símbolos del plan gratuito contemplado, con aviso en log en vez de recorte silencioso. **Fallo propio cazado en la verificación**: con el flag apagado la corrutina hacía `return` y `ws.supervisar()` —que solo espera ante excepciones— la relanzaba en bucle cerrado (20+ mensajes en 25 s, CPU quemada); ahora se aparca. **LICENCIA, y por eso viene apagado**: los términos de Finnhub dicen que todos sus planes son «strictly for personal use unless explicitly stated otherwise» y prohíben redistribuir los datos «or derived results» sin aprobación escrita. Servirlos a ~100 usuarios ES redistribución — encenderlo es una decisión de licencia, no de configuración |
 | ❓ | 26 | 🟢 | Alertas de posición | *sin comprobar* |
 | ❓ | 27 | 🟢 | Cruce con Options Flow | *sin comprobar* |
 | ✅ | 2 | ⚪ | Honestidad en la UI: tooltip del punto del WebSocket | VERIFICADO Y ARREGLADO 31/07. **No era un hallazgo suelto**: es el punto 2 de la solución de #A6, y el generador de este documento lo cortó en los dos puntos del enunciado, dejándolo como una fila huérfana sin contenido. Al ir al documento original de la auditoría, pedía cambiar el tooltip del ws-dot de «Precios en tiempo real» por algo honesto. **Se había quedado sin hacer**: al cerrar #A6 se cambió el texto de la cabecera pero no ese tooltip, que seguía prometiendo tiempo real. Ahora dice «Conexión activa — precios diferidos, se refrescan cada 60 s»: el punto verde significa que la conexión está viva, no que el dato sea de este segundo |
