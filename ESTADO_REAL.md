@@ -29,7 +29,8 @@ parecería completo y sería engañoso.
 
 ## Cobertura de esta versión — leer antes de usarlo
 
-- **379 hallazgos** extraídos de los 16 documentos de auditoría.
+- **383 hallazgos**: 379 extraídos de los 16 documentos de auditoría, más 4
+  encontrados después auditando datos en producción (RSU Algoritmo #14–#17).
 - **64 son críticos (🔴)**: todos revisados en la primera pasada.
   33 cerrados · 11 abiertos ·
   1 ya no aplican ·
@@ -40,7 +41,12 @@ parecería completo y sería engañoso.
   revisados uno a uno, seis arreglados en esa sesión. Quedan 3 abiertos (#6
   festivos, #7 universo, #20 histórico de percentil) y 4 sin comprobar del
   tier UX/NUEVO.
-- Los **297 restantes** están extraídos y clasificados por
+- **RSU Algoritmo, auditoría de datos (30/07, `34efe61`+`bb8106f`)**: los
+  valores en pantalla eran todos correctos, pero aparecieron **4 hallazgos
+  nuevos** que no estaban en la auditoría original (#14–#17), tres de ellos
+  encadenados y con efecto real sobre las señales. El backtest a 10 años pasa
+  de 51 a 16 señales, con la ventaja a 60 días de +1,51pp a +4,30pp.
+- Los **294 restantes** están extraídos y clasificados por
   severidad, pero marcados ❓ SIN VERIFICAR: aparecen aquí para no perderlos de
   vista, **no como lista de trabajo fiable**. Verificarlos es la segunda pasada.
 
@@ -448,23 +454,34 @@ a uno contra el código, seis cerrados en esa sesión. Es, junto a Research, el
 | ❓ | 21 | 🟢 | Rotación sectorial en el tiempo | *sin comprobar* |
 | ❓ | 22 | 🟢 | Alerta de entrada en el top decil | *sin comprobar* |
 
-## Rsu Algoritmo  (13 hallazgos — ✅2 · ❓11)
+## Rsu Algoritmo  (17 hallazgos — ✅9 · ❓8)
+
+**Auditoría de datos el 30/07** (commits `34efe61` y `bb8106f`), a raíz de que
+el usuario recibiera tres avisos de semáforo en un día. Los valores en pantalla
+resultaron todos correctos —contrastados uno a uno contra un recálculo
+independiente desde yfinance— pero salieron cuatro hallazgos nuevos, tres de
+ellos encadenados y con efecto real sobre las señales. Los #14–#17 no estaban
+en la auditoría original.
 
 | | # | Sev | Hallazgo | Estado / evidencia |
 |-|---|-----|----------|--------------------|
 | ✅ | 1 | 🔴 | El backtest valida un sistema distinto del que corre en producción (McClellan) | PRIORIDAD 2: oscilador de amplitud sectorial con histórico desde 1998 |
 | ✅ | 2 | 🔴 | `get_rsu_algoritmo()` no tiene caché — ~13 llamadas de red por carga de página, y una escritura en BD | caché de 10 min en get_rsu_algoritmo() |
 | ❓ | 3 | 🔴 | El "limpiado de datos" por percentiles puede borrar barras legítimas justo en un crash | *sin comprobar* |
-| ❓ | 4 | 🟠 | El RVOL del día del mínimo se compara contra la media de volumen de HOY, no de aquel día | *sin comprobar* |
-| ❓ | 5 | 🟠 | El texto al usuario dice "/100" cuando el máximo real es 90 | *sin comprobar* |
+| ✅ | 4 | 🟠 | El RVOL del día del mínimo se compara contra la media de volumen de HOY, no de aquel día | verificado 30/07: ya estaba cerrado desde el 21/07 — `_rvol_en_minimo` usa `rolling(20).mean().loc[idx_min]`, la media EN el día del mínimo. Estaba mal contado como pendiente |
+| ✅ | 5 | 🟠 | El texto al usuario dice "/100" cuando el máximo real es 90 | 30/07: el backend ya enviaba `max_score: 90`, el frontend lo tenía a fuego en 4 sitios. Un 52 es el 58% de lo alcanzable, no el 52% |
 | ❓ | 6 | 🟠 | Comentario de cabecera desactualizado sobre los umbrales | *sin comprobar* |
 | ❓ | 7 | 🟠 | La caché del backtest puede servir un resultado sin filtro de crédito como si fuera completo | *sin comprobar* |
 | ❓ | 8 | 🟠 | Sin `FRED_API_KEY`, el filtro de crédito es inoperante en el histórico y nadie lo ve claramente | *sin comprobar* |
-| ❓ | 9 | 🟠 | `timestamp` naive (duodécima aparición) | *sin comprobar* |
+| ✅ | 9 | 🟠 | `timestamp` naive (duodécima aparición) | verificado 30/07: ya usa `shared/time_utils.get_timestamp()` (Europe/Madrid). Cerrado en la sesión 2, mal contado como pendiente |
 | ❓ | 10 | 🟡 | `_descargar_sectores()` se ejecuta siempre aunque su resultado casi nunca se use | *sin comprobar* |
 | ❓ | 11 | 🟡 | `q10`/`q90` mal nombrados | *sin comprobar* |
 | ❓ | 12 | 🟡 | El backtest recalcula el baseline completo en cada ejecución | *sin comprobar* |
 | ❓ | 13 | 🟡 | `df_vix` a 3 meses limita la ventana del VIX | *sin comprobar* |
+| ✅ | 14 | 🔴 | **La EMA200 semanal no había convergido**: se calculaba sobre 5 años (~262 semanas) para un span de 200, y con `adjust=True` el valor arrastra el arranque de la serie | 30/07: 5y → 584,99 (+24,7%) vs convergido → 563,45 (+29,5%). Casi 5pp de error, justo sobre un corte del 25% → el gatekeeper quedaba ACTIVO sin deber estarlo. Arreglado a 15y en vivo y `BUFFER_YEARS` 5→15 en el backtest, donde el sesgo afectaba a TODOS los días evaluados |
+| ✅ | 15 | 🔴 | **El gatekeeper de la EMA200W era simétrico** (`abs(dist) ≤ 25%`): trataba igual estar 24% por encima de la media secular que 24% por debajo | 30/07: se encendía el 62,5% de las semanas y se APAGABA en 2002 (−27,5%) y 2009 (−41,7%), los dos suelos más profundos. Los 7 suelos reales estuvieron todos ≤ +6,9%. Ahora `dist ≤ +10%`: 7 de 7, activo el 26,8% |
+| ✅ | 16 | 🔴 | **El semáforo se decidía con datos a medio refrescar**, y cada cambio notificaba y entraba en `senales_tracked` | 30/07: los 3 avisos del día llegaron de madrugada con el MISMO precio (729,46), score 51→55→52 — el scan nocturno reescribe la amplitud a las 22:15 UTC y FRED va por su cuenta. Decisión movida a una vez por sesión, atada a que la fecha de la amplitud coincida con la sesión, + histéresis de 3 puntos aplicada también en el backtest |
+| ✅ | 17 | 🟡 | `?">ABI: 38.8%` en pantalla: `tt()` devuelve HTML y estaba dentro de un `title="..."` | 30/07: la comilla del `<span>` cerraba el atributo y el resto se derramaba como texto |
 
 ## Scanner  (20 hallazgos — ✅9 · ❓11)
 
