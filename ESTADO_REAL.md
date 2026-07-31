@@ -152,7 +152,7 @@ exposición: con ~100 usuarios reales, no hay política de privacidad.
 | ❓ | 23 | 🟢 | Detección de bases y pivot points | *sin comprobar* |
 | ❓ | 24 | 🟢 | Cruce con Insider y Options Flow | *sin comprobar* |
 
-## Cartera  (46 hallazgos — ❌3 · ✅29 · ❓11 · ⬜3)
+## Cartera  (46 hallazgos — ❌3 · ✅29 · ❓10 · ⬜4)
 
 | | # | Sev | Hallazgo | Estado / evidencia |
 |-|---|-----|----------|--------------------|
@@ -190,7 +190,7 @@ exposición: con ~100 usuarios reales, no hay política de privacidad.
 | ✅ | 20 | 🔵 | Asignación objetivo vs real | HECHO 31/07, y es la pantalla que faltaba para entender #B19: tabla por nivel con posiciones, capital asignado frente al objetivo, y cuántas se quedan sin dimensionar. Con la cartera real dice lo que ninguna pantalla decía — 13 CORE × 5% + 36 HIGH × 3% + 3 LOTTERY × 1% = **176% del capital base**, contra un equity de 159.482 $: faltan 16.517 $ y por eso hay cinco posiciones sin tamaño. El texto nombra las tres salidas (cerrar posiciones, bajar los pesos, subir el capital base) sin elegir por el usuario |
 | ✅ | 21 | 🔵 | Columna P&L $ visible en la tabla | HECHO 31/07. El porcentaje solo no dice el impacto: un +40% en una posición de 1.000 $ pesa mucho menos que un +5% en una de 12.000 $. **El backend ya calculaba `pnl_usd` y `applyLivePrices` ya sabía actualizarlo en vivo** — había un `querySelector` de `data-live-pnl-usd-id` buscando un elemento que no existía en ninguna parte. Solo faltaba la celda; añadirla revive código ya escrito |
 | ✅ | 22 | 🔵 | Días en posición | HECHO 31/07. En las abiertas, días desde la compra; en las cerradas, duración real de la operación. Ordenable en las dos tablas. Un +12% en tres semanas y otro en año y medio no son la misma operación y hasta ahora se veían igual. Con los datos reales va de 8d (GOOGL) a 536d (GLXY) en abiertas. Solo se pudo calcular bien para las cerradas gracias a las fechas de cierre normalizadas (#B13) |
-| ❓ | 23 | 🔵 | Responsive | *sin comprobar* |
+| ⬜ | 23 | 🔵 | Responsive | MEDIDO 31/07 a 375px y 768px. **La tabla de Cartera NO es el problema**: su contenedor tiene `overflow-x:auto` y hace scroll propio (1.174px dentro de 385px), así que las dos columnas nuevas de #21/#22 no la empeoran. **El problema es el armazón de la aplicación, y es global, no de Cartera**: a 375px la página entera desborda (contenido de 708px) porque la barra lateral sigue en `display:block` y la barra superior mide 435px. A 768px ya no desborda. Además existe una vista `/mobile` hecha a propósito (una columna: Algoritmo, Mercado, Cartera y Watchlist) a la que **no redirige ni enlaza nada** — es una ruta manual que ningún usuario va a encontrar. Se deja ⬜ en Cartera porque el arreglo no pertenece a este módulo: es decidir qué hacer con el armazón y con esa vista huérfana |
 | ❓ | 1 | 🟢 | A1 + A2 (validación de sesión por fecha + `auto_adjust=False`) | parcial: A1 resuelto, A2 sigue abierto |
 | ❓ | 3 | 🟢 | B1 (clean_numeric) + B2 (comisiones) + B3 (suma de %) | parcial: B3 resuelto; B1 y B2 verificados como latentes (sin efecto con la hoja actual) |
 | ❓ | 4 | 🟢 | A5–A8 | parcial: A7 y A8 resueltos, A5 medido como irrelevante, A6 abierto |
