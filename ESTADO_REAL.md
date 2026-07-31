@@ -152,7 +152,7 @@ exposición: con ~100 usuarios reales, no hay política de privacidad.
 | ❓ | 23 | 🟢 | Detección de bases y pivot points | *sin comprobar* |
 | ❓ | 24 | 🟢 | Cruce con Insider y Options Flow | *sin comprobar* |
 
-## Cartera  (46 hallazgos — ❌3 · ✅29 · ❓10 · ⬜4)
+## Cartera  (46 hallazgos — ❌3 · ✅31 · ❓8 · ⬜4)
 
 | | # | Sev | Hallazgo | Estado / evidencia |
 |-|---|-----|----------|--------------------|
@@ -200,8 +200,8 @@ exposición: con ~100 usuarios reales, no hay política de privacidad.
 | ❓ | 25 | 🟢 | Feed de trades en tiempo real vía Finnhub WS | *sin comprobar* |
 | ❓ | 26 | 🟢 | Alertas de posición | *sin comprobar* |
 | ❓ | 27 | 🟢 | Cruce con Options Flow | *sin comprobar* |
-| ❓ | 2 | ⚪ | Honestidad en la UI: | *sin comprobar* |
-| ❓ | A9 | ⚪ | Pre/Post market: decisión no comunicada | *sin comprobar* |
+| ✅ | 2 | ⚪ | Honestidad en la UI: tooltip del punto del WebSocket | VERIFICADO Y ARREGLADO 31/07. **No era un hallazgo suelto**: es el punto 2 de la solución de #A6, y el generador de este documento lo cortó en los dos puntos del enunciado, dejándolo como una fila huérfana sin contenido. Al ir al documento original de la auditoría, pedía cambiar el tooltip del ws-dot de «Precios en tiempo real» por algo honesto. **Se había quedado sin hacer**: al cerrar #A6 se cambió el texto de la cabecera pero no ese tooltip, que seguía prometiendo tiempo real. Ahora dice «Conexión activa — precios diferidos, se refrescan cada 60 s»: el punto verde significa que la conexión está viva, no que el dato sea de este segundo |
+| ✅ | A9 | ⚪ | Pre/Post market: decisión no comunicada | VERIFICADO Y ARREGLADO 31/07. Confirmado recorriendo el horario completo: `get_market_status()` devuelve PRE/POST de 4:00 a 9:30 y de 16:00 a 20:00 ET, pero `_is_market_open()` es False en esas mismas franjas, así que el precio servido es el CIERRE REGULAR. **Son 9 horas al día** en las que el badge dice que el mercado se negocia y los números están quietos, sin nada que lo explique. Es una decisión razonable —el volumen extendido es escaso y los precios poco representativos— pero no estaba comunicada. Ahora, solo en PRE/POST, aparece «precios del cierre regular» junto al badge, con el porqué al pasar el ratón |
 
 ## Infraestructura Y Valoracion Global  (18 hallazgos — ❌1 · ✅2 · ❓14 · ⬜1)
 

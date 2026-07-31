@@ -167,7 +167,14 @@ export function cleanup() {
 function setWsStatus(state) {
     document.querySelectorAll('.ws-dot').forEach(el => {
         el.className = 'ws-dot ' + state;
-        el.title = state === 'live' ? 'Precios en tiempo real' : 'Sin conexión live';
+        // El punto verde significa "la conexión está viva", no "esto es tiempo
+        // real". Decía "Precios en tiempo real" y no lo son: hay retraso de la
+        // fuente, más 60 s de caché en el servidor, más 60 s entre difusiones.
+        // Prometer tiempo real con datos gratuitos es aparentar algo que no se
+        // puede dar. Ver auditoría de Cartera, #A6 punto 2.
+        el.title = state === 'live'
+            ? 'Conexión activa — precios diferidos, se refrescan cada 60 s'
+            : 'Sin conexión live';
     });
 }
 
@@ -454,9 +461,20 @@ function header() {
 
 function topBar(data) {
     const mktBadge = `<span style="background:${data.mkt_color}22;border:1px solid ${data.mkt_color}88;border-radius:4px;padding:2px 10px;font-size:11px;color:${data.mkt_color};letter-spacing:.1em;">● MKT: ${data.mkt_status}</span>`;
+
+    // En pre/post el badge dice que el mercado se está negociando, pero los
+    // precios que se muestran son los del CIERRE REGULAR: la terminal no pide
+    // datos de horario extendido. Es una decisión razonable —el volumen fuera
+    // de hora es escaso y los precios poco representativos— pero el usuario no
+    // tenía forma de saberlo, y veía "PRE/POST" junto a números quietos.
+    // Ver auditoría de Cartera, #A9.
+    const notaExtendida = data.mkt_status === 'PRE/POST'
+        ? `<span style="color:var(--color-muted);font-size:10px;margin-left:8px;" title="La terminal no usa datos de horario extendido: el volumen fuera de hora es escaso y los precios poco representativos. Lo que ves es el último cierre regular.">precios del cierre regular</span>`
+        : '';
+
     return `<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1.5rem;">
         <div style="color:var(--color-muted);font-size:11px;">LAST UPDATE: ${data.last_update}</div>
-        ${mktBadge}
+        <div>${mktBadge}${notaExtendida}</div>
     </div>`;
 }
 
