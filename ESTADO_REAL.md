@@ -29,8 +29,8 @@ parecería completo y sería engañoso.
 
 ## Cobertura de esta versión — leer antes de usarlo
 
-- **402 hallazgos**: 379 extraídos de los 16 documentos de auditoría, más 23
-  encontrados después con el sistema ya en producción (RSU Algoritmo #14–#30, Cartera #B19,
+- **403 hallazgos**: 379 extraídos de los 16 documentos de auditoría, más 24
+  encontrados después con el sistema ya en producción (RSU Algoritmo #14–#30, Cartera #B19–#B20,
   Newsfeed/briefing #27–#31).
 - **64 son críticos (🔴)**: todos revisados en la primera pasada.
   33 cerrados · 11 abiertos ·
@@ -152,7 +152,7 @@ exposición: con ~100 usuarios reales, no hay política de privacidad.
 | ❓ | 23 | 🟢 | Detección de bases y pivot points | *sin comprobar* |
 | ❓ | 24 | 🟢 | Cruce con Insider y Options Flow | *sin comprobar* |
 
-## Cartera  (43 hallazgos — ❌4 · ✅21 · ❓15 · ⬜3)
+## Cartera  (44 hallazgos — ❌4 · ✅22 · ❓15 · ⬜3)
 
 | | # | Sev | Hallazgo | Estado / evidencia |
 |-|---|-----|----------|--------------------|
@@ -183,6 +183,7 @@ exposición: con ~100 usuarios reales, no hay política de privacidad.
 | ✅ | B17 | 🟡 | Colisión de clave en notificaciones Telegram | ARREGLADO 31/07: la clave pasa a incluir el precio de compra. **No se usa el `id` de fila aunque también sea único**: ese id sale del orden del CSV, así que insertar una fila en medio de la hoja cambiaría el de todas las de abajo y provocaría un aluvión de avisos repetidos. Con puente de migración —si la operación ya se avisó con el formato antiguo, la clave nueva se registra en silencio— porque si no el primer arranque tras el despliegue habría mandado un Telegram por cada posición viva. Probado: 1ª pasada 0 enviados / 3 migrados, 2ª pasada 0/0 (idempotente), y dos lotes NUEVOS del mismo ticker el mismo día generan 2 avisos, que es lo que el hallazgo pedía |
 | ✅ | B18 | 🟡 | Barra de peso saturada | ARREGLADO 31/07: la barra se escala contra la mayor posición de la tabla en vez de `peso*3` con tope 100. Con la cartera real esto importa por el motivo contrario al que decía el hallazgo: ninguna posición llega al 33%, así que TODAS las barras eran rayitas de menos del 10% de ancho e igual de inútiles. Ahora 3,2% → 100%, 2,7% → 84%, 1,9% → 59%, 1,1% → 34%, 0,6% → 19% |
 | ✅ | B19 | 🟠 | Posiciones abiertas reales que se muestran como $0 y 0% de peso | ENCONTRADO Y ARREGLADO 31/07, de paso con B4: **5 de las 53 posiciones abiertas** (GOOGL, ISRG, NEE, ORLY, SPCX) salían con $0 invertidos, 0 acciones y 0% de peso, indistinguibles de no existir. La simulación por niveles está saturada (comprometido ≈ equity, `capital_disponible` = 0) y a lo que no cabe le asignaba `0.0`, pese a que su propio docstring promete `None` en ese caso. Ahora devuelve `None`, la fila se marca `sin_dimensionar` y tanto la tabla como el panel de riesgo («menor posición» era siempre una de ellas al 0%) las tratan aparte, diciendo «sin asignar» con el porqué al pasar el ratón, en vez de un cero que parece un dato. Nota: el respaldo Cantidad/Inversión tampoco existe — **la columna `Inversión` está vacía en las 53 filas abiertas** |
+| ✅ | B20 | 🟠 | Filas con fechas imposibles: cierre anterior a la compra, cerrada sin fecha, abierta con fecha de cierre | HECHO 31/07. Estas comprobaciones **no se podían hacer antes**: mientras la hoja mezclaba DD/MM y MM/DD, comparar dos fechas entre sí no significaba nada porque cualquiera podía estar leída al revés. Con el formato ya coherente (#B13) sí, y la primera pasada sobre los datos reales sacó **5 filas**: una compra fechada en el futuro, tres cierres anteriores a su propia compra (ITA, SKYT, CRUS) y una posición marcada como ABIERTA con fecha de cierre puesta (ZBRA) — esta última seguía comprometiendo capital que ya no le correspondía. Cinco condiciones binarias, sin nada que interpretar: o la fila es imposible o no lo es. Se informan con fila, ticker y motivo; no se corrige nada por nuestra cuenta, porque el dato bueno solo lo sabe quien hizo la operación |
 | ✅ | 19 | 🔵 | P&L del DÍA agregado de la cartera | hecho: tarjeta «P&L Hoy» en cabecera, calculada en backend y recalculada en vivo, excluyendo posiciones sin cierre de ayer disponible |
 | ✅ | 20 | 🔵 | Asignación objetivo vs real | HECHO 31/07, y es la pantalla que faltaba para entender #B19: tabla por nivel con posiciones, capital asignado frente al objetivo, y cuántas se quedan sin dimensionar. Con la cartera real dice lo que ninguna pantalla decía — 13 CORE × 5% + 36 HIGH × 3% + 3 LOTTERY × 1% = **176% del capital base**, contra un equity de 159.482 $: faltan 16.517 $ y por eso hay cinco posiciones sin tamaño. El texto nombra las tres salidas (cerrar posiciones, bajar los pesos, subir el capital base) sin elegir por el usuario |
 | ❓ | 21 | 🔵 | Columna P&L $ visible en la tabla | *sin comprobar* |

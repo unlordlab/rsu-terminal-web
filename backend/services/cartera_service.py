@@ -570,6 +570,55 @@ def simulate_tier_capital(df, col_fecha, col_estado, col_compra, col_actual, col
     }
 
 
+def comprobar_coherencia_fechas(df, col_fecha, col_cierre, col_estado, col_ticker) -> list:
+    """Incoherencias entre las dos fechas y el estado de cada operación.
+
+    Estas comprobaciones no se podían hacer antes: mientras la hoja mezclaba
+    DD/MM y MM/DD, comparar dos fechas entre sí no significaba nada, porque
+    cualquiera de las dos podía estar leída al revés. Con el formato ya
+    resuelto (ver parse_dates_flexible) sí tienen sentido, y de hecho la
+    primera pasada sobre los datos reales sacó cinco filas: una compra
+    fechada en el futuro, tres cierres anteriores a su propia compra y una
+    posición marcada como abierta con fecha de cierre puesta.
+
+    Son condiciones binarias y baratas: nada que interpretar, o la fila es
+    imposible o no lo es. Se informan; no se corrige nada por nuestra cuenta,
+    porque el dato correcto solo lo sabe quien hizo la operación."""
+    hoy = pd.Timestamp(datetime.now(ZoneInfo("Europe/Madrid")).date())
+    avisos = []
+
+    def _apunta(fila_idx, tipo, detalle):
+        avisos.append({
+            "fila":    int(fila_idx) + 2,   # +2 = cabecera + índice base 0, para que cuadre con el Excel
+            "ticker":  str(df.loc[fila_idx, col_ticker]),
+            "tipo":    tipo,
+            "detalle": detalle,
+        })
+
+    cerrada = df[col_estado].astype(str).str.upper().str.contains("CERRADA|CLOSED", na=False)
+    cierres = df[col_cierre] if col_cierre else None
+
+    for idx in df.index:
+        f_compra = df.loc[idx, col_fecha]
+        f_cierre = cierres.loc[idx] if cierres is not None else None
+
+        if pd.notna(f_compra) and f_compra > hoy:
+            _apunta(idx, "compra_futura", f"fecha de compra {f_compra:%d/%m/%Y}, posterior a hoy")
+        if f_cierre is not None and pd.notna(f_cierre):
+            if f_cierre > hoy:
+                _apunta(idx, "cierre_futuro", f"fecha de cierre {f_cierre:%d/%m/%Y}, posterior a hoy")
+            if pd.notna(f_compra) and f_cierre < f_compra:
+                _apunta(idx, "cierre_antes_de_compra",
+                        f"cerrada el {f_cierre:%d/%m/%Y} pero comprada el {f_compra:%d/%m/%Y}")
+            if not cerrada.loc[idx]:
+                _apunta(idx, "abierta_con_cierre",
+                        f"marcada como abierta pero con fecha de cierre {f_cierre:%d/%m/%Y}")
+        elif cerrada.loc[idx] and cierres is not None:
+            _apunta(idx, "cerrada_sin_cierre", "marcada como cerrada pero sin fecha de cierre")
+
+    return avisos
+
+
 def get_cartera_tickers() -> set:
     """Tickers actualmente en posición abierta en Cartera -- para los
     badges de cruce 💼 en Scanner/RS-RW/Insider/Research/Options Flow
@@ -760,6 +809,11 @@ def get_cartera():
             print(f"[Cartera] {diag_fechas['ambiguas']} fecha(s) ambigua(s) DD/MM vs MM/DD sin forma de resolver — normalizar el formato de la hoja")
         if diag_fechas["futuras"]:
             print(f"[Cartera] {diag_fechas['futuras']} fecha(s) posteriores a hoy con el formato ya resuelto — revisar esas filas en la hoja")
+
+        incoherencias = comprobar_coherencia_fechas(df, col_fecha, col_cierre, col_estado, col_ticker)
+        if incoherencias:
+            print(f"[Cartera] {len(incoherencias)} incoherencia(s) de fechas: "
+                  + "; ".join(f"fila {a['fila']} {a['ticker']} ({a['tipo']})" for a in incoherencias))
 
         n_before = len(df)
         df = df.dropna(subset=[col_fecha, col_ticker])
@@ -1014,6 +1068,7 @@ def get_cartera():
             "metrics":      metrics,
             "asignacion":   asignacion,
             "diag_fechas":  diag_fechas,
+            "incoherencias": incoherencias,
             "closed_stats": closed_stats,
             "abiertas":     abiertas_rows,
             "cerradas":     cerradas_rows,

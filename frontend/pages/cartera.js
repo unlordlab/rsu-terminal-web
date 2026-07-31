@@ -44,6 +44,7 @@ async function loadCartera(container) {
         let html = topBar(data);
 
         html += avisoFechas(data.diag_fechas);
+        html += avisoIncoherencias(data.incoherencias);
         if (m && m.total_inv > 0) html += metricsRow(m);
         if (data.asignacion && data.asignacion.por_nivel && data.asignacion.por_nivel.length) {
             html += asignacionPanel(data.asignacion);
@@ -171,6 +172,34 @@ function setWsStatus(state) {
 // posiciones sobrantes se quedaban con el precio de la carga inicial sin que
 // nada lo indicara, con el indicador marcando "MKT LIVE" igual. Ver auditoría
 // de Cartera, hallazgo #B12.
+// Filas imposibles: una compra con fecha futura, un cierre anterior a su
+// propia compra, una posición cerrada sin fecha de cierre o una abierta que sí
+// la tiene. Son comprobaciones que antes no se podían hacer — con la hoja
+// mezclando DD/MM y MM/DD, comparar dos fechas no significaba nada porque
+// cualquiera podía estar leída al revés.
+const _ETIQUETA_INCOHERENCIA = {
+    compra_futura:          'Compra en el futuro',
+    cierre_futuro:          'Cierre en el futuro',
+    cierre_antes_de_compra: 'Cierre anterior a la compra',
+    cerrada_sin_cierre:     'Cerrada sin fecha de cierre',
+    abierta_con_cierre:     'Abierta con fecha de cierre',
+};
+
+function avisoIncoherencias(lista) {
+    if (!lista || !lista.length) return '';
+    const filas = lista.map(a => `<div style="padding:3px 0;">
+        <span style="color:var(--color-muted);">fila ${esc(a.fila)}</span>
+        <b style="color:var(--color-text);">${esc(a.ticker)}</b>
+        — ${esc(_ETIQUETA_INCOHERENCIA[a.tipo] || a.tipo)}:
+        <span style="color:var(--color-muted);">${esc(a.detalle)}</span>
+    </div>`).join('');
+    return `<div style="background:#2a1010;border:1px solid #f23645;border-radius:var(--radius);padding:10px 14px;font-size:11px;color:#ff6b6b;margin-bottom:1.25rem;line-height:1.5;">
+        <div style="margin-bottom:6px;">⚠ <b>${lista.length} fila(s) de la hoja con fechas imposibles.</b>
+        Distorsionan el orden de la simulación de capital, el histórico y los avisos.</div>
+        ${filas}
+    </div>`;
+}
+
 // Celda de PESO. Dos cosas que no eran evidentes en la versión anterior:
 //
 //  · Una posición abierta a la que la simulación de niveles no pudo asignar
