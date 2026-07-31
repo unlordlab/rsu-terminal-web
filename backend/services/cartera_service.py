@@ -975,6 +975,21 @@ def get_cartera():
                 # vez de enseñar un cero que parece un dato.
                 sin_dimensionar = bool(is_open and inv == 0 and compra > 0)
 
+                # Días en posición: desde la compra hasta hoy si sigue abierta,
+                # o hasta el cierre si ya salió. Es el dato que falta para saber
+                # si un +12% se consiguió en tres semanas o en año y medio — dos
+                # operaciones muy distintas que hasta ahora se veían igual.
+                # Ver auditoría de Cartera, #22.
+                dias = None
+                try:
+                    f_ini = row[col_fecha]
+                    f_fin = (row[col_cierre] if (not is_open and col_cierre and pd.notna(row.get(col_cierre)))
+                             else pd.Timestamp(datetime.now(ZoneInfo("Europe/Madrid")).date()))
+                    if pd.notna(f_ini):
+                        dias = max(0, int((f_fin - f_ini).days))
+                except Exception:
+                    dias = None
+
                 comment = str(row[col_comment])[:60] if col_comment and col_comment in row.index else ""
                 if comment.lower() in ("nan", "none", ""):
                     comment = ""
@@ -1013,6 +1028,7 @@ def get_cartera():
                     "industry": sec.get("industry", ""),
                     "tier":     tier,
                     "sin_dimensionar": sin_dimensionar,
+                    "dias":     dias,
                 })
             return rows
 

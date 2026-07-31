@@ -20,7 +20,11 @@ let _filterClosed = '';
 // ── Helpers numéricos seguros (null/NaN → 0) ─────────────────────────────────
 const n = (v, d=0) => (v == null || isNaN(v) ? d : Number(v));
 const fix = (v, dec=2) => n(v).toFixed(dec);
-const usd = (v) => n(v).toLocaleString('en-US', {minimumFractionDigits:2});
+// maximumFractionDigits explícito: con solo el mínimo, toLocaleString deja
+// hasta 3 decimales, y los valores que llegan del WebSocket sin redondear
+// (P&L en $ recalculado en el navegador) salían como "-$1,071.043". El backend
+// sí redondea a céntimos, así que la discrepancia solo se veía en vivo.
+const usd = (v) => n(v).toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2});
 
 export async function render(container) {
     injectStyles();
@@ -761,6 +765,15 @@ function activeTable(rows) {
         { label: 'P. ACTUAL',   key: 'actual' },
         { label: 'HOY %',       key: 'chg_hoy' },
         { label: 'P&L %',       key: 'pnl' },
+        // P&L en dólares: el porcentaje solo no dice nada del impacto real.
+        // Un +40% en una posición de 1.000 $ pesa mucho menos en la cartera
+        // que un +5% en una de 12.000 $ (#21). El backend ya lo calculaba y
+        // applyLivePrices ya sabía actualizarlo en vivo — solo faltaba la
+        // celda donde pintarlo.
+        { label: 'P&L $',       key: 'pnl_usd' },
+        // Días en posición: un +12% en tres semanas y otro en año y medio no
+        // son la misma operación, y hasta ahora se veían igual (#22).
+        { label: 'DÍAS',        key: 'dias' },
         { label: 'PESO',        key: 'peso' },
         { label: '7D',          key: null },
         { label: 'COMENTARIO',  key: null },
@@ -814,6 +827,8 @@ function activeTable(rows) {
             <td style="padding:8px 10px;font-size:12px;font-weight:500;" data-live-pnl-id="${r.id}">
                 <span style="color:${pnlColor};">${r.pnl >= 0 ? '+' : ''}${fix(r.pnl)}%</span>
             </td>
+            <td style="padding:8px 10px;font-size:12px;color:${pnlColor};white-space:nowrap;" data-live-pnl-usd-id="${r.id}">${r.pnl_usd >= 0 ? '+$' : '-$'}${usd(Math.abs(n(r.pnl_usd)))}</td>
+            <td style="padding:8px 10px;font-size:11px;color:var(--color-muted);">${r.dias == null ? '—' : r.dias + 'd'}</td>
             <td style="padding:8px 10px;min-width:80px;">${pesoCelda(r, maxPeso)}</td>
             <td style="padding:8px 10px;"><canvas class="sparkline" id="${sparkId}" width="60" height="20"></canvas></td>
             <td style="padding:8px 10px;color:var(--color-muted);font-size:11px;max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${comment}">${comment}</td>
@@ -884,6 +899,10 @@ function closedTable(rows) {
         { label: 'P. COMPRA',  key: 'compra' },
         { label: 'P. SALIDA',  key: 'actual' },
         { label: 'P&L %',      key: 'pnl' },
+        // En las cerradas los días son la duración real de la operación, de
+        // compra a venta. Ordenar por aquí responde a una pregunta que no se
+        // podía hacer: ¿mis ganadoras las aguanto más que mis perdedoras?
+        { label: 'DÍAS',       key: 'dias' },
         { label: 'COMENTARIO', key: null },
     ];
     const th = cols.map(c => {
@@ -907,6 +926,7 @@ function closedTable(rows) {
             <td style="padding:8px 12px;color:var(--color-text);font-size:12px;">$${usd(r.compra)}</td>
             <td style="padding:8px 12px;color:var(--color-text);font-size:12px;">$${usd(r.actual)}</td>
             <td style="padding:8px 12px;color:${c};font-size:12px;font-weight:500;">${r.pnl >= 0 ? '+' : ''}${fix(r.pnl)}%</td>
+            <td style="padding:8px 12px;color:var(--color-muted);font-size:11px;">${r.dias == null ? '—' : r.dias + 'd'}</td>
             <td style="padding:8px 12px;color:var(--color-muted);font-size:11px;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${r.comment || ''}">${r.comment || '—'}</td>
         </tr>`;
     }).join('');

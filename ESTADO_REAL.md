@@ -29,8 +29,8 @@ parecería completo y sería engañoso.
 
 ## Cobertura de esta versión — leer antes de usarlo
 
-- **404 hallazgos**: 379 extraídos de los 16 documentos de auditoría, más 25
-  encontrados después con el sistema ya en producción (RSU Algoritmo #14–#30, Cartera #B19–#B21,
+- **405 hallazgos**: 379 extraídos de los 16 documentos de auditoría, más 26
+  encontrados después con el sistema ya en producción (RSU Algoritmo #14–#30, Cartera #B19–#B22,
   Newsfeed/briefing #27–#31).
 - **64 son críticos (🔴)**: todos revisados en la primera pasada.
   33 cerrados · 11 abiertos ·
@@ -152,7 +152,7 @@ exposición: con ~100 usuarios reales, no hay política de privacidad.
 | ❓ | 23 | 🟢 | Detección de bases y pivot points | *sin comprobar* |
 | ❓ | 24 | 🟢 | Cruce con Insider y Options Flow | *sin comprobar* |
 
-## Cartera  (45 hallazgos — ❌3 · ✅26 · ❓13 · ⬜3)
+## Cartera  (46 hallazgos — ❌3 · ✅29 · ❓11 · ⬜3)
 
 | | # | Sev | Hallazgo | Estado / evidencia |
 |-|---|-----|----------|--------------------|
@@ -185,10 +185,11 @@ exposición: con ~100 usuarios reales, no hay política de privacidad.
 | ✅ | B19 | 🟠 | Posiciones abiertas reales que se muestran como $0 y 0% de peso | ENCONTRADO Y ARREGLADO 31/07, de paso con B4: **5 de las 53 posiciones abiertas** (GOOGL, ISRG, NEE, ORLY, SPCX) salían con $0 invertidos, 0 acciones y 0% de peso, indistinguibles de no existir. La simulación por niveles está saturada (comprometido ≈ equity, `capital_disponible` = 0) y a lo que no cabe le asignaba `0.0`, pese a que su propio docstring promete `None` en ese caso. Ahora devuelve `None`, la fila se marca `sin_dimensionar` y tanto la tabla como el panel de riesgo («menor posición» era siempre una de ellas al 0%) las tratan aparte, diciendo «sin asignar» con el porqué al pasar el ratón, en vez de un cero que parece un dato. Nota: el respaldo Cantidad/Inversión tampoco existe — **la columna `Inversión` está vacía en las 53 filas abiertas** |
 | ✅ | B20 | 🟠 | Filas con fechas imposibles: cierre anterior a la compra, cerrada sin fecha, abierta con fecha de cierre | HECHO 31/07. Estas comprobaciones **no se podían hacer antes**: mientras la hoja mezclaba DD/MM y MM/DD, comparar dos fechas entre sí no significaba nada porque cualquiera podía estar leída al revés. Con el formato ya coherente (#B13) sí, y la primera pasada sobre los datos reales sacó **5 filas**: una compra fechada en el futuro, tres cierres anteriores a su propia compra (ITA, SKYT, CRUS) y una posición marcada como ABIERTA con fecha de cierre puesta (ZBRA) — esta última seguía comprometiendo capital que ya no le correspondía. Cinco condiciones binarias, sin nada que interpretar: o la fila es imposible o no lo es. Se informan con fila, ticker y motivo; no se corrige nada por nuestra cuenta, porque el dato bueno solo lo sabe quien hizo la operación |
 | ✅ | B21 | 🔴 | El titular del gráfico anunciaba «+132% en el periodo» y no era un retorno | ENCONTRADO Y ARREGLADO 31/07 al medir #B14. El porcentaje era `(valor_final − valor_inicial) / valor_inicial`, y en una cartera que se está construyendo eso mide sobre todo el dinero nuevo que entra. Con los datos reales: **63.366 → 147.003 = «+132%»**, cuando de las 47 posiciones de la curva **solo 15 existían al principio** y las otras 32 aportaron **91.424 $ de capital nuevo**. El resultado real contra el capital aportado en ese momento era del **−1%**. Era el número más visible de la sección y estaba equivocado en dos órdenes de magnitud. Se sustituye por el **retorno ponderado por tiempo**: cada día descuenta la aportación de ese día antes de medir la variación y encadena, que es la forma estándar de medir rendimiento cuando entra y sale capital. Con la cartera completa (abiertas + cerradas) da **+25,5%**, y cuadra con el +23,4% de patrimonio sobre aportado, que es la comprobación cruzada. Verificado además con una serie sintética de resultado calculable a mano |
+| ✅ | B22 | 🟡 | `usd()` dejaba tres decimales en los valores que llegan del WebSocket | ENCONTRADO 31/07 al añadir la columna de #21, que destapó un fallo latente: `toLocaleString` con solo `minimumFractionDigits` permite hasta 3 decimales, así que el P&L en $ recalculado en el navegador salía como **`-$1,071.043`**. No se veía antes porque esa celda no existía y el camino en vivo estaba muerto. Arreglado en el propio helper, con lo que queda cubierto cualquier otro importe que llegue sin redondear |
 | ✅ | 19 | 🔵 | P&L del DÍA agregado de la cartera | hecho: tarjeta «P&L Hoy» en cabecera, calculada en backend y recalculada en vivo, excluyendo posiciones sin cierre de ayer disponible |
 | ✅ | 20 | 🔵 | Asignación objetivo vs real | HECHO 31/07, y es la pantalla que faltaba para entender #B19: tabla por nivel con posiciones, capital asignado frente al objetivo, y cuántas se quedan sin dimensionar. Con la cartera real dice lo que ninguna pantalla decía — 13 CORE × 5% + 36 HIGH × 3% + 3 LOTTERY × 1% = **176% del capital base**, contra un equity de 159.482 $: faltan 16.517 $ y por eso hay cinco posiciones sin tamaño. El texto nombra las tres salidas (cerrar posiciones, bajar los pesos, subir el capital base) sin elegir por el usuario |
-| ❓ | 21 | 🔵 | Columna P&L $ visible en la tabla | *sin comprobar* |
-| ❓ | 22 | 🔵 | Días en posición | *sin comprobar* |
+| ✅ | 21 | 🔵 | Columna P&L $ visible en la tabla | HECHO 31/07. El porcentaje solo no dice el impacto: un +40% en una posición de 1.000 $ pesa mucho menos que un +5% en una de 12.000 $. **El backend ya calculaba `pnl_usd` y `applyLivePrices` ya sabía actualizarlo en vivo** — había un `querySelector` de `data-live-pnl-usd-id` buscando un elemento que no existía en ninguna parte. Solo faltaba la celda; añadirla revive código ya escrito |
+| ✅ | 22 | 🔵 | Días en posición | HECHO 31/07. En las abiertas, días desde la compra; en las cerradas, duración real de la operación. Ordenable en las dos tablas. Un +12% en tres semanas y otro en año y medio no son la misma operación y hasta ahora se veían igual. Con los datos reales va de 8d (GOOGL) a 536d (GLXY) en abiertas. Solo se pudo calcular bien para las cerradas gracias a las fechas de cierre normalizadas (#B13) |
 | ❓ | 23 | 🔵 | Responsive | *sin comprobar* |
 | ❓ | 1 | 🟢 | A1 + A2 (validación de sesión por fecha + `auto_adjust=False`) | parcial: A1 resuelto, A2 sigue abierto |
 | ❓ | 3 | 🟢 | B1 (clean_numeric) + B2 (comisiones) + B3 (suma de %) | parcial: B3 resuelto; B1 y B2 verificados como latentes (sin efecto con la hoja actual) |
