@@ -43,6 +43,7 @@ async function loadCartera(container) {
 
         let html = topBar(data);
 
+        html += avisoFechas(data.diag_fechas);
         if (m && m.total_inv > 0) html += metricsRow(m);
         if (data.asignacion && data.asignacion.por_nivel && data.asignacion.por_nivel.length) {
             html += asignacionPanel(data.asignacion);
@@ -502,6 +503,38 @@ function loadingHTML() {
 // ¿caben las posiciones abiertas dentro de mis propias reglas de tamaño?
 // Si los niveles piden más capital del que hay, algunas posiciones se quedan
 // sin dimensionar — y antes eso solo se veía como un "0%" mudo en su fila.
+// Aviso de fechas ambiguas (#B13). No es un fallo del parseo: cuando la hoja
+// escribe 07/11/2025 y los dos números son ≤ 12, esa fecha significa dos cosas
+// distintas y ningún código puede saber cuál. Lo único deshonesto sería
+// callarlo, porque de esas fechas dependen el orden de la simulación de
+// capital, el histórico y la clave de las notificaciones.
+function avisoFechas(d) {
+    if (!d) return '';
+    const caja = (txt) => `<div style="background:#2a1f0a;border:1px solid #d68910;border-radius:var(--radius);padding:10px 14px;font-size:11px;color:#ffb800;margin-bottom:1.25rem;line-height:1.5;">${txt}</div>`;
+
+    // Caso 1: la hoja mezcla formatos y hay fechas que significan dos cosas.
+    if (d.ambiguas) {
+        const corregidas = d.corregidas
+            ? ` Otras ${d.corregidas} se han podido resolver con certeza porque una de las dos lecturas caía en el futuro.`
+            : '';
+        return caja(`⚠ <b>${d.ambiguas} fecha(s) de la hoja son ambiguas</b>: la columna mezcla día-primero
+            y mes-primero, así que 07-11-2025 puede ser 7 de noviembre u 11 de julio y no hay forma de
+            saber cuál.${corregidas} Afecta al orden de las operaciones, al histórico y a los avisos.
+            <span style="color:var(--color-muted);">Desaparece en cuanto todas las fechas usen el mismo
+            formato: basta con que alguna fila lleve un día mayor que 12 para que quede probado cuál es.</span>`);
+    }
+
+    // Caso 2: el formato ya es coherente, pero hay fechas posteriores a hoy.
+    // Con el formato resuelto eso ya no es una mala lectura: es un error en la
+    // hoja, y merece un aviso distinto en vez de callarse.
+    if (d.futuras) {
+        return caja(`⚠ <b>${d.futuras} operación(es) con fecha posterior a hoy.</b> El formato de fechas de
+            la hoja ya es coherente, así que no es un problema de interpretación — son fechas mal escritas.
+            <span style="color:var(--color-muted);">Distorsionan el orden de la simulación de capital y el histórico.</span>`);
+    }
+    return '';
+}
+
 function asignacionPanel(a) {
     const hayDeficit = a.deficit > 0;
     const colorDef   = hayDeficit ? '#ffb800' : 'var(--color-accent)';

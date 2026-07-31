@@ -152,7 +152,7 @@ exposición: con ~100 usuarios reales, no hay política de privacidad.
 | ❓ | 23 | 🟢 | Detección de bases y pivot points | *sin comprobar* |
 | ❓ | 24 | 🟢 | Cruce con Insider y Options Flow | *sin comprobar* |
 
-## Cartera  (43 hallazgos — ❌4 · ✅20 · ❓16 · ⬜3)
+## Cartera  (43 hallazgos — ❌4 · ✅21 · ❓15 · ⬜3)
 
 | | # | Sev | Hallazgo | Estado / evidencia |
 |-|---|-----|----------|--------------------|
@@ -176,7 +176,7 @@ exposición: con ~100 usuarios reales, no hay política de privacidad.
 | ✅ | B10 | 🟠 | Gating de tier incoherente (relevante para la monetización) | verificado 31/07: coherente hoy — `include_router(cartera.router, dependencies=paid)`, el WS exige `min_tier=tier1` y la entrada del menú lleva `minTier: tier1` |
 | ✅ | B11 | 🟠 | `last_update` con hora del contenedor (UTC) | verificado 31/07: usa `ZoneInfo(Europe/Madrid)` |
 | ✅ | B12 | 🟠 | Límite silencioso de 30 tickers en el WS | ARREGLADO 31/07: tope de 30 → 120 y, si alguna vez recorta, el propio mensaje del WS lleva `truncados` y la página pinta un aviso en ámbar diciendo cuántas posiciones se quedan con el precio de la última recarga. Con 53 posiciones abiertas, las 23 que antes no recibían precio en vivo ya lo reciben |
-| ❓ | B13 | 🟡 | Fechas ambiguas DD/MM vs MM/DD — riesgo silencioso permanente | *sin comprobar* |
+| ✅ | B13 | 🟡 | Fechas ambiguas DD/MM vs MM/DD — riesgo silencioso permanente | MEDIDO Y ARREGLADO EN PARTE 31/07. La columna `Fecha` mezcla los dos formatos **de forma probada**: 5 valores solo pueden ser DD/MM (`29/10/2025`), 28 solo pueden ser MM/DD (`03/16/2026`) y **53 de 86 son ambiguas** (`07/11/2025` = ¿7 nov o 11 jul?). Por orden de fila hay tres tramos: antiguo DD/MM, medio MM/DD, reciente DD/MM otra vez — así que un default único de columna sería falso en dos de los tres. **Consecuencia real que había:** 3 posiciones CERRADAS fechadas en octubre y noviembre de 2026, es decir, en el futuro (SKYT, VLO, ALAB). **Arreglado con la única regla que es cierta y no adivina:** una operación no puede estar en el futuro, así que si una de las dos lecturas cae después de hoy, la otra es la buena. Resuelve **7 fechas** y deja 0 en el futuro. Efecto medido aguas abajo: `capital_disponible` pasa de 0 a 3.298 $ porque cambia el orden cronológico de la simulación por eventos (#B4). **Las 38 restantes no se pueden resolver desde el código** — la ambigüedad está en el dato. Se cuentan y se avisan en la página, diciendo que se elimina escribiendo las fechas como AAAA-MM-DD. Queda ✅ porque lo resoluble está resuelto y lo irresoluble ya no es silencioso, pero **el cierre completo depende de normalizar la hoja** |
 | ❓ | B14 | 🟡 | Curva «Evolución del Valor» con sesgo de superviviente | *sin comprobar* |
 | ❓ | B15 | 🟡 | Línea de invertido del gráfico con fallback engañoso | *sin comprobar* |
 | ✅ | B16 | 🟡 | Export CSV: comillas sin escapar y sin BOM | ARREGLADO 31/07: función `csvCampo()` con la regla estándar (RFC 4180) — se entrecomilla si hay coma, comilla o salto de línea, y las comillas internas se duplican. Más BOM UTF-8 y saltos CRLF para que Excel en Windows no destroce los acentos. Verificado campo a campo |

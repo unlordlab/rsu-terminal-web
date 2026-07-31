@@ -1,5 +1,6 @@
 import pandas as pd
 import unicodedata
+import re
 import time
 import math
 from datetime import datetime, timezone
@@ -117,6 +118,11 @@ def norm_col(s):
 # ese % fijo sobre settings.capital_total. Si una fila no tiene nivel valido,
 # se cae al calculo antiguo (Cantidad/Inversion) para no romper nada.
 TIER_WEIGHTS = {"CORE": 5.0, "HIGH": 3.0, "LOTTERY": 1.0}
+
+# Fecha numérica con separador, del estilo 07/11/2025 — la forma en la que la
+# ambigüedad DD/MM vs MM/DD es posible. Un formato ISO (2025-11-07) no encaja
+# aquí y por tanto nunca se toca. Ver parse_dates_flexible().
+_RE_FECHA_NUMERICA = re.compile(r"^\s*(\d{1,2})[/-](\d{1,2})[/-](\d{4})\s*$")
 
 def norm_tier(value) -> str | None:
     if value is None:
@@ -637,23 +643,123 @@ def get_cartera():
         df[col_estado] = df[col_estado].astype(str).str.strip().str.upper()
         df[col_ticker] = df[col_ticker].astype(str).str.strip()
 
-        def parse_dates_flexible(series):
-            """La hoja mezcla fechas DD/MM/AAAA (entradas antiguas) y MM/DD/AAAA
-            (entradas más recientes). Probamos primero día-primero (convención
-            habitual); para las que resulten inválidas (ej. "06/29/2026" → día=06,
-            mes=29 no existe), reintentamos mes-primero antes de descartar la fila.
-            """
-            raw = series.astype(str)
-            parsed = pd.to_datetime(raw, dayfirst=True, errors="coerce")
+        def formato_de_columna(raw):
+            """Deduce si una columna está escrita día-primero o mes-primero
+            usando solo los valores que NO admiten dos lecturas: si el primer
+            campo supera 12 tiene que ser un día, y si lo supera el segundo
+            tiene que serlo también.
+
+            La gracia es que esto convierte la ambigüedad en un problema de
+            columna y no de valor: en una columna coherente, `07-11-2025` deja
+            de ser ambiguo en cuanto otra fila dice `29-10-2025`, porque esa
+            prueba que la columna escribe el día delante. No es una
+            preferencia ni una heurística, es evidencia del propio dato.
+
+            Devuelve "dia", "mes", "mezcla" (hay pruebas de ambos formatos, que
+            es el caso peor y no se puede resolver) o "sin evidencia" (todos
+            los valores son ambiguos y no hay nada en qué apoyarse)."""
+            dmy = mdy = 0
+            for valor in raw:
+                if not isinstance(valor, str):
+                    continue
+                m = _RE_FECHA_NUMERICA.match(valor)
+                if not m:
+                    continue
+                a, b = int(m.group(1)), int(m.group(2))
+                if a > 12 and b <= 12:
+                    dmy += 1
+                elif b > 12 and a <= 12:
+                    mdy += 1
+            if dmy and not mdy:
+                return "dia"
+            if mdy and not dmy:
+                return "mes"
+            if dmy and mdy:
+                return "mezcla"
+            return "sin evidencia"
+
+        def parse_dates_flexible(series, diag):
+            """La hoja mezcla fechas DD/MM/AAAA y MM/DD/AAAA. Se prueba primero
+            día-primero; para las que resulten inválidas ("06/29/2026" → día=06,
+            mes=29 no existe) se reintenta mes-primero antes de descartar.
+
+            Eso deja fuera el caso peligroso, que es el que NO falla: cuando los
+            dos números son ≤ 12, ambas lecturas son fechas válidas y la
+            elección es silenciosa. En esta hoja son 53 de 86 valores. Ver
+            auditoría de Cartera, hallazgo #B13.
+
+            Lo que sí se puede resolver con certeza, y es lo que hace este
+            bloque: una fecha de operación NO puede estar en el futuro. Si una
+            de las dos lecturas cae después de hoy y la otra no, la del futuro
+            es imposible y se descarta. No es una heurística ni una preferencia
+            de formato — es eliminar lo que no puede ser. Con los datos reales
+            había 3 posiciones fechadas en octubre y noviembre de 2026, ya
+            cerradas, por elegir mal la lectura.
+
+            Para el resto no hay forma de decidir desde el código: la
+            ambigüedad está en el dato, no en el parseo. Se cuentan y se
+            informan para que se puedan normalizar en origen (AAAA-MM-DD la
+            elimina por completo)."""
+            raw     = series.astype(str)
+            formato = formato_de_columna(raw)
+            diag["formatos"].append(formato)
+
+            parsed = pd.to_datetime(raw, dayfirst=(formato != "mes"), errors="coerce")
             need_retry = parsed.isna() & series.notna()
             if need_retry.any():
-                retry = pd.to_datetime(raw[need_retry], dayfirst=False, errors="coerce")
+                retry = pd.to_datetime(raw[need_retry], dayfirst=(formato == "mes"), errors="coerce")
                 parsed.loc[need_retry] = retry
+
+            hoy = pd.Timestamp(datetime.now(ZoneInfo("Europe/Madrid")).date())
+
+            if formato in ("dia", "mes"):
+                # Columna coherente: el formato está probado por sus propios
+                # valores, así que no queda ambigüedad que contar. Lo único que
+                # se comprueba es que no salga ninguna fecha futura — con el
+                # formato ya resuelto, eso ya no sería una lectura equivocada
+                # sino un error de tecleo en la hoja, y se avisa como tal.
+                diag["futuras"] += int((parsed > hoy).sum())
+                return parsed
+
+            for idx, valor in raw.items():
+                # pandas 3 ya no convierte los NaN al literal "nan" en
+                # astype(str): los deja como faltantes, así que `valor` puede
+                # ser un float. La columna de fecha de cierre está casi
+                # entera vacía, con lo que este caso es el habitual, no el raro.
+                if not isinstance(valor, str):
+                    continue
+                m = _RE_FECHA_NUMERICA.match(valor)
+                if not m:
+                    continue
+                a, b, anio = int(m.group(1)), int(m.group(2)), int(m.group(3))
+                if a > 12 or b > 12 or a == b:
+                    continue          # sin ambigüedad posible
+                try:
+                    dia_primero = pd.Timestamp(anio, b, a)
+                    mes_primero = pd.Timestamp(anio, a, b)
+                except ValueError:
+                    continue
+                if dia_primero > hoy and mes_primero <= hoy:
+                    parsed.loc[idx] = mes_primero
+                    diag["corregidas"] += 1
+                elif mes_primero > hoy and dia_primero <= hoy:
+                    parsed.loc[idx] = dia_primero
+                    diag["corregidas"] += 1
+                else:
+                    diag["ambiguas"] += 1
             return parsed
 
-        df[col_fecha] = parse_dates_flexible(df[col_fecha])
+        diag_fechas = {"ambiguas": 0, "corregidas": 0, "futuras": 0, "formatos": []}
+        df[col_fecha] = parse_dates_flexible(df[col_fecha], diag_fechas)
         if col_cierre:
-            df[col_cierre] = parse_dates_flexible(df[col_cierre])
+            df[col_cierre] = parse_dates_flexible(df[col_cierre], diag_fechas)
+        print(f"[Cartera] Formato de fechas deducido por columna: {diag_fechas['formatos']}")
+        if diag_fechas["corregidas"]:
+            print(f"[Cartera] {diag_fechas['corregidas']} fecha(s) reinterpretada(s): la lectura día-primero caía en el futuro")
+        if diag_fechas["ambiguas"]:
+            print(f"[Cartera] {diag_fechas['ambiguas']} fecha(s) ambigua(s) DD/MM vs MM/DD sin forma de resolver — normalizar el formato de la hoja")
+        if diag_fechas["futuras"]:
+            print(f"[Cartera] {diag_fechas['futuras']} fecha(s) posteriores a hoy con el formato ya resuelto — revisar esas filas en la hoja")
 
         n_before = len(df)
         df = df.dropna(subset=[col_fecha, col_ticker])
@@ -907,6 +1013,7 @@ def get_cartera():
             "ok":           True,
             "metrics":      metrics,
             "asignacion":   asignacion,
+            "diag_fechas":  diag_fechas,
             "closed_stats": closed_stats,
             "abiertas":     abiertas_rows,
             "cerradas":     cerradas_rows,
