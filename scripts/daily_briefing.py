@@ -67,7 +67,24 @@ GROQ_TPM_LIMIT     = 8000
 GROQ_TPM_SAFETY    = 350   # colchón: mi estimación por caracteres nunca coincide exactamente con el tokenizador real
 GROQ_MAX_OUTPUT    = 1800  # ~33% por encima del briefing más largo observado
 GROQ_MIN_OUTPUT    = 1200  # por debajo de esto el briefing saldría cortado a medias
-CHARS_POR_TOKEN    = 3.5   # calibrado contra el 413 real de Groq (español con tildes tokeniza peor que inglés)
+
+# RECALIBRADO el 31/07/2026 contra una medición exacta, no a ojo. Estaba en 3.5
+# y subestimaba un 13%: ese día el script calculó ~5744 tokens de prompt y Groq
+# respondió "Requested 8401" con max_tokens=1800, o sea que el prompt real eran
+# 6601 tokens. 20104 chars / 6601 tokens = 3.046 chars por token.
+#
+# Se deja en 2.9, por debajo de lo medido: el error de este lado (sobrestimar
+# el prompt y recortar de más) cuesta un poco de contexto; el del otro lado
+# (subestimar) cuesta quedarse sin briefing. No es simétrico.
+CHARS_POR_TOKEN    = 2.9
+
+
+class PromptDemasiadoGrande(Exception):
+    """Groq ha devuelto 413: el prompt no cabe en el presupuesto de TPM.
+
+    Se distingue del resto de errores porque main() sabe reaccionar a esta en
+    concreto, reintentando con el siguiente nivel de NIVELES_RECORTE.
+    """
 
 # Techo del prompt para que quepa una respuesta completa.
 TECHO_PROMPT = GROQ_TPM_LIMIT - GROQ_TPM_SAFETY - GROQ_MIN_OUTPUT   # 6450
@@ -1449,6 +1466,19 @@ def generate_briefing(prompt: str) -> str:
         timeout=120,
     )
 
+    # 413 = el prompt no cabe en el presupuesto de TPM. NO es un error
+    # cualquiera: es exactamente la condición que sabemos degradar, así que se
+    # distingue del resto para que main() reintente con un recorte más
+    # agresivo en vez de morirse.
+    #
+    # Por qué hace falta esto y no basta con afinar la constante: el 31/07/2026
+    # el script calculó ~5744 tokens de prompt y Groq contó 6601 (pidió 8401
+    # con los 1800 de respuesta). Un 13% de desvío. Se ha recalibrado
+    # CHARS_POR_TOKEN con esa medición, pero CUALQUIER estimación por
+    # caracteres se va a desviar del tokenizador real -- la única fuente de
+    # verdad es la respuesta de Groq, así que hay que saber reaccionar a ella.
+    if r.status_code == 413:
+        raise PromptDemasiadoGrande(f"Groq 413: {r.text[:200]}")
     if r.status_code != 200:
         raise ValueError(f"Groq error {r.status_code}: {r.text[:200]}")
 
@@ -1588,30 +1618,51 @@ def main():
     print("📈 Descargando indicadores macro publicados (FRED)...")
     macro_indicators = get_macro_indicators()
 
-    # Recorte progresivo hasta que el prompt quepa. Antes esto era un umbral
-    # binario que abortaba el Action entero: el 30/07/2026 no hubo briefing
-    # porque un día de calendario cargado (BOE + BOJ + GDP + Core PCE) empujó
-    # el prompt 130 tokens por encima del techo. Quedarse sin briefing es peor
-    # que un briefing con menos contexto histórico. Ver NIVELES_RECORTE.
-    prompt, nivel_usado = None, None
-    for nivel in NIVELES_RECORTE:
+    # Recorte progresivo hasta que el prompt quepa DE VERDAD.
+    #
+    # Dos vueltas de este problema en dos días:
+    #   30/07 — el prompt se pasó del techo y el script abortaba sin más, así
+    #           que no hubo briefing. De ahí NIVELES_RECORTE.
+    #   31/07 — el prompt pasó MI comprobación (~5744 tok estimados) pero Groq
+    #           contó 6601 y devolvió 413. Recortar según una estimación por
+    #           caracteres no basta: hay que reaccionar también al veredicto
+    #           real de la API.
+    #
+    # Por eso construir y llamar viven en el MISMO bucle: cada nivel se
+    # comprueba primero contra la estimación (barato, evita una llamada
+    # condenada) y, si pasa, contra Groq. Un 413 baja al siguiente nivel igual
+    # que lo haría una estimación por encima del techo.
+    raw_briefing, nivel_usado = None, None
+    for i, nivel in enumerate(NIVELES_RECORTE):
         prompt = build_prompt(market_data, news, major_headlines, earnings, breadth,
                               insider_clusters, briefing_history, bias_history,
                               macro_indicators, recorte=nivel)
-        nivel_usado = nivel
         tokens = estimar_tokens(prompt)
-        if tokens <= TECHO_PROMPT:
-            if nivel is not NIVELES_RECORTE[0]:
-                print(f"✂️  Prompt recortado a nivel '{nivel['nombre']}' "
-                      f"(~{tokens} tok, techo {TECHO_PROMPT}): historial "
-                      f"{nivel['historial']} chars, {nivel['titulares']} titulares por fuente, "
-                      f"calendario {nivel['calendario'] or 'completo'}")
+        if tokens > TECHO_PROMPT and i < len(NIVELES_RECORTE) - 1:
+            print(f"✂️  Nivel '{nivel['nombre']}': ~{tokens} tok, por encima del techo "
+                  f"({TECHO_PROMPT}) — probando el siguiente recorte")
+            continue
+        if i > 0:
+            print(f"✂️  Usando nivel '{nivel['nombre']}' (~{tokens} tok): historial "
+                  f"{nivel['historial']} chars, {nivel['titulares']} titulares por fuente, "
+                  f"calendario {nivel['calendario'] or 'completo'}")
+        print(f"🧠 Llamando a {MODEL} via Groq...")
+        try:
+            raw_briefing = generate_briefing(prompt)
+            nivel_usado = nivel
             break
-        print(f"✂️  Nivel '{nivel['nombre']}' se queda en ~{tokens} tok, por encima del techo "
-              f"({TECHO_PROMPT}) — probando el siguiente recorte")
+        except PromptDemasiadoGrande as e:
+            # Groq no está de acuerdo con mi cuenta. Manda Groq.
+            if i == len(NIVELES_RECORTE) - 1:
+                raise ValueError(
+                    f"Groq rechaza el prompt por tamaño incluso en el nivel de recorte más "
+                    f"agresivo. Ya no es cuestión de datos: lo que sobra son INSTRUCCIONES "
+                    f"fijas (el 53% del prompt, medido el 31/07/2026) — hay que comprimir "
+                    f"_ESTILO_V2 / las reglas anti-alucinación, o subir el límite de TPM. {e}"
+                ) from e
+            print(f"⚠️  Groq devolvió 413 con el nivel '{nivel['nombre']}' pese a que mi "
+                  f"estimación decía ~{tokens} tok — bajando un nivel de recorte")
 
-    print(f"🧠 Llamando a {MODEL} via Groq...")
-    raw_briefing = generate_briefing(prompt)
     briefing, bias = extract_bias_tag(raw_briefing)
     print(f"📌 Sesgo detectado hoy: {bias or 'N/D (el modelo no incluyó la etiqueta)'}")
 

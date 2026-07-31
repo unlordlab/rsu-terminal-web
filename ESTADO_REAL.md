@@ -29,9 +29,9 @@ parecería completo y sería engañoso.
 
 ## Cobertura de esta versión — leer antes de usarlo
 
-- **386 hallazgos**: 379 extraídos de los 16 documentos de auditoría, más 7
+- **388 hallazgos**: 379 extraídos de los 16 documentos de auditoría, más 9
   encontrados después con el sistema ya en producción (RSU Algoritmo #14–#17,
-  Newsfeed/briefing #27–#29).
+  Newsfeed/briefing #27–#31).
 - **64 son críticos (🔴)**: todos revisados en la primera pasada.
   33 cerrados · 11 abiertos ·
   1 ya no aplican ·
@@ -302,10 +302,10 @@ exposición: con ~100 usuarios reales, no hay política de privacidad.
 | ❓ | B3 | ⚪ | CANSLIM — los bugs se arreglaron hoy; queda la crítica metodológica | *sin comprobar* |
 | ❓ | B4 | ⚪ | SPXL — el motor ya está sano; el riesgo ahora es epistemológico | *sin comprobar* |
 
-## Newsfeed  (29 hallazgos — ❌1 · ✅3 · ❓25)
+## Newsfeed  (31 hallazgos — ❌1 · ✅5 · ❓25)
 
-Los #27–#29 no vienen de la auditoría: salieron el 31/07 al fallar el briefing
-diario en producción. Se agrupan aquí porque `scripts/daily_briefing.py`
+Los #27–#31 no vienen de la auditoría: salieron al fallar el briefing diario en
+producción dos días seguidos (30 y 31/07), cada día por una causa distinta. Se agrupan aquí porque `scripts/daily_briefing.py`
 alimenta el modal "Resumen de Mercado Diario", aunque sea un script aparte.
 
 | | # | Sev | Hallazgo | Estado / evidencia |
@@ -339,6 +339,8 @@ alimenta el modal "Resumen de Mercado Diario", aunque sea un script aparte.
 | ✅ | 27 | 🔴 | **El briefing diario no se genera los días de calendario cargado** — el prompt desbordaba el límite de 8.000 TPM de Groq y el script abortaba, dejando a los ~100 usuarios sin briefing | 31/07: el 30/07 falló con ~6578 tok contra un techo de 6450, por un día con BOE + BOJ + Advance GDP + Core PCE (15 eventos de impacto alto/medio, frente a 4-5 de un día normal). Medido: **3471 tok (53%) eran INSTRUCCIONES FIJAS** y solo 2703 datos — el prompt llevaba meses al borde. Ahora recorte progresivo en 4 niveles hasta que quepa, en vez de abortar; el nivel 0 ya ahorra 533 tok (historial 3000→1800 chars, titulares 8+8→5+5) |
 | ❌ | 28 | 🟠 | Las instrucciones fijas del prompt son el 53% de su tamaño | verificado 31/07: `_ESTILO_V2` solo son 2296 tok, con las 9 reglas anti-alucinación en prosa larga y bloques duplicados (`PROHIBIDO SONAR A TEXTO GENERADO` y `CONVICCIÓN CALIBRADA` aparecen dos veces con listas casi idénticas). Comprimir a lista telegráfica ahorraría ~600 tok, pero cambia el output: exige comparar un briefing antes/después |
 | ❓ | 29 | 🟡 | ¿Hay margen de TPM sin recortar nada? | *sin comprobar* — los 8.000 TPM son del tier gratuito de Groq. Antes de comprimir el prompt (#28) conviene mirar si otro modelo del mismo tier tiene más margen, o el coste del siguiente escalón |
+| ✅ | 30 | 🔴 | **El contador de tokens subestimaba un 13%**, así que el recorte automático dejaba pasar prompts que Groq rechazaba | 31/07: el briefing volvió a fallar, ahora con 413 pese a pasar la comprobación interna. Medición exacta: el script estimó 5.744 tok y Groq pidió 8.401 con `max_tokens=1800`, o sea **6.601 reales**. 20.104 chars / 6.601 = **3,046 chars/token**, no los 3,5 configurados. Recalibrado a 2,9 (por debajo de lo medido a propósito: sobrestimar cuesta contexto, subestimar cuesta el briefing entero) |
+| ✅ | 31 | 🟠 | Un 413 de Groq mataba el proceso en vez de reintentar con menos contexto | 31/07: cualquier estimación por caracteres se desvía del tokenizador real, así que la única fuente de verdad es la respuesta de la API. Ahora el 413 se distingue del resto de errores (`PromptDemasiadoGrande`) y baja un nivel de recorte; construir y llamar viven en el mismo bucle. Verificado con un Groq simulado más estricto que la estimación: falla en 'normal', reintenta en 'medio' y genera |
 
 ## Options Flow  (25 hallazgos — ❌3 · ✅2 · ❓20)
 
