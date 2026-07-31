@@ -29,8 +29,9 @@ parecería completo y sería engañoso.
 
 ## Cobertura de esta versión — leer antes de usarlo
 
-- **383 hallazgos**: 379 extraídos de los 16 documentos de auditoría, más 4
-  encontrados después auditando datos en producción (RSU Algoritmo #14–#17).
+- **386 hallazgos**: 379 extraídos de los 16 documentos de auditoría, más 7
+  encontrados después con el sistema ya en producción (RSU Algoritmo #14–#17,
+  Newsfeed/briefing #27–#29).
 - **64 son críticos (🔴)**: todos revisados en la primera pasada.
   33 cerrados · 11 abiertos ·
   1 ya no aplican ·
@@ -301,7 +302,11 @@ exposición: con ~100 usuarios reales, no hay política de privacidad.
 | ❓ | B3 | ⚪ | CANSLIM — los bugs se arreglaron hoy; queda la crítica metodológica | *sin comprobar* |
 | ❓ | B4 | ⚪ | SPXL — el motor ya está sano; el riesgo ahora es epistemológico | *sin comprobar* |
 
-## Newsfeed  (26 hallazgos — ✅2 · ❓24)
+## Newsfeed  (29 hallazgos — ❌1 · ✅3 · ❓25)
+
+Los #27–#29 no vienen de la auditoría: salieron el 31/07 al fallar el briefing
+diario en producción. Se agrupan aquí porque `scripts/daily_briefing.py`
+alimenta el modal "Resumen de Mercado Diario", aunque sea un script aparte.
 
 | | # | Sev | Hallazgo | Estado / evidencia |
 |-|---|-----|----------|--------------------|
@@ -331,6 +336,9 @@ exposición: con ~100 usuarios reales, no hay política de privacidad.
 | ❓ | 24 | 🟢 | Alertas de noticias HIGH | *sin comprobar* |
 | ❓ | 25 | 🟢 | Push por WebSocket en vez de polling: | *sin comprobar* |
 | ❓ | 26 | 🟢 | Feed de la SEC (EDGAR current events RSS) | *sin comprobar* |
+| ✅ | 27 | 🔴 | **El briefing diario no se genera los días de calendario cargado** — el prompt desbordaba el límite de 8.000 TPM de Groq y el script abortaba, dejando a los ~100 usuarios sin briefing | 31/07: el 30/07 falló con ~6578 tok contra un techo de 6450, por un día con BOE + BOJ + Advance GDP + Core PCE (15 eventos de impacto alto/medio, frente a 4-5 de un día normal). Medido: **3471 tok (53%) eran INSTRUCCIONES FIJAS** y solo 2703 datos — el prompt llevaba meses al borde. Ahora recorte progresivo en 4 niveles hasta que quepa, en vez de abortar; el nivel 0 ya ahorra 533 tok (historial 3000→1800 chars, titulares 8+8→5+5) |
+| ❌ | 28 | 🟠 | Las instrucciones fijas del prompt son el 53% de su tamaño | verificado 31/07: `_ESTILO_V2` solo son 2296 tok, con las 9 reglas anti-alucinación en prosa larga y bloques duplicados (`PROHIBIDO SONAR A TEXTO GENERADO` y `CONVICCIÓN CALIBRADA` aparecen dos veces con listas casi idénticas). Comprimir a lista telegráfica ahorraría ~600 tok, pero cambia el output: exige comparar un briefing antes/después |
+| ❓ | 29 | 🟡 | ¿Hay margen de TPM sin recortar nada? | *sin comprobar* — los 8.000 TPM son del tier gratuito de Groq. Antes de comprimir el prompt (#28) conviene mirar si otro modelo del mismo tier tiene más margen, o el coste del siguiente escalón |
 
 ## Options Flow  (25 hallazgos — ❌3 · ✅2 · ❓20)
 

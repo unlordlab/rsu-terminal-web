@@ -69,6 +69,35 @@ GROQ_MAX_OUTPUT    = 1800  # ~33% por encima del briefing más largo observado
 GROQ_MIN_OUTPUT    = 1200  # por debajo de esto el briefing saldría cortado a medias
 CHARS_POR_TOKEN    = 3.5   # calibrado contra el 413 real de Groq (español con tildes tokeniza peor que inglés)
 
+# Techo del prompt para que quepa una respuesta completa.
+TECHO_PROMPT = GROQ_TPM_LIMIT - GROQ_TPM_SAFETY - GROQ_MIN_OUTPUT   # 6450
+
+# ── Recorte progresivo del prompt ─────────────────────────────────────────────
+# El 30/07/2026 el briefing NO SE GENERÓ: el prompt salió a ~6578 tokens y el
+# script abortó. La causa no fue un cambio de código sino un día de calendario
+# cargado -- BOE, BOJ, Advance GDP y Core PCE la misma mañana, 15 eventos de
+# impacto alto/medio donde un día normal hay 4 o 5. Es decir, fallaba
+# justamente los días en que el briefing más vale.
+#
+# Medido antes de tocar nada: de los 6578 tokens, 3471 (53%) eran
+# INSTRUCCIONES FIJAS y solo 2703 datos. El prompt llevaba meses al borde.
+#
+# En vez de un umbral binario que aborta, se prueban niveles de recorte de
+# menos a más agresivo hasta que quepa. Se sacrifica primero lo que menos
+# duele: el historial narrativo (contexto, no información de hoy), luego el
+# número de titulares -- el propio prompt ya pide "usa 2-3, no los enumeres
+# todos" -- y por último el calendario, que es lo más ligado al día.
+#
+# El nivel 0 no es "sin recorte": ya baja el historial de 3000 a 1800 chars y
+# los titulares de 8+8 a 5+5, que es el recorte de datos que da margen sin
+# tocar una sola instrucción de estilo.
+NIVELES_RECORTE = [
+    {"nombre": "normal",    "historial": 1800, "titulares": 5, "calendario": None},
+    {"nombre": "medio",     "historial": 1000, "titulares": 4, "calendario": 10},
+    {"nombre": "agresivo",  "historial": 500,  "titulares": 3, "calendario": 7},
+    {"nombre": "mínimo",    "historial": 0,    "titulares": 2, "calendario": 5},
+]
+
 
 def estimar_tokens(texto: str) -> int:
     """Estimación por caracteres — deliberadamente conservadora (divisor bajo
@@ -747,11 +776,16 @@ def _append_briefing_history(history: list, date: str, text: str, bias: str) -> 
     return history[-BRIEFING_HISTORY_DAYS:]
 
 
-def format_briefing_history(history: list) -> str:
+def format_briefing_history(history: list, presupuesto: int = None) -> str:
     """Bloque narrativo legible para el prompt -- mismo criterio ya
     establecido en el proyecto de no volcar JSON crudo (ver sector_lines,
     calendar_lines...). Orden cronológico, el más reciente al final."""
-    if not history:
+    # presupuesto=0 -> el nivel de recorte más agresivo prescinde del bloque
+    # entero (ver NIVELES_RECORTE). Es contexto de días pasados: lo primero
+    # que sobra cuando hay que elegir entre eso y quedarse sin briefing.
+    if presupuesto is None:
+        presupuesto = BRIEFING_HISTORY_CHARS_BUDGET
+    if not history or presupuesto <= 0:
         return "Sin briefings anteriores registrados todavía."
     ordered = sorted(history, key=lambda h: h["date"])
     # Presupuesto TOTAL de caracteres repartido entre las entradas, en vez de
@@ -762,7 +796,7 @@ def format_briefing_history(history: list) -> str:
     # bloque ocupa lo mismo tenga 1 o 3 entradas: cuantas más haya, menos
     # texto de cada una, que es el reparto correcto (lo más reciente importa
     # más, pero todas aportan contexto).
-    por_entrada = max(600, BRIEFING_HISTORY_CHARS_BUDGET // len(ordered))
+    por_entrada = max(300, presupuesto // len(ordered))
     return "\n\n".join(f"[{h['date']} — sesgo {h.get('bias', 'N/D')}]\n{h['text'][:por_entrada]}" for h in ordered)
 
 
@@ -1046,7 +1080,17 @@ def _cierre_y_estructura() -> str:
 
 def build_prompt(market_data: dict, news: list, major_headlines: list, earnings: list, breadth: dict,
                   insider_clusters: list, briefing_history: list, bias_history: list,
-                  macro_indicators: list = None) -> str:
+                  macro_indicators: list = None, recorte: dict = None) -> str:
+    # `recorte` es uno de NIVELES_RECORTE: cuántos titulares y eventos de
+    # calendario entran, y cuánto historial narrativo. Se llama en bucle desde
+    # main() de menos a más agresivo hasta que el prompt quepa en TECHO_PROMPT,
+    # en vez de abortar cuando no cabe. Ver el comentario de NIVELES_RECORTE.
+    recorte = recorte or NIVELES_RECORTE[0]
+    max_titulares = recorte.get("titulares")
+    max_calendario = recorte.get("calendario")
+    if max_titulares:
+        news = news[:max_titulares]
+        major_headlines = major_headlines[:max_titulares]
     d = market_data
 
     # Formatear índices
@@ -1137,7 +1181,12 @@ def build_prompt(market_data: dict, news: list, major_headlines: list, earnings:
 
     # Calendario
     calendar_lines = ""
-    for ev in d.get("calendar", []):
+    eventos = d.get("calendar", [])
+    if max_calendario:
+        # Ya vienen ordenados por impacto (ver el fix de events[:10] sin
+        # ordenar), así que recortar por la cola quita lo menos relevante.
+        eventos = eventos[:max_calendario]
+    for ev in eventos:
         calendar_lines += f"| {ev['time']} ET | {ev['event']} | {ev.get('forecast','N/D')} | {ev.get('previous','N/D')} | {ev['impact']} |\n"
     if not calendar_lines:
         calendar_lines = "| — | Sin eventos de alto impacto hoy | — | — | — |\n"
@@ -1221,7 +1270,7 @@ def build_prompt(market_data: dict, news: list, major_headlines: list, earnings:
 
     # Memoria de los últimos días — continuidad narrativa real, con texto
     # completo (no solo el sesgo, eso lo cubre bias_history_str aparte)
-    briefing_history_str = format_briefing_history(briefing_history)
+    briefing_history_str = format_briefing_history(briefing_history, recorte.get("historial"))
     memoria_block = (
         f"""CONTEXTO HISTÓRICO — MEMORIA DE LOS ÚLTIMOS {len(briefing_history)} BRIEFINGS (tus propias notas de días anteriores, más reciente al final):
 {briefing_history_str}
@@ -1353,11 +1402,16 @@ def generate_briefing(prompt: str) -> str:
     print(f"🧮 Presupuesto Groq: prompt ~{prompt_tokens} tokens · respuesta hasta {max_salida} "
           f"(límite {GROQ_TPM_LIMIT} TPM)")
     if max_salida < GROQ_MIN_OUTPUT:
+        # Llegar aquí significa que ni el nivel de recorte MÍNIMO ha bastado
+        # (main() los prueba todos antes de llamar a esta función), así que ya
+        # no es cuestión de datos: el problema está en las instrucciones fijas,
+        # que son el 53% del prompt. Por eso el mensaje ya no dice "recorta el
+        # historial" -- eso el script lo ha intentado solo.
         raise ValueError(
             f"El prompt (~{prompt_tokens} tokens) deja solo {max_salida} tokens para la respuesta, "
-            f"por debajo del mínimo de {GROQ_MIN_OUTPUT} para un briefing completo. "
-            f"Recorta BRIEFING_HISTORY_CHARS_BUDGET (hoy {BRIEFING_HISTORY_CHARS_BUDGET}) "
-            f"o alguna sección del prompt antes de volver a ejecutar."
+            f"por debajo del mínimo de {GROQ_MIN_OUTPUT}. El recorte progresivo de datos ya se ha "
+            f"agotado (ver NIVELES_RECORTE), así que lo que sobra son INSTRUCCIONES fijas: "
+            f"hay que comprimir _ESTILO_V2 / las reglas anti-alucinación, o subir el límite de TPM."
         )
 
     r = requests.post(
@@ -1534,9 +1588,27 @@ def main():
     print("📈 Descargando indicadores macro publicados (FRED)...")
     macro_indicators = get_macro_indicators()
 
-    prompt = build_prompt(market_data, news, major_headlines, earnings, breadth,
-                          insider_clusters, briefing_history, bias_history,
-                          macro_indicators)
+    # Recorte progresivo hasta que el prompt quepa. Antes esto era un umbral
+    # binario que abortaba el Action entero: el 30/07/2026 no hubo briefing
+    # porque un día de calendario cargado (BOE + BOJ + GDP + Core PCE) empujó
+    # el prompt 130 tokens por encima del techo. Quedarse sin briefing es peor
+    # que un briefing con menos contexto histórico. Ver NIVELES_RECORTE.
+    prompt, nivel_usado = None, None
+    for nivel in NIVELES_RECORTE:
+        prompt = build_prompt(market_data, news, major_headlines, earnings, breadth,
+                              insider_clusters, briefing_history, bias_history,
+                              macro_indicators, recorte=nivel)
+        nivel_usado = nivel
+        tokens = estimar_tokens(prompt)
+        if tokens <= TECHO_PROMPT:
+            if nivel is not NIVELES_RECORTE[0]:
+                print(f"✂️  Prompt recortado a nivel '{nivel['nombre']}' "
+                      f"(~{tokens} tok, techo {TECHO_PROMPT}): historial "
+                      f"{nivel['historial']} chars, {nivel['titulares']} titulares por fuente, "
+                      f"calendario {nivel['calendario'] or 'completo'}")
+            break
+        print(f"✂️  Nivel '{nivel['nombre']}' se queda en ~{tokens} tok, por encima del techo "
+              f"({TECHO_PROMPT}) — probando el siguiente recorte")
 
     print(f"🧠 Llamando a {MODEL} via Groq...")
     raw_briefing = generate_briefing(prompt)
