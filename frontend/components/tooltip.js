@@ -2081,6 +2081,36 @@ El bloque de al lado (Exposición por Sector) te dice el % exacto en cada sector
 Una cartera con 5 sectores al 20% cada uno tiene HHI = 20% (bien repartida). Una cartera con un sector al 60% y el resto repartido tiene un HHI mucho más alto, aunque el "Exposición por Sector" solo muestre ese 60% como dato individual.`
     },
 
+    "cartera-asignacion": {
+        title: "Asignación objetivo vs real",
+        short: "¿Caben las posiciones abiertas dentro de tus propias reglas de tamaño?",
+        long: `Cada nivel fija un tamaño como porcentaje del capital base: CORE 5%, HIGH 3%, LOTTERY 1%. Esta tabla multiplica ese porcentaje por el número de posiciones abiertas de cada nivel y lo compara con el capital que hay de verdad.
+
+La cuenta es tozuda: 13 posiciones CORE al 5% ya son el 65% del capital. Si además hay 36 HIGH al 3%, eso son 108% más. Sumado pasa del 100% mucho antes de lo que parece.
+
+Cuando el total pedido supera al capital disponible, las últimas posiciones en abrirse se quedan sin tamaño asignado y aparecen como «sin asignar» en la tabla. No es un error de datos: es que el número de posiciones y las reglas de tamaño no caben juntos.
+
+Hay tres formas de cuadrarlo, y conviene elegir a conciencia:
+
+▸ Cerrar posiciones hasta que quepan. Es lo que las propias reglas están pidiendo — un nivel CORE del 5% implica una cartera concentrada, no de cincuenta nombres.
+▸ Bajar los pesos por nivel. Coherente, pero redefine qué significa CORE.
+▸ Subir el capital base. Válido solo si ese número refleja capital real; si no, es maquillaje.`
+    },
+
+    "cartera-cadencia": {
+        title: "¿Cada cuánto se actualizan estos precios?",
+        short: "No son en tiempo real. Entre el mercado y esta pantalla hay tres retrasos que se suman.",
+        long: `El indicador verde significa que la conexión está viva, no que el precio sea de este segundo. Los tres retrasos, de mayor a menor:
+
+▸ La fuente de datos va con retraso respecto al mercado. Es lo normal en datos gratuitos: el tiempo real de verdad se paga.
+▸ El servidor guarda cada precio 60 segundos antes de volver a pedirlo, para no saturar la fuente con 50 posiciones.
+▸ La página recibe una tanda nueva cada 60 segundos.
+
+En la práctica, lo que ves puede ir unos minutos por detrás del mercado. Para una cartera de posiciones a semanas o meses eso da igual; para decidir una entrada al segundo, no uses esta pantalla.
+
+Los porcentajes de P&L se calculan contra tu precio de compra, así que arrastran ese mismo retraso — no son un error, son una foto ligeramente antigua.`
+    },
+
     "cartera-nivel": {
         title: "Nivel de Convicción (CORE / HIGH / LOTTERY)",
         short: "No es solo una etiqueta — determina el tamaño real de la posición como % fijo de tu capital total.",

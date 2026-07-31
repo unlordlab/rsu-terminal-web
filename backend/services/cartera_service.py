@@ -228,8 +228,15 @@ def _fetch_price_single(ticker: str) -> dict | None:
             if data and isinstance(data, list):
                 price = float(data[0].get("price", 0))
                 if price:
+                    # quote-short da el precio pero NO la variación del día ni
+                    # el cierre anterior. Antes se rellenaban con `prev: price,
+                    # chg: 0.0`, es decir, un «sin cambios» fabricado que en
+                    # pantalla es indistinguible de una sesión realmente plana.
+                    # Se devuelve None en ambos: hay precio, no hay variación
+                    # — mismo criterio de «sin dato, no se inventa» del resto
+                    # del proyecto. Ver auditoría de Cartera, hallazgo #A3.
                     entry = {"ticker": ticker, "price": round(price, 2),
-                             "prev": price, "chg": 0.0, "updated": now}
+                             "prev": None, "chg": None, "updated": now}
                     _price_cache[ticker] = entry
                     return entry
     except Exception as e:
@@ -823,6 +830,48 @@ def get_cartera():
                 metrics["pnl_realizado_acum"]  = sim["pnl_realizado"]
                 metrics["capital_disponible"]  = sim["capital_disponible"]
 
+        # ── ASIGNACIÓN OBJETIVO VS REAL ──────────────────────────────────────
+        # Cuánto capital pedirían las reglas de nivel si TODAS las posiciones
+        # abiertas tuvieran su tamaño completo, frente a cuánto hay de verdad.
+        # Es la cuenta que hace falta para ver de un vistazo si el número de
+        # posiciones abiertas cabe en las propias reglas de tamaño: 5% × 13
+        # CORE + 3% × 37 HIGH + 1% × 3 LOTTERY = 179% del capital, que
+        # obviamente no cabe, y por eso hay posiciones sin dimensionar. Sin
+        # esta tabla, lo único que se veía era un «0%» silencioso en cinco
+        # filas. Ver auditoría de Cartera, #20 (y #B19, que es su síntoma).
+        asignacion = {}
+        if abiertas_rows and sim and sim.get("inv_by_idx") and settings.capital_total > 0:
+            equity = round(settings.capital_total + sim["pnl_realizado"], 2)
+            por_nivel = []
+            deseado_total = 0.0
+            for nivel, peso in TIER_WEIGHTS.items():
+                filas_nivel = [r for r in abiertas_rows if r["tier"] == nivel]
+                if not filas_nivel:
+                    continue
+                deseado = round(settings.capital_total * peso / 100 * len(filas_nivel), 2)
+                deseado_total += deseado
+                por_nivel.append({
+                    "nivel":         nivel,
+                    "peso_unitario": peso,
+                    "n":             len(filas_nivel),
+                    "deseado":       deseado,
+                    "asignado":      round(sum(r["inv"] for r in filas_nivel), 2),
+                    "sin_asignar":   sum(1 for r in filas_nivel if r["sin_dimensionar"]),
+                })
+            por_nivel.sort(key=lambda x: -x["deseado"])
+            sin_nivel = [r for r in abiertas_rows if not r["tier"]]
+            asignacion = {
+                "capital_base":   round(settings.capital_total, 2),
+                "equity_modelo":  equity,
+                "comprometido":   round(total_inv, 2),
+                "deseado_total":  round(deseado_total, 2),
+                # Positivo = falta capital para dar tamaño completo a todo lo abierto.
+                "deficit":        round(deseado_total - equity, 2),
+                "pct_del_capital": round(deseado_total / settings.capital_total * 100, 1),
+                "por_nivel":      por_nivel,
+                "sin_nivel":      len(sin_nivel),
+            }
+
         closed_stats = {}
         if cerradas_rows:
             ganadas  = len([r for r in cerradas_rows if r["pnl"] > 0])
@@ -857,6 +906,7 @@ def get_cartera():
         resultado = _sanitize({
             "ok":           True,
             "metrics":      metrics,
+            "asignacion":   asignacion,
             "closed_stats": closed_stats,
             "abiertas":     abiertas_rows,
             "cerradas":     cerradas_rows,

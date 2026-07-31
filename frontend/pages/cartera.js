@@ -4,7 +4,7 @@
 // sparklines, indicadores WS por fila, exportar CSV, panel de riesgo.
 // ─────────────────────────────────────────────────────────────────────────────
 
-import { errorMessage } from '/core/ui.js';
+import { errorMessage, esc } from '/core/ui.js';
 
 let _ws        = null;
 let _wsRetries = 0;
@@ -44,6 +44,9 @@ async function loadCartera(container) {
         let html = topBar(data);
 
         if (m && m.total_inv > 0) html += metricsRow(m);
+        if (data.asignacion && data.asignacion.por_nivel && data.asignacion.por_nivel.length) {
+            html += asignacionPanel(data.asignacion);
+        }
 
         if (data.history && data.history.length > 1) {
             html += sectionHeader('01 // EVOLUCIÓN DEL VALOR');
@@ -400,7 +403,11 @@ function header() {
     return `<div style="margin-bottom:1.5rem;display:flex;justify-content:space-between;align-items:flex-end;">
         <div>
             <div style="color:var(--color-accent);font-size:18px;letter-spacing:.1em;text-shadow:var(--glow-text);margin-bottom:4px;">CARTERA</div>
-            <div style="color:var(--color-muted);font-size:12px;">Portfolio tracker · Precios live · WebSocket</div>
+            <!-- "Precios live" prometía tiempo real y no lo es: el WebSocket
+                 difunde cada 60 s, los precios se cachean otros 60 s en el
+                 servidor y la propia fuente va con retraso. Se dice el número
+                 en vez de una etiqueta que sugiere lo contrario (#A6). -->
+            <div style="color:var(--color-muted);font-size:12px;">Portfolio tracker · Precios diferidos, actualizados cada 60 s <span class="tt-trigger" data-tooltip="cartera-cadencia" title="¿Qué es esto?">?</span></div>
         </div>
         <div style="display:flex;gap:8px;align-items:center;">
             <button class="export-btn" onclick="window.__carteraExportCSV()">↓ CSV</button>
@@ -489,10 +496,62 @@ function loadingHTML() {
 
 // ── PANEL DE RIESGO ───────────────────────────────────────────────────────────
 
+// ASIGNACIÓN OBJETIVO VS REAL
+//
+// Responde a una pregunta que hasta ahora no estaba en ninguna pantalla:
+// ¿caben las posiciones abiertas dentro de mis propias reglas de tamaño?
+// Si los niveles piden más capital del que hay, algunas posiciones se quedan
+// sin dimensionar — y antes eso solo se veía como un "0%" mudo en su fila.
+function asignacionPanel(a) {
+    const hayDeficit = a.deficit > 0;
+    const colorDef   = hayDeficit ? '#ffb800' : 'var(--color-accent)';
+
+    const filas = a.por_nivel.map(nv => {
+        const pct   = nv.deseado > 0 ? Math.min(nv.asignado / nv.deseado * 100, 100) : 100;
+        const falta = Math.round((nv.deseado - nv.asignado) * 100) / 100;
+        const color = nv.sin_asignar ? '#ffb800' : 'var(--color-accent)';
+        return `<div style="display:grid;grid-template-columns:90px 60px 1fr 110px 110px;gap:10px;padding:7px 0;border-bottom:1px solid var(--color-border);font-size:11px;align-items:center;">
+            <div style="color:var(--color-text);">${esc(nv.nivel)}</div>
+            <div style="color:var(--color-muted);">${nv.n} × ${nv.peso_unitario}%</div>
+            <div style="background:var(--color-bg,#0a0a0a);border-radius:3px;height:6px;">
+                <div style="height:100%;width:${pct}%;background:${color};border-radius:3px;"></div>
+            </div>
+            <div style="text-align:right;color:var(--color-muted);">$${usd(nv.asignado)} / $${usd(nv.deseado)}</div>
+            <div style="text-align:right;color:${nv.sin_asignar ? '#ffb800' : 'var(--color-muted)'};">${
+                nv.sin_asignar ? nv.sin_asignar + ' sin asignar' : 'completo'
+            }</div>
+        </div>`;
+    }).join('');
+
+    const veredicto = hayDeficit
+        ? `Tus reglas de nivel piden <b style="color:${colorDef};">$${usd(a.deseado_total)}</b> `
+          + `(${a.pct_del_capital}% del capital base) para dar tamaño completo a todo lo abierto, `
+          + `y el modelo tiene <b>$${usd(a.equity_modelo)}</b>. `
+          + `Faltan <b style="color:${colorDef};">$${usd(a.deficit)}</b>: por eso hay posiciones sin dimensionar. `
+          + `Se corrige cerrando posiciones, bajando los pesos por nivel o subiendo el capital base — no es un fallo de datos.`
+        : `Todo lo abierto cabe dentro de las reglas de nivel: piden $${usd(a.deseado_total)} `
+          + `(${a.pct_del_capital}% del capital base) y el modelo tiene $${usd(a.equity_modelo)}.`;
+
+    return `<div style="background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius);padding:1rem;margin-bottom:1.5rem;">
+        <div style="color:var(--color-muted);font-size:11px;letter-spacing:.08em;margin-bottom:10px;">ASIGNACIÓN OBJETIVO VS REAL <span class="tt-trigger" data-tooltip="cartera-asignacion" title="¿Qué es esto?">?</span></div>
+        <div style="display:grid;grid-template-columns:90px 60px 1fr 110px 110px;gap:10px;padding-bottom:6px;border-bottom:1px solid var(--color-border);font-size:10px;color:var(--color-muted);">
+            <div>NIVEL</div><div>POSICIONES</div><div>ASIGNADO / OBJETIVO</div><div style="text-align:right;">CAPITAL</div><div style="text-align:right;">ESTADO</div>
+        </div>
+        ${filas}
+        <div style="margin-top:10px;font-size:11px;color:var(--color-muted);line-height:1.5;">${veredicto}</div>
+        ${a.sin_nivel ? `<div style="margin-top:6px;font-size:11px;color:#ffb800;">${a.sin_nivel} posición(es) abierta(s) sin nivel asignado en la hoja — no entran en este reparto.</div>` : ''}
+    </div>`;
+}
+
 function riskPanel(abiertas) {
     if (!abiertas.length) return '';
 
-    const byPeso    = [...abiertas].sort((a,b) => b.peso - a.peso);
+    // "Mayor / menor posición" solo tiene sentido entre las que TIENEN tamaño.
+    // Con las sin dimensionar dentro, la menor era siempre una de ellas al 0%
+    // — un dato vacío ocupando la tarjeta (mismo cero engañoso de #B19, que la
+    // tabla ya marca como "sin asignar").
+    const conTamano = abiertas.filter(r => !r.sin_dimensionar);
+    const byPeso    = [...(conTamano.length ? conTamano : abiertas)].sort((a,b) => b.peso - a.peso);
     const byPnl     = [...abiertas].sort((a,b) => b.pnl - a.pnl);
     const biggest   = byPeso[0];
     const smallest  = byPeso[byPeso.length-1];

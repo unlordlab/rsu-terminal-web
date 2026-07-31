@@ -122,13 +122,18 @@ async function loadWatchlist(container) {
         const header = '<div style="display:grid;grid-template-columns:1fr 100px 90px 90px 40px;gap:8px;padding:7px 14px;border-bottom:1px solid var(--color-border);font-size:10px;color:var(--color-muted);">'
             + '<div>TICKER</div><div style="text-align:right;">PRECIO</div><div style="text-align:right;">VAR%</div><div style="text-align:center;">ALERTA</div><div></div></div>';
         const rows = data.data.map(w => {
-            const up    = (w.chg || 0) >= 0;
-            const color = w.ok ? (up ? 'var(--color-accent)' : '#f23645') : 'var(--color-muted)';
-            const arrow = up ? '▲' : '▼';
+            // chg puede ser null teniendo precio: la fuente de respaldo da la
+            // cotización pero no la variación del día. Antes `Math.abs(null)`
+            // daba 0 y se pintaba un "▲ 0.00%" que parecía una sesión plana
+            // real. Sin variación se muestra "—", igual que sin precio.
+            const hayChg = w.ok && w.chg != null;
+            const up     = (w.chg || 0) >= 0;
+            const color  = hayChg ? (up ? 'var(--color-accent)' : '#f23645') : 'var(--color-muted)';
+            const arrow  = up ? '▲' : '▼';
             return '<div style="display:grid;grid-template-columns:1fr 100px 90px 90px 40px;gap:8px;padding:8px 14px;border-bottom:1px solid var(--color-border);font-size:12px;align-items:center;">'
                 + '<div class="ticker-link" style="color:var(--color-accent);cursor:pointer;font-weight:500;" onclick="goToResearch(\'' + esc(w.ticker) + '\')">' + esc(w.ticker) + '</div>'
                 + '<div style="text-align:right;color:var(--color-text);">' + (w.ok ? '$' + w.price.toFixed(2) : '—') + '</div>'
-                + '<div style="text-align:right;color:' + color + ';">' + (w.ok ? arrow + ' ' + Math.abs(w.chg).toFixed(2) + '%' : '—') + '</div>'
+                + '<div style="text-align:right;color:' + color + ';">' + (hayChg ? arrow + ' ' + Math.abs(w.chg).toFixed(2) + '%' : '—') + '</div>'
                 + '<div style="text-align:center;"><button class="wl-alert-btn" data-ticker="' + esc(w.ticker) + '" style="background:transparent;border:1px solid var(--color-border);color:var(--color-muted);border-radius:3px;padding:3px 8px;font-size:10px;cursor:pointer;">＋ alerta</button></div>'
                 + '<div style="text-align:center;"><button class="wl-remove-btn" data-ticker="' + esc(w.ticker) + '" style="background:transparent;border:none;color:var(--color-muted);cursor:pointer;font-size:14px;" title="Quitar de watchlist">✕</button></div>'
                 + '</div>';

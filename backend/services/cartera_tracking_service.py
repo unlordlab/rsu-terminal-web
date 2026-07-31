@@ -89,6 +89,44 @@ def _reclamar(conn, clave, tipo, ticker):
     return cur.rowcount == 1
 
 
+def _clave(row, tipo: str) -> str:
+    """Identidad de una operación a efectos de «¿ya avisé de esto?».
+
+    Incluye el PRECIO DE COMPRA. Antes era solo `ticker|fecha|tipo`, así que
+    dos lotes del mismo ticker abiertos el mismo día compartían clave y del
+    segundo no se avisaba nunca (auditoría de Cartera, #B17).
+
+    Y NO se usa el `id` de fila, que también es único: ese id sale del orden
+    de las filas del CSV (`ticker-<índice>`), así que insertar una fila en
+    medio de la hoja desplazaría el índice de todas las de abajo, cambiaría
+    sus claves y provocaría un aluvión de avisos repetidos. El precio de
+    compra, en cambio, no se mueve cuando reordenas la hoja.
+    """
+    return f"{row['ticker']}|{row['fecha']}|{row.get('compra')}|{tipo}"
+
+
+def _clave_legado(row, tipo: str) -> str:
+    """La clave anterior al fix de #B17, sin precio de compra."""
+    return f"{row['ticker']}|{row['fecha']}|{tipo}"
+
+
+def _avisado_con_formato_viejo(conn, row, tipo: str) -> bool:
+    """Puente para el cambio de formato de clave (#B17). Se consulta DESPUÉS
+    de reclamar la clave nueva, no antes: si esta operación ya se avisó en su
+    día con el formato antiguo, la clave nueva queda registrada igual pero no
+    se reenvía nada. Sin esto, el primer arranque tras el despliegue habría
+    mandado un Telegram por cada posición viva.
+
+    Efecto secundario asumido y correcto: para las posiciones que YA existían,
+    dos lotes del mismo ticker y día comparten clave antigua, así que el
+    segundo tampoco se avisará ahora — reenviar hoy la apertura de un lote de
+    hace meses sería ruido. A partir de este despliegue, cada lote nuevo tiene
+    su propia clave y sí se avisa por separado, que es lo que pedía #B17."""
+    return conn.execute(
+        "SELECT 1 FROM notificadas WHERE clave = ?", (_clave_legado(row, tipo),)
+    ).fetchone() is not None
+
+
 def procesar_cartera_notificaciones():
     """
     Job periódico — compara el estado actual de Cartera contra lo ya
@@ -104,31 +142,31 @@ def procesar_cartera_notificaciones():
     conn = _conn()
     es_primera_vez = conn.execute("SELECT COUNT(*) as c FROM notificadas").fetchone()['c'] == 0
 
-    enviadas = 0
-    for row in data.get('abiertas', []):
-        clave = f"{row['ticker']}|{row['fecha']}|apertura"
-        if es_primera_vez:
-            conn.execute(
-                "INSERT OR IGNORE INTO notificadas (clave, tipo, ticker, enviado_en) VALUES (?,?,?,?)",
-                (clave, 'apertura', row['ticker'], datetime.utcnow().isoformat())
-            )
-            continue
-        if _reclamar(conn, clave, 'apertura', row['ticker']):
-            enviar_telegram(_mensaje_apertura(row))
-            enviadas += 1
-
-    for row in data.get('cerradas', []):
-        # Misma fecha de ENTRADA que en apertura (no la de cierre) — es la
-        # clave natural que conecta ambos eventos de la misma posición.
-        clave = f"{row['ticker']}|{row['fecha']}|cierre"
-        if es_primera_vez:
-            conn.execute(
-                "INSERT OR IGNORE INTO notificadas (clave, tipo, ticker, enviado_en) VALUES (?,?,?,?)",
-                (clave, 'cierre', row['ticker'], datetime.utcnow().isoformat())
-            )
-            continue
-        if _reclamar(conn, clave, 'cierre', row['ticker']):
-            enviar_telegram(_mensaje_cierre(row))
+    enviadas   = 0
+    migradas   = 0
+    # La fecha de la clave es siempre la de ENTRADA, también en los cierres:
+    # es lo que conecta ambos eventos de la misma posición.
+    for tipo, filas, mensaje in (
+        ('apertura', data.get('abiertas', []), _mensaje_apertura),
+        ('cierre',   data.get('cerradas', []), _mensaje_cierre),
+    ):
+        for row in filas:
+            clave = _clave(row, tipo)
+            if es_primera_vez:
+                conn.execute(
+                    "INSERT OR IGNORE INTO notificadas (clave, tipo, ticker, enviado_en) VALUES (?,?,?,?)",
+                    (clave, tipo, row['ticker'], datetime.utcnow().isoformat())
+                )
+                continue
+            # Reclamar primero (es lo que evita el envío duplicado entre el
+            # bucle periódico y una llamada manual concurrente), decidir
+            # después si de verdad hay que mandar algo.
+            if not _reclamar(conn, clave, tipo, row['ticker']):
+                continue
+            if _avisado_con_formato_viejo(conn, row, tipo):
+                migradas += 1
+                continue
+            enviar_telegram(mensaje(row))
             enviadas += 1
 
     conn.commit()
@@ -136,9 +174,12 @@ def procesar_cartera_notificaciones():
 
     if es_primera_vez:
         print("[CarteraTracking] Primera ejecución — posiciones existentes memorizadas sin enviar Telegram (evita un aluvión de mensajes con todo el histórico)")
-    elif enviadas:
-        print(f"[CarteraTracking] {enviadas} notificación(es) enviada(s)")
-    return {"enviadas": enviadas, "bootstrap": es_primera_vez}
+    else:
+        if migradas:
+            print(f"[CarteraTracking] {migradas} operación(es) ya avisada(s) con el formato de clave anterior — reetiquetadas sin enviar nada")
+        if enviadas:
+            print(f"[CarteraTracking] {enviadas} notificación(es) enviada(s)")
+    return {"enviadas": enviadas, "migradas": migradas, "bootstrap": es_primera_vez}
 
 
 init_db()
