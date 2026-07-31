@@ -1017,20 +1017,98 @@ Empieza vacío. Es normal y esperado — se irá llenando solo, sin que haga fal
     },
 
     "algoritmo-gatekeepers": {
-        title: "Gatekeepers",
-        short: "Condiciones estructurales que deben cumplirse para que el algoritmo pueda encender VERDE, aunque el score ya sea alto.",
-        long: `Un score alto por sí solo no enciende el semáforo en VERDE — hace falta que, además, se cumpla al menos uno de los "gatekeepers" (condiciones de guardia):
+        title: "La puerta (gatekeeper)",
+        short: "Una condición obligatoria: por muy alto que sea el score, sin ella el semáforo no puede ponerse VERDE.",
+        long: `El score te dice CUÁNTAS señales de suelo hay. La puerta te dice si estás en el SITIO donde los suelos ocurren. Hacen falta las dos cosas.
 
-▸ Cerca de la EMA200 semanal — el precio está dentro de un margen razonable de la media de largo plazo, no muy extendido.
-▸ RVOL extremo en el mínimo — el volumen del día del mínimo de precio fue anormalmente alto, señal de capitulación real, no de un mínimo silencioso.
-▸ FTD confirmado — Follow-Through Day, una sesión de fuerza posterior al mínimo que confirma que la reversión tiene volumen detrás, no es solo un rebote técnico.
+LA CONDICIÓN, EN UNA FRASE:
+El precio ha vuelto a su media de las últimas 200 semanas (unos 4 años), o está a menos de un 10% por encima de ella.
 
-POR QUÉ EXISTEN:
-Sin estos filtros, un score alto podría encenderse simplemente porque varios indicadores de momentum coinciden en un rebote débil, sin que haya ninguna evidencia estructural de que sea un giro real. Los gatekeepers son la diferencia entre "los números dicen que esto pinta bien" y "hay señales de que dinero grande está actuando", que es justo la misma filosofía que verás en el Módulo 22 de la Academia (El Triángulo RSU) aplicada aquí a la detección de fondos de mercado.
+POR QUÉ ESA Y NO OTRA:
+Se midieron los 7 grandes suelos del S&P 500 desde 1997. En TODOS, el precio estaba como mucho un 6,9% por encima de esa media, y la mitad de las veces por debajo. Cuando el mercado está un 30% por encima de su media de 4 años, sencillamente no está en zona de suelo — por mucho miedo que haya ese día.
 
-También verás el Drawdown de 52 semanas junto a los gatekeepers — no es un gatekeeper en sí, es contexto: cuanto mayor la caída previa, más significativo es que se cumplan estas condiciones de giro.
+Por debajo de la media no hay límite: cuanto más profunda la caída, más claramente se ha vuelto a la zona.
 
-BAA10Y (diferencial de crédito corporativo Baa vs Treasury 10y) también aparece aquí, pero funciona al revés que los demás: los gatekeepers de arriba son permisivos (basta con que se cumpla UNO). El BAA10Y es un filtro de cautela — si está en nivel crítico (≥4%), degrada un VERDE que de otro modo sería pleno a VERDE-VOL, porque señala que el problema puede ser de crédito real, no solo de precio de las acciones (ver tooltip principal del algoritmo para el porqué, con el ejemplo real de 2008).`
+QUÉ CAMBIÓ EL 31/07/2026:
+Antes había DOS puertas y bastaba con una. La segunda era "hubo un día de mucho volumen" (RVOL alto). Al medir las señales históricas por cuál las había validado, salió esto:
+
+▸ validadas por la media de 200 semanas → +12,9% a 60 días
+▸ validadas SOLO por el volumen → +3,5% a 60 días
+
+La segunda puerta dejaba pasar casi la mitad de las señales y eran las peores. "Hubo un día de mucho volumen" pasa constantemente sin que sea un suelo. Se eliminó como validador. El RVOL se sigue mostrando porque es información útil, pero ya no abre la puerta.
+
+LO QUE VES AL LADO, QUE NO ES LA PUERTA:
+▸ FTD — un día de subida fuerte con volumen tras el mínimo. Es contexto: NO suma puntos ni valida nada, solo te dice si el dinero institucional ya se ha movido.
+▸ Drawdown 52 semanas — cuánto ha caído el mercado desde máximos. Contexto.
+▸ BAA10Y — el sobrecoste que paga la deuda corporativa de peor calidad. Funciona al revés: es un freno. Si está en nivel crítico (≥4%), degrada un VERDE pleno a VERDE-VOL, porque avisa de que el problema puede ser de crédito y no solo de precios.
+▸ ABI — cuánta dispersión hay entre valores. Contexto.`
+    },
+
+    "algoritmo-candidatos": {
+        title: "En qué construir",
+        short: "Los valores que mejor aguantaron la caída, sacados del scan nocturno de RS/RW.",
+        long: `El semáforo dice CUÁNDO empezar a construir posición. Esta lista dice EN QUÉ.
+
+EL CRITERIO — los líderes, no los más castigados:
+Tras un suelo de mercado, lo que históricamente funciona mejor no es comprar lo que más ha caído, sino lo que MENOS cayó y antes recupera. Lo más castigado suele serlo por una razón, y con frecuencia rebota el último o no rebota.
+
+Es la lógica de Weinstein, Minervini y O'Neil, y la misma que enseña la Academia de la terminal.
+
+CÓMO SE ELIGEN:
+▸ Percentil de fuerza relativa ≥ 80 — aguantaron mejor que el 80% del S&P 500.
+▸ Con la fuerza relativa MEJORANDO, no solo alta por inercia de hace meses.
+
+Salen del scan nocturno de RS/RW, que ya calcula esto para ~500 valores cada noche. No se calcula nada nuevo ni se hace ninguna petición extra.
+
+POR QUÉ SE VEN TAMBIÉN EN ÁMBAR:
+Porque el sentido de la fase de watchlist es llegar con la decisión tomada. Si solo aparecieran al ponerse verde, tendrías que elegir con prisa justo el día que más nervioso estás. En ámbar salen en gris y con el aviso de que todavía no toca.
+
+LO QUE ESTO NO ES:
+No es una recomendación de compra ni una cartera. Es el punto de partida para tu propio análisis — por eso cada valor enlaza a su ficha de Research.`
+    },
+
+    "algoritmo-bloques": {
+        title: "Los tres bloques",
+        short: "Los cinco factores agrupados en las tres preguntas que de verdad responden.",
+        long: `El score suma cinco factores, pero se muestran agrupados en tres bloques. La razón no es estética.
+
+Se midieron los datos de entrada de cada factor sobre 4.673 sesiones desde 2008, y tres de ellos resultaron ser casi la misma información:
+
+▸ VIX contra distancia a la media de 200 semanas → correlación 0,67
+▸ VIX contra el drawdown → 0,83
+▸ RSI contra VIX → 0,51
+
+Es decir: RSI, VIX y distancia a la media larga son tres formas distintas de decir "el mercado ha caído". Mostrarlos como tres barras separadas daba una falsa sensación de confirmación múltiple — parecían tres señales independientes coincidiendo, cuando era una repetida.
+
+LOS TRES BLOQUES:
+▸ ¿Ha caído de verdad? — RSI, VIX y distancia a la media de 200 semanas. Los tres miden lo mismo desde ángulos distintos.
+▸ ¿Ha habido capitulación? — el volumen del día del mínimo. Es el único factor genuinamente independiente de los demás (correlación entre −0,01 y 0,36).
+▸ ¿Participa todo el mercado? — la amplitud: si cae todo o solo cuatro valores grandes.
+
+NOTA HONESTA:
+Se probó también FUSIONAR los tres redundantes en el cálculo, no solo en la pantalla. Salió peor: la ventaja caía de +1,7 a −1,9 puntos. La razón es interesante — sumar tres cosas correlacionadas obliga a que las tres estén altas a la vez, y promediarlas deja que una sola arrastre el resultado. La redundancia estaba sosteniendo un requisito de acuerdo que nadie había diseñado a propósito. Así que se agrupan de cara al usuario, pero el cálculo se queda como está.`
+    },
+
+    "algoritmo-baseline": {
+        title: "Las dos ventajas del backtest",
+        short: "Contra un día cualquiera y contra días de pánico parecidos. La segunda es la que cuenta.",
+        long: `Cuando un backtest dice "bate al índice en X puntos", la pregunta correcta es: ¿comparado con qué?
+
+EL PROBLEMA DE LA CIFRA FÁCIL:
+"vs día normal" compara las señales contra comprar en un día cualquiera. Suena bien, pero engaña: este algoritmo NO se dispara un día cualquiera, se dispara cuando hay miedo. Y el miedo ya precede rebotes por sí solo — comprar en pánico funciona razonablemente sin ningún algoritmo de por medio.
+
+Es como decir que un tratamiento funciona porque sus pacientes mejoran más que la población general, cuando todos tenían un resfriado y el resfriado se cura solo.
+
+LA CIFRA HONESTA:
+"vs día de pánico" compara contra días con el VIX por encima de 25 — días que se parecen a una señal. Lo que quede ahí es lo que aporta el sistema por encima de la simple reversión a la media.
+
+Medido el 31/07/2026, la ventaja a 60 días caía de +4,75 puntos contra un día cualquiera a +1,70 contra días de pánico. Más de la mitad de lo que se publicaba no era mérito del algoritmo.
+
+POR QUÉ VIX>25 Y NO OTRA COSA:
+Se probaron varias condiciones. Contra días de drawdown profundo la ventaja sale bastante MAYOR. Se eligió a propósito la comparación menos favorable: escoger la condición que mejor deja al sistema sería exactamente el sesgo que esta cifra existe para corregir.
+
+CUIDADO CON EL PORCENTAJE DE ACIERTOS:
+Con pocas señales, un porcentaje alto no es una promesa. Mira siempre cuántas son: un 100% sobre 16 señales dice mucho menos de lo que parece, y no se va a mantener.`
     },
 
     "algoritmo-importancia": {

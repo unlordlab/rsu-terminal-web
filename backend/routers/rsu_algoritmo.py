@@ -12,6 +12,15 @@ async def algoritmo(user=Depends(verify_token)):
 async def algoritmo_backtest(years: int = Query(10, ge=2, le=20), user=Depends(verify_token)):
     return get_rsu_algoritmo_backtest(years=years)
 
+@router.get("/candidatos")
+async def algoritmo_candidatos(user=Depends(verify_token)):
+    """El puente "cuándo → qué": en qué mirar cuando el semáforo se ponga
+    verde. Se sirve siempre, no solo en VERDE — verlos en ÁMBAR es lo que
+    permite tener la decisión tomada de antemano."""
+    from services.algoritmo_candidatos_service import get_candidatos_algoritmo
+    return get_candidatos_algoritmo()
+
+
 @router.get("/historial-real")
 async def algoritmo_historial_real(user=Depends(verify_token)):
     """

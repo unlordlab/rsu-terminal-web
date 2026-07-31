@@ -1,5 +1,5 @@
 import { tt } from '/components/tooltip.js';
-import { errorMessage } from '/core/ui.js';
+import { errorMessage, esc } from '/core/ui.js';
 
 export async function render(container) {
     container.innerHTML = '<div style="margin-bottom:1.5rem;">'
@@ -124,7 +124,7 @@ export async function render(container) {
         const abiColor = data.abi_estado === 'ALTA DISPERSIÓN' ? '#ff9800' : 'var(--color-muted)';
         const abiTxt   = data.abi_valor == null ? 'ABI: sin datos (requiere scan nocturno)' : 'ABI: ' + data.abi_valor + '% (' + data.abi_estado + ')';
         const gatekeepersHtml = '<div style="margin-top:1rem;padding:1rem;background:var(--color-bg,#0a0a0a);border-radius:var(--radius);border:1px solid var(--color-border);">'
-            + '<div style="color:var(--color-muted);font-size:11px;letter-spacing:0.08em;margin-bottom:8px;">GATEKEEPERS ' + tt('algoritmo-gatekeepers') + ' (umbral VERDE: ' + data.umbral_verde + '/' + (data.max_score || 100) + ')</div>'
+            + '<div style="color:var(--color-muted);font-size:11px;letter-spacing:0.08em;margin-bottom:8px;">LA PUERTA ' + tt('algoritmo-gatekeepers') + ' (para VERDE hacen falta ' + data.umbral_verde + '/' + (data.max_score || 100) + ')</div>'
             + '<div style="display:flex;gap:1.5rem;flex-wrap:wrap;font-size:12px;">'
             // Se dice la distancia real, no un "cerca" a secas: la condición es
             // asimétrica (≤ +10% sobre la media de 200 semanas, sin límite por
@@ -194,16 +194,21 @@ export async function render(container) {
             + '</div>'
             + '</div>'
 
+            // El puente "cuándo -> qué". Se rellena aparte (loadCandidatos)
+            // para que un fallo del scan de RS/RW no retrase ni rompa el
+            // semáforo, que es lo principal de esta página.
+            + '<div id="algo-candidatos" style="margin-bottom:1rem;"></div>'
+
             // Fila 2: factores + detalles + medias
             + '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:1rem;margin-bottom:1rem;">'
 
             + '<div style="background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius);padding:1.25rem;">'
-            + '<div style="color:var(--color-accent);font-size:12px;letter-spacing:0.08em;margin-bottom:1rem;">FACTORES · SCORES</div>'
+            + '<div style="color:var(--color-accent);font-size:12px;letter-spacing:0.08em;margin-bottom:1rem;">CÓMO SE FORMA EL SCORE ' + tt('algoritmo-bloques') + '</div>'
             + factores
             + '</div>'
 
             + '<div style="background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius);padding:1.25rem;">'
-            + '<div style="color:var(--color-accent);font-size:12px;letter-spacing:0.08em;margin-bottom:1rem;">ANÁLISIS DE CONDICIONES</div>'
+            + '<div style="color:var(--color-accent);font-size:12px;letter-spacing:0.08em;margin-bottom:1rem;">QUÉ ESTÁ PASANDO HOY, PUNTO POR PUNTO</div>'
             + detallesHtml
             + '</div>'
 
@@ -248,6 +253,8 @@ export async function render(container) {
             + '<div style="color:var(--color-accent);font-size:12px;letter-spacing:0.08em;margin-bottom:0.5rem;">SEÑALES REALES (EN VIVO) ' + tt('algoritmo-historial-real') + '</div>'
             + '<div id="historial-real-content" style="color:var(--color-muted);font-size:12px;">Cargando...</div>'
             + '</div>';
+
+        loadCandidatos(container, isGreen);
 
         renderChart(chartId, data.chart, data.color);
 
@@ -394,12 +401,15 @@ function renderBacktestResults(data) {
         ? '<div style="color:var(--color-muted);font-size:12px;padding:1rem 0;">No se detectaron señales VERDE en el periodo analizado — el nuevo sistema con gatekeepers obligatorios es considerablemente más selectivo que la versión anterior.</div>'
         : '<div style="max-height:340px;overflow-y:auto;margin-top:0.5rem;">'
           + '<div style="display:grid;grid-template-columns:85px 55px 80px 70px 50px 50px 50px 50px;gap:6px;padding:6px 0;border-bottom:1px solid var(--color-border);font-size:9px;color:var(--color-muted);position:sticky;top:0;background:var(--color-surface);">'
-          + '<div>FECHA</div><div>SCORE</div><div>GATEKEEPER</div><div>DRAWDOWN</div><div>+5d</div><div>+10d</div><div>+20d</div><div>+60d</div>'
+          + '<div>FECHA</div><div>SCORE</div><div>PUERTA</div><div>DRAWDOWN</div><div>+5d</div><div>+10d</div><div>+20d</div><div>+60d</div>'
           + '</div>'
           + data.senales.map(s => {
               const r = s.retornos;
               const fmt = v => v == null ? '<span style="color:#555;">—</span>' : '<span style="color:' + (v >= 0 ? 'var(--color-accent)' : '#f23645') + ';">' + (v >= 0 ? '+' : '') + v + '%</span>';
-              const gk = s.gatekeeper_a ? 'EMA200W' : (s.gatekeeper_b ? 'RVOL' : '—');
+              // Desde el 31/07/2026 solo valida la vuelta a la media de 200
+              // semanas. Las señales históricas guardan igualmente el flag del
+              // RVOL, pero ya no abre la puerta: no se muestra como validador.
+              const gk = s.gatekeeper_a ? 'media 200s' : '—';
               const ftdTag = s.ftd_confirmado ? ' <span style="color:var(--color-accent);" title="FTD confirmado">✓FTD</span>' : '';
               const creditTag = s.credit_spread_nivel === 'elevado'
                   ? ' <span style="color:#ff9800;" title="BAA10Y ' + s.credit_spread_valor + '% — elevado pero mejorando en el momento de la señal (si hubiera estado empeorando, se habría filtrado igual que crítico)">⚠BAA</span>'
@@ -470,12 +480,13 @@ function renderBacktestResults(data) {
             : '')
         + '</div>'
 
-        + '<div style="display:grid;grid-template-columns:80px 1fr 1fr 1fr 1fr;gap:10px;padding:6px 0;border-bottom:1px solid var(--color-border);font-size:10px;color:var(--color-muted);">'
-        + '<div>HORIZONTE</div><div>RETORNO SEÑAL</div><div>BASELINE SPY</div><div>VENTAJA</div><div>TASA ÉXITO</div>'
+        + '<div style="color:var(--color-muted);font-size:11px;letter-spacing:0.05em;margin-bottom:6px;">QUÉ APORTA LA SEÑAL ' + tt('algoritmo-baseline') + '</div>'
+        + '<div style="display:grid;grid-template-columns:70px 1fr 1fr 1fr 1fr;gap:10px;padding:6px 0;border-bottom:1px solid var(--color-border);font-size:10px;color:var(--color-muted);">'
+        + '<div>PLAZO</div><div>RETORNO SEÑAL</div><div>VS DÍA NORMAL</div><div>VS DÍA DE PÁNICO</div><div>ACIERTOS</div>'
         + '</div>'
         + statsRows
 
-        + '<div style="margin-top:1rem;color:var(--color-muted);font-size:11px;letter-spacing:0.05em;">HISTORIAL DE SEÑALES <span style="font-weight:normal;text-transform:none;letter-spacing:0;">(GATEKEEPER = qué condición estructural validó la señal · ✓FTD = confirmación de volumen ya llegada)</span></div>'
+        + '<div style="margin-top:1rem;color:var(--color-muted);font-size:11px;letter-spacing:0.05em;">HISTORIAL DE SEÑALES <span style="font-weight:normal;text-transform:none;letter-spacing:0;">(PUERTA = la condición estructural que validó la señal · ✓FTD = el dinero institucional ya se había movido)</span></div>'
         + senalesHtml
 
         + importanciaHtml;
@@ -533,4 +544,54 @@ function drawChart(chartId, chart, color) {
             }
         }
     });
+}
+
+// ── El puente "cuándo → qué" ──────────────────────────────────────────────────
+// El semáforo dice cuándo empezar a construir, pero no en qué. Esta caja lo
+// cierra con los valores que mejor aguantaron la caída, del scan nocturno de
+// RS/RW — no calcula nada nuevo.
+//
+// Se muestra SIEMPRE, no solo en VERDE: en ámbar aparece en gris con el aviso
+// de que todavía no toca. Verlos antes es justo lo que permite tener la
+// decisión tomada cuando llegue el momento, que es para lo que sirve la fase
+// de watchlist.
+async function loadCandidatos(container, enVerde) {
+    const caja = container.querySelector('#algo-candidatos');
+    if (!caja) return;
+    try {
+        const token = sessionStorage.getItem('rsu_token');
+        const res  = await fetch('/api/v1/algoritmo/candidatos', {
+            headers: token ? { 'Authorization': 'Bearer ' + token } : {}
+        });
+        if (!res.ok) return;
+        const data = await res.json();
+        if (!data.ok || !data.candidatos || !data.candidatos.length) return;
+
+        const borde  = enVerde ? 'var(--color-accent)' : 'var(--color-border)';
+        const titulo = enVerde
+            ? 'EN QUÉ EMPEZAR A CONSTRUIR'
+            : 'EN QUÉ MIRARÍAS SI SE PUSIERA VERDE';
+        const bajada = enVerde
+            ? 'El semáforo está en verde. Estos son los valores que mejor aguantaron la caída y ya están recuperando fuerza.'
+            : 'Todavía NO es momento de entrar. Esta lista está aquí para que tengas la decisión tomada cuando llegue.';
+
+        const filas = data.candidatos.map(c =>
+            '<a href="/research?ticker=' + encodeURIComponent(c.ticker) + '" '
+            + 'style="display:grid;grid-template-columns:80px 1fr;gap:12px;padding:9px 0;border-bottom:1px solid var(--color-border);text-decoration:none;align-items:baseline;">'
+            + '<span style="color:' + (enVerde ? 'var(--color-accent)' : 'var(--color-text)') + ';font-size:14px;font-weight:500;">' + esc(c.ticker) + '</span>'
+            + '<span style="color:var(--color-muted);font-size:12px;">' + esc(c.porque)
+            + '<span style="opacity:0.6;"> · ' + esc(c.sector) + '</span></span>'
+            + '</a>'
+        ).join('');
+
+        caja.innerHTML = '<div style="background:var(--color-surface);border:1px solid ' + borde + ';border-radius:var(--radius);padding:1.25rem;">'
+            + '<div style="color:' + (enVerde ? 'var(--color-accent)' : 'var(--color-muted)') + ';font-size:12px;letter-spacing:0.08em;margin-bottom:4px;">' + titulo + ' ' + tt('algoritmo-candidatos') + '</div>'
+            + '<div style="color:var(--color-muted);font-size:11px;margin-bottom:10px;">' + bajada + '</div>'
+            + filas
+            + '<div style="color:var(--color-muted);font-size:10px;margin-top:10px;">' + esc(data.criterio) + ' · ' + esc(data.fuente) + '. Pulsa cualquiera para abrir su análisis.</div>'
+            + '</div>';
+    } catch (e) {
+        // Silencioso a propósito: es un añadido, no debe ensuciar la página
+        // principal si el Gist de RS/RW no responde.
+    }
 }

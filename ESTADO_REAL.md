@@ -29,8 +29,8 @@ parecería completo y sería engañoso.
 
 ## Cobertura de esta versión — leer antes de usarlo
 
-- **394 hallazgos**: 379 extraídos de los 16 documentos de auditoría, más 15
-  encontrados después con el sistema ya en producción (RSU Algoritmo #14–#23,
+- **397 hallazgos**: 379 extraídos de los 16 documentos de auditoría, más 18
+  encontrados después con el sistema ya en producción (RSU Algoritmo #14–#26,
   Newsfeed/briefing #27–#31).
 - **64 son críticos (🔴)**: todos revisados en la primera pasada.
   33 cerrados · 11 abiertos ·
@@ -465,7 +465,7 @@ a uno contra el código, seis cerrados en esa sesión. Es, junto a Research, el
 | ❓ | 21 | 🟢 | Rotación sectorial en el tiempo | *sin comprobar* |
 | ❓ | 22 | 🟢 | Alerta de entrada en el top decil | *sin comprobar* |
 
-## Rsu Algoritmo  (23 hallazgos — ❌1 · ✅19 · ❓0 · ⬜3)
+## Rsu Algoritmo  (26 hallazgos — ❌1 · ✅22 · ❓0 · ⬜3)
 
 **Módulo con el tier completo verificado** — el tercero, tras Research y RS/RW.
 Cero hallazgos sin comprobar.
@@ -501,6 +501,9 @@ Queda abierto #12, medido y descartado por marginal.
 | ✅ | 21 | 🟠 | El backtest se comparaba solo contra "un día cualquiera", lo que infla el mérito | 31/07: el algoritmo solo se dispara cuando hay miedo, y el miedo ya rebota solo. Medido: la ventaja a 60d caía de +4,75pp contra un día normal a +1,70pp contra días de VIX>25 — más de la mitad era reversión a la media. Ahora se publican **las dos cifras** y la página explica cuál es la buena. Se elige VIX>25 y no drawdown aun siendo la comparación menos favorable |
 | ✅ | 22 | 🟠 | El backtest fallaba con `Unexpected token '<'` y no se podía consultar | 31/07: el cálculo tarda minutos, Nginx corta a los 60s por defecto y devuelve una página HTML de error 504 que el frontend intentaba parsear como JSON. El cálculo del servidor SÍ terminaba y dejaba la caché escrita — de ahí que al segundo intento funcionara ("muchas veces", no siempre). Arreglado por los dos lados: la caché se precalienta desde `algoritmo_check_loop` cuando está fría (ventana de exposición de 12h a ≤30 min) y el frontend detecta respuestas no-JSON y explica qué pasa. **No hay `nginx.conf` en el repo**, así que subir el timeout del proxy sigue siendo cosa del VPS |
 | ✅ | 23 | 🟡 | El score iba sobre 90, que no se lee como porcentaje | 31/07: los cinco factores reescalados para sumar 100 exactos (RSI 18→20, VIX 22→24, Breadth 18→20, Volume 12→14, EMA200W 20→22, con los tramos internos en la misma proporción). Los umbrales vuelven a ser los redondos 60/70. **No es cosmético**: los tramos cambian ±1 punto y eso mueve qué días cruzan — 16 señales igual pero 13 episodios en vez de 14, y la ventaja a 60d contra días de pánico pasa de +5,94pp a +4,60pp. Dentro del ruido de una muestra de 16, pero no es cero |
+| ✅ | 24 | 🟠 | El semáforo decía CUÁNDO pero no EN QUÉ — se ponía verde y el usuario se quedaba mirando un color | 31/07: caja nueva con los 5 valores que mejor aguantaron la caída y ya recuperan fuerza (percentil RS ≥ 80 con pendiente positiva), del scan nocturno de RS/RW — **no calcula nada nuevo**. Se muestra SIEMPRE, en gris cuando no es momento ("esto es lo que mirarías"), porque el sentido de la fase ámbar es llegar con la decisión tomada. Cada fila enlaza a Research |
+| ✅ | 25 | 🟡 | Las tres secciones hablaban en jerga: `~ McClellan -52 < -50 (+8)` | 31/07: 33 textos reescritos en lenguaje normal manteniendo el número entre paréntesis. "FACTORES · SCORES" → "CÓMO SE FORMA EL SCORE", "ANÁLISIS DE CONDICIONES" → "QUÉ ESTÁ PASANDO HOY, PUNTO POR PUNTO", "GATEKEEPERS" → "LA PUERTA". El FTD queda marcado como *contexto, no puntúa* en las cuatro variantes de su texto |
+| ✅ | 26 | 🟠 | Seis líneas anunciaban puntos distintos de los que sumaban | 31/07, **introducido por mí** al reescalar a 100 con reemplazos de texto: decían `(+11)` sumando 10, `(+6)` sumando 7, `(+7)` sumando 8, y los umbrales viejos 54/63. Arreglados y blindados con `test_algoritmo_coherencia_textos.py`, que lee el fuente y compara cada literal con la asignación de su línea — verificado que el test falla si se rompe a propósito |
 | ❌ | 12 | 🟡 | El backtest recalcula el baseline completo en cada ejecución | verificado 31/07: cierto — bucle Python con `.iloc[]` escalar sobre ~4.500 posiciones × 4 horizontes. Real pero **marginal**: el backtest hace además ~4.500 llamadas a `_calcular_score_punto` (minutos) y se cachea 12h, así que corre como mucho dos veces al día. Vectorizarlo es trivial pero no compensa tocar el motor por esto |
 | ⬜ | 13 | 🟡 | `df_vix` a 3 meses limita la ventana del VIX | verificado 31/07: **el hallazgo no aplica**. El factor VIX usa `df_vix['Close'].tail(VENTANA)` con `VENTANA = 10`, así que la ventana la fija esa constante, no la descarga. Los 3 meses (~63 sesiones) son 6× lo que se consume |
 | ✅ | 14 | 🔴 | **La EMA200 semanal no había convergido**: se calculaba sobre 5 años (~262 semanas) para un span de 200, y con `adjust=True` el valor arrastra el arranque de la serie | 30/07: 5y → 584,99 (+24,7%) vs convergido → 563,45 (+29,5%). Casi 5pp de error, justo sobre un corte del 25% → el gatekeeper quedaba ACTIVO sin deber estarlo. Arreglado a 15y en vivo y `BUFFER_YEARS` 5→15 en el backtest, donde el sesgo afectaba a TODOS los días evaluados |

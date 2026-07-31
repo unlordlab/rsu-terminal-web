@@ -578,15 +578,15 @@ def _calcular_score_punto(df_spy, df_vix, sector_data=None, df_vix3m=None, credi
     if ftd_data:
         sig = ftd_data.get('signal', 'none')
         if sig == 'confirmed':
-            detalles.append("✓ FTD Confirmado — confirma demanda institucional")
+            detalles.append("✓ Los grandes ya están comprando: día de subida fuerte con volumen (FTD) · contexto, no puntúa")
             if price < mm['ema_21']:
                 advertencias.append("⚠ FTD bajo EMA21 — Posible trampa alcista")
         elif sig in ['potential', 'early']:
-            detalles.append("~ FTD en desarrollo (sin confirmar aún)")
+            detalles.append("~ Posible entrada de dinero institucional, aún sin confirmar (FTD) · contexto, no puntúa")
         elif sig == 'active':
-            detalles.append("• Rally activo sin FTD todavía")
+            detalles.append("• El rebote aún no ha traído un día de compra institucional clara (FTD) · contexto, no puntúa")
         else:
-            detalles.append("✗ Sin FTD")
+            detalles.append("✗ Todavía no hay señal de compra institucional (FTD) · contexto, no puntúa")
     metricas['FTD'] = {"score": 0, "max": 0, "color": "#2962ff", "data": ftd_data,
                        "confirmado": ftd_confirmado, "es_confirmacion": True}
 
@@ -602,20 +602,20 @@ def _calcular_score_punto(df_spy, df_vix, sector_data=None, df_vix3m=None, credi
     rsi_score   = 0
     rsi_sem_oversold = rsi_sem is not None and rsi_sem < 40
     if rsi_min < 30:
-        rsi_score = 13; detalles.append(f"✓ RSI diario min {rsi_min:.1f} < 30 (+13)")
+        rsi_score = 13; detalles.append(f"✓ El precio venía muy castigado: el RSI diario tocó {rsi_min:.1f} (bajo 30) (+13)")
     elif rsi_min < 40:
-        rsi_score = 10; detalles.append(f"✓ RSI diario min {rsi_min:.1f} < 40 (+11)")
+        rsi_score = 10; detalles.append(f"✓ El precio venía castigado: el RSI diario tocó {rsi_min:.1f} (bajo 40) (+10)")
     elif rsi_min < 50:
-        rsi_score = 4;  detalles.append(f"~ RSI diario min {rsi_min:.1f} < 50 (+4)")
+        rsi_score = 4;  detalles.append(f"~ Algo de debilidad: el RSI diario tocó {rsi_min:.1f} (bajo 50) (+4)")
     elif rsi_actual > 75:
-        rsi_score = -4; detalles.append(f"✗ RSI {rsi_actual:.1f} > 75 sobrecompra (-4)")
+        rsi_score = -4; detalles.append(f"✗ El precio está caliente, no castigado: RSI {rsi_actual:.1f} (sobrecompra) (-4)")
     else:
-        detalles.append("• RSI diario en rango neutral (0)")
+        detalles.append("• El precio no viene ni castigado ni caliente (RSI en rango normal) (0)")
     if rsi_sem_oversold:
         rsi_score += 7
-        detalles.append(f"✓ RSI semanal {rsi_sem:.1f} < 40 — sobreventa estructural (+6)")
+        detalles.append(f"✓ La debilidad viene de lejos, no es de esta semana: RSI semanal {rsi_sem:.1f} (+7)")
     elif rsi_sem is not None:
-        detalles.append(f"• RSI semanal {rsi_sem:.1f} sin sobreventa estructural (0)")
+        detalles.append(f"• La debilidad es solo de corto plazo: RSI semanal {rsi_sem:.1f} (0)")
     score += rsi_score
     metricas['RSI'] = {"score": rsi_score, "max": 20, "color": "#00ffad" if rsi_score >= 0 else "#f23645",
                        "actual": round(rsi_actual, 1), "minimo": round(rsi_min, 1),
@@ -629,23 +629,23 @@ def _calcular_score_punto(df_spy, df_vix, sector_data=None, df_vix3m=None, credi
         vix_max     = float(vix_ventana.max())
         vix_actual  = float(df_vix['Close'].iloc[-1])
         if vix_max > 35:
-            vix_score = 17; detalles.append(f"✓ VIX max {vix_max:.1f} > 35 — capitulación (+17)")
+            vix_score = 17; detalles.append(f"✓ Pánico extremo: el VIX llegó a {vix_max:.1f} (sobre 35) (+17)")
         elif vix_max > 30:
-            vix_score = 13; detalles.append(f"✓ VIX max {vix_max:.1f} > 30 (+13)")
+            vix_score = 13; detalles.append(f"✓ Mucho miedo: el VIX llegó a {vix_max:.1f} (sobre 30) (+13)")
         elif vix_max > 25:
-            vix_score = 9;  detalles.append(f"~ VIX max {vix_max:.1f} > 25 (+9)")
+            vix_score = 9;  detalles.append(f"~ Miedo elevado: el VIX llegó a {vix_max:.1f} (sobre 25) (+9)")
         else:
-            detalles.append("• VIX sin spike significativo (0)")
+            detalles.append("• No ha habido un pico de miedo relevante (VIX) (0)")
         # Curva VIX/VIX3M: backwardation (ratio > 1.0) = pánico de corto plazo
         # superando al de medio plazo = señal de capitulación adicional, NO de
         # exclusión (ver tooltip — esto corrige una lectura inicial errónea).
         if vix3m_ratio is not None:
             if vix3m_ratio > 1.0:
                 vix_score += 7
-                detalles.append(f"✓ Curva VIX/VIX3M en backwardation ({vix3m_ratio}) — pánico extremo (+6)")
+                detalles.append(f"✓ El miedo de HOY supera al de dentro de 3 meses — pánico agudo, típico de suelos (VIX/VIX3M {vix3m_ratio}) (+7)")
             elif vix3m_ratio > 0.95:
                 vix_score += 3
-                detalles.append(f"~ Curva VIX/VIX3M tensa ({vix3m_ratio}) (+3)")
+                detalles.append(f"~ La curva del miedo está tensa (VIX/VIX3M {vix3m_ratio}) (+3)")
         if score > 50 and vix_actual < 20:
             advertencias.append(f"⚠ VIX actual bajo ({vix_actual:.1f}) — Posible complacencia")
         metricas['VIX'] = {"score": vix_score, "max": 24, "color": "#ff9800",
@@ -680,19 +680,19 @@ def _calcular_score_punto(df_spy, df_vix, sector_data=None, df_vix3m=None, credi
         mc_val, girando_al_alza, metodo = _mcclellan_con_giro(df_spy, sector_data, breadth_real=breadth_real)
     mc_score = 0
     if mc_val < -80:
-        mc_score = 12; detalles.append(f"✓ McClellan {mc_val:.0f} < -80 (+12)")
+        mc_score = 12; detalles.append(f"✓ Casi todo el mercado cayendo a la vez, no solo el índice (amplitud {mc_val:.0f}) (+12)")
     elif mc_val < -50:
-        mc_score = 9;  detalles.append(f"~ McClellan {mc_val:.0f} < -50 (+9)")
+        mc_score = 9;  detalles.append(f"~ La caída está muy extendida entre valores (amplitud {mc_val:.0f}) (+9)")
     elif mc_val < -20:
-        mc_score = 3;  detalles.append(f"• McClellan {mc_val:.0f} < -20 (+3)")
+        mc_score = 3;  detalles.append(f"• La caída está algo extendida entre valores (amplitud {mc_val:.0f}) (+3)")
     else:
-        detalles.append(f"• McClellan {mc_val:.0f} neutral (0)")
+        detalles.append(f"• La amplitud del mercado no muestra estrés (amplitud {mc_val:.0f}) (0)")
     # Bonus por giro al alza: se aplica siempre que haya algún nivel negativo,
     # no solo cuando mc_val < -80 (condición anterior demasiado restrictiva).
     # El giro desde cualquier zona negativa es señal de agotamiento vendedor.
     if girando_al_alza and mc_score > 0:
         mc_score += 8
-        detalles.append("✓ McClellan girando al alza — presión vendedora agotándose (+7)")
+        detalles.append("✓ La presión vendedora se está agotando: la amplitud ya gira al alza (+8)")
     elif mc_score > 0 and not girando_al_alza:
         advertencias.append("⚠ McClellan negativo pero aún sin girar al alza — posible caída en curso")
     score += mc_score
@@ -705,13 +705,13 @@ def _calcular_score_punto(df_spy, df_vix, sector_data=None, df_vix3m=None, credi
     rvol_min, fecha_min = _rvol_en_minimo(df_spy, ventana=20)
     vol_score = 0
     if rvol_min > 2.0:
-        vol_score = 14; detalles.append(f"✓ RVOL {rvol_min:.1f}x en día del mínimo (+14)")
+        vol_score = 14; detalles.append(f"✓ Capitulación: el día del mínimo se negoció {rvol_min:.1f} veces el volumen normal (+14)")
     elif rvol_min > 1.5:
-        vol_score = 9;  detalles.append(f"~ RVOL {rvol_min:.1f}x en día del mínimo (+9)")
+        vol_score = 9;  detalles.append(f"~ Volumen alto en el día del mínimo: {rvol_min:.1f} veces lo normal (+9)")
     elif rvol_min > 1.2:
-        vol_score = 5;  detalles.append(f"• RVOL {rvol_min:.1f}x en día del mínimo (+5)")
+        vol_score = 5;  detalles.append(f"• Algo de volumen extra en el día del mínimo: {rvol_min:.1f} veces lo normal (+5)")
     else:
-        detalles.append("• Sin RVOL significativo en el mínimo (0)")
+        detalles.append("• El mínimo se hizo sin volumen destacable — no hubo capitulación (0)")
     score += vol_score
     metricas['Volume'] = {"score": vol_score, "max": 14, "color": "#f23645",
                           "rvol_minimo": round(rvol_min, 2),
@@ -749,12 +749,12 @@ def _calcular_score_punto(df_spy, df_vix, sector_data=None, df_vix3m=None, credi
         cerca_ema200w = dist_ema200w <= MARGEN_SUELO_EMA200W
         if cerca_ema200w:
             ema200w_score = 22
-            detalles.append(f"✓ Precio a {dist_ema200w:+.1f}% de su media de 200 semanas — ha vuelto a la media secular (+22)")
+            detalles.append(f"✓ El precio ha vuelto a su media de 200 semanas ({dist_ema200w:+.1f}%) — la zona donde suelen formarse los suelos (+22)")
         elif dist_ema200w <= MARGEN_CERCANIA_EMA200W:
             ema200w_score = 11
-            detalles.append(f"~ Precio a {dist_ema200w:+.1f}% sobre su media de 200 semanas — acercándose (+10)")
+            detalles.append(f"~ El precio se acerca a su media de 200 semanas ({dist_ema200w:+.1f}%) (+11)")
         else:
-            detalles.append(f"• Precio a {dist_ema200w:+.1f}% sobre su media de 200 semanas — lejos de zona de suelo (0)")
+            detalles.append(f"• El precio está a {dist_ema200w:+.1f}% de su media de 200 semanas — lejos de zona de suelo (0)")
         if pendiente_ema200w is not None and pendiente_ema200w < 0:
             advertencias.append("⚠ EMA200 semanal con pendiente negativa — soporte débil, no fuerte")
     else:
@@ -763,7 +763,7 @@ def _calcular_score_punto(df_spy, df_vix, sector_data=None, df_vix3m=None, credi
         # bullet entre otros ocho) porque son 20 de los ~90 puntos del score
         # desapareciendo de golpe, y porque procesar_cierre_si_toca() usa esta
         # advertencia para NO tomar la decisión oficial con el dato roto.
-        detalles.append("• EMA200 semanal sin histórico suficiente")
+        detalles.append("• Sin media de 200 semanas: histórico insuficiente en esta descarga (fallo de datos, no del mercado)")
         advertencias.append("⚠ Sin EMA200 semanal — histórico insuficiente en esta descarga. "
                             "Faltan 20 puntos del score por falta de dato, no por el mercado")
     score += ema200w_score
@@ -801,9 +801,9 @@ def _calcular_score_punto(df_spy, df_vix, sector_data=None, df_vix3m=None, credi
     regimen_score = 10 if sobre_sma200 else 0  # se muestra/trackea, pero NO se suma a `score` (ver abajo)
     if not sobre_sma200:
         advertencias.append(f"⚠ Precio {dist_sma200:.1f}% bajo SMA200 — Régimen bajista, listón de VERDE sube a 63")
-        detalles.append("• Bajo SMA200 — Régimen bajista (umbral 63)")
+        detalles.append(f"• El mercado está en tendencia bajista (bajo su media de 200 días) — se exige {UMBRAL_VERDE_BAJISTA} para dar VERDE")
     else:
-        detalles.append(f"✓ Sobre SMA200 ({dist_sma200:+.1f}%) — Régimen alcista (umbral 54)")
+        detalles.append(f"✓ El mercado está en tendencia alcista ({dist_sma200:+.1f}% sobre su media de 200 días) — basta {UMBRAL_VERDE_ALCISTA} para dar VERDE")
     if price < mm['ema_21']:
         advertencias.append("EMA21 actua como resistencia — Cuidado")
     metricas['SMA200'] = {"score": regimen_score, "max": 10,
@@ -988,7 +988,7 @@ def _calcular_score_punto(df_spy, df_vix, sector_data=None, df_vix3m=None, credi
             abi_valor = round(abs(ultimo["advances"] - ultimo["declines"]) / total_issues * 100, 1)
             abi_estado = "ALTA DISPERSIÓN" if abi_valor >= 40 else ("BAJA ACTIVIDAD" if abi_valor <= 15 else "NORMAL")
             if abi_estado == "ALTA DISPERSIÓN":
-                detalles.append(f"• ABI {abi_valor}% — alta dispersión de mercado (contexto, no puntúa)")
+                detalles.append(f"• Mucha dispersión entre valores: unos suben y otros bajan con fuerza (ABI {abi_valor}%) · contexto, no puntúa")
 
     return {
         "score":            score,
