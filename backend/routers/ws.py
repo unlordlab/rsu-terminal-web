@@ -414,6 +414,29 @@ async def algoritmo_check_loop():
             await loop.run_in_executor(None, get_rsu_algoritmo)
         except Exception as e:
             print(f"[AlgoritmoCheck] Error: {e}")
+
+        # Calentar la caché del BACKTEST si está fría.
+        #
+        # El usuario reportaba "Unexpected token '<'" al abrir el backtest: el
+        # cálculo tarda minutos, Nginx corta la petición a los 60s por defecto
+        # y devuelve una página HTML de error 504 que el frontend intentaba
+        # parsear como JSON. El cálculo del servidor SÍ terminaba y dejaba la
+        # caché escrita, así que al segundo intento funcionaba — de ahí el
+        # "muchas veces" en vez de "siempre".
+        #
+        # Calentándola aquí, el endpoint responde instantáneo desde caché y
+        # nadie paga nunca el cálculo en una petición HTTP. Con TTL de 12h y
+        # esta pasada cada 30 min, la ventana en la que puede estar fría baja
+        # de 12 horas a 30 minutos como mucho.
+        try:
+            from services.cache import cache
+            from services.rsu_algoritmo_service import get_rsu_algoritmo_backtest
+            for years in (10, 15, 20):
+                if cache.get(f"algoritmo:backtest:{years}y:v19") is None:
+                    print(f"[AlgoritmoBacktest] Caché fría para {years}y — precalculando")
+                    await loop.run_in_executor(None, get_rsu_algoritmo_backtest, years)
+        except Exception as e:
+            print(f"[AlgoritmoBacktest] Error calentando caché: {type(e).__name__}: {e}")
         # Decisión OFICIAL del semáforo (la que notifica y deja huella), en su
         # propio try/except para que un fallo aquí no rompa el calentado de
         # caché de arriba. Es idempotente por fecha de sesión: en casi todas

@@ -39,7 +39,7 @@ export async function render(container) {
             + luz('yel', isAmbar)
             + luz('grn', isGreen)
             + '<div style="color:' + data.color + ';font-size:16px;letter-spacing:0.12em;margin-top:12px;font-weight:500;">' + data.estado + '</div>'
-            + '<div style="color:var(--color-muted);font-size:12px;margin-top:4px;">' + data.score + ' / ' + (data.max_score || 90) + '</div>'
+            + '<div style="color:var(--color-muted);font-size:12px;margin-top:4px;">' + data.score + ' / ' + (data.max_score || 100) + '</div>'
             + '</div>';
 
         // Los cinco factores se AGRUPAN en tres bloques. El cálculo no cambia
@@ -124,7 +124,7 @@ export async function render(container) {
         const abiColor = data.abi_estado === 'ALTA DISPERSIÓN' ? '#ff9800' : 'var(--color-muted)';
         const abiTxt   = data.abi_valor == null ? 'ABI: sin datos (requiere scan nocturno)' : 'ABI: ' + data.abi_valor + '% (' + data.abi_estado + ')';
         const gatekeepersHtml = '<div style="margin-top:1rem;padding:1rem;background:var(--color-bg,#0a0a0a);border-radius:var(--radius);border:1px solid var(--color-border);">'
-            + '<div style="color:var(--color-muted);font-size:11px;letter-spacing:0.08em;margin-bottom:8px;">GATEKEEPERS ' + tt('algoritmo-gatekeepers') + ' (umbral VERDE: ' + data.umbral_verde + '/' + (data.max_score || 90) + ')</div>'
+            + '<div style="color:var(--color-muted);font-size:11px;letter-spacing:0.08em;margin-bottom:8px;">GATEKEEPERS ' + tt('algoritmo-gatekeepers') + ' (umbral VERDE: ' + data.umbral_verde + '/' + (data.max_score || 100) + ')</div>'
             + '<div style="display:flex;gap:1.5rem;flex-wrap:wrap;font-size:12px;">'
             // Se dice la distancia real, no un "cerca" a secas: la condición es
             // asimétrica (≤ +10% sobre la media de 200 semanas, sin límite por
@@ -167,12 +167,12 @@ export async function render(container) {
 
             + '<div style="background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius);padding:1.5rem;">'
             + '<div style="display:flex;align-items:baseline;gap:10px;margin-bottom:0.75rem;">'
-            // El denominador es el máximo REALMENTE alcanzable (90), no 100:
-            // la SMA200 aporta 10 al total nominal pero no puntúa, solo decide
-            // el umbral. Decir /100 hacía parecer más flojo cualquier score —
-            // un 52 es el 58% de lo alcanzable, no el 52%. Hallazgo #5.
+            // Los cinco factores suman 100 exactos desde el 31/07/2026, así
+            // que el score SE LEE COMO UN PORCENTAJE directo. Se sigue usando
+            // data.max_score en vez de un 100 a fuego: si algún día vuelven a
+            // cambiar los pesos, la pantalla no miente sola.
             + '<span style="color:' + data.color + ';font-size:56px;font-weight:500;line-height:1;">' + data.score + '</span>'
-            + '<span style="color:var(--color-muted);font-size:18px;">/' + (data.max_score || 90) + '</span>'
+            + '<span style="color:var(--color-muted);font-size:18px;">/' + (data.max_score || 100) + '</span>'
             // El semáforo OFICIAL (el que avisa por Telegram y entra en el
             // track record) se decide una vez al día, con los cierres. Lo que
             // se ve aquí durante la sesión es un cálculo en curso, y hay que
@@ -183,7 +183,7 @@ export async function render(container) {
                 : '')
             + '</div>'
             + '<div style="background:var(--color-bg,#0a0a0a);border-radius:4px;height:8px;margin-bottom:1rem;">'
-            + '<div style="height:100%;width:' + Math.min(100, data.score / (data.max_score || 90) * 100) + '%;background:' + data.color + ';border-radius:4px;transition:width 1s;"></div>'
+            + '<div style="height:100%;width:' + Math.min(100, data.score / (data.max_score || 100) * 100) + '%;background:' + data.color + ';border-radius:4px;transition:width 1s;"></div>'
             + '</div>'
             + '<div style="color:' + data.color + ';font-size:18px;letter-spacing:0.15em;margin-bottom:0.75rem;font-weight:500;">' + data.senal + '</div>'
             + '<div style="color:var(--color-text);font-size:13px;line-height:1.7;padding:1rem;background:var(--color-bg,#0a0a0a);border-radius:var(--radius);border-left:3px solid ' + data.color + ';">'
@@ -329,6 +329,18 @@ async function runBacktest(container) {
         const res   = await fetch('/api/v1/algoritmo/backtest?years=' + years, {
             headers: token ? { 'Authorization': 'Bearer ' + token } : {}
         });
+        // Si la caché del backtest está fría, el cálculo tarda minutos y el
+        // proxy corta antes, devolviendo una página HTML de error. Hacer
+        // res.json() sobre eso soltaba "Unexpected token '<'", que no le dice
+        // nada a nadie. Se detecta y se explica qué está pasando y qué hacer.
+        const tipo = res.headers.get('content-type') || '';
+        if (!res.ok || !tipo.includes('application/json')) {
+            throw new Error(
+                res.status === 504 || res.status === 502
+                    ? 'El backtest está tardando más de lo que permite el servidor. Se está calculando en segundo plano — espera un minuto y vuelve a pulsar RECALCULAR.'
+                    : 'El servidor respondió ' + res.status + ' sin datos utilizables. Si se repite, revisa los logs del backend.'
+            );
+        }
         const data  = await res.json();
         if (!data.ok) throw new Error(data.error || 'Sin datos');
 
@@ -394,7 +406,7 @@ function renderBacktestResults(data) {
                   : '';
               return '<div style="display:grid;grid-template-columns:85px 55px 80px 70px 50px 50px 50px 50px;gap:6px;padding:6px 0;border-bottom:1px solid var(--color-border);font-size:10px;align-items:center;">'
                   + '<div style="color:var(--color-text);">' + s.fecha + '</div>'
-                  + '<div style="color:var(--color-muted);">' + s.score + '/' + (data.max_score || 90) + '</div>'
+                  + '<div style="color:var(--color-muted);">' + s.score + '/' + (data.max_score || 100) + '</div>'
                   + '<div style="color:var(--color-secondary,#00d9ff);">' + gk + ftdTag + creditTag + '</div>'
                   + '<div style="color:' + (s.drawdown_pct <= -15 ? '#f23645' : 'var(--color-muted)') + ';">' + s.drawdown_pct + '%</div>'
                   + '<div>' + fmt(r.d5) + '</div><div>' + fmt(r.d10) + '</div><div>' + fmt(r.d20) + '</div><div>' + fmt(r.d60) + '</div>'
