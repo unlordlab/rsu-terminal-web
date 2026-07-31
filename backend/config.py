@@ -50,6 +50,20 @@ class Settings(BaseSettings):
     xai_api_key: str = ""
     fmp_api_key: str = ""
     finnhub_api_key: str = ""
+    # Precios de Cartera en vivo por el WebSocket de trades de Finnhub, en vez
+    # de las cotizaciones diferidas de yfinance. Ver
+    # services/finnhub_stream_service.py.
+    #
+    # DESACTIVADO POR DEFECTO, y no por prudencia técnica: los términos de
+    # Finnhub dicen que todos sus planes son «strictly for personal use unless
+    # explicitly stated otherwise» y prohíben redistribuir los datos «or
+    # derived results» a terceros sin aprobación escrita. Servir estos precios
+    # a los usuarios de la terminal ES redistribución, así que encenderlo es
+    # una decisión de licencia, no solo de configuración.
+    #
+    # Apagarlo devuelve Cartera a yfinance sin tocar nada más: el camino
+    # anterior sigue intacto y en uso (es quien aporta el cierre anterior).
+    finnhub_realtime: bool = False
     # YA NO SE USA EN NINGÚN SITIO desde el 29/07/2026: la única función que
     # la usaba (sorpresas de resultados en Research) pasó a yfinance, porque
     # el plan gratuito de Alpha Vantage son 25 peticiones AL DÍA y con ~100

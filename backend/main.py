@@ -50,6 +50,10 @@ async def lifespan(app: FastAPI):
     task8 = asyncio.create_task(ws.supervisar("cartera_check_loop", ws.cartera_check_loop))
     task9 = asyncio.create_task(ws.supervisar("telegram_link_poll_loop", ws.telegram_link_poll_loop))
     task10 = asyncio.create_task(ws.supervisar("rsu_score_resultados_loop", ws.rsu_score_resultados_loop))
+    # Stream de precios en vivo de Cartera (Finnhub). Se crea siempre, pero la
+    # propia corrutina sale de inmediato si FINNHUB_REALTIME no está activo, así
+    # que apagarlo no deja ninguna tarea colgando ni conexión abierta.
+    task11 = asyncio.create_task(ws.supervisar("finnhub_stream_loop", ws.finnhub_stream_loop))
     yield
     task1.cancel()
     task2.cancel()
@@ -61,6 +65,7 @@ async def lifespan(app: FastAPI):
     task8.cancel()
     task9.cancel()
     task10.cancel()
+    task11.cancel()
 
 app = FastAPI(
     title=settings.app_name,

@@ -286,6 +286,17 @@ async def supervisar(nombre: str, corrutina_factory, cooldown: int = 60):
 
 # ── BACKGROUND LOOPS ──────────────────────────────────────────────────────────
 
+async def finnhub_stream_loop():
+    """Precios en vivo de Cartera vía el WebSocket de Finnhub. Vive en su
+    propio servicio (services/finnhub_stream_service.py); aquí solo se expone
+    con la forma que espera main.py, igual que el resto de bucles.
+
+    Sale de inmediato si FINNHUB_REALTIME está apagado, que es el valor por
+    defecto — encenderlo tiene implicaciones de licencia, ver el servicio."""
+    from services.finnhub_stream_service import stream_loop
+    await stream_loop()
+
+
 async def broadcast_loop():
     while True:
         await asyncio.sleep(60)
