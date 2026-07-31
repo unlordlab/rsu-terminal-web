@@ -47,10 +47,26 @@ def test_ema200_semanal_con_100_semanas_sigue_devolviendo_none():
     assert valor is None and pendiente is None
 
 
-def test_ema200_semanal_con_260_semanas_da_valor_valido():
-    """Confirma que la función SÍ funciona una vez hay histórico
-    suficiente -- no solo que rechaza correctamente el caso insuficiente."""
+def test_ema200_semanal_con_260_semanas_sigue_siendo_insuficiente():
+    """ACTUALIZADO el 30/07/2026 -- antes este test afirmaba lo contrario, que
+    con ~260 semanas la función "SÍ funciona". Codificaba una suposición falsa:
+    `min_periods=200` impide publicar un valor prematuro, pero NO garantiza que
+    la EMA haya convergido. Con adjust=True (el default de pandas) el valor es
+    una media ponderada de todo lo disponible, y con 262 semanas todavía pesa
+    el arranque de la serie.
+
+    Medido con SPY real: 262 semanas dan 584,99 cuando el valor convergido es
+    563,45 -- un 3,8% de error, casi 5 puntos porcentuales en la distancia al
+    precio. Y el gatekeeper compara contra un corte, así que ese error decidía
+    si se abría o no. Ver rsu_algoritmo_service.MIN_SEMANAS_EMA200W."""
     df = _df_spy_sintetico(1820)  # ~260 semanas
+    valor, pendiente = _ema200_semanal(df)
+    assert valor is None and pendiente is None
+
+
+def test_ema200_semanal_con_historico_convergido_da_valor_valido():
+    """El caso bueno: ~570 semanas (11 años), por encima del mínimo de 500."""
+    df = _df_spy_sintetico(4000)
     valor, pendiente = _ema200_semanal(df)
     assert valor is not None and isinstance(valor, float)
     assert pendiente is not None

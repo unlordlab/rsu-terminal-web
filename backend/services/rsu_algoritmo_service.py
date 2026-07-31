@@ -56,6 +56,27 @@ CREDIT_SPREAD_CRITICO = 4.0
 MARGEN_HISTERESIS = 3
 ESTADOS_VERDES = {"VERDE", "VERDE-VOL"}
 
+# Semanas mínimas para dar por buena la EMA200 semanal. NO son 200.
+#
+# `min_periods=200` solo garantiza que pandas no emita un valor antes de tener
+# 200 puntos; no garantiza que ese valor haya CONVERGIDO. Con adjust=True (el
+# default) la EMA es una media ponderada de todo lo disponible, y con 262
+# semanas todavía pesa el arranque de la serie. Medido el 30/07/2026 con SPY:
+#   262 sem -> 584,99 (3,8% de error) | 523 -> 565,65 (0,39%) | converge en 563,45
+#
+# Por qué importa el guard y no basta con pedir 15 años de descarga: si
+# yfinance devuelve un histórico corto en una petición concreta (pasa, y en
+# silencio), con el umbral en 200 nos tragaríamos un valor sin converger como
+# si fuera bueno. Eso es peor que no tener dato, porque el factor vale 20 de
+# los ~90 puntos del score y además abre el gatekeeper. Con 500 semanas el
+# error queda por debajo del 0,4% y una descarga parcial cae limpiamente a
+# "sin dato" en vez de a un número plausible pero falso.
+#
+# Esto explica además el 4º cambio de semáforo del 30/07 (52 -> 32 a las 09:21
+# UTC): los 20 puntos del factor desaparecieron enteros, que es justo lo que
+# pasa cuando esta función devuelve None por histórico insuficiente.
+MIN_SEMANAS_EMA200W = 500
+
 
 def aplicar_histeresis(estado_crudo, score, umbral, gatekeeper_ok, estado_anterior):
     """Estado OFICIAL a partir del estado crudo de hoy y del oficial de ayer.
@@ -427,7 +448,7 @@ def _ema200_semanal(df_spy):
     Devuelve (valor_ema, pendiente_reciente) o (None, None) si no hay histórico suficiente.
     """
     weekly = _resample_semanal(df_spy)
-    if weekly is None or len(weekly) < 200:
+    if weekly is None or len(weekly) < MIN_SEMANAS_EMA200W:
         return None, None
     ema200w = weekly['Close'].ewm(span=200, min_periods=200).mean()
     valor   = _safe_float(ema200w.iloc[-1])
@@ -722,7 +743,14 @@ def _calcular_score_punto(df_spy, df_vix, sector_data=None, df_vix3m=None, credi
         if pendiente_ema200w is not None and pendiente_ema200w < 0:
             advertencias.append("⚠ EMA200 semanal con pendiente negativa — soporte débil, no fuerte")
     else:
+        # No es una lectura de mercado, es un fallo de datos: yfinance devolvió
+        # un histórico corto. Se dice en voz alta (antes solo quedaba este
+        # bullet entre otros ocho) porque son 20 de los ~90 puntos del score
+        # desapareciendo de golpe, y porque procesar_cierre_si_toca() usa esta
+        # advertencia para NO tomar la decisión oficial con el dato roto.
         detalles.append("• EMA200 semanal sin histórico suficiente")
+        advertencias.append("⚠ Sin EMA200 semanal — histórico insuficiente en esta descarga. "
+                            "Faltan 20 puntos del score por falta de dato, no por el mercado")
     score += ema200w_score
     metricas['EMA200W'] = {"score": ema200w_score, "max": 20, "color": "#00d9ff",
                            "valor": round(ema200w, 2) if ema200w is not None else None,
@@ -1091,6 +1119,17 @@ def procesar_cierre_si_toca():
         if not resultado.get("ok"):
             print(f"[AlgoritmoCierre] Sin resultado válido, se reintenta: {resultado.get('error')}")
             return {"procesado": False, "motivo": "sin_resultado"}
+
+        # Un fallo de descarga no puede disfrazarse de señal. Si falta la
+        # EMA200 semanal, al score le faltan 20 de sus ~90 puntos por falta de
+        # dato — y eso basta para bajar de VERDE a AMBAR y mandar un aviso que
+        # el mercado no ha pedido. Pasó de verdad el 30/07/2026: el cuarto
+        # cambio de semáforo del día (52 -> 32 a las 09:21 UTC) fue exactamente
+        # este factor evaporándose. Se espera al siguiente tick.
+        if ((resultado.get("metricas") or {}).get("EMA200W") or {}).get("valor") is None:
+            print("[AlgoritmoCierre] Sin EMA200 semanal en esta pasada (histórico corto de "
+                  "yfinance) — no se decide con 20 puntos ausentes por falta de dato")
+            return {"procesado": False, "motivo": "sin_ema200w", "fecha": fecha_sesion}
 
         estado_crudo = resultado.get("estado")
         oficial = aplicar_histeresis(

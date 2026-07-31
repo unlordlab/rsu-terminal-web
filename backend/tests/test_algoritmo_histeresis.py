@@ -123,7 +123,8 @@ def _resultado_falso(**extra):
     base = {
         "ok": True, "estado": "AMBAR", "senal": "DESARROLLANDO", "score": 52,
         "umbral_verde": 54, "precio": 729.46, "gatekeeper_a": True,
-        "gatekeeper_b": True, "metricas": {}, "ftd_confirmado": False,
+        "gatekeeper_b": True, "ftd_confirmado": False,
+        "metricas": {"EMA200W": {"valor": 563.64, "score": 0, "max": 20}},
         "credit_spread_valor": 1.62, "credit_spread_nivel": "normal",
     }
     base.update(extra)
@@ -179,6 +180,35 @@ def test_con_amplitud_al_dia_decide_y_lo_registrado_no_es_provisional():
     assert capturado["estado"] == "VERDE", "la histéresis debe retener el verde"
     assert capturado["fecha"] == "2026-07-29"
     assert capturado["provisional"] is False
+
+
+def test_no_decide_si_falta_la_ema200_semanal():
+    """El 4º cambio de semáforo del 30/07 (52 -> 32 a las 09:21 UTC) fue este
+    factor evaporándose: yfinance devolvió un histórico corto y desaparecieron
+    20 de los ~90 puntos del score. Un fallo de descarga no puede disfrazarse
+    de señal ni mandar un aviso que el mercado no ha pedido."""
+    from unittest.mock import patch
+    import services.rsu_algoritmo_service as svc
+
+    sin_ema = _resultado_falso(score=32, metricas={"EMA200W": {"valor": None, "score": 0, "max": 20}})
+
+    with patch.object(svc, "_fetch_breadth_real", return_value=[{"date": "2026-07-29"}]), \
+         patch.object(svc, "_ultima_sesion_cerrada", return_value="2026-07-29"), \
+         patch.object(svc, "get_rsu_algoritmo", return_value=sin_ema), \
+         patch("services.algoritmo_tracking_service.sesion_ya_procesada", return_value=False), \
+         patch("services.algoritmo_tracking_service.procesar_resultado_algoritmo") as registrar:
+        r = svc.procesar_cierre_si_toca()
+
+    assert r["procesado"] is False
+    assert r["motivo"] == "sin_ema200w"
+    assert not registrar.called, "no debe registrar ni notificar un fallo de datos"
+
+
+def test_min_semanas_ema200w_exige_convergencia_no_solo_200():
+    """min_periods=200 evita publicar un valor prematuro, pero no que haya
+    convergido: con 262 semanas el error medido era del 3,8%."""
+    from services.rsu_algoritmo_service import MIN_SEMANAS_EMA200W
+    assert MIN_SEMANAS_EMA200W >= 500
 
 
 def test_sin_gist_de_amplitud_no_se_queda_bloqueado():
