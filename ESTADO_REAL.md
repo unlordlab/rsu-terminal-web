@@ -29,8 +29,8 @@ parecería completo y sería engañoso.
 
 ## Cobertura de esta versión — leer antes de usarlo
 
-- **399 hallazgos**: 379 extraídos de los 16 documentos de auditoría, más 20
-  encontrados después con el sistema ya en producción (RSU Algoritmo #14–#28,
+- **401 hallazgos**: 379 extraídos de los 16 documentos de auditoría, más 22
+  encontrados después con el sistema ya en producción (RSU Algoritmo #14–#30,
   Newsfeed/briefing #27–#31).
 - **64 son críticos (🔴)**: todos revisados en la primera pasada.
   33 cerrados · 11 abiertos ·
@@ -465,7 +465,7 @@ a uno contra el código, seis cerrados en esa sesión. Es, junto a Research, el
 | ❓ | 21 | 🟢 | Rotación sectorial en el tiempo | *sin comprobar* |
 | ❓ | 22 | 🟢 | Alerta de entrada en el top decil | *sin comprobar* |
 
-## Rsu Algoritmo  (28 hallazgos — ❌1 · ✅24 · ❓0 · ⬜3)
+## Rsu Algoritmo  (30 hallazgos — ❌1 · ✅26 · ❓0 · ⬜3)
 
 **Módulo con el tier completo verificado** — el tercero, tras Research y RS/RW.
 Cero hallazgos sin comprobar.
@@ -506,6 +506,8 @@ Queda abierto #12, medido y descartado por marginal.
 | ✅ | 26 | 🟠 | Seis líneas anunciaban puntos distintos de los que sumaban | 31/07, **introducido por mí** al reescalar a 100 con reemplazos de texto: decían `(+11)` sumando 10, `(+6)` sumando 7, `(+7)` sumando 8, y los umbrales viejos 54/63. Arreglados y blindados con `test_algoritmo_coherencia_textos.py`, que lee el fuente y compara cada literal con la asignación de su línea — verificado que el test falla si se rompe a propósito |
 | ✅ | 27 | 🔴 | **La herramienta recomendaba un stop que destruía su propia ventaja** | 31/07: el texto del VERDE decía "entrada gradual 25% con stop −7%". El backtest ya simulaba ese stop pero **no lo enseñaba**. Medido: habría cortado **5 de las 16 señales**, incluidas las dos de marzo de 2020 (+14,5% y +17,1% sin stop → −7% con él). El retorno medio a 60d caía de +10,64% a +5,81%, y contra el baseline de pánico (~+6,04%) la ventaja pasaba de **+4,60pp a −0,23pp: desaparecía**. Ahora: entrada escalonada SIN stop, con los números en el propio texto |
 | ✅ | 28 | 🟠 | Sin stop hacía falta decir cuánto duele, o el consejo sería peor | 31/07: la simulación de stop se sustituye por la **peor caída intermedia** (máximos mínimos intradía entre entrada y horizonte), en el backtest y en el tracking en vivo. Medido: −6,06% de media y **−19,98% en el peor caso** (marzo 2020). Es el dato que determina el tamaño de posición cuando no hay stop, y ahora sale en el texto del VERDE y como columna del historial en vez de la de PUERTA, que decía lo mismo en las 16 filas |
+| ✅ | 29 | 🟡 | El historial del backtest tenía tres columnas confundibles y una celda con dos cosas dentro | 31/07: (a) la columna PUERTA se había sustituido por LLEGÓ A CAER, así que el historial dejó de decir por qué cada señal era válida; (b) `DRAWDOWN` sonaba igual que LLEGÓ A CAER siendo cosas distintas (lo caído ANTES de entrar vs lo sufrido DESPUÉS); (c) los `✓FTD` y `⚠BAA` se pegaban DENTRO de la celda de LLEGÓ A CAER, mezclando un porcentaje con dos etiquetas sin relación — es lo que hacía ilegible esa columna. Ahora: **VS MEDIA 200S** (la condición obligatoria, nombrada por lo que mide y no por su papel en la jerga del módulo), **DESDE MÁX**, **LLEGÓ A CAER** y **CONTEXTO** en su propia columna. El número de VS MEDIA 200S sí varía — de **−20,5%** (jun-2009) a **+9,3%** (abr-2025), Covid en +5,7% — y es la prueba visible de por qué la banda es asimétrica: un corte simétrico de ±10% deja fuera 2009 y uno en 0% deja fuera 10 de las 16 |
+| ✅ | 30 | 🟠 | El módulo no tenía manual: el usuario veía un color y ocho tooltips sueltos | 31/07: fase nueva en Academy, **GUÍA DE LA TERMINAL**, con el módulo 26 (8 lecciones, ~24 min, quiz de 10 preguntas) explicando el semáforo en lenguaje de usuario: qué mide cada factor, la puerta, el listón, los cinco colores, el plan de entrada por tramos, los resultados a 5/10/20/60 días **incluidos los plazos en los que resta**, por qué no hay stop, y las 16 señales una a una. Se separa de la FASE 6 a propósito: aquella explica los conceptos, esta explica cómo se usa la pantalla. Se irá ampliando con un módulo por herramienta |
 | ❌ | 12 | 🟡 | El backtest recalcula el baseline completo en cada ejecución | verificado 31/07: cierto — bucle Python con `.iloc[]` escalar sobre ~4.500 posiciones × 4 horizontes. Real pero **marginal**: el backtest hace además ~4.500 llamadas a `_calcular_score_punto` (minutos) y se cachea 12h, así que corre como mucho dos veces al día. Vectorizarlo es trivial pero no compensa tocar el motor por esto |
 | ⬜ | 13 | 🟡 | `df_vix` a 3 meses limita la ventana del VIX | verificado 31/07: **el hallazgo no aplica**. El factor VIX usa `df_vix['Close'].tail(VENTANA)` con `VENTANA = 10`, así que la ventana la fija esa constante, no la descarga. Los 3 meses (~63 sesiones) son 6× lo que se consume |
 | ✅ | 14 | 🔴 | **La EMA200 semanal no había convergido**: se calculaba sobre 5 años (~262 semanas) para un span de 200, y con `adjust=True` el valor arrastra el arranque de la serie | 30/07: 5y → 584,99 (+24,7%) vs convergido → 563,45 (+29,5%). Casi 5pp de error, justo sobre un corte del 25% → el gatekeeper quedaba ACTIVO sin deber estarlo. Arreglado a 15y en vivo y `BUFFER_YEARS` 5→15 en el backtest, donde el sesgo afectaba a TODOS los días evaluados |

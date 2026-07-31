@@ -120,4 +120,12 @@ export const LESSON_INDEX = {
     '25-2': { title: 'DCA vs. Invertir de Golpe — la Evidencia', words: 353 },
     '25-3': { title: 'DCA vs. Entrada Escalonada — No son lo Mismo', words: 466 },
     '25-4': { title: 'Construir tu Propia Posición con Criterio', words: 343 },
+    '26-1': { title: 'Qué es el Semáforo y Por Qué Existe', words: 582 },
+    '26-2': { title: 'Cómo se Forma la Nota — Los Cinco Factores', words: 709 },
+    '26-3': { title: 'La Puerta y el Listón', words: 584 },
+    '26-4': { title: 'Los Cinco Colores y Cuándo Cambian', words: 420 },
+    '26-5': { title: 'Cómo se Usa, Paso a Paso', words: 544 },
+    '26-6': { title: 'Qué ha Hecho Históricamente', words: 747 },
+    '26-7': { title: 'Cuánto Duele por el Camino, y Por Qué No Hay Stop', words: 506 },
+    '26-8': { title: 'Límites y Glosario', words: 635 },
 };

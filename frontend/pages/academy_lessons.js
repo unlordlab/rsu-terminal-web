@@ -5817,4 +5817,395 @@ export const LESSONS = {
             },
         ]
     },
+
+    // ── MÓDULO 26 · GUÍA DE LA TERMINAL — RSU ALGORITMO ────────────────────
+    // Manual de usuario del semáforo de suelos. Los números de las lecciones
+    // 26-6 y 26-7 salen del backtest real del módulo (periodo máximo, 16
+    // señales entre 2008 y 2026) — si el sistema dispara una señal nueva,
+    // hay que actualizarlos aquí y regenerar el manifiesto.
+
+    '26-1': {
+        moduleId: 26,
+        lessonIndex: 0,
+        title: 'Qué es el Semáforo y Por Qué Existe',
+        duration: '8 min',
+        intro: 'El RSU Algoritmo es un semáforo que responde cada día a una sola pregunta: después de esta caída, ¿es hoy un momento razonable para EMPEZAR a construir una posición en el mercado americano? Esta lección explica qué problema resuelve y, sobre todo, qué NO intenta hacer.',
+        sections: [
+            {
+                heading: 'Una sola pregunta',
+                blocks: [
+                    { type: 'text', content: 'La mayoría de herramientas de la terminal responden a la pregunta <b>en qué</b> invertir: qué valores son los más fuertes, cuáles tienen mejores fundamentales, dónde se está moviendo el dinero institucional. El RSU Algoritmo responde a una pregunta distinta y anterior a todas ellas: <b>cuándo</b>.' },
+                    { type: 'text', content: 'No dice qué comprar exactamente. No dice cuándo vender. No promete acertar el mínimo. Dice si las condiciones típicas de un suelo de mercado están presentes hoy o no, con un criterio fijo que no cambia según el estado de ánimo del momento.' },
+                    { type: 'concept', title: 'La pregunta exacta', content: 'Después de esta caída, ¿es hoy un momento razonable para EMPEZAR a construir una posición en el mercado americano? Fíjate en la palabra EMPEZAR: el semáforo marca el principio de un proceso de compra por tramos, no una orden de entrada única.' },
+                ]
+            },
+            {
+                heading: 'Los dos errores que evita',
+                blocks: [
+                    { type: 'text', content: 'Cuando el mercado cae con fuerza, casi todo el mundo comete uno de estos dos errores:' },
+                    { type: 'table', headers: ['El error', 'Qué pasa'], rows: [
+                        ['Vender abajo', 'El miedo aprieta justo cuando los precios ya han bajado mucho, y se acaba vendiendo en la peor zona posible.'],
+                        ['Comprar demasiado pronto y demasiado grande', 'Se entra con toda la posición en la primera caída del 10%, y luego no queda capital cuando llega la del 25%.'],
+                    ]},
+                    { type: 'text', content: 'El problema no es de información, es de <b>momento</b>. Todo el mundo sabe en abstracto que las caídas son oportunidades. Lo difícil es reconocerlo mientras está pasando, con la cuenta en rojo y los titulares en contra.' },
+                    { type: 'text', content: 'El semáforo existe para eso: para tener un criterio <b>decidido de antemano</b>, siempre el mismo, que se pueda consultar en el peor momento emocional sin tener que analizar nada desde cero.' },
+                ]
+            },
+            {
+                heading: 'Lo que NO intenta hacer',
+                blocks: [
+                    { type: 'warning', content: 'El semáforo no intenta acertar el día exacto del mínimo. Eso no lo hace nadie de forma consistente. Su objetivo es señalar la ZONA en la que históricamente empieza a compensar comprar, sabiendo que después aún puede caer más — y de hecho, en 6 de las 16 señales históricas, el mercado siguió cayendo más de un 5% después de ponerse verde.' },
+                    { type: 'text', content: 'Esto no es un defecto que haya que disimular: es la condición de partida. Una herramienta que solo se encendiera en el mínimo exacto se encendería tan tarde que no serviría de nada. El precio a pagar por señalar la zona a tiempo es aceptar que la zona tiene grosor.' },
+                ]
+            },
+            {
+                heading: 'Dónde encaja con el resto de la terminal',
+                blocks: [
+                    { type: 'text', content: 'El semáforo mide el mercado <b>en conjunto</b>, usando el índice americano como referencia. No analiza empresas concretas. Encaja así con el resto de módulos:' },
+                    { type: 'steps', items: [
+                        'RSU Algoritmo responde CUÁNDO: hay condiciones de suelo o no las hay.',
+                        'RS/RW, Scanner y CANSLIM responden EN QUÉ: qué valores están más fuertes.',
+                        'Research y RSU Score responden SI ESE VALOR CONCRETO merece la pena por dentro.',
+                        'Cartera y los módulos de gestión responden CUÁNTO: qué tamaño le corresponde a la posición.',
+                    ]},
+                    { type: 'tip', label: 'LA IDEA', content: 'Ninguno de los cuatro sustituye a los otros tres. Un valor excelente comprado en el momento equivocado sigue doliendo, y un momento excelente aprovechado con el valor equivocado también.' },
+                ]
+            },
+        ]
+    },
+
+    '26-2': {
+        moduleId: 26,
+        lessonIndex: 1,
+        title: 'Cómo se Forma la Nota — Los Cinco Factores',
+        duration: '10 min',
+        intro: 'Cada día se puntúan cinco cosas distintas. La suma va de 0 a 100. Cuanto más alta, más condiciones de suelo hay presentes a la vez. Esta lección explica qué mide cada factor y por qué pesa lo que pesa.',
+        sections: [
+            {
+                heading: 'Los cinco factores',
+                blocks: [
+                    { type: 'table', headers: ['Factor', 'La pregunta que responde', 'Puntos'], rows: [
+                        ['Miedo (VIX y su curva)', '¿Hay miedo de verdad, o solo una corrección ordenada? Se mira el índice del miedo y si el miedo de HOY supera al de dentro de tres meses, que es lo típico del pánico agudo.', '24'],
+                        ['Vuelta a la media larga (200 semanas)', '¿Ha vuelto el precio al entorno de su precio medio de los últimos cuatro años? Es la zona donde históricamente se han formado los suelos importantes.', '22'],
+                        ['Precio castigado (RSI diario y semanal)', '¿Viene el precio muy castigado, y desde hace tiempo? Un castigo que aparece también en el gráfico semanal pesa más que uno de dos días.', '20'],
+                        ['Amplitud (participación del mercado)', '¿Está cayendo todo el mercado o solo cuatro valores grandes que arrastran al índice? Y sobre todo: ¿esa caída generalizada ya está girando al alza?', '20'],
+                        ['Capitulación (volumen en el mínimo)', '¿El día del mínimo se negoció mucho más de lo normal? Un suelo suele venir con un día de ventas masivas: el último que se rinde.', '14'],
+                    ]},
+                    { type: 'text', content: 'Suman exactamente 100, así que la nota se puede leer directamente como un porcentaje: un 72 significa que están presentes, en intensidad, casi tres cuartas partes de las condiciones que el sistema busca.' },
+                ]
+            },
+            {
+                heading: 'Por qué el miedo pesa más que el volumen',
+                blocks: [
+                    { type: 'text', content: 'Los pesos no son arbitrarios, pero tampoco son una verdad matemática: reflejan cuánta información aporta cada señal sobre el hecho concreto de estar en un suelo.' },
+                    { type: 'text', content: 'Un pico de miedo extremo es un acontecimiento raro y muy asociado a los suelos. Un día de volumen alto, en cambio, ocurre constantemente por muchas razones que no tienen nada que ver con una capitulación: vencimientos de derivados, rebalanceos de índices, resultados de una empresa grande. Por eso el volumen puntúa la mitad que el miedo: es una confirmación útil, no una prueba.' },
+                ]
+            },
+            {
+                heading: 'La amplitud: lo que no se ve mirando el índice',
+                blocks: [
+                    { type: 'text', content: 'El índice puede caer un 3% porque han caído sus 500 componentes, o porque han caído mucho las cinco empresas más grandes mientras el resto aguanta. Son dos situaciones muy distintas y en el gráfico del índice se ven igual.' },
+                    { type: 'text', content: 'La amplitud mide cuántos valores participan del movimiento. Y el sistema no se conforma con que sea negativa: da puntos extra cuando esa caída generalizada <b>ya está girando al alza</b>. Una amplitud muy negativa y todavía cayendo es una caída en curso; una amplitud muy negativa que ya rebota es presión vendedora agotándose. No es lo mismo.' },
+                    { type: 'concept', title: 'La diferencia práctica', content: 'Este matiz es la razón por la que el sistema no se enciende en mitad de un desplome. No basta con que las cosas estén mal: tienen que estar mal Y empezando a mejorar por debajo de la superficie.' },
+                ]
+            },
+            {
+                heading: 'Tres cosas que se miran pero NO puntúan',
+                blocks: [
+                    { type: 'text', content: 'En el panel del módulo verás otros tres datos que no suman puntos. Que aparezcan sin puntuar no es un descuido:' },
+                    { type: 'table', headers: ['Dato', 'Para qué sirve entonces'], rows: [
+                        ['Régimen del mercado (media de 200 días)', 'No suma puntos: decide cuál es el listón para dar verde. Ver la lección siguiente.'],
+                        ['FTD (día de seguimiento)', 'Un día de subida fuerte con mucho volumen, señal de que el dinero institucional se ha movido. Llega DESPUÉS del suelo, no a la vez, así que se muestra como confirmación posterior y no como parte de la nota.'],
+                        ['Estado del crédito', 'El sobrecoste que pagan las empresas por endeudarse. No suma ni resta, pero si está roto y empeorando degrada un verde a naranja: puede que el problema sea más profundo que una caída de bolsa.'],
+                    ]},
+                    { type: 'tip', label: 'EL CASO DEL FTD', content: 'El FTD es el ejemplo más claro de por qué no todo lo útil debe puntuar. Es una señal excelente, pero ocurre en un momento distinto del proceso: primero la capitulación, después la confirmación. Meterlo en la misma suma mezclaría dos fotogramas distintos de la misma película.' },
+                ]
+            },
+        ]
+    },
+
+    '26-3': {
+        moduleId: 26,
+        lessonIndex: 2,
+        title: 'La Puerta y el Listón',
+        duration: '9 min',
+        intro: 'Una nota alta no basta para que el semáforo se ponga verde. Hay que cruzar además una puerta obligatoria, y el listón de la nota cambia según cómo esté el mercado. Estas dos reglas son las que hacen que el sistema sea selectivo.',
+        sections: [
+            {
+                heading: 'La puerta: una condición obligatoria',
+                blocks: [
+                    { type: 'concept', title: 'La puerta', content: 'El precio tiene que haber vuelto a su media de 200 semanas. En concreto: no estar más de un 10% por encima de ella. Por debajo no hay límite — cuanto más profunda la caída, más claramente se ha vuelto a la media.' },
+                    { type: 'text', content: 'La media de 200 semanas es, en la práctica, el precio medio del mercado en los últimos cuatro años. Es la referencia de largo plazo más lenta que se sigue habitualmente, y por eso mismo es difícil de mover: hace falta una caída de verdad para que el precio vuelva a ella.' },
+                    { type: 'text', content: '¿Por qué como condición obligatoria y no como un factor más? Porque se puede tener mucho miedo, mucho volumen y mucha sobreventa <b>sin</b> que el mercado se haya abaratado de verdad. Un susto fuerte en un mercado que sigue muy caro no es un suelo: es un susto. La puerta separa una cosa de la otra.' },
+                    { type: 'text', content: 'Si la nota es alta pero la puerta está cerrada, el semáforo no se calla ni miente: lo dice con un naranja explícito que significa <b>lista de seguimiento, no entrada</b>.' },
+                ]
+            },
+            {
+                heading: 'Por qué la banda es asimétrica',
+                blocks: [
+                    { type: 'text', content: 'Llama la atención que el límite sea «no más de un 10% POR ENCIMA» y no «a menos de un 10% de distancia» en cualquier dirección. La razón se ve mirando dónde estaba el precio en las 16 señales históricas:' },
+                    { type: 'table', headers: ['Señal', 'Distancia a la media de 200 semanas'], rows: [
+                        ['Junio 2009 — salida de la crisis financiera', '-20,5%'],
+                        ['Octubre 2011 — crisis de deuda europea', '-3,7%'],
+                        ['Marzo 2020 — Covid', '+5,7% y +5,8%'],
+                        ['Abril 2025', '+9,3%'],
+                    ]},
+                    { type: 'text', content: 'Con un corte simétrico de más menos 10% se caería 2009, que es el suelo más importante de la muestra. Con un corte en 0% (exigir que el precio esté POR DEBAJO de la media) se caerían 10 de las 16, Covid incluido. Estar un 24% por encima de la media de cuatro años y estar un 24% por debajo son situaciones opuestas, no dos formas de estar «cerca».' },
+                    { type: 'tip', label: 'CÓMO LEERLO EN LA TABLA', content: 'En el historial de señales del módulo, la columna VS MEDIA 200S muestra ese número para cada señal. Cuanto más negativo, más profunda fue la vuelta a la media.' },
+                ]
+            },
+            {
+                heading: 'El listón no siempre es el mismo',
+                blocks: [
+                    { type: 'table', headers: ['Situación del mercado', 'Nota necesaria', 'Por qué'], rows: [
+                        ['Precio POR ENCIMA de su media de 200 días (tendencia sana)', '60 / 100', 'Una caída dentro de una tendencia que sigue viva tiende a resolverse mejor.'],
+                        ['Precio POR DEBAJO de su media de 200 días (tendencia rota)', '70 / 100', 'Con la tendencia ya rota se exige más evidencia antes de hablar de suelo.'],
+                    ]},
+                    { type: 'text', content: 'Dicho en llano: comprar un bache dentro de un mercado que sube es una apuesta más sencilla que intentar cazar el fondo de un mercado que lleva meses bajando. El sistema pide más pruebas en el segundo caso.' },
+                    { type: 'warning', content: 'Puede sonar a optimismo mal entendido — «se pone más fácil justo cuando todo va bien» — pero es lo contrario: la exigencia SUBE precisamente en el escenario más peligroso, que es el mercado ya roto donde cada rebote parece un suelo y casi ninguno lo es.' },
+                ]
+            },
+        ]
+    },
+
+    '26-4': {
+        moduleId: 26,
+        lessonIndex: 3,
+        title: 'Los Cinco Colores y Cuándo Cambian',
+        duration: '7 min',
+        intro: 'El semáforo tiene cinco estados, no tres. Esta lección explica qué significa cada uno en la práctica y por qué el color no cambia en tiempo real durante la sesión.',
+        sections: [
+            {
+                heading: 'Los cinco estados',
+                blocks: [
+                    { type: 'table', headers: ['Color', 'Cuándo aparece', 'Qué significa en la práctica'], rows: [
+                        ['ROJO', 'Nota por debajo de 30', 'No hay nada. No es momento de hacer nada especial. Preservar liquidez.'],
+                        ['ÁMBAR BAJO', 'Nota entre 30 y 49', 'Algunos ingredientes están, pero muy pocos. Demasiado pronto incluso para preparar nada. Observar.'],
+                        ['ÁMBAR', 'Nota entre 50 y el listón', 'La fase de preparación. Es el momento de mirar la lista de candidatos y decidir con calma qué se compraría y con cuánto. Todavía no se compra.'],
+                        ['NARANJA', 'Nota suficiente pero la puerta cerrada, o el crédito roto', 'Posible señal falsa. Lista de seguimiento, no entrada. Si es por el crédito, entrada muy reducida como máximo.'],
+                        ['VERDE', 'Nota por encima del listón Y puerta abierta', 'Empezar a construir, por tramos, con el plan de la lección siguiente.'],
+                    ]},
+                ]
+            },
+            {
+                heading: 'El ámbar no es una sala de espera',
+                blocks: [
+                    { type: 'text', content: 'Es tentador leer el ámbar como «todavía nada, ya volveré cuando esté verde». Sería desaprovechar la parte más útil del sistema.' },
+                    { type: 'text', content: 'El verde llega en el peor momento emocional posible: titulares catastróficos, cartera en rojo, todo el mundo diciendo que esto va a peor. Nadie elige bien en ese estado. El ámbar es el momento en que <b>todavía se puede pensar con calma</b>, y por eso es cuando hay que dejar decidido qué se compraría, con cuánto capital y en cuántos tramos.' },
+                    { type: 'tip', label: 'LA REGLA DEL ÁMBAR', content: 'Si cuando llegue el verde tienes que empezar a decidir, llegas tarde. El trabajo del ámbar es que el verde solo requiera ejecutar.' },
+                ]
+            },
+            {
+                heading: 'Cuándo cambia de color',
+                blocks: [
+                    { type: 'text', content: 'El semáforo toma <b>una decisión al día</b>, con el mercado ya cerrado. No parpadea durante la sesión. Un color que cambiara cada media hora sería ruido disfrazado de información, y además convertiría cada oscilación en una notificación.' },
+                    { type: 'text', content: 'Además, salir del verde cuesta un poco más que entrar: hace falta caer <b>tres puntos por debajo del listón</b>, no simplemente rozarlo. Así un día flojo no apaga una señal que sigue siendo válida.' },
+                    { type: 'warning', content: 'Hay una excepción, y es importante: si se cierra la puerta, el verde se apaga de inmediato sin margen ninguno. Que el precio se aleje de su media de 200 semanas no es ruido en la frontera — es que la razón de fondo de la señal ha desaparecido.' },
+                ]
+            },
+        ]
+    },
+
+    '26-5': {
+        moduleId: 26,
+        lessonIndex: 4,
+        title: 'Cómo se Usa, Paso a Paso',
+        duration: '10 min',
+        intro: 'El semáforo señala una zona, no un punto. Esta lección explica el plan concreto que corresponde a ese hecho: cómo entrar por tramos, cómo dimensionar la posición y de dónde salen los cinco candidatos que muestra el módulo.',
+        sections: [
+            {
+                heading: 'Los cinco pasos',
+                blocks: [
+                    { type: 'steps', items: [
+                        'EN ÁMBAR, PREPARAR. Mirar la lista de candidatos y decidir de antemano qué se compraría y cuánto capital se destina en total. Decidir esto antes del verde es justo lo que evita improvisar cuando llegue.',
+                        'EN VERDE, PRIMER TRAMO PEQUEÑO. No entrar con toda la posición. El verde marca una zona, no un punto exacto: después del verde el precio todavía puede bajar.',
+                        'AÑADIR SOLO SI SIGUE BAJANDO. El resto del capital se reserva precisamente para poder comprar más abajo. Si el precio sube desde el primer tramo, se gana con lo que se tiene; no hay prisa por completar.',
+                        'NO HAY STOP. En estas señales concretas, poner un stop cerrado destruye el resultado — la lección 26-7 lo demuestra con los números. El control del riesgo es el TAMAÑO de la posición, no una orden de venta automática.',
+                        'HORIZONTE: UNAS OCHO SEMANAS. Los resultados aparecen a partir del mes y sobre todo a los 60 días. Quien no pueda esperar ese plazo, no debería usar esta señal.',
+                    ]},
+                ]
+            },
+            {
+                heading: 'La regla práctica del tamaño',
+                blocks: [
+                    { type: 'warning', content: 'Históricamente estas señales llegaron a estar un 6% en rojo de media antes de funcionar, y un 20% en el peor caso. Si ver la posición un 20% abajo te llevaría a venderla, entonces la posición es demasiado grande. Redúcela hasta que ese número sea soportable.' },
+                    { type: 'text', content: 'Esta es la regla que sustituye al stop, y conviene entender por qué es equivalente y no una versión relajada. Un stop limita la pérdida por operación pero te saca del mercado; el tamaño limita la pérdida sobre tu patrimonio total y te deja dentro. Cuando la estrategia consiste precisamente en aguantar la parte fea, la segunda es la herramienta correcta.' },
+                ]
+            },
+            {
+                heading: 'En qué comprar: la lista de candidatos',
+                blocks: [
+                    { type: 'text', content: 'El semáforo dice <b>cuándo</b>. La lista de candidatos dice <b>en qué mirar</b>. Aparece siempre, también en ámbar — en gris cuando aún no toca — para que la decisión esté tomada antes de que haga falta.' },
+                    { type: 'text', content: 'Son cinco valores del S&amp;P 500 elegidos con dos filtros:' },
+                    { type: 'steps', items: [
+                        'Están entre el 20% más fuerte del índice (percentil de fuerza relativa de 80 o más). Es decir: cayeron menos que el resto durante la caída.',
+                        'Su fuerza ya está mejorando, no solo aguantando por inercia de meses atrás.',
+                    ]},
+                    { type: 'concept', title: 'Por qué los más fuertes y no los más castigados', content: 'Después de un suelo, lo que suele recuperar antes y mejor es lo que menos cayó. Lo que más ha caído suele haberlo hecho por una razón concreta, y a menudo tarda años en volver — o no vuelve. Es la misma lógica del Módulo 16 (las 4 etapas de Weinstein) y del Módulo 3: no luchar contra la tendencia relativa de un valor solo porque parezca barato.' },
+                    { type: 'text', content: 'La lista no calcula nada nuevo: lee el mismo análisis de fuerza relativa que ya alimenta el módulo RS/RW cada noche. Es un atajo para no tener que cruzar dos pantallas en el peor momento.' },
+                ]
+            },
+        ]
+    },
+
+    '26-6': {
+        moduleId: 26,
+        lessonIndex: 5,
+        title: 'Qué ha Hecho Históricamente',
+        duration: '11 min',
+        intro: 'El backtest recorre la historia día a día calculando la nota con la información que existía ese día. Esta lección explica cómo se mide, qué salió, y por qué a corto plazo el sistema no solo no aporta nada sino que resta.',
+        sections: [
+            {
+                heading: 'Cómo se mide',
+                blocks: [
+                    { type: 'text', content: 'Se recorre la historia día a día, calculando la nota con la información que existía <b>ese día</b>, sin usar nada posterior. Cada vez que el semáforo se habría puesto verde, se apunta la fecha y se mira qué hizo el mercado después.' },
+                    { type: 'text', content: 'El resultado se compara con dos referencias distintas, y la diferencia entre ellas es lo más importante de esta lección:' },
+                    { type: 'table', headers: ['Referencia', 'Qué mide', 'Dificultad'], rows: [
+                        ['Un día cualquiera', 'Lo que habría dado comprar en una fecha al azar del mismo periodo.', 'La comparación fácil.'],
+                        ['Un día de pánico comparable', 'Lo que habría dado comprar en cualquier OTRO día con el mercado igual de asustado (índice del miedo por encima de 25).', 'La comparación dura, y la que de verdad importa.'],
+                    ]},
+                    { type: 'concept', title: 'Por qué la segunda referencia es la única honesta', content: 'Es fácil batir a «un día cualquiera» simplemente comprando en las caídas — cualquier sistema que compre con miedo lo consigue. La pregunta real es si el sistema aporta algo RESPECTO A simplemente comprar cuando hay miedo. Esa es la comparación contra días de pánico.' },
+                ]
+            },
+            {
+                heading: 'Resultados 2008 - 2026 (16 señales)',
+                blocks: [
+                    { type: 'table', headers: ['Plazo', 'Con la señal', 'Día cualquiera', 'Día de pánico', 'Ventaja real', 'En positivo'], rows: [
+                        ['5 días',  '+0,20%',  '+0,25%', '+0,50%', '-0,30 pp', '10 de 16'],
+                        ['10 días', '-0,61%',  '+0,50%', '+0,91%', '-1,52 pp', '8 de 16'],
+                        ['20 días', '+4,12%',  '+1,00%', '+2,09%', '+2,03 pp', '13 de 16'],
+                        ['60 días', '+10,64%', '+3,01%', '+6,04%', '+4,60 pp', '16 de 16'],
+                    ]},
+                    { type: 'text', content: 'Y sobre los últimos 10 años, donde solo hay 9 señales, el patrón se repite: -2,74 pp a 5 días, -3,48 pp a 10 días, +0,44 pp a 20 días y <b>+3,46 pp a 60 días</b>. Números distintos, misma forma.' },
+                ]
+            },
+            {
+                heading: 'Cómo leer estas tablas',
+                blocks: [
+                    { type: 'text', content: '<b>A corto plazo no aporta nada, y puede restar.</b> A 5 y 10 días la señal va por detrás de comprar en cualquier otro día de pánico. Esto no es un defecto oculto: es la naturaleza del sistema. Se compra <i>durante</i> la caída, y la caída sigue unos días más.' },
+                    { type: 'text', content: '<b>El valor aparece a partir del mes.</b> A 60 días, la ventaja sobre otro día de pánico comparable es de unos 4,6 puntos porcentuales, y sobre un día cualquiera de más de 7.' },
+                    { type: 'warning', content: 'Que las 16 acabaran en positivo a 60 días NO es una promesa. Con solo 16 casos, un 100% es un número que no se debe esperar que se repita. Lo que sostiene al sistema no es ese 100%, sino que la ventaja aparece en dos periodos independientes y siempre en el mismo plazo.' },
+                    { type: 'tip', label: 'LA MUESTRA ES PEQUEÑA', content: 'Los suelos de mercado son raros por definición: 16 en 18 años. Cualquier conclusión aquí es direccional, no una medición fina. Los resultados pasados no garantizan resultados futuros.' },
+                ]
+            },
+            {
+                heading: 'Las señales, una a una',
+                blocks: [
+                    { type: 'table', headers: ['Fecha', 'Nota', 'A 60 días', 'Llegó a caer', 'Contexto'], rows: [
+                        ['23/06/2009', '62', '+19,93%', '-2,63%',  'Salida de la crisis financiera'],
+                        ['02/11/2009', '68', '+3,50%',  '-0,75%',  ''],
+                        ['25/01/2010', '71', '+10,37%', '-4,73%',  ''],
+                        ['07/05/2010', '71', '+1,34%',  '-8,67%',  'Flash crash'],
+                        ['01/07/2010', '76', '+11,80%', '-1,11%',  ''],
+                        ['04/08/2011', '77', '+7,49%',  '-10,21%', 'Crisis de deuda europea'],
+                        ['03/10/2011', '73', '+14,27%', '-2,27%',  ''],
+                        ['19/12/2018', '79', '+13,55%', '-6,42%',  'Corrección de fin de año'],
+                        ['09/03/2020', '83', '+14,51%', '-19,94%', 'Covid'],
+                        ['11/03/2020', '83', '+17,08%', '-19,98%', 'Covid — peor caso de la serie'],
+                        ['14/06/2022', '71', '+9,22%',  '-2,71%',  'Año de subidas de tipos'],
+                        ['22/06/2022', '72', '+3,41%',  '-0,89%',  ''],
+                        ['27/09/2022', '79', '+6,78%',  '-4,20%',  ''],
+                        ['05/10/2022', '71', '+1,88%',  '-7,69%',  ''],
+                        ['17/03/2023', '61', '+11,97%', '-0,15%',  'Crisis de bancos regionales'],
+                        ['04/04/2025', '80', '+23,16%', '-4,65%',  'Mejor resultado de la serie'],
+                    ]},
+                    { type: 'text', content: 'Las dos señales de marzo de 2020 son el mismo episodio: el semáforo se encendió, se apagó un día y volvió a encenderse. Contadas como episodios independientes, las 16 señales corresponden a 13 momentos de mercado distintos.' },
+                ]
+            },
+        ]
+    },
+
+    '26-7': {
+        moduleId: 26,
+        lessonIndex: 6,
+        title: 'Cuánto Duele por el Camino, y Por Qué No Hay Stop',
+        duration: '9 min',
+        intro: 'El retorno final no cuenta toda la historia. Lo que hace vender por pánico no es el resultado a 60 días, es lo que marca la pantalla la segunda semana. Esta lección pone número a eso y explica por qué aquí un stop destruye el resultado.',
+        sections: [
+            {
+                heading: 'La peor caída intermedia',
+                blocks: [
+                    { type: 'concept', title: 'Qué es', content: 'Lo más abajo que llegó a estar la posición, en cualquier momento entre la compra y el final del plazo, usando los mínimos de cada sesión y no los cierres. Es el número que de verdad se sufre, porque lo que asusta es el rojo que ves durante la sesión, no el cierre.' },
+                    { type: 'table', headers: ['Plazo', 'Peor caída media', 'Peor caso registrado'], rows: [
+                        ['5 días',  '-4,18%', '-16,89%'],
+                        ['10 días', '-5,58%', '-19,98%'],
+                        ['20 días', '-5,79%', '-19,98%'],
+                        ['60 días', '-6,06%', '-19,98%'],
+                    ]},
+                    { type: 'text', content: 'Ese -19,98% es marzo de 2020, la misma señal que acabó en +17,08% a 60 días. Las dos cosas son verdad a la vez, y por eso hay que mirar las dos antes de decidir el tamaño de la posición.' },
+                ]
+            },
+            {
+                heading: 'Por qué no hay stop',
+                blocks: [
+                    { type: 'text', content: 'Un stop es una orden de venta automática que salta si el precio cae un porcentaje determinado. Suena prudente, y en muchas estrategias lo es — el Módulo 12 lo trata como pieza central de la gestión del riesgo. <b>Aquí no.</b>' },
+                    { type: 'text', content: 'Sobre las 16 señales históricas, un stop del 7% habría:' },
+                    { type: 'steps', items: [
+                        'Cortado 5 de las 16 señales.',
+                        'Incluidas las dos de marzo de 2020, que terminaron en +14,5% y +17,1% a 60 días y se habrían convertido en dos pérdidas del 7%.',
+                        'Bajado el resultado medio a 60 días de +10,64% a +5,81% — por debajo de lo que habría dado comprar en cualquier otro día de pánico. La ventaja desaparecía entera.',
+                    ]},
+                    { type: 'warning', content: 'Esto significa que la recomendación «entrada gradual con stop del -7%» era, medida contra su propio histórico, el consejo que anulaba el sistema. Quien lo hubiera seguido al pie de la letra habría perdido dinero en el mejor suelo de la muestra.' },
+                ]
+            },
+            {
+                heading: 'La razón de fondo',
+                blocks: [
+                    { type: 'text', content: 'El sistema compra a propósito <i>mientras el precio todavía cae</i>. Un stop cerrado vende exactamente en el momento para el que la señal fue diseñada. No es que el stop funcione mal: es que aquí el stop y la señal persiguen objetivos incompatibles.' },
+                    { type: 'text', content: 'Esto no es una excusa para operar sin gestión del riesgo. Es un cambio de herramienta: cuando la estrategia consiste en aguantar la parte fea, el riesgo se controla ANTES de entrar, decidiendo el tamaño, y no DESPUÉS, con una orden de salida.' },
+                    { type: 'tip', label: 'LA REGLA', content: 'Entrada escalonada sin stop, con el primer tramo pequeño y el resto reservado para comprar más abajo. Y un tamaño total que te permita ver la posición un 20% en rojo sin necesidad de vender. Si no puedes con eso, la posición es demasiado grande — no el sistema demasiado arriesgado.' },
+                ]
+            },
+        ]
+    },
+
+    '26-8': {
+        moduleId: 26,
+        lessonIndex: 7,
+        title: 'Límites y Glosario',
+        duration: '8 min',
+        intro: 'Cierre del módulo: lo que esta herramienta NO hace, dicho sin adornos, y un glosario de todos los términos que aparecen en el panel del semáforo.',
+        sections: [
+            {
+                heading: 'Lo que el semáforo no hace',
+                blocks: [
+                    { type: 'table', headers: ['Límite', 'Detalle'], rows: [
+                        ['No acierta el mínimo', 'Y no lo pretende. En 6 de las 16 señales el mercado siguió cayendo más de un 5% después del verde.'],
+                        ['No sirve a corto plazo', 'Los números a 5 y 10 días son negativos frente a la referencia. Quien necesite el dinero en dos semanas no debería usar esta señal.'],
+                        ['Habla del mercado entero', 'La nota se calcula sobre el índice americano, no sobre valores concretos. La lista de candidatos es una ayuda para pasar de «cuándo» a «en qué», no un análisis individual de cada empresa.'],
+                        ['No dice cuándo vender', 'Es una herramienta de entrada. La salida es una decisión aparte.'],
+                        ['La muestra es corta', '16 señales en 18 años. Los suelos de mercado son acontecimientos raros por definición, y eso limita lo que se puede afirmar.'],
+                        ['El pasado no se repite igual', 'Todos los números de este módulo describen lo que ocurrió, no lo que ocurrirá.'],
+                    ]},
+                ]
+            },
+            {
+                heading: 'Glosario del panel',
+                blocks: [
+                    { type: 'table', headers: ['Término', 'Qué significa'], rows: [
+                        ['VIX', 'El «índice del miedo». Mide cuánta agitación espera el mercado en el próximo mes. Por debajo de 15, calma; por encima de 30, miedo serio; por encima de 35, pánico.'],
+                        ['VIX / VIX3M', 'Compara el miedo de hoy con el esperado dentro de tres meses. Por encima de 1 significa que el susto inmediato supera al de medio plazo — típico del pánico agudo.'],
+                        ['RSI', 'Termómetro de 0 a 100 que dice si un precio ha subido o bajado demasiado deprisa. Por debajo de 30, muy castigado; por encima de 70, muy caliente. Ver Módulo 8.'],
+                        ['Amplitud / McClellan', 'Cuántos valores suben frente a cuántos bajan. Sirve para saber si un movimiento del índice lo protagoniza todo el mercado o solo unas pocas empresas grandes.'],
+                        ['RVOL', 'Volumen relativo. Cuántas veces se negoció más de lo normal en un día. Un RVOL de 2 significa el doble de lo habitual.'],
+                        ['Capitulación', 'El momento en que los últimos vendedores se rinden y venden todo de golpe. Suele verse como una caída fuerte con muchísimo volumen.'],
+                        ['Media de 200 semanas', 'El precio medio del mercado en los últimos cuatro años. Referencia de largo plazo muy lenta, poco sensible al ruido diario.'],
+                        ['Media de 200 días', 'El precio medio del último año aproximadamente. Se usa para saber si la tendencia general es alcista o bajista.'],
+                        ['FTD', 'Follow-Through Day: día de subida fuerte con mucho volumen después de una caída. Se interpreta como la entrada del dinero institucional.'],
+                        ['ABI', 'Mide cuánta dispersión hay entre valores, sin decir dirección. Contexto, no puntúa.'],
+                        ['Spread de crédito', 'El sobrecoste que pagan las empresas por endeudarse frente al Estado. Cuando se dispara, indica que el problema va más allá de la bolsa.'],
+                        ['Fuerza relativa', 'Cómo se comporta un valor comparado con el mercado. Un percentil de 90 significa que va mejor que el 90% de los demás. Ver módulo RS/RW.'],
+                        ['Punto porcentual (pp)', 'La diferencia entre dos porcentajes. De 6% a 10% hay 4 puntos porcentuales de diferencia.'],
+                        ['Peor caída intermedia', 'Lo más abajo que llegó a estar una posición en cualquier momento antes de cerrarse el plazo, aunque después acabara en positivo.'],
+                    ]},
+                ]
+            },
+            {
+                heading: 'Resumen del módulo',
+                blocks: [
+                    { type: 'tip', label: 'EL SEMÁFORO — LA REGLA', content: 'Responde CUÁNDO empezar a construir, no qué comprar ni cuándo vender. Nota de 0 a 100 con cinco factores, más una puerta obligatoria (vuelta a la media de 200 semanas) y un listón que sube a 70 cuando la tendencia está rota. Prepara en ámbar, entra por tramos en verde, sin stop, y dimensiona la posición para aguantar un 20% en rojo. El valor aparece a los 60 días, no antes.' },
+                ]
+            },
+        ]
+    },
 };

@@ -1359,7 +1359,7 @@ def get_rsu_algoritmo_backtest(years: int = 10, umbrales: tuple = None) -> dict:
     # El sufijo de umbrales evita que un barrido experimental (ver la tarea de
     # evaluar el umbral dinámico) contamine la caché del backtest real.
     sufijo = "" if not umbrales else f":u{umbrales[0]}-{umbrales[1]}"
-    cache_key = f"algoritmo:backtest:{years}y:v19{sufijo}"
+    cache_key = f"algoritmo:backtest:{years}y:v20{sufijo}"
     cached = cache.get(cache_key)
     if cached:
         return cached
@@ -1483,6 +1483,18 @@ def get_rsu_algoritmo_backtest(years: int = 10, umbrales: tuple = None) -> dict:
                     "gatekeeper_b":   resultado['gatekeeper_b'],
                     "ftd_confirmado": resultado['ftd_confirmado'],
                     "drawdown_pct":   resultado['drawdown_52w_pct'],
+                    # La puerta, en número y no en booleano. `gatekeeper_a` es
+                    # True en las 16 filas por definición (es la única puerta,
+                    # y sin ella no hay señal), así que mostrarlo como ✓ no
+                    # dice nada. Lo que sí varía —y es lo que la puerta mide—
+                    # es CUÁNTO había vuelto el precio a su media de 200
+                    # semanas ese día: va de −20,5% (jun-2009, saliendo de la
+                    # crisis financiera) a +9,3% (abr-2025), y las dos de
+                    # marzo de 2020 abrieron en +5,7%/+5,8%. Ese rango es
+                    # justo el argumento de la banda asimétrica: si el corte
+                    # fuera |dist| ≤ 10%, 2009 quedaría fuera; si fuera
+                    # dist ≤ 0%, quedarían fuera 10 de las 16, COVID incluido.
+                    "dist_ema200w":   (resultado['metricas'].get('EMA200W') or {}).get('distancia_pct'),
                     "credit_spread_valor": resultado['credit_spread_valor'],
                     "credit_spread_nivel": resultado['credit_spread_nivel'],
                     "credit_spread_empeorando": resultado['credit_spread_empeorando'],

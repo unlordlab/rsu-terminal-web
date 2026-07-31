@@ -400,27 +400,43 @@ function renderBacktestResults(data) {
     const senalesHtml = data.senales.length === 0
         ? '<div style="color:var(--color-muted);font-size:12px;padding:1rem 0;">No se detectaron señales VERDE en el periodo analizado — el nuevo sistema con gatekeepers obligatorios es considerablemente más selectivo que la versión anterior.</div>'
         : '<div style="max-height:340px;overflow-y:auto;margin-top:0.5rem;">'
-          + '<div style="display:grid;grid-template-columns:85px 55px 80px 70px 50px 50px 50px 50px;gap:6px;padding:6px 0;border-bottom:1px solid var(--color-border);font-size:9px;color:var(--color-muted);position:sticky;top:0;background:var(--color-surface);">'
-          + '<div>FECHA</div><div>SCORE</div><div>LLEGÓ A CAER</div><div>DRAWDOWN</div><div>+5d</div><div>+10d</div><div>+20d</div><div>+60d</div>'
+          + '<div style="display:grid;grid-template-columns:80px 50px 74px 66px 74px 62px 44px 44px 44px 44px;gap:6px;padding:6px 0;border-bottom:1px solid var(--color-border);font-size:9px;color:var(--color-muted);position:sticky;top:0;background:var(--color-surface);">'
+          + '<div>FECHA</div><div>SCORE</div>'
+          + '<div title="Distancia del precio a su media de 200 semanas el día de la señal. Es la condición obligatoria del sistema: para que haya señal tiene que estar por debajo de +10%. Por debajo de 0% el precio ya cotiza bajo su media de cuatro años.">VS MEDIA 200S</div>'
+          + '<div title="Cuánto había caído ya el índice desde su máximo de las últimas 52 semanas cuando saltó la señal — el tamaño del susto previo.">DESDE MÁX</div>'
+          + '<div title="Lo peor que llegó a estar la posición DESPUÉS de entrar, en cualquier momento de los 60 días, usando los mínimos intradía.">LLEGÓ A CAER</div>'
+          + '<div title="✓FTD = en el momento de la señal ya había un día de subida fuerte con volumen (dinero institucional moviéndose). ⚠BAA = el spread de crédito estaba elevado, aunque mejorando.">CONTEXTO</div>'
+          + '<div>+5d</div><div>+10d</div><div>+20d</div><div>+60d</div>'
           + '</div>'
           + data.senales.map(s => {
               const r = s.retornos;
               const fmt = v => v == null ? '<span style="color:#555;">—</span>' : '<span style="color:' + (v >= 0 ? 'var(--color-accent)' : '#f23645') + ';">' + (v >= 0 ? '+' : '') + v + '%</span>';
-              // La columna "PUERTA" se quitó: desde que solo valida la vuelta
-              // a la media de 200 semanas, decía lo mismo en las 16 filas. En
-              // su sitio va lo que de verdad necesita saber quien entra SIN
-              // stop: cuánto llegó a estar la posición en rojo antes de
-              // funcionar.
+              // "VS MEDIA 200S" es la condición obligatoria del sistema,
+              // pero se etiqueta por lo que MIDE y no por el papel que juega:
+              // un encabezado "PUERTA" obliga a saberse la jerga del módulo
+              // para entender qué es ese número. Y como booleano no valdría
+              // (sería ✓ en las 16 filas, sin señal no hay puerta abierta),
+              // se muestra la distancia, que sí tiene recorrido real: de
+              // −20,5% (jun-2009) a +9,3% (abr-2025).
+              //
+              // ✓FTD y ⚠BAA van en su propia columna CONTEXTO. Antes se
+              // pegaban dentro de la celda de LLEGÓ A CAER, así que esa
+              // celda mezclaba un porcentaje de caída con dos etiquetas que
+              // no tienen nada que ver con él.
               const caida = (s.peor_caida || {}).d60;
+              const dist  = s.dist_ema200w;
               const ftdTag = s.ftd_confirmado ? ' <span style="color:var(--color-accent);" title="FTD confirmado">✓FTD</span>' : '';
               const creditTag = s.credit_spread_nivel === 'elevado'
                   ? ' <span style="color:#ff9800;" title="BAA10Y ' + s.credit_spread_valor + '% — elevado pero mejorando en el momento de la señal (si hubiera estado empeorando, se habría filtrado igual que crítico)">⚠BAA</span>'
                   : '';
-              return '<div style="display:grid;grid-template-columns:85px 55px 80px 70px 50px 50px 50px 50px;gap:6px;padding:6px 0;border-bottom:1px solid var(--color-border);font-size:10px;align-items:center;">'
+              const contexto = (ftdTag + creditTag).trim() || '<span style="color:#555;">—</span>';
+              return '<div style="display:grid;grid-template-columns:80px 50px 74px 66px 74px 62px 44px 44px 44px 44px;gap:6px;padding:6px 0;border-bottom:1px solid var(--color-border);font-size:10px;align-items:center;">'
                   + '<div style="color:var(--color-text);">' + s.fecha + '</div>'
                   + '<div style="color:var(--color-muted);">' + s.score + '/' + (data.max_score || 100) + '</div>'
-                  + '<div style="color:' + (caida != null && caida <= -10 ? '#f23645' : 'var(--color-muted)') + ';">' + (caida != null ? caida + '%' : '—') + ftdTag + creditTag + '</div>'
+                  + '<div style="color:var(--color-accent);" title="El precio estaba a ' + (dist != null ? dist + '%' : '?') + ' de su media de 200 semanas — la condición obligatoria pide menos de +10%">' + (dist != null ? (dist >= 0 ? '+' : '') + dist + '%' : '—') + '</div>'
                   + '<div style="color:' + (s.drawdown_pct <= -15 ? '#f23645' : 'var(--color-muted)') + ';">' + s.drawdown_pct + '%</div>'
+                  + '<div style="color:' + (caida != null && caida <= -10 ? '#f23645' : 'var(--color-muted)') + ';">' + (caida != null ? caida + '%' : '—') + '</div>'
+                  + '<div>' + contexto + '</div>'
                   + '<div>' + fmt(r.d5) + '</div><div>' + fmt(r.d10) + '</div><div>' + fmt(r.d20) + '</div><div>' + fmt(r.d60) + '</div>'
                   + '</div>';
           }).join('')
@@ -494,7 +510,7 @@ function renderBacktestResults(data) {
         + '</div>'
         + statsRows
 
-        + '<div style="margin-top:1rem;color:var(--color-muted);font-size:11px;letter-spacing:0.05em;">HISTORIAL DE SEÑALES <span style="font-weight:normal;text-transform:none;letter-spacing:0;">(LLEGÓ A CAER = lo peor que se puso la posición antes de funcionar, con los mínimos intradía · ✓FTD = el dinero institucional ya se había movido)</span></div>'
+        + '<div style="margin-top:1rem;color:var(--color-muted);font-size:11px;letter-spacing:0.05em;">HISTORIAL DE SEÑALES <span style="font-weight:normal;text-transform:none;letter-spacing:0;">(VS MEDIA 200S = la condición obligatoria: dónde estaba el precio respecto a su media de 200 semanas · DESDE MÁX = lo que ya había caído el índice antes de entrar · LLEGÓ A CAER = lo peor que se puso la posición después de entrar · pasa el ratón por cada cabecera para el detalle)</span></div>'
         + senalesHtml
 
         + importanciaHtml;

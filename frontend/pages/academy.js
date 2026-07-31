@@ -72,6 +72,7 @@ const MODULES = [
     { id:23, title:'Convicción a Largo Plazo',   icon:'🏔️', description:'Por qué a veces merece la pena pagar una prima de valoración por una posición estratégica en un tema de crecimiento secular — y cómo no confundir convicción con negación cuando la tesis se rompe.' },
     { id:24, title:'Volatilidad, el VIX y la Oportunidad', icon:'🌪️', description:'La volatilidad no es lo mismo que perder capital de forma permanente. Qué mide el VIX de verdad, por qué los picos extremos de miedo han sido históricamente zonas interesantes — y por qué desconfiar de cualquier tabla de rendimientos "hipotéticos".' },
     { id:25, title:'Construir una Posición con DCA', icon:'🧱', description:'Promediar coste con aportaciones fijas no es lo mismo que escalar una posición en una caída — y confundirlas es un error caro, sobre todo en instrumentos apalancados. Cómo construir cualquiera de las dos con criterio, no a ciegas.' },
+    { id:26, title:'RSU Algoritmo — El Semáforo de Suelos', icon:'🚦', description:'Manual completo del semáforo: qué mide cada uno de sus cinco factores, por qué hay una condición obligatoria que no se puede saltar, cómo se entra por tramos y sin stop, y qué ha hecho de verdad en las 16 señales de los últimos 18 años — incluidos los plazos en los que no aporta nada.' },
 ];
 
 const PHASES = [
@@ -82,6 +83,12 @@ const PHASES = [
     { label:'🚀 FASE 4 // EJECUCIÓN Y MENTALIDAD',       modules:[12,13,14,15] },
     { label:'🔄 FASE 5 // CICLO DE VIDA DEL PRECIO',     modules:[16] },
     { label:'🧮 FASE 6 // HERRAMIENTAS PROPIETARIAS RSU', modules:[20,21,22] },
+    // Guía de la Terminal: el manual de cada módulo, en lenguaje de usuario.
+    // Se separa de la FASE 6 a propósito — aquella explica los CONCEPTOS que
+    // usan las herramientas (qué es el RSU Score, qué es el análisis
+    // fundamental); esta explica CÓMO SE USA cada pantalla y qué ha hecho de
+    // verdad. Se irá ampliando con un módulo por herramienta.
+    { label:'🛠️ GUÍA DE LA TERMINAL // CÓMO FUNCIONA CADA HERRAMIENTA', modules:[26] },
 ];
 
 // ── LECCIONES DE CADA MÓDULO ─────────────────────────────────────────────────

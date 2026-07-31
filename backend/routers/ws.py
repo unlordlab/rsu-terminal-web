@@ -432,7 +432,7 @@ async def algoritmo_check_loop():
             from services.cache import cache
             from services.rsu_algoritmo_service import get_rsu_algoritmo_backtest
             for years in (10, 15, 20):
-                if cache.get(f"algoritmo:backtest:{years}y:v19") is None:
+                if cache.get(f"algoritmo:backtest:{years}y:v20") is None:
                     print(f"[AlgoritmoBacktest] Caché fría para {years}y — precalculando")
                     await loop.run_in_executor(None, get_rsu_algoritmo_backtest, years)
         except Exception as e:
