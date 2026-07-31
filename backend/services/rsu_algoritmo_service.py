@@ -1045,11 +1045,6 @@ def procesar_cierre_si_toca():
         from services.algoritmo_tracking_service import (
             procesar_resultado_algoritmo, obtener_estado_oficial, sesion_ya_procesada,
         )
-        resultado = get_rsu_algoritmo()
-        if not resultado.get("ok"):
-            print(f"[AlgoritmoCierre] Sin resultado válido, se reintenta: {resultado.get('error')}")
-            return {"procesado": False, "motivo": "sin_resultado"}
-
         # La fecha de sesión sale del propio DataFrame de SPY, no del reloj del
         # contenedor: así un festivo o un fin de semana no inventan una sesión
         # que no existió (mismo criterio que snapshots_service).
@@ -1059,6 +1054,43 @@ def procesar_cierre_si_toca():
             return {"procesado": False, "motivo": "sin_sesion_cerrada"}
         if sesion_ya_procesada(fecha_sesion):
             return {"procesado": False, "motivo": "ya_procesada", "fecha": fecha_sesion}
+
+        # No decidir hasta que la AMPLITUD sea de esta misma sesión.
+        #
+        # Esto no es teórico: el 30/07/2026 el usuario recibió tres avisos de
+        # cambio de semáforo (51 -> 55 -> 52) de madrugada, TODOS con el mismo
+        # precio de SPY (729,46). No fue ruido de precio — fue que el scan
+        # nocturno reescribe el Gist de amplitud a las 22:15 UTC y FRED publica
+        # por su cuenta, así que cada recálculo pillaba una mezcla distinta de
+        # datos frescos y rancios. El Breadth pesa 18 puntos más 7 del bonus de
+        # giro: mueve el score de sobra para cruzar el umbral.
+        #
+        # El cierre de Nueva York es a las 20:00 UTC y el scan a las 22:15, así
+        # que decidir "al cerrar el mercado" usaría la amplitud de AYER. Se
+        # espera a que el dato corresponda a la sesión que se está decidiendo,
+        # y se reintenta en el siguiente tick de 30 min.
+        #
+        # Si no hay amplitud real en absoluto (Gist sin configurar o vacío) sí
+        # se decide: en ese caso el factor cae SIEMPRE al oscilador sectorial,
+        # de forma consistente, y no hay mezcla que pueda hacer parpadear nada.
+        breadth_hist = _fetch_breadth_real()
+        if breadth_hist:
+            fecha_breadth = (breadth_hist[-1] or {}).get("date")
+            if fecha_breadth != fecha_sesion:
+                print(f"[AlgoritmoCierre] Amplitud todavía de {fecha_breadth}, la sesión a decidir "
+                      f"es {fecha_sesion} — se espera al scan nocturno")
+                return {"procesado": False, "motivo": "amplitud_desfasada",
+                        "fecha": fecha_sesion, "fecha_breadth": fecha_breadth}
+
+        # Solo ahora se pide el cálculo, y se fuerza fresco: la caché de 10 min
+        # podría devolver un resultado computado ANTES de que llegara la
+        # amplitud de esta sesión, que es justo lo que se acaba de comprobar.
+        from services.cache import cache
+        cache.delete("algoritmo:live:v1")
+        resultado = get_rsu_algoritmo()
+        if not resultado.get("ok"):
+            print(f"[AlgoritmoCierre] Sin resultado válido, se reintenta: {resultado.get('error')}")
+            return {"procesado": False, "motivo": "sin_resultado"}
 
         estado_crudo = resultado.get("estado")
         oficial = aplicar_histeresis(

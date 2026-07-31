@@ -108,3 +108,92 @@ def test_estar_muy_por_encima_de_la_media_secular_no_es_zona_de_suelo():
     -3,7% de máximos históricos. La banda vieja lo daba por bueno."""
     assert not _cerca(29.4)
     assert abs(24.7) <= 25, "con la EMA mal calculada (5 años) sí pasaba el filtro viejo"
+
+
+# ── Decisión de cierre: esperar a que la amplitud sea de la misma sesión ─────
+#
+# Lo que de verdad provocó los tres avisos del 30/07/2026: llegaron de
+# madrugada y los TRES con el MISMO precio de SPY (729,46), score 51 -> 55 ->
+# 52. No fue ruido de precio. El scan nocturno reescribe el Gist de amplitud a
+# las 22:15 UTC mientras el cierre de Nueva York es a las 20:00, así que cada
+# recálculo mezclaba datos frescos con rancios. El Breadth pesa 18 puntos más
+# 7 del bonus de giro: mueve el score de sobra para cruzar el umbral.
+
+def _resultado_falso(**extra):
+    base = {
+        "ok": True, "estado": "AMBAR", "senal": "DESARROLLANDO", "score": 52,
+        "umbral_verde": 54, "precio": 729.46, "gatekeeper_a": True,
+        "gatekeeper_b": True, "metricas": {}, "ftd_confirmado": False,
+        "credit_spread_valor": 1.62, "credit_spread_nivel": "normal",
+    }
+    base.update(extra)
+    return base
+
+
+def test_no_decide_si_la_amplitud_es_de_una_sesion_anterior():
+    """Y no debe ni disparar el cálculo: sería trabajo tirado."""
+    from unittest.mock import patch
+    import services.rsu_algoritmo_service as svc
+
+    with patch.object(svc, "_fetch_breadth_real", return_value=[{"date": "2026-07-28"}]), \
+         patch.object(svc, "_ultima_sesion_cerrada", return_value="2026-07-29"), \
+         patch("services.algoritmo_tracking_service.sesion_ya_procesada", return_value=False), \
+         patch.object(svc, "get_rsu_algoritmo") as calc:
+        r = svc.procesar_cierre_si_toca()
+
+    assert r["procesado"] is False
+    assert r["motivo"] == "amplitud_desfasada"
+    assert not calc.called
+
+
+def test_no_repite_una_sesion_ya_procesada():
+    from unittest.mock import patch
+    import services.rsu_algoritmo_service as svc
+
+    with patch.object(svc, "_ultima_sesion_cerrada", return_value="2026-07-29"), \
+         patch("services.algoritmo_tracking_service.sesion_ya_procesada", return_value=True):
+        r = svc.procesar_cierre_si_toca()
+
+    assert r["procesado"] is False and r["motivo"] == "ya_procesada"
+
+
+def test_con_amplitud_al_dia_decide_y_lo_registrado_no_es_provisional():
+    from unittest.mock import patch
+    import services.rsu_algoritmo_service as svc
+
+    capturado = {}
+
+    def _capturar(res, fecha_sesion=None):
+        capturado.update(estado=res["estado"], fecha=fecha_sesion,
+                         provisional=res.get("provisional"))
+
+    with patch.object(svc, "_fetch_breadth_real", return_value=[{"date": "2026-07-29"}]), \
+         patch.object(svc, "_ultima_sesion_cerrada", return_value="2026-07-29"), \
+         patch.object(svc, "get_rsu_algoritmo", return_value=_resultado_falso()), \
+         patch("services.algoritmo_tracking_service.sesion_ya_procesada", return_value=False), \
+         patch("services.algoritmo_tracking_service.obtener_estado_oficial", return_value="VERDE"), \
+         patch("services.algoritmo_tracking_service.procesar_resultado_algoritmo", _capturar):
+        r = svc.procesar_cierre_si_toca()
+
+    assert r["procesado"] is True
+    assert capturado["estado"] == "VERDE", "la histéresis debe retener el verde"
+    assert capturado["fecha"] == "2026-07-29"
+    assert capturado["provisional"] is False
+
+
+def test_sin_gist_de_amplitud_no_se_queda_bloqueado():
+    """Sin amplitud real el factor cae SIEMPRE al oscilador sectorial, de forma
+    consistente — no hay mezcla que pueda hacer parpadear el semáforo, así que
+    no tiene sentido bloquear la decisión indefinidamente."""
+    from unittest.mock import patch
+    import services.rsu_algoritmo_service as svc
+
+    with patch.object(svc, "_fetch_breadth_real", return_value=[]), \
+         patch.object(svc, "_ultima_sesion_cerrada", return_value="2026-07-29"), \
+         patch.object(svc, "get_rsu_algoritmo", return_value=_resultado_falso()), \
+         patch("services.algoritmo_tracking_service.sesion_ya_procesada", return_value=False), \
+         patch("services.algoritmo_tracking_service.obtener_estado_oficial", return_value="AMBAR"), \
+         patch("services.algoritmo_tracking_service.procesar_resultado_algoritmo", lambda *a, **k: None):
+        r = svc.procesar_cierre_si_toca()
+
+    assert r["procesado"] is True
