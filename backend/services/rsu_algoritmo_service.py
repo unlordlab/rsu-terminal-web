@@ -769,8 +769,15 @@ def _calcular_score_punto(df_spy, df_vix, sector_data=None, df_vix3m=None, credi
                            "margen_suelo": MARGEN_SUELO_EMA200W}
 
     # 6. Régimen de mercado — SMA200 diaria (+10)
-    # RÉGIMEN DE MERCADO — decide el UMBRAL de VERDE (60 alcista / 70 bajista),
-    # ver más abajo. NO suma puntos al score.
+    # RÉGIMEN DE MERCADO — decide el UMBRAL de VERDE
+    # (UMBRAL_VERDE_ALCISTA / UMBRAL_VERDE_BAJISTA, hoy 54 y 63), ver más
+    # abajo. NO suma puntos al score.
+    #
+    # Decía "60 / 70", que dejó de ser cierto cuando la SMA200 salió del score
+    # y el máximo alcanzable bajó de 100 a 90: los umbrales se reescalaron
+    # proporcionalmente a 54/63 y este comentario se quedó atrás. Ahora
+    # apunta a las constantes en vez de repetir los números, que es lo que
+    # hizo que divergieran. Ver auditoría RSU Algoritmo, hallazgo #6.
     #
     # BUG CORREGIDO: antes sumaba +10 al score Y ADEMÁS bajaba el umbral de
     # 70 a 60 — el mismo hecho binario (¿está el precio sobre la SMA200?)
@@ -990,19 +997,33 @@ def get_rsu_algoritmo():
             f_spy     = yf_executor.submit(lambda: yf.Ticker("SPY").history(period="15y"))
             f_vix     = yf_executor.submit(lambda: yf.Ticker("^VIX").history(period="3mo"))
             f_vix3m   = yf_executor.submit(lambda: yf.Ticker("^VIX3M").history(period="5d"))
-            f_sect    = ex.submit(_descargar_sectores)
             f_credit  = ex.submit(_fetch_hy_spread_cached)
             f_breadth = ex.submit(_fetch_breadth_real)
             df_spy      = f_spy.result()
             df_vix      = f_vix.result()
             df_vix3m    = f_vix3m.result()
-            sector_data = f_sect.result()
             credit_hist = f_credit.result()
             try:
                 breadth_real = f_breadth.result()
             except Exception as e:
                 print(f"[RSU Algoritmo] Amplitud real no disponible, usando proxy: {type(e).__name__}: {e}")
                 breadth_real = None
+
+        # Los sectores solo se descargan SI hacen falta, no siempre.
+        #
+        # _mcclellan_proxy() usa la amplitud real (PRIORIDAD 1) cuando está
+        # disponible y entonces IGNORA los sectores por completo. Descargarlos
+        # igualmente era tirar 9 peticiones a la basura en cada cache-miss —
+        # y desde la sesión 44 no son 9 peticiones pequeñas: esa sesión cambió
+        # `period` de "1mo" a "max" para que el oscilador convergiera, así que
+        # el desperdicio pasó a ser el histórico COMPLETO de los 9 ETFs.
+        # Medido el 31/07/2026: 1,67s y 58.253 filas descargadas y descartadas.
+        # Mismo umbral que usa _mcclellan_proxy para decidir (>= 40 sesiones),
+        # para que la condición no pueda divergir de la que de verdad manda.
+        sector_data = None
+        if not (breadth_real and len(breadth_real) >= 40):
+            print("[RSU Algoritmo] Sin amplitud real suficiente — descargando sectores para el oscilador")
+            sector_data = _descargar_sectores()
 
         if len(df_spy) < 50:
             return {"ok": False, "error": "Datos insuficientes de SPY"}
