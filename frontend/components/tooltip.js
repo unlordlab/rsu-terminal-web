@@ -2081,6 +2081,28 @@ El bloque de al lado (Exposición por Sector) te dice el % exacto en cada sector
 Una cartera con 5 sectores al 20% cada uno tiene HHI = 20% (bien repartida). Una cartera con un sector al 60% y el resto repartido tiene un HHI mucho más alto, aunque el "Exposición por Sector" solo muestre ese 60% como dato individual.`
     },
 
+    "cartera-evolucion": {
+        title: "Patrimonio y capital aportado",
+        short: "Dos líneas que crecen no significan que estés ganando: una es lo que vale la cartera, la otra es el dinero que has metido.",
+        long: `La línea de patrimonio es lo que valdría hoy todo lo que tienes, contando las posiciones abiertas a precio de mercado más el importe de las que ya vendiste. La línea de aportado es la suma de todo el capital que has ido poniendo.
+
+Lo que importa no es que suban, sino la SEPARACIÓN entre ellas. Si el patrimonio va por encima del aportado, estás ganando; si va por debajo, perdiendo. Dos líneas subiendo juntas y pegadas significan que la cartera crece solo porque metes dinero.
+
+▸ POR QUÉ EL PORCENTAJE NO ES «VALOR FINAL VS INICIAL»
+
+Esa cuenta, en una cartera que se está construyendo, mide sobre todo las aportaciones. Si empiezas con 60.000 y acabas con 147.000 tras haber metido 91.000 por el camino, el «+132%» que saldría no es rentabilidad: es que has ingresado dinero.
+
+El porcentaje que se muestra es el retorno ponderado por tiempo: cada día descuenta la aportación de ese día antes de medir la variación, y encadena los resultados. Es la forma estándar de medir rendimiento cuando entra y sale capital, precisamente porque lo neutraliza.
+
+▸ INCLUYE LO CERRADO
+
+La curva cuenta también las posiciones ya vendidas, entre su compra y su cierre, y después su importe sigue sumando como caja. Sin eso, una cartera parecería mejorar sola con solo cerrar las operaciones malas — la curva enseñaría únicamente a los supervivientes.
+
+▸ NO ES LO MISMO QUE LAS TARJETAS DE ARRIBA
+
+Las tarjetas de cabecera miran solo las posiciones abiertas ahora mismo. Esta curva mira toda la actividad del periodo, cerradas incluidas. Que den números distintos es correcto: responden a preguntas distintas.`
+    },
+
     "cartera-asignacion": {
         title: "Asignación objetivo vs real",
         short: "¿Caben las posiciones abiertas dentro de tus propias reglas de tamaño?",

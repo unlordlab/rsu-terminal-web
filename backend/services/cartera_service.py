@@ -396,20 +396,45 @@ def fetch_sparklines(tickers: list, days: int = 30) -> dict:
 _history_cache: dict = {"updated": 0, "data": None}
 _HISTORY_TTL = 900  # 15 min — reconstruir el histórico es costoso (N llamadas yfinance)
 
-def get_portfolio_history(abiertas_rows: list, days: int = 180) -> list:
-    """Reconstruye la curva de valor de la cartera (posiciones abiertas actuales)
-    desde la fecha de entrada más antigua hasta hoy, usando precios históricos.
-    Devuelve [{fecha, valor, invertido}] en orden cronológico.
-    Nota: requiere 'shares' > 0 por posición (columna Cantidad rellenada en el
-    Excel); si no hay shares, el valor histórico no se puede ponderar por posición
-    y se devuelve una lista vacía en vez de datos engañosos.
+def get_portfolio_history(abiertas_rows: list, days: int = 180, cerradas_rows: list = None) -> list:
+    """Curva de la cartera: patrimonio y capital aportado, día a día.
+
+    Devuelve [{fecha, valor, invertido, retorno}] en orden cronológico, donde
+    `retorno` es un índice base 100 con el retorno ponderado por tiempo.
+
+    QUÉ ESTABA MAL (auditoría de Cartera, #B14, #B15 y el titular del gráfico):
+
+    1. Solo entraban las posiciones ABIERTAS HOY. Todo lo cerrado durante el
+       periodo —incluidas las pérdidas— era invisible: sesgo de superviviente
+       de manual. Ahora entran también las cerradas, entre su fecha de compra
+       y la de cierre, y al cerrarse su importe de venta pasa a caja y sigue
+       contando. Esto no se podía hacer hasta que las fechas de cierre
+       existieron y fueron fiables (#B13).
+
+    2. El porcentaje que se enseñaba era (valor_final - valor_inicial) /
+       valor_inicial. Con una cartera en construcción eso NO es un retorno:
+       mide sobre todo el dinero nuevo que ha ido entrando. Medido con los
+       datos reales: 63.366 → 147.003 = "+132%", cuando de las 47 posiciones
+       solo 15 existían al principio y las otras 32 aportaron 91.424 $ nuevos.
+       El resultado real contra el capital aportado era del -1%.
+
+       Se sustituye por el retorno ponderado por tiempo (TWR): cada día se
+       descuenta la aportación de ese día antes de medir la variación, y se
+       encadenan. Es la forma estándar de medir rendimiento cuando hay
+       entradas y salidas de capital, precisamente porque las neutraliza.
     """
     now = time.time()
+    cerradas_rows = cerradas_rows or []
     positions = [r for r in abiertas_rows if r.get("shares", 0) > 0]
-    if not positions:
+    cerradas  = [r for r in cerradas_rows
+                 if r.get("shares", 0) > 0 and r.get("fecha_cierre") and r.get("actual", 0) > 0]
+    if not positions and not cerradas:
         return []
 
-    cache_key = tuple(sorted((r["ticker"], r["shares"]) for r in positions))
+    cache_key = tuple(sorted(
+        [(r["ticker"], r["shares"], "A") for r in positions]
+        + [(r["ticker"], r["shares"], r["fecha_cierre"]) for r in cerradas]
+    ))
     cached = _history_cache.get("data")
     if cached and _history_cache.get("key") == cache_key and (now - _history_cache["updated"]) < _HISTORY_TTL:
         return cached
@@ -425,8 +450,9 @@ def get_portfolio_history(abiertas_rows: list, days: int = 180) -> list:
         except Exception:
             return ticker, None
 
+    tickers = list(dict.fromkeys([p["ticker"] for p in positions + cerradas]))
     series = {}
-    for ticker, s in yf_executor.map(_hist_for, [p["ticker"] for p in positions]):
+    for ticker, s in yf_executor.map(_hist_for, tickers):
         if s is not None and not s.empty:
             s.index = s.index.tz_localize(None)
             series[ticker] = s
@@ -438,36 +464,63 @@ def get_portfolio_history(abiertas_rows: list, days: int = 180) -> list:
     if not all_dates:
         return []
 
-    entry_dates = {}
-    for p in positions:
+    def _fecha(valor, por_defecto):
         try:
-            entry_dates[p["ticker"]] = datetime.strptime(p["fecha"], "%d/%m/%Y")
+            return datetime.strptime(valor, "%d/%m/%Y")
         except Exception:
-            entry_dates[p["ticker"]] = all_dates[0]
+            return por_defecto
+
+    # Cada operación con sus dos extremos: desde cuándo cuenta y hasta cuándo.
+    # `salida` None = sigue abierta.
+    ops = [{"row": p, "entrada": _fecha(p["fecha"], all_dates[0]), "salida": None}
+           for p in positions]
+    ops += [{"row": r, "entrada": _fecha(r["fecha"], all_dates[0]),
+             "salida": _fecha(r["fecha_cierre"], all_dates[0])} for r in cerradas]
 
     result = []
+    equity_prev = None
+    inv_prev    = 0.0
+    indice      = 100.0
+
     for d in all_dates:
-        total_val = 0.0
-        total_inv = 0.0
-        for p in positions:
-            ticker = p["ticker"]
-            if d < entry_dates.get(ticker, all_dates[0]):
-                continue  # posición aún no abierta en esta fecha
-            s = series.get(ticker)
+        mercado = 0.0   # valor de las posiciones vivas ese día
+        caja    = 0.0   # importe de las ya vendidas a esa altura
+        aportado = 0.0  # capital acumulado puesto hasta esa fecha
+        for op in ops:
+            p = op["row"]
+            if d < op["entrada"]:
+                continue                      # aún no comprada
+            aportado += p.get("inv", 0.0) or 0.0
+            if op["salida"] is not None and d >= op["salida"]:
+                caja += p["actual"] * p["shares"]   # vendida: su importe queda en caja
+                continue
+            s = series.get(p["ticker"])
             if s is None:
                 continue
             px_series = s[s.index <= d]
             if px_series.empty:
                 continue
-            px = float(px_series.iloc[-1])
-            total_val += px * p["shares"]
-            total_inv += p.get("inv", 0.0)
-        if total_val > 0:
-            result.append({
-                "fecha":     d.strftime("%Y-%m-%d"),
-                "valor":     round(total_val, 2),
-                "invertido": round(total_inv, 2),
-            })
+            mercado += float(px_series.iloc[-1]) * p["shares"]
+
+        equity = mercado + caja
+        if equity <= 0:
+            continue
+
+        # TWR: se descuenta la aportación del día ANTES de medir la variación,
+        # para que meter dinero nuevo no se cuente como si fuera rendimiento.
+        if equity_prev and equity_prev > 0:
+            aporte_dia = aportado - inv_prev
+            base = equity_prev + aporte_dia
+            if base > 0:
+                indice *= equity / base
+        equity_prev, inv_prev = equity, aportado
+
+        result.append({
+            "fecha":     d.strftime("%Y-%m-%d"),
+            "valor":     round(equity, 2),
+            "invertido": round(aportado, 2),
+            "retorno":   round(indice, 2),
+        })
 
     _history_cache.update({"updated": now, "key": cache_key, "data": result})
     return result
@@ -1059,7 +1112,7 @@ def get_cartera():
 
         history = []
         try:
-            history = get_portfolio_history(abiertas_rows)
+            history = get_portfolio_history(abiertas_rows, cerradas_rows=cerradas_rows)
         except Exception:
             history = []
 

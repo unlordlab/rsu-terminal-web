@@ -989,17 +989,45 @@ function drawSparkline(canvasId, closes) {
 
 function historySection(history) {
     const first = history[0], last = history[history.length - 1];
-    const pnlPct = first.valor > 0 ? ((last.valor - first.valor) / first.valor * 100) : 0;
-    const pnlColor = pnlPct >= 0 ? 'var(--color-accent)' : '#f23645';
+
+    // El porcentaje que se enseñaba aquí era (valor_final - valor_inicial) /
+    // valor_inicial, y en una cartera que se está construyendo eso NO es un
+    // retorno: mide sobre todo el dinero nuevo que ha ido entrando. Con los
+    // datos reales daba +135% cuando el resultado contra el capital aportado
+    // era del +23%. Ahora se usa el retorno ponderado por tiempo, que descuenta
+    // las aportaciones antes de medir. Ver #B14/#B15 y get_portfolio_history().
+    const twr = last.retorno != null ? last.retorno - 100 : null;
+    const sobreAportado = last.invertido > 0
+        ? (last.valor - last.invertido) / last.invertido * 100 : null;
+    const col = (v) => v >= 0 ? 'var(--color-accent)' : '#f23645';
+
+    const cifra = twr != null
+        ? `<div style="text-align:right;">
+               <div style="color:${col(twr)};font-size:13px;font-weight:500;">${twr >= 0 ? '+' : ''}${fix(twr)}% de rentabilidad</div>
+               <div style="color:var(--color-muted);font-size:10px;">descontando las aportaciones del periodo</div>
+           </div>`
+        : '';
+
+    const pie = sobreAportado != null
+        ? `<div style="color:var(--color-muted);font-size:10px;margin-top:8px;line-height:1.5;">
+               Patrimonio $${usd(last.valor)} sobre $${usd(last.invertido)} aportados
+               (<span style="color:${col(sobreAportado)};">${sobreAportado >= 0 ? '+' : ''}${fix(sobreAportado)}%</span>).
+               Incluye <b>posiciones cerradas</b>: al vender, su importe sigue contando como caja, así que la
+               curva no mejora sola por quitar de en medio las que salieron mal.
+               Las tarjetas de arriba, en cambio, son solo de las posiciones abiertas.
+           </div>`
+        : '';
+
     return `<div style="background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius);padding:1rem 1.25rem;margin-bottom:1rem;">
         <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:8px;">
-            <div style="color:var(--color-muted);font-size:10px;letter-spacing:.08em;">VALOR DE MERCADO · ÚLTIMOS ${history.length} DÍAS CON DATOS</div>
-            <div style="color:${pnlColor};font-size:13px;font-weight:500;">${pnlPct >= 0 ? '+' : ''}${fix(pnlPct)}% en el periodo</div>
+            <div style="color:var(--color-muted);font-size:10px;letter-spacing:.08em;">PATRIMONIO Y CAPITAL APORTADO · ÚLTIMOS ${history.length} DÍAS CON DATOS <span class="tt-trigger" data-tooltip="cartera-evolucion" title="¿Qué es esto?">?</span></div>
+            ${cifra}
         </div>
         <canvas id="cartera-history-chart" width="900" height="220" style="width:100%;height:220px;display:block;"></canvas>
         <div style="display:flex;justify-content:space-between;color:var(--color-muted);font-size:10px;margin-top:6px;">
             <span>${first.fecha}</span><span>${last.fecha}</span>
         </div>
+        ${pie}
     </div>`;
 }
 
