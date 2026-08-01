@@ -89,6 +89,28 @@ def _smr_rating(sales_g: float, roe: float, margins: float) -> str:
     if score >= 1: return 'D'
     return 'E'
 
+def _marcar_cartera(filas: list) -> None:
+    """Marca `en_cartera` en cada fila, in-place.
+
+    Va DENTRO del servicio (y por tanto dentro de la caché) a propósito: la
+    Cartera es única y global en esta aplicación, así que el mismo valor
+    sirve para todos los usuarios. `in_watchlist`, en cambio, es por usuario
+    y se calcula en el router DESPUÉS de la caché -- mezclarlo aquí filtraría
+    la watchlist de un usuario a la respuesta que ve el siguiente. Mismo
+    reparto que scanner.py, rsrw.py e insider.py (sesión 16).
+
+    Falla en silencio a "ningún ticker en cartera": que la hoja de Cartera no
+    responda no debe tumbar el scan de CANSLIM, que no depende de ella.
+    """
+    try:
+        from services.cartera_service import get_cartera_tickers
+        tickers = get_cartera_tickers()
+    except Exception:
+        tickers = set()
+    for fila in filas:
+        fila["en_cartera"] = fila.get("ticker") in tickers
+
+
 # _trend_template() vivía aquí hasta el 01/08/2026. Se movió tal cual a
 # shared/canslim_engine.py porque el scan usaba su propia versión de 3
 # condiciones y la terminal se contradecía a sí misma: la tabla daba la
@@ -388,6 +410,44 @@ def analyze_ticker(ticker: str, universe_perfs: list = None) -> dict:
             f"M — Mercado: {market_label}":      market_can_buy,
         }
 
+        # ── Por qué cumple o falla cada letra ────────────────────────────────
+        # Hasta el 01/08/2026 el badge de cada letra solo llevaba el criterio
+        # en el `title`: se veía una "A" en rojo sin saber si había fallado
+        # por un 24% (a un punto) o por un -3% (a años luz). El backend ya
+        # tenía todos estos números calculados; solo faltaba enseñarlos. Ver
+        # auditoría CANSLIM, hallazgo #21.
+        #
+        # `valor: None` significa SIN DATO, que no es lo mismo que incumplir
+        # -- el frontend lo pinta distinto. Se usan los mismos umbrales de
+        # `abs(x) > 0.1` que ya emplea el score fundamental para decidir si
+        # yfinance trajo el campo o devolvió un cero por defecto.
+        def _pct(v):
+            return f"{v:+.1f}%"
+
+        can_slim_detalle = [
+            {"letra": "C", "criterio": "Crecimiento de EPS",
+             "objetivo": "> 25%", "cumple": bool(eps_g >= 25),
+             "valor": _pct(eps_g) if abs(eps_g) > 0.1 else None},
+            {"letra": "A", "criterio": "Crecimiento de ventas",
+             "objetivo": "> 25%", "cumple": bool(sales_g >= 25),
+             "valor": _pct(sales_g) if abs(sales_g) > 0.1 else None},
+            {"letra": "N", "criterio": "Distancia al máximo de 52 semanas",
+             "objetivo": "dentro del 15%", "cumple": bool(near_new_high),
+             "valor": _pct(pct_from_high)},
+            {"letra": "S", "criterio": "RS Rating (percentil vs universo)",
+             "objetivo": "> 80", "cumple": bool(rs_r >= 80) if rs_r is not None else None,
+             "valor": str(rs_r) if rs_r is not None else None},
+            {"letra": "L", "criterio": "Trend Template de Minervini",
+             "objetivo": "5 de 7 condiciones", "cumple": bool(trend['passed']),
+             "valor": f"{trend['score']}/7"},
+            {"letra": "I", "criterio": "Participación institucional",
+             "objetivo": "> 40%", "cumple": bool(inst_sponsorship) if inst_sponsorship is not None else None,
+             "valor": f"{inst_pct:.1f}%" if inst_data_ok else None},
+            {"letra": "M", "criterio": "Estado del mercado general",
+             "objetivo": "permite comprar", "cumple": market_can_buy,
+             "valor": market_label if market.get("ok") else None},
+        ]
+
         # ── Score técnico (lo que puede evaluar sin fundamentales) ───────────
         # La fórmula vive en shared/canslim_engine.py desde el 01/08/2026:
         # el scan usaba antes otra distinta, con otros pesos y contando
@@ -455,7 +515,9 @@ def analyze_ticker(ticker: str, universe_perfs: list = None) -> dict:
             ma50_line.append(round(float(slice50.mean()), 2) if len(slice50) >= 10 else None)
             ma200_line.append(round(float(slice200.mean()), 2) if len(slice200) >= 50 else None)
 
-        return _sanitize({
+        # en_cartera aquí es seguro aunque analyze_ticker() no cachee hoy: la
+        # Cartera es global, no cambia entre usuarios (ver _marcar_cartera).
+        resultado = {
             "ok":        True,
             "ticker":    ticker.upper(),
             "name":      name,
@@ -500,6 +562,7 @@ def analyze_ticker(ticker: str, universe_perfs: list = None) -> dict:
             },
             "trend":            trend,
             "can_slim_letters": can_slim_letters,
+            "can_slim_detalle": can_slim_detalle,
             "canslim_score":    canslim_score,
             "near_new_high":    near_new_high,
             "pct_from_high":    round(pct_from_high, 1),
@@ -510,7 +573,9 @@ def analyze_ticker(ticker: str, universe_perfs: list = None) -> dict:
                 "ma200":   ma200_line,
             },
             "timestamp": get_timestamp(),
-        })
+        }
+        _marcar_cartera([resultado])
+        return _sanitize(resultado)
 
     except Exception as e:
         # El traceback completo va al log del servidor, nunca a la respuesta
@@ -562,14 +627,17 @@ def get_canslim_from_gist() -> dict:
     if cached is not None:
         return cached
 
+
     data = _load_canslim_gist()
     if not data:
         result = {"ok": False, "error": "Scan nocturno no disponible todavía", "candidates": [], "timestamp": get_timestamp()}
     else:
+        candidatos = data.get("candidates", [])
+        _marcar_cartera(candidatos)
         result = {
             "ok":         True,
-            "candidates": data.get("candidates", []),
-            "total":      data.get("total", len(data.get("candidates", []))),
+            "candidates": candidatos,
+            "total":      data.get("total", len(candidatos)),
             "scanned":    data.get("scanned", 0),
             "timestamp":  get_timestamp(),
         }
@@ -708,6 +776,7 @@ def scan_canslim(min_score: int = 40, max_results: int = 50) -> dict:
             candidates.append(r)
 
     candidates.sort(key=lambda x: -x['score'])
+    _marcar_cartera(candidates)
 
     return _sanitize({
         "ok":         True,

@@ -241,6 +241,31 @@ function renderAnalysis(data) {
         return '<div style="width:32px;height:32px;border-radius:4px;background:' + bg + ';border:2px solid ' + border + ';display:flex;align-items:center;justify-content:center;font-family:var(--font-mono);font-size:13px;font-weight:bold;color:' + color + ';" title="' + esc(title) + '">' + l + '</div>';
     }).join('');
 
+    // Por qué cumple o falla cada letra. Hasta ahora el badge solo llevaba el
+    // criterio en el `title`: se veía una "A" en rojo sin saber si había
+    // fallado por un 24% o por un -3%. El backend ya calculaba el número.
+    // Se distingue "no cumple" (rojo, con su valor) de "sin dato" (gris, y
+    // se dice que no hay dato en vez de pintarlo como un suspenso).
+    const detalleLetras = (data.can_slim_detalle || []).map(d => {
+        const sinDato = d.cumple === null || d.valor == null;
+        const col   = sinDato ? '#888' : d.cumple ? 'var(--color-accent)' : '#f23645';
+        const icono = sinDato ? '·' : d.cumple ? '✓' : '✗';
+        const valor = d.valor == null ? 'sin dato' : d.valor;
+        return '<div style="display:grid;grid-template-columns:20px 1fr auto auto;gap:10px;padding:5px 0;border-bottom:1px solid var(--color-border);font-size:11px;align-items:baseline;">'
+            + '<span style="color:' + col + ';font-weight:bold;">' + esc(d.letra) + '</span>'
+            + '<span style="color:var(--color-muted);">' + esc(d.criterio) + '</span>'
+            + '<span style="color:var(--color-muted);opacity:.7;">objetivo ' + esc(d.objetivo) + '</span>'
+            + '<span style="color:' + col + ';min-width:82px;text-align:right;">' + icono + ' ' + esc(valor) + '</span>'
+            + '</div>';
+    }).join('');
+
+    const detalleBloque = detalleLetras
+        ? '<div style="background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius);padding:.85rem 1rem;margin-top:.75rem;">'
+            + '<div style="color:var(--color-muted);font-size:10px;letter-spacing:.08em;margin-bottom:6px;">POR QUÉ CUMPLE O FALLA CADA LETRA</div>'
+            + detalleLetras
+          + '</div>'
+        : '';
+
     const ibdRows = [
         // data.ibd.rs puede ser null (sin universo de referencia para el
         // percentil real -- ver canslim_service.py _rs_rating_real). Antes
@@ -336,6 +361,7 @@ function renderAnalysis(data) {
         + '<div>'
         + '<div style="display:flex;align-items:center;gap:12px;margin-bottom:6px;">'
         + '<span style="color:var(--color-accent);font-size:22px;letter-spacing:0.1em;cursor:pointer;" onmouseover="this.style.textDecoration=\'underline\'" onmouseout="this.style.textDecoration=\'none\'" onclick="window.__navigate(\'/research?ticker=' + esc(data.ticker) + '\')">' + esc(data.ticker) + '</span>'
+        + marcas(data)
         + '<span style="color:var(--color-muted);font-size:13px;">' + esc(data.name) + '</span>'
         + '</div>'
         + '<div style="color:var(--color-muted);font-size:11px;margin-bottom:10px;">' + esc(data.sector) + ' · ' + esc(data.industry) + '</div>'
@@ -357,6 +383,7 @@ function renderAnalysis(data) {
         + '</div>'
         + '</div>'
         + scoreBars
+        + detalleBloque
         + '</div>'
         + '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:1rem;margin-bottom:1rem;">'
         // IBD
@@ -499,6 +526,19 @@ function renderChart(data) {
 // despliega esto y corre el primer scan nocturno, el Gist todavía trae los
 // datos del scan anterior, que no tienen ese campo. Durante esas horas se
 // sigue pintando el tick de siempre en vez de un "undefined/7".
+// Badges 💼 (posición abierta en Cartera) y ⭐ (en tu Watchlist), los mismos
+// que ya llevan Scanner, RS/RW, Insider, Research y Options Flow. CANSLIM era
+// el único módulo de listado sin ellos.
+//
+// `en_cartera` lo calcula el servicio (la Cartera es global); `in_watchlist`
+// lo pone el router con el usuario de la petición, nunca dentro de la caché.
+function marcas(r) {
+    let out = '';
+    if (r.en_cartera)   out += '<span title="Tienes una posición abierta en Cartera" style="font-size:11px;">💼</span>';
+    if (r.in_watchlist) out += '<span title="Está en tu Watchlist" style="font-size:11px;">⭐</span>';
+    return out ? '<span style="margin-left:5px;">' + out + '</span>' : '';
+}
+
 function trendCelda(c) {
     if (c.trend_score == null) return c.trend ? '✓' : '✗';
     return esc(c.trend_score) + '/7';
@@ -534,7 +574,7 @@ function renderScanResults(data, minScore) {
         const scoreColor = c.score >= 70 ? 'var(--color-accent)' : c.score >= 50 ? '#ffb800' : '#f23645';
         const nearColor  = c.near_new_high ? 'var(--color-accent)' : '#ffb800';
         return '<div style="display:grid;' + cols + ';gap:8px;padding:9px 14px;border-bottom:1px solid var(--color-border);font-size:12px;align-items:center;cursor:pointer;" class="scan-row" data-ticker="' + esc(c.ticker) + '">'
-            + '<div style="color:var(--color-accent);font-weight:500;">' + esc(c.ticker) + '</div>'
+            + '<div style="color:var(--color-accent);font-weight:500;">' + esc(c.ticker) + marcas(c) + '</div>'
             + '<div style="color:var(--color-text);">$' + c.price.toLocaleString('en-US') + '</div>'
             + '<div style="color:' + perfColor + ';">' + (c.perf_12m >= 0 ? '+' : '') + c.perf_12m.toFixed(1) + '%</div>'
             + '<div style="color:' + ratingColor(c.rs, 80, 60) + ';">' + esc(c.rs) + '</div>'
