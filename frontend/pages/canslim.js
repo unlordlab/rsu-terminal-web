@@ -86,7 +86,15 @@ function renderMarket(data) {
     return '<div style="background:var(--color-surface);border:2px solid ' + color + '44;border-radius:var(--radius);padding:1.25rem;">'
         + '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem;">'
         + '<div>'
-        + '<div style="color:var(--color-muted);font-size:10px;letter-spacing:.1em;margin-bottom:4px;">M — MARKET DIRECTION (CAN SLIM)</div>'
+        // La M sale de get_market_status(), que mira SPY + VIX + amplitud.
+        // Ese detalle vive entero en la pantalla de Mercado y hasta ahora no
+        // habia forma de llegar desde aqui: se veia el veredicto sin poder
+        // ver en que se basa (hallazgo #18).
+        + '<div style="color:var(--color-muted);font-size:10px;letter-spacing:.1em;margin-bottom:4px;">'
+        + 'M — MARKET DIRECTION (CAN SLIM)'
+        + '<span onclick="window.__navigate(\'/market\')" title="Ver el detalle del mercado: amplitud, VIX, curva de tipos" '
+        + 'style="margin-left:8px;color:var(--color-secondary);cursor:pointer;text-decoration:underline;letter-spacing:0;">ver en Mercado →</span>'
+        + '</div>'
         + '<div style="display:flex;align-items:center;gap:12px;">'
         + '<span style="color:' + color + ';font-size:15px;letter-spacing:.06em;font-weight:500;">► ' + esc(data.status_es) + '</span>'
         + '<span style="background:' + color + '22;color:' + color + ';border:1px solid ' + color + '44;border-radius:3px;padding:2px 10px;font-size:11px;">' + esc(data.score) + '/100</span>'
@@ -364,7 +372,16 @@ function renderAnalysis(data) {
         + marcas(data)
         + '<span style="color:var(--color-muted);font-size:13px;">' + esc(data.name) + '</span>'
         + '</div>'
-        + '<div style="color:var(--color-muted);font-size:11px;margin-bottom:10px;">' + esc(data.sector) + ' · ' + esc(data.industry) + '</div>'
+        + '<div style="color:var(--color-muted);font-size:11px;margin-bottom:6px;">' + esc(data.sector) + ' · ' + esc(data.industry) + '</div>'
+        // Enlaces cruzados. El ticker de arriba ya llevaba a Research, pero no
+        // habia forma de saltar a RS/RW -- que es justo donde vive el detalle
+        // del RS Rating que esta pantalla resume en un numero (hallazgo #20).
+        // Los dos destinos aceptan ?ticker= desde la sesion 16.
+        + '<div style="font-size:11px;color:var(--color-muted);margin-bottom:10px;">Ver este valor en: '
+        + enlaceTicker('/research', data.ticker, 'Research', 'Ficha completa: fundamentales, noticias y RSU Score')
+        + '<span style="opacity:.4;"> · </span>'
+        + enlaceTicker('/rsrw', data.ticker, 'RS/RW', 'Fuerza relativa frente al mercado y a su sector')
+        + '</div>'
         + '<div style="display:flex;gap:6px;align-items:center;">'
         + badges
         + '<span style="color:var(--color-muted);font-size:11px;margin-left:4px;">IBD: <span style="color:' + ratingColor(data.ibd.composite, 80, 60) + ';">' + esc(data.ibd.composite) + '</span></span>'
@@ -537,6 +554,14 @@ function marcas(r) {
     if (r.en_cartera)   out += '<span title="Tienes una posición abierta en Cartera" style="font-size:11px;">💼</span>';
     if (r.in_watchlist) out += '<span title="Está en tu Watchlist" style="font-size:11px;">⭐</span>';
     return out ? '<span style="margin-left:5px;">' + out + '</span>' : '';
+}
+
+// Enlace a otra pantalla de la terminal con el ticker ya cargado. El ticker
+// se escapa con esc() aunque venga del backend: acaba dentro de un atributo
+// onclick, que es el contexto donde un valor sin sanear duele más.
+function enlaceTicker(ruta, ticker, texto, titulo) {
+    return '<span onclick="window.__navigate(\'' + ruta + '?ticker=' + esc(ticker) + '\')" title="' + esc(titulo) + '" '
+        + 'style="color:var(--color-secondary);cursor:pointer;text-decoration:underline;">' + esc(texto) + '</span>';
 }
 
 function trendCelda(c) {
