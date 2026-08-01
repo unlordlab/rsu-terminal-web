@@ -29,9 +29,9 @@ parecería completo y sería engañoso.
 
 ## Cobertura de esta versión — leer antes de usarlo
 
-- **405 hallazgos**: 379 extraídos de los 16 documentos de auditoría, más 26
-  encontrados después con el sistema ya en producción (RSU Algoritmo #14–#30, Cartera #B19–#B22,
-  Newsfeed/briefing #27–#31).
+- **407 hallazgos**: 379 extraídos de los 16 documentos de auditoría, más 28
+  encontrados después con el sistema ya en producción (RSU Algoritmo #14–#30, Cartera #B19–#B22
+  y #28, Newsfeed/briefing #27–#31, Infraestructura #19 —la versión móvil—).
 - **64 son críticos (🔴)**: todos revisados en la primera pasada.
   33 cerrados · 11 abiertos ·
   1 ya no aplican ·
@@ -48,6 +48,14 @@ parecería completo y sería engañoso.
   señales: el backtest a 10 años pasa de 51 a 16 señales, con la ventaja a 60
   días de +1,51pp a +4,30pp. Del tier que quedaba sin comprobar, **4 de 7 ya
   estaban cerrados y 2 no aplicaban** — solo 2 eran trabajo real.
+- **CANSLIM verificado del todo (01/08)**: cuarto módulo con el tier completo
+  revisado. De los 19 que quedaban ❓, **10 ya estaban cerrados** por sesiones
+  posteriores a la auditoría (la 2, la 11, la 16, la 32 y la 39, más los avisos
+  de fallo de los workflows) y solo 9 son trabajo real — ninguno crítico. El de
+  más peso es **#6**: el scan y el análisis individual siguen usando dos
+  definiciones distintas de «tendencia» (3 condiciones vs. las 7 de Minervini) y
+  tres escalas de «score» con el mismo nombre. Confirma otra vez que consultar
+  las auditorías sin verificar lleva a trabajar sobre cosas ya hechas.
 - Los **287 restantes** están extraídos y clasificados por
   severidad, pero marcados ❓ SIN VERIFICAR: aparecen aquí para no perderlos de
   vista, **no como lista de trabajo fiable**. Verificarlos es la segunda pasada.
@@ -123,7 +131,7 @@ exposición: con ~100 usuarios reales, no hay política de privacidad.
 | ❓ | 15 | 🟡 | `ath = close.max()` sobre el histórico disponible | *sin comprobar* |
 | ❓ | 16 | 🟡 | `_get_zone` es la salida más prescriptiva de toda la terminal | *sin comprobar* |
 
-## Canslim  (24 hallazgos — ✅5 · ❓19)
+## Canslim  (24 hallazgos — ❌9 · ✅15 · ❓0)
 
 | | # | Sev | Hallazgo | Estado / evidencia |
 |-|---|-----|----------|--------------------|
@@ -132,27 +140,27 @@ exposición: con ~100 usuarios reales, no hay política de privacidad.
 | ✅ | 3 | 🔴 | El botón "ESCANEAR S&P 500 (503)" dispara 503 descargas bajo demanda, sin caché ni lock, y está diseñado para pulsarse | scan movido a GitHub Actions + Gist; el frontend ya no dispara 503 descargas |
 | ✅ | 4 | 🔴 | El universo está embebido aquí (503) y diverge del universo compartido (525) — la Fase 2.1 se dejó este fichero | universo unificado en shared/sp500_universe.py |
 | ✅ | 5 | 🔴 | `inst_pct` puede leer 0,75 como "0,75%" en vez de "75%" — y el criterio I falla siempre | canslim_service.py:331 raw*100 desde major_holders, contrastado en el código contra AAPL 66.5% / JPM 76.1% / XOM 68.4% / TXN 94.7% |
-| ❓ | 6 | 🟠 | El scan y el análisis individual usan definiciones distintas de "tendencia" y escalas distintas de "score" | *sin comprobar* |
-| ❓ | 7 | 🟠 | `perf_12m` del scan no son 12 meses para todos los tickers — y contamina el percentil de todos | *sin comprobar* |
-| ❓ | 8 | 🟠 | La etiqueta "A — Ventas **anuales** >25%" usa el crecimiento **trimestral | *sin comprobar* |
-| ❓ | 9 | 🟠 | `traceback.format_exc()` se devuelve al usuario en la respuesta de error | *sin comprobar* |
-| ❓ | 10 | 🟠 | El estado del mercado se calcula aquí por tercera vez, con criterios distintos | *sin comprobar* |
-| ❓ | 11 | 🟠 | `_get_timestamp()` naive — décima aparición del bug de timezone | *sin comprobar* |
-| ❓ | 12 | 🟡 | `universe_perfs` de depuración expuesto en la respuesta pública | *sin comprobar* |
-| ❓ | 13 | 🟡 | Los fallos del scan son invisibles | *sin comprobar* |
-| ❓ | 14 | 🟡 | `for future in futures` no usa `as_completed` | *sin comprobar* |
-| ❓ | 15 | 🟡 | `spy_hist['Close'].iloc[-2]` sin validar longitud | *sin comprobar* |
-| ❓ | 16 | 🟡 | Escapado en el frontend | *sin comprobar* |
-| ❓ | 17 | 🟡 | Sin deep-link `?ticker=` | *sin comprobar* |
-| ❓ | 18 | 🔵 | Conectar la M al widget que ya existe | *sin comprobar* |
-| ❓ | 19 | 🔵 | Badge 💼/⭐ de Cartera y Watchlist | *sin comprobar* |
-| ❓ | 20 | 🔵 | Enlace cruzado con Research y RS/RW | *sin comprobar* |
-| ❓ | 21 | 🔵 | Explicar por qué falla cada letra | *sin comprobar* |
-| ❓ | 22 | 🟢 | Histórico de candidatos | *sin comprobar* |
-| ❓ | 23 | 🟢 | Detección de bases y pivot points | *sin comprobar* |
-| ❓ | 24 | 🟢 | Cruce con Insider y Options Flow | *sin comprobar* |
+| ❌ | 6 | 🟠 | El scan y el análisis individual usan definiciones distintas de "tendencia" y escalas distintas de "score" | verificado 01/08: **real y vigente, es el hallazgo abierto de más peso del módulo**. (a) *Tendencia*: el scan usa un chequeo de 3 condiciones inline (`price > ma50 and price > ma150 and ma50 > ma150`, `canslim_scan.py:92` y `canslim_service.py:680`), el análisis individual usa el Trend Template de Minervini de 7 condiciones (`_trend_template()`, línea 86). Un ticker puede salir con `trend ✓` en la tabla del scan y suspender la letra L al abrirlo. (b) *Score*: la columna SCORE del scan es 0-100 de seis pesos booleanos (25+25+20+15+10+5), mientras el individual muestra `composite` (1-99, estilo IBD, ponderado rs/eps/smr/acc) y `tech_score` (0-100 reescalado) — tres números distintos que el usuario lee como si fueran el mismo. La sesión 32 unificó `perf_12m` y `acc_dis_rating` en `shared/canslim_engine.py` pero **dejó fuera `_trend_template()` a propósito** (el scan nocturno no lo necesitaba), así que esta divergencia sigue entera |
+| ✅ | 7 | 🟠 | `perf_12m` del scan no son 12 meses para todos los tickers — y contamina el percentil de todos | verificado 01/08: cerrado en la sesión 32. Los dos caminos llaman a `perf_12m()` de `shared/canslim_engine.py` (`canslim_service.py:290` y `:667`, `canslim_scan.py`), que exige 252 sesiones reales (`iloc[-252]`, `0.0` si no llega) sobre histórico de 2 años — antes el scan usaba `iloc[0]` sobre `period="1y"` |
+| ✅ | 8 | 🟠 | La etiqueta "A — Ventas **anuales** >25%" usa el crecimiento **trimestral** | verificado 01/08: la etiqueta es `"A — Crecimiento de ventas >25%"` (`canslim_service.py:423`), sin afirmar el periodo, con comentario en el código (línea 417) explicando que `revenueGrowth` de yfinance es trimestral interanual |
+| ✅ | 9 | 🟠 | `traceback.format_exc()` se devuelve al usuario en la respuesta de error | verificado 01/08: `canslim_service.py:566-569` imprime el traceback al log del servidor y devuelve solo `{"ok": False, "error": str(e)}` |
+| ✅ | 10 | 🟠 | El estado del mercado se calcula aquí por tercera vez, con criterios distintos | verificado 01/08: cerrado en la sesión 39. `get_market_status()` usa `spy_trend_snapshot()` de `shared/market_regime.py` (línea 175), el mismo que `market_service.py`. RSU Algoritmo sigue con el suyo **por decisión documentada**, no por olvido: su SMA200 corre dentro del backtest día a día (point-in-time) y no puede compartir una caché "de hoy" |
+| ✅ | 11 | 🟠 | `_get_timestamp()` naive — décima aparición del bug de timezone | verificado 01/08: cerrado en la sesión 2. `from time_utils import get_timestamp` (línea 17), sin ningún `datetime.now()` desnudo en el fichero |
+| ✅ | 12 | 🟡 | `universe_perfs` de depuración expuesto en la respuesta pública | verificado 01/08: no aparece en ningún `return` de `get_canslim_from_gist()` ni de `scan_canslim()`. El array vive solo en `cache.set("canslim:universe_perfs", ...)`, que es lo que consume `analyze_ticker()` |
+| ✅ | 13 | 🟡 | Los fallos del scan son invisibles | verificado 01/08: `canslim_scan.yml:36` y `nightly_scans.yml:93` avisan por Telegram con `if: failure()` |
+| ✅ | 14 | 🟡 | `for future in futures` no usa `as_completed` | verificado 01/08: `canslim_service.py:723` itera `as_completed(futures)`, con el porqué en el comentario de la línea 719 |
+| ❌ | 15 | 🟡 | `spy_hist['Close'].iloc[-2]` sin validar longitud | verificado 01/08: **medio cerrado**. En `analyze_ticker()` (línea 289) ya está cubierto por el guard `len(hist) < 50` de la línea 277. En `get_market_status()` (línea 163) sigue sin guard: solo se comprueba `spy_hist.empty`, así que con exactamente 1 sesión reventaría — mientras las líneas vecinas sí llevan `if len(spy_hist) >= N`. Con SPY a `period="1y"` es inalcanzable en la práctica; queda abierto como la incoherencia que es, no como riesgo real |
+| ✅ | 16 | 🟡 | Escapado en el frontend | verificado 01/08: cerrado en la sesión 11. `import { errorMessage, esc } from '/core/ui.js'` y 31 usos de `esc()` en `canslim.js` |
+| ✅ | 17 | 🟡 | Sin deep-link `?ticker=` | verificado 01/08: cerrado en la sesión 16. `canslim.js:169` lee `URLSearchParams` y lanza el análisis solo |
+| ❌ | 18 | 🔵 | Conectar la M al widget que ya existe | verificado 01/08: la letra M ya usa el `can_buy` real (hallazgo #2), pero en el frontend es un cuadrado con un `title` — no lleva a la pantalla de Mercado, donde está el detalle que la justifica |
+| ❌ | 19 | 🔵 | Badge 💼/⭐ de Cartera y Watchlist | verificado 01/08: sigue abierto. Cero apariciones de `en_cartera`/`in_watchlist` en `canslim.js` y en `routers/canslim.py` — es el único de los módulos de listado que se quedó fuera de la sesión 16, que ya lo dejó dicho por escrito |
+| ❌ | 20 | 🔵 | Enlace cruzado con Research y RS/RW | verificado 01/08: **medio hecho**. El ticker de la cabecera del análisis individual navega a `/research?ticker=` (`canslim.js:338`). No hay enlace a RS/RW desde ninguna parte, y las filas del scan no navegan: al pulsarlas rellenan el buscador y lanzan el análisis interno |
+| ❌ | 21 | 🔵 | Explicar por qué falla cada letra | verificado 01/08: sigue abierto. El badge de cada letra solo lleva el criterio en el `title` (p. ej. «A — Crecimiento de ventas >25%»); no dice **el valor real que lo incumple**, que el backend ya tiene calculado. El usuario ve una A en rojo sin saber si falló por 24% o por -3% |
+| ❌ | 22 | 🟢 | Histórico de candidatos | verificado 01/08: no existe. Cero rastro de persistencia de candidatos — el Gist nocturno se sobrescribe, así que no se puede responder «¿qué proponía CANSLIM hace tres meses y cómo salió?» |
+| ❌ | 23 | 🟢 | Detección de bases y pivot points | verificado 01/08: no existe. Sin `pivot` ni detección de bases en el servicio |
+| ❌ | 24 | 🟢 | Cruce con Insider y Options Flow | verificado 01/08: no existe. `canslim_service.py`/`routers/canslim.py` no importan nada de Insider ni de Options |
 
-## Cartera  (46 hallazgos — ❌3 · ✅32 · ❓7 · ⬜4)
+## Cartera  (47 hallazgos — ❌3 · ✅33 · ❓7 · ⬜4)
 
 | | # | Sev | Hallazgo | Estado / evidencia |
 |-|---|-----|----------|--------------------|
@@ -164,15 +172,15 @@ exposición: con ~100 usuarios reales, no hay política de privacidad.
 | ✅ | B3 | 🔴 | «P&L Total Acum.» es una suma de porcentajes — no es un P&L | avg_pnl ponderado por capital invertido |
 | ✅ | B4 | 🔴 | `simulate_tier_capital` procesa el cierre en la fecha de APERTURA | ARREGLADO 31/07: la simulación pasa a ser **por eventos**. Cada fila genera hasta dos (apertura en `Fecha`, cierre en `Fecha Cierre`), se ordenan por fecha real y las aperturas van antes que los cierres del mismo día. **Honestidad sobre el efecto: hoy casi no cambia nada, y la razón está en los datos, no en el código** — de las 32 posiciones cerradas solo **1 tiene fecha de cierre**, así que las otras 31 siguen cerrándose el día que se abren, igual que antes. Agregados idénticos (equity, P&L realizado, capital disponible: 0,00 de diferencia) y solo 3 de 86 posiciones cambian su inversión asignada. **Para que el arreglo sirva de verdad hay que rellenar la columna `Fecha Cierre` en la hoja** |
 | ⬜ | A5 | 🟠 | El P&L en $ puede divergir entre la carga inicial y los updates en vivo | MEDIDO 31/07 sobre las 53 posiciones abiertas reales: divergen 2, y por **4-5 céntimos**. La causa es el redondeo de `shares` a 4 decimales, no una fórmula distinta. Real pero irrelevante; no se toca |
-| ❌ | A4 | 🟠 | Cripto en cartera: precio congelado 16 horas al día | verificado 31/07: real pero menor de lo descrito. `_is_market_open()` usa horario NYSE, así que fuera de él una cripto se sirve desde barras diarias — con `_DAILY_BARS_TTL = 6h`, el desfase máximo es de 6 horas, no de 16 |
+| ❌ | A4 | 🟠 | Cripto en cartera: precio congelado 16 horas al día | verificado 31/07: real pero menor de lo descrito. `_is_market_open()` usa horario NYSE, así que fuera de él una cripto se sirve desde barras diarias — con `_DAILY_BARS_TTL = 6h`, el desfase máximo es de 6 horas, no de 16. **DECISIÓN 01/08: no se aplica de momento** — el desfase real (6h, fuera de horario NYSE) no justifica el trabajo hoy. Se queda ❌, no ⬜: el hallazgo sigue siendo cierto, lo que se ha decidido es no priorizarlo |
 | ✅ | A6 | 🟠 | Cadencia real del «en vivo»: hasta ~2 minutos de retraso, más los 15 min de Yahoo | ARREGLADO 31/07: la cabecera decía «Precios live · WebSocket» y ahora dice «Precios diferidos, actualizados cada 60 s», con un tooltip que desglosa los tres retrasos que se suman (fuente, caché de 60 s del servidor, difusión de 60 s) y aclara que el indicador verde significa conexión viva, no precio de este segundo |
 | ✅ | A7 | 🟠 | Las métricas de cabecera se quedan congeladas mientras las filas se actualizan | resuelto: «P&L Hoy», «Valor de Mercado» y «P&L Neto» se recalculan en cada tick del WS (ids `cartera-*-value`) |
 | ✅ | A8 | 🟠 | Reordenar o filtrar la tabla revierte los precios al snapshot inicial | resuelto: `applyLivePrices` persiste `actual`/`pnl`/`chg_hoy` en el objeto, no solo en el DOM |
 | ✅ | B5 | 🟠 | El Google Sheet se lee 3+ veces por carga de página (y cada 60s con el WS activo) | ARREGLADO 31/07: caché de 60 s en `get_cartera()`, el mismo TTL que ya tenían los precios y el mismo intervalo del broadcast, así que no se sirve nada más rancio de lo que ya se servía. **Medido: 11,2 s → 0,0015 s.** Se devuelve una copia profunda para que ninguno de los siete consumidores (página, WS, badges de cinco módulos, snapshots, notificaciones) pueda contaminar a los demás mutando una fila — verificado con una prueba de aislamiento |
 | ✅ | B6 | 🟠 | El WebSocket de cartera queda vivo para siempre al salir de la página | resuelto: `export function cleanup()` cierra el socket y cancela el reintento; el router la invoca al destruir la página |
-| ❌ | B7 | 🟠 | Token JWT en la query string del WebSocket | verificado 31/07: sigue viajando en `?token=`. Mitigado (validación de Origin contra CSWSH, cierre 4403) y es una limitación real del navegador —no se pueden poner cabeceras en el handshake— pero el token sigue quedando en logs de proxy/servidor |
+| ❌ | B7 | 🟠 | Token JWT en la query string del WebSocket | verificado 31/07: sigue viajando en `?token=`. Mitigado (validación de Origin contra CSWSH, cierre 4403) y es una limitación real del navegador —no se pueden poner cabeceras en el handshake— pero el token sigue quedando en logs de proxy/servidor. **DECISIÓN 01/08: bloqueado a propósito hasta que el VPS tenga HTTPS** — hoy el tráfico va en claro por `http://`, así que mover el token de la query a otro sitio no protegería nada: quien pueda leer los logs puede leer también el propio WebSocket. Se retoma con el dominio y el certificado, no antes |
 | ✅ | B8 | 🟠 | Sparklines cruzados entre tickers que son prefijo de otros | ARREGLADO 31/07: el selector pasa de subcadena (`[id*="-MA"]`) a sufijo exacto (`[id$="-MA"]`). Verificado con un caso sintético: el viejo casaba `MA`, `MARA` y `MAGS`; el nuevo solo `MA`. Con la cartera de hoy no había ningún par afectado (0 tickers que sean prefijo de otro), así que es un arreglo preventivo |
-| ❌ | B9 | 🟠 | `/notificaciones/check` accesible a cualquier usuario autenticado | verificado 31/07: real aunque acotado — el router entero está tras `paid`, así que es «cualquier usuario de pago», no cualquiera. Sigue permitiendo que un usuario dispare avisos de Telegram al chat del admin |
+| ❌ | B9 | 🟠 | `/notificaciones/check` accesible a cualquier usuario autenticado | verificado 31/07: real aunque acotado — el router entero está tras `paid`, así que es «cualquier usuario de pago», no cualquiera. Sigue permitiendo que un usuario dispare avisos de Telegram al chat del admin. **DECISIÓN 01/08: no se aplica de momento** — el alcance real (usuarios de pago, ~100 personas conocidas, el efecto es ruido en un chat propio) no justifica el trabajo hoy. Se queda ❌, no ⬜: el agujero sigue abierto, lo que se ha decidido es no priorizarlo |
 | ✅ | B10 | 🟠 | Gating de tier incoherente (relevante para la monetización) | verificado 31/07: coherente hoy — `include_router(cartera.router, dependencies=paid)`, el WS exige `min_tier=tier1` y la entrada del menú lleva `minTier: tier1` |
 | ✅ | B11 | 🟠 | `last_update` con hora del contenedor (UTC) | verificado 31/07: usa `ZoneInfo(Europe/Madrid)` |
 | ✅ | B12 | 🟠 | Límite silencioso de 30 tickers en el WS | ARREGLADO 31/07: tope de 30 → 120 y, si alguna vez recorta, el propio mensaje del WS lleva `truncados` y la página pinta un aviso en ámbar diciendo cuántas posiciones se quedan con el precio de la última recarga. Con 53 posiciones abiertas, las 23 que antes no recibían precio en vivo ya lo reciben |
@@ -198,12 +206,13 @@ exposición: con ~100 usuarios reales, no hay política de privacidad.
 | ❓ | 6 | 🟢 | B4 (simulación por eventos) | abierto — es el arreglo que pide B4, ya confirmado |
 | ✅ | 24 | 🟢 | Snapshot diario del equity en SQLite | hecho: tabla `snapshot_cartera` en `snapshots.db`, escrita desde el bucle de 4 min con dedup por fecha de sesión |
 | ✅ | 25 | 🟢 | Feed de trades en tiempo real vía Finnhub WS | HECHO 31/07, **detrás de un flag apagado por defecto**. `services/finnhub_stream_service.py`: una conexión al WebSocket de trades suscrita a los tickers abiertos, que escribe en el MISMO `_price_cache` que ya usaba Cartera. El WS propio de la terminal lo distribuye sin enterarse del origen y **el frontend no cambia**. Revertir es `FINNHUB_REALTIME=false`; yfinance sigue vivo y es además quien aporta el CIERRE ANTERIOR (Finnhub manda trades, no el cierre de ayer), así que sin `prev` conocido el tick se descarta en vez de publicar un 0% inventado. **Medido con los 50 tickers reales**: conectado, 50/50 suscritos, 125 ticks aplicados, y los porcentajes contrastados contra el `pc` autoritativo de Finnhub (AMZN/MSFT/MSTR coinciden al céntimo). Degradación automática: si el stream cae, a los 60 s el caché envejece y `fetch_live_prices` vuelve a yfinance solo. Tope de 50 símbolos del plan gratuito contemplado, con aviso en log en vez de recorte silencioso. **Fallo propio cazado en la verificación**: con el flag apagado la corrutina hacía `return` y `ws.supervisar()` —que solo espera ante excepciones— la relanzaba en bucle cerrado (20+ mensajes en 25 s, CPU quemada); ahora se aparca. **LICENCIA, y por eso viene apagado**: los términos de Finnhub dicen que todos sus planes son «strictly for personal use unless explicitly stated otherwise» y prohíben redistribuir los datos «or derived results» sin aprobación escrita. Servirlos a ~100 usuarios ES redistribución — encenderlo es una decisión de licencia, no de configuración |
-| ❓ | 26 | 🟢 | Alertas de posición | *sin comprobar* |
-| ❓ | 27 | 🟢 | Cruce con Options Flow | *sin comprobar* |
+| ❓ | 26 | 🟢 | Alertas de posición | *sin comprobar*. **DECISIÓN 01/08: aplazada**, no se construye en esta ronda |
+| ❓ | 27 | 🟢 | Cruce con Options Flow | *sin comprobar*. **DECISIÓN 01/08: aplazada**, no se construye en esta ronda |
+| ✅ | 28 | 🟠 | El módulo no tenía manual: el usuario veía una tabla de posiciones sin saber por qué está compuesta así ni qué significa la mitad de las cifras | HECHO 01/08: **módulo 27 de Academy, «La Cartera RSU»** (8 lecciones, ~26 min, 5.152 palabras, quiz de 10 preguntas, 3 gráficos SVG nuevos), en la misma fase GUÍA DE LA TERMINAL que el 26. Dos mitades: **por qué** (el reparto en cuatro bloques, las cinco tendencias que sostienen la parte de acciones, la prima de valoración y la volatilidad como su precio, el horizonte semanal/mensual) y **cómo se lee** (las seis tarjetas, realizado vs no realizado, las 12 columnas, «sin asignar», el HHI de sector, asignación objetivo vs real, la curva con retorno ponderado por tiempo, cerradas, límites y glosario). **Tres decisiones de honestidad que hubo que tomar**: (a) el donut del reparto es de **septiembre de 2025** y se etiqueta como objetivo con su fecha, no como foto de hoy; (b) los cuatro bloques del reparto **no caben en esta pantalla** —SPXL y cripto tienen módulo propio— y hay un gráfico dedicado solo a decir dónde vive cada uno; (c) bloque y nivel CORE/HIGH/LOTTERY son **dos clasificaciones distintas** y se separan explícitamente, porque comparten pantalla y se confunden. Los pesos 5/3/1% salen de `TIER_WEIGHTS` en `cartera_service.py`, no de la tesis. Verificado en navegador: 8 lecciones en el manifiesto, índices 0-7, los 3 gráficos parsean como XML válido y ninguno desborda su `viewBox`, quiz operativo, cero errores de consola |
 | ✅ | 2 | ⚪ | Honestidad en la UI: tooltip del punto del WebSocket | VERIFICADO Y ARREGLADO 31/07. **No era un hallazgo suelto**: es el punto 2 de la solución de #A6, y el generador de este documento lo cortó en los dos puntos del enunciado, dejándolo como una fila huérfana sin contenido. Al ir al documento original de la auditoría, pedía cambiar el tooltip del ws-dot de «Precios en tiempo real» por algo honesto. **Se había quedado sin hacer**: al cerrar #A6 se cambió el texto de la cabecera pero no ese tooltip, que seguía prometiendo tiempo real. Ahora dice «Conexión activa — precios diferidos, se refrescan cada 60 s»: el punto verde significa que la conexión está viva, no que el dato sea de este segundo |
 | ✅ | A9 | ⚪ | Pre/Post market: decisión no comunicada | VERIFICADO Y ARREGLADO 31/07. Confirmado recorriendo el horario completo: `get_market_status()` devuelve PRE/POST de 4:00 a 9:30 y de 16:00 a 20:00 ET, pero `_is_market_open()` es False en esas mismas franjas, así que el precio servido es el CIERRE REGULAR. **Son 9 horas al día** en las que el badge dice que el mercado se negocia y los números están quietos, sin nada que lo explique. Es una decisión razonable —el volumen extendido es escaso y los precios poco representativos— pero no estaba comunicada. Ahora, solo en PRE/POST, aparece «precios del cierre regular» junto al badge, con el porqué al pasar el ratón |
 
-## Infraestructura Y Valoracion Global  (18 hallazgos — ❌1 · ✅2 · ❓14 · ⬜1)
+## Infraestructura Y Valoracion Global  (19 hallazgos — ❌2 · ✅2 · ❓14 · ⬜1)
 
 | | # | Sev | Hallazgo | Estado / evidencia |
 |-|---|-----|----------|--------------------|
@@ -225,6 +234,7 @@ exposición: con ~100 usuarios reales, no hay política de privacidad.
 | ❓ | 16 | 🟡 | Las tareas se cancelan pero no se esperan al apagar | *sin comprobar* |
 | ❓ | 17 | 🟡 | Los cinco workflows de GitHub Actions no avisan si fallan | *sin comprobar* |
 | ❓ | 18 | 🟡 | `sector_medians.yml` existe pero su Gist no está configurado | *sin comprobar* |
+| ❌ | 19 | 🟠 | **La terminal no es usable en móvil, y la vista móvil que existe no la encuentra nadie** | ANOTADO 01/08 a petición del usuario. Sale de la medición de Cartera #23 (31/07) pero **no es un problema de Cartera ni de ninguna página concreta: es del armazón**. Medido a 375px: la página entera desborda (contenido de 708px) porque la barra lateral sigue en `display:block` y la barra superior mide 435px; a 768px ya no desborda. Las tablas NO son la causa — tienen `overflow-x:auto` y hacen scroll propio. Además existe una vista `/mobile` construida a propósito (una columna: Algoritmo, Mercado, Cartera, Watchlist) a la que **no redirige ni enlaza nada**: es una ruta manual que ningún usuario va a descubrir. Son dos decisiones, no una: (a) qué hacer con el armazón a <768px, y (b) si `/mobile` se adopta como destino real (con redirección por ancho o por user-agent) o se borra por ser código muerto |
 
 ## Insider Flow  (23 hallazgos — ❓23)
 

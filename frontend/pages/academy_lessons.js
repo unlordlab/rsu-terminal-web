@@ -6208,4 +6208,413 @@ export const LESSONS = {
             },
         ]
     },
+
+    // ── MÓDULO 27 · GUÍA DE LA TERMINAL — LA CARTERA RSU ───────────────────
+    // Dos mitades: por qué la cartera está compuesta así (lecciones 1-4, la
+    // tesis de medio-largo plazo) y cómo se lee la pantalla (5-8, manual de
+    // la página /cartera). Los pesos por nivel (5/3/1%) salen de TIER_WEIGHTS
+    // en backend/services/cartera_service.py — si cambian ahí, cambian aquí.
+
+    '27-1': {
+        moduleId: 27,
+        lessonIndex: 0,
+        title: 'Qué es la Cartera RSU',
+        duration: '8 min',
+        intro: 'La Cartera RSU no es una lista de valores sueltos que han ido gustando. Es un reparto decidido de antemano, con un porqué detrás de cada bloque y un tamaño asignado a cada posición. Esta lección explica el mapa completo, antes de entrar en ninguna pantalla.',
+        sections: [
+            {
+                heading: 'Un reparto, no una colección',
+                blocks: [
+                    { type: 'text', content: 'La diferencia entre una cartera y una colección de valores es que la cartera responde a dos preguntas que la colección ni se plantea: <b>qué proporción</b> del dinero va a cada tipo de riesgo, y <b>cuánto</b> pesa cada posición dentro de su bloque.' },
+                    { type: 'text', content: 'El reparto de diseño de la cartera RSU, tal como se publicó en septiembre de 2025, es este:' },
+                    { type: 'chart', id: 'rsu_asignacion_donut' },
+                    { type: 'warning', content: 'Ese gráfico es el reparto OBJETIVO del diseño, con la fecha en la que se publicó. No es una foto de lo que hay abierto hoy. Los pesos reales de este momento salen de la propia terminal, en la sección ASIGNACIÓN de la Cartera — y casi nunca coinciden exactamente con el objetivo, porque el mercado mueve los precios y eso mueve los pesos solo.' },
+                ]
+            },
+            {
+                heading: 'Los cuatro bloques no viven en la misma pantalla',
+                blocks: [
+                    { type: 'text', content: 'Esto confunde al llegar y conviene decirlo pronto: la página <b>Cartera</b> no muestra los cuatro bloques del reparto. Muestra dos. Los otros dos tienen su propia herramienta, con su propia lógica.' },
+                    { type: 'chart', id: 'rsu_cuatro_bloques' },
+                    { type: 'text', content: 'Por eso, buscar la estrategia SPXL dentro de la tabla de posiciones es buscar en el sitio equivocado: esa parte se gestiona por fases de compra y tiene su propio backtest, en el módulo SPXL.' },
+                ]
+            },
+            {
+                heading: 'Dos clasificaciones distintas, no una',
+                blocks: [
+                    { type: 'text', content: 'Dentro de la página Cartera aparece una segunda etiqueta en cada posición: <b>CORE</b>, <b>HIGH</b> o <b>LOTTERY</b>. No es lo mismo que el bloque del reparto.' },
+                    { type: 'table', headers: ['Clasificación', 'Qué responde', 'Dónde se ve'], rows: [
+                        ['Bloque del reparto (SPXL / Stocks / Cryptos / Beta)', 'A qué tipo de riesgo pertenece este dinero', 'En el reparto general, repartido entre varios módulos'],
+                        ['Nivel (CORE / HIGH / LOTTERY)', 'Cuánto capital le corresponde a ESTA posición concreta', 'Columna NIVEL de la tabla de Cartera'],
+                    ]},
+                    { type: 'tip', label: 'LA IDEA', content: 'El bloque dice de qué familia es la posición. El nivel dice qué tamaño le toca. Son dos preguntas independientes: puede haber una posición de nivel CORE dentro del bloque de RSU Stocks y otra de nivel LOTTERY dentro del mismo bloque.' },
+                ]
+            },
+            {
+                heading: 'Lo que esta pantalla no es',
+                blocks: [
+                    { type: 'warning', content: 'La Cartera muestra un reparto real con posiciones reales, y eso puede leerse fácilmente como una lista de compras. No lo es. Es material de estudio: sirve para ver cómo se construye y se sigue una cartera con criterio, no para copiar tickers. El módulo 27 explica el método; las decisiones de cada uno son de cada uno.' },
+                ]
+            },
+        ]
+    },
+
+    '27-2': {
+        moduleId: 27,
+        lessonIndex: 1,
+        title: 'La Tesis de Fondo — Por Qué Estas Empresas',
+        duration: '10 min',
+        intro: 'La pregunta que más se repite al ver la cartera es por qué hay empresas que parecen caras. Esta lección responde a eso: qué se está comprando en realidad cuando se compra una posición de la parte de acciones, y qué tienen en común entre sí.',
+        sections: [
+            {
+                heading: 'La pregunta de la valoración',
+                blocks: [
+                    { type: 'text', content: 'Mirando solo el ratio precio/beneficio, varias de estas empresas están claramente por encima de la media del mercado. Esa observación es correcta, y no se discute. Lo que se discute es la conclusión que se saca de ella.' },
+                    { type: 'text', content: 'Un ratio de valoración compara el precio de hoy con el beneficio de hoy. Es una foto. Lo que estas posiciones intentan capturar no es el beneficio de hoy, sino el hecho de estar situadas en el sitio por donde va a pasar mucho dinero durante los próximos años.' },
+                    { type: 'concept', title: 'Qué se compra en realidad', content: 'No se compra un beneficio actual barato. Se compra una posición dentro de una tendencia estructural de varios años, en compañías que son difíciles de sustituir dentro de esa tendencia. El precio de eso rara vez parece barato mientras la tendencia está en marcha.' },
+                ]
+            },
+            {
+                heading: 'Las cinco tendencias que sostienen la parte de acciones',
+                blocks: [
+                    { type: 'text', content: 'Las posiciones no están elegidas una a una por su gráfico. Están elegidas por el sitio que ocupan dentro de cinco corrientes de fondo:' },
+                    { type: 'table', headers: ['Tendencia', 'Por qué es estructural', 'Qué se busca dentro de ella'], rows: [
+                        ['Energía nuclear', 'La demanda eléctrica crece más rápido que la capacidad de generarla, y la nuclear vuelve a estar en las hojas de ruta oficiales tras décadas fuera.', 'Compañías con posición casi única en la cadena de suministro doméstica del combustible, con contratos públicos detrás.'],
+                        ['Industria espacial', 'El acceso al espacio ha dejado de ser exclusivamente estatal y el gasto en defensa espacial va en aumento.', 'Compañías cuyo componente viaja en un porcentaje alto de lo que se lanza, no una apuesta a un solo lanzamiento.'],
+                        ['Centros de datos e IA', 'La capacidad de cómputo es hoy un cuello de botella físico: hacen falta edificios, chips y electricidad reales.', 'Compañías con acuerdos y respaldo de los grandes fabricantes de chips, no solo software encima.'],
+                        ['IA aplicada a defensa', 'El gasto en defensa crece en varios países a la vez y la IA está entrando en el campo de batalla y en la logística.', 'Exposición a varios sectores a la vez, no a un único contrato o programa.'],
+                        ['Energía y refrigeración de la IA', 'Cada centro de datos nuevo necesita alimentación y refrigeración; es la parte menos visible y más obligatoria.', 'Compañías con historial de resultados sostenido, no promesas de futuro sin cuenta de resultados.'],
+                    ]},
+                ]
+            },
+            {
+                heading: 'El hilo común: infraestructura crítica',
+                blocks: [
+                    { type: 'text', content: 'Si se busca lo que tienen en común esas cinco corrientes, aparece siempre lo mismo: no son las empresas que salen en la noticia, son las que están debajo. La compañía que fabrica el combustible, la que refrigera la sala, la que pone el componente que viaja en el cohete.' },
+                    { type: 'concept', title: 'Misión crítica', content: 'Una empresa es de misión crítica cuando quitarla del medio detiene el proceso entero, y sustituirla es caro, lento o directamente imposible a corto plazo. Esa dificultad de sustitución es lo que sostiene los márgenes durante años, y es lo que un ratio de valoración de un solo ejercicio no recoge.' },
+                    { type: 'text', content: 'Cuando una compañía combina las dos cosas —está dentro de una corriente que crece durante años y es difícil de sustituir dentro de ella—, el mercado le pone un precio más alto que a la media. Ese sobreprecio se llama <b>prima de valoración</b>, y es el tema de la lección siguiente.' },
+                ]
+            },
+            {
+                heading: 'El límite honesto de esta tesis',
+                blocks: [
+                    { type: 'warning', content: 'Una tesis de este tipo puede ser correcta en la corriente y equivocada en la empresa. Que la demanda eléctrica crezca no garantiza que una compañía concreta la capture; que la IA necesite refrigeración no garantiza que sea esta empresa la que la venda dentro de cinco años. La tendencia es el punto de partida del análisis, no el final.' },
+                    { type: 'tip', label: 'LA REGLA DE LA CASA', content: 'Usa esta tesis como punto de partida para tu propio análisis, no como una lista cerrada. Cualquier posición que no te convenza después de mirarla tú, sáltatela. Una posición que se mantiene solo porque la mantiene otro se vende al primer susto, que es exactamente cuando no hay que venderla.' },
+                ]
+            },
+        ]
+    },
+
+    '27-3': {
+        moduleId: 27,
+        lessonIndex: 2,
+        title: 'La Prima de Valoración y la Volatilidad',
+        duration: '9 min',
+        intro: 'Las posiciones de esta cartera se mueven más que la media, tanto hacia arriba como hacia abajo. Eso no es un efecto secundario indeseado: es la consecuencia directa de la lección anterior. Esta lección explica por qué, y qué hacer con ello.',
+        sections: [
+            {
+                heading: 'Qué es exactamente una prima de valoración',
+                blocks: [
+                    { type: 'concept', title: 'Prima de valoración', content: 'Es lo que el mercado paga POR ENCIMA de lo que pagaría por una empresa media con los mismos beneficios actuales. Se paga por crecimiento esperado, por dificultad de sustitución, o por las dos cosas.' },
+                    { type: 'text', content: 'Esa prima tiene una consecuencia mecánica: como parte del precio depende de expectativas de años futuros, cuando el mercado se pone nervioso lo primero que recorta es precisamente esa parte. La empresa no ha cambiado en un día, pero lo que el mercado está dispuesto a pagar por su futuro, sí.' },
+                ]
+            },
+            {
+                heading: 'El patrón: cae más fuerte, recupera antes',
+                blocks: [
+                    { type: 'chart', id: 'rsu_prima_correccion' },
+                    { type: 'text', content: 'El patrón que se observa una y otra vez en este tipo de compañías es el mismo: en la corrección caen más que el mercado, a veces mucho más, y cuando el mercado se estabiliza recuperan antes y con más fuerza. Quien mira solo la parte izquierda del gráfico ve un desastre; quien mira las dos partes ve el precio de la entrada.' },
+                    { type: 'warning', content: 'El gráfico ilustra el patrón, no lo garantiza. Hay compañías con prima de valoración que caen fuerte y no recuperan nunca, porque la tesis estaba mal o el mundo cambió. La caída fuerte es segura; la recuperación no. Por eso la tesis hay que revisarla, no solo aguantarla.' },
+                ]
+            },
+            {
+                heading: 'La volatilidad como precio, no como accidente',
+                blocks: [
+                    { type: 'tip', label: 'LA FRASE', content: 'La volatilidad es el precio que se paga por estar en el sitio correcto. No es un fallo de la cartera ni una señal de que algo va mal: es el peaje de tener exposición a lo que crece rápido.' },
+                    { type: 'text', content: 'La consecuencia práctica es importante y tiene que ver con el tamaño de las posiciones, no con el análisis. Si una posición está dimensionada de forma que una caída del 35% te obligaría a vender, esa posición está mal dimensionada para esta cartera — por muy buena que sea la tesis.' },
+                    { type: 'text', content: 'Ese es exactamente el problema que resuelven los niveles CORE, HIGH y LOTTERY, que se ven en la lección 27-5: decidir el tamaño ANTES de comprar, pensando en la caída que va a haber, no en la subida que se espera.' },
+                ]
+            },
+            {
+                heading: 'Cuándo la caída sí es una señal',
+                blocks: [
+                    { type: 'text', content: 'Aguantar la volatilidad no significa ignorar todo. La diferencia entre las dos situaciones se puede resumir así:' },
+                    { type: 'table', headers: ['Lo que ha caído', 'Qué significa', 'Qué hacer'], rows: [
+                        ['El precio, sin noticias sobre la empresa', 'El mercado está recortando la prima de todo el sector a la vez. La tesis sigue intacta.', 'Aguantar, y si el reparto lo permite, ampliar en los niveles previstos.'],
+                        ['El precio, tras perder el contrato o la ventaja que sostenía la tesis', 'Lo que ha cambiado no es el precio, es la razón por la que estaba la posición ahí.', 'Revisar la tesis desde cero. Aguantar aquí es aguantar por costumbre.'],
+                    ]},
+                    { type: 'concept', title: 'La pregunta que separa las dos', content: 'Si hoy no tuvieras la posición y leyeras la tesis por primera vez, ¿la comprarías al precio de hoy? Si la respuesta es sí, la caída es ruido. Si es no, la caída es información y hay que actuar en consecuencia.' },
+                ]
+            },
+        ]
+    },
+
+    '27-4': {
+        moduleId: 27,
+        lessonIndex: 3,
+        title: 'El Horizonte — Semanal y Mensual, No Diario',
+        duration: '7 min',
+        intro: 'Casi todos los errores de gestión de esta cartera vienen del mismo sitio: mirar en el gráfico diario una decisión que se tomó pensando en años. Esta lección explica en qué marco temporal se toma cada decisión.',
+        sections: [
+            {
+                heading: 'Por qué el gráfico diario engaña aquí',
+                blocks: [
+                    { type: 'text', content: 'En una posición pensada para varios años, el gráfico diario contiene sobre todo ruido: reacciones a titulares, rotaciones de fondos, vencimientos de opciones. Nada de eso cambia la razón por la que la posición está abierta, pero todo eso se ve enorme cuando se mira de cerca.' },
+                    { type: 'text', content: 'El mismo movimiento, visto en el gráfico semanal o mensual, suele ser una vela más dentro de una estructura que sigue igual. No es que el gráfico semanal sea más optimista: es que filtra lo que no importa para una decisión de años.' },
+                    { type: 'tip', label: 'REGLA PRÁCTICA', content: 'El marco en el que miras el gráfico debe coincidir con el plazo de tu decisión. Decisión a años, gráfico mensual. Decisión a meses, gráfico semanal. Si te encuentras mirando velas de una hora en una posición de largo plazo, el problema no es el gráfico.' },
+                ]
+            },
+            {
+                heading: 'Dónde se buscan los niveles de verdad',
+                blocks: [
+                    { type: 'text', content: 'Los puntos de ampliación y de recorte de una cartera de largo plazo no aparecen en el gráfico diario. Aparecen en las referencias lentas: medias móviles largas, zonas donde el precio ya se paró antes, rupturas confirmadas en cierre semanal.' },
+                    { type: 'steps', items: [
+                        'Se define la referencia en el gráfico semanal o mensual, con calma, fuera del momento de tensión.',
+                        'Se espera a que el precio llegue ahí, sin adelantarse por impaciencia.',
+                        'Se confirma con el cierre de la semana, no con lo que hace el precio un martes por la tarde.',
+                        'Se ejecuta el tramo que tocaba, del tamaño que ya estaba decidido por el nivel de la posición.',
+                    ]},
+                ]
+            },
+            {
+                heading: 'Cómo se traduce esto en la pantalla',
+                blocks: [
+                    { type: 'text', content: 'La página Cartera está construida con esta idea dentro, y conviene saberlo para no malinterpretar lo que muestra:' },
+                    { type: 'table', headers: ['Elemento de la pantalla', 'Para qué sirve de verdad'], rows: [
+                        ['P&L Hoy y la columna HOY %', 'Contexto del día. No es un dato accionable en una posición de años.'],
+                        ['El mini-gráfico de 7 días de cada fila', 'Ver de un vistazo si el movimiento de hoy es puntual o viene de varios días. Sigue siendo corto plazo.'],
+                        ['La columna DÍAS EN POSICIÓN', 'Recordar el plazo real de cada operación. Un +12% en tres semanas y otro en año y medio no son lo mismo.'],
+                        ['La curva de patrimonio', 'El marco correcto para juzgar cómo va la cartera: meses, no días.'],
+                    ]},
+                    { type: 'warning', content: 'El número que más llama la atención al abrir la pantalla (el P&L del día, en verde o en rojo y en grande) es justamente el que menos debería influir en una decisión de esta cartera. Está ahí porque es información, no porque sea una señal.' },
+                ]
+            },
+        ]
+    },
+
+    '27-5': {
+        moduleId: 27,
+        lessonIndex: 4,
+        title: 'Los Niveles — CORE, HIGH y LOTTERY',
+        duration: '9 min',
+        intro: 'Cada posición abierta lleva una etiqueta de nivel, y esa etiqueta determina cuánto dinero le corresponde. Es el mecanismo que convierte una convicción en una cifra concreta, decidida antes de comprar.',
+        sections: [
+            {
+                heading: 'Tres niveles, tres tamaños fijos',
+                blocks: [
+                    { type: 'text', content: 'El tamaño de una posición no se decide mirando el precio del día ni las ganas que haya de comprar. Se decide asignándole un nivel, y cada nivel tiene un porcentaje fijo del capital base:' },
+                    { type: 'table', headers: ['Nivel', 'Peso por posición', 'Qué significa esa convicción'], rows: [
+                        ['CORE', '5% del capital base', 'La tesis está clara, la compañía es difícil de sustituir y la posición está pensada para años. Es el peso máximo que se le da a una sola idea.'],
+                        ['HIGH', '3% del capital base', 'Buena tesis, pero con más incertidumbre: competencia, ejecución todavía por demostrar o valoración muy exigente.'],
+                        ['LOTTERY', '1% del capital base', 'Apuesta pequeña y asumida como tal. Puede irse a cero sin que eso rompa nada, y por eso el tamaño es el que es.'],
+                    ]},
+                    { type: 'concept', title: 'Capital base', content: 'Es la cifra de referencia sobre la que se calculan todos los pesos. No es el valor de mercado de hoy (que sube y baja cada día), sino el capital que se ha decidido dedicar al modelo. Así, el tamaño objetivo de una posición no cambia solo porque el mercado tuvo un buen mes.' },
+                ]
+            },
+            {
+                heading: 'Por qué el tamaño se decide antes, no después',
+                blocks: [
+                    { type: 'text', content: 'Decidir el tamaño en el momento de comprar es decidirlo en el peor momento posible: con la idea recién estudiada, con entusiasmo y sin haber vivido todavía su primera caída del 30%.' },
+                    { type: 'text', content: 'Con niveles fijos, la pregunta cambia por completo. Ya no es «cuánto meto en esto», que es una pregunta emocional. Es «¿esto es CORE, HIGH o LOTTERY?», que es una pregunta sobre la calidad de la tesis. El tamaño sale solo de la respuesta.' },
+                    { type: 'tip', label: 'EL EFECTO SECUNDARIO ÚTIL', content: 'Los niveles ponen un límite natural al número de posiciones. Si todo lo que se abre es CORE al 5%, con veinte ideas ya se ha agotado el capital base entero. Obliga a jerarquizar, que es justo lo que hace falta cuando todo parece buena idea.' },
+                ]
+            },
+            {
+                heading: 'Cuando las reglas piden más capital del que hay',
+                blocks: [
+                    { type: 'text', content: 'Aquí aparece un caso muy real, y la terminal lo enseña en vez de disimularlo. Si se abren muchas posiciones, la suma de lo que piden todos los niveles puede superar el capital base disponible.' },
+                    { type: 'text', content: 'Por ejemplo, con muchas posiciones CORE y HIGH abiertas a la vez, las reglas pueden llegar a pedir bastante más del 100% del capital base. Eso no es un error de la hoja ni un fallo del cálculo: es la señal de que hay más ideas abiertas de las que caben con el tamaño que se les ha asignado.' },
+                    { type: 'steps', items: [
+                        'La terminal reparte el capital disponible entre las posiciones y marca las que se quedan sin él.',
+                        'Esas posiciones aparecen en la tabla como SIN ASIGNAR, no como una posición del 0% (que sería un cero engañoso).',
+                        'El panel de ASIGNACIÓN dice exactamente cuánto falta, en dólares, para dar tamaño completo a todo lo abierto.',
+                    ]},
+                    { type: 'concept', title: 'Las tres salidas honestas', content: 'Cuando falta capital, hay tres formas de arreglarlo y ninguna es maquillar el número: cerrar posiciones para liberar sitio, bajar los pesos por nivel (que todo pese menos), o subir el capital base si de verdad se va a aportar más dinero. Inventar un capital que no existe hace que todos los porcentajes de la pantalla dejen de significar nada.' },
+                ]
+            },
+            {
+                heading: 'El nivel no es una nota de la empresa',
+                blocks: [
+                    { type: 'warning', content: 'Que una posición sea LOTTERY no significa que sea mala, y que sea CORE no significa que vaya a subir. El nivel mide cuánto se está dispuesto a perder en esa idea concreta, no lo buena que es. Una LOTTERY puede acabar siendo la posición más rentable de la cartera — con un 1% de peso, que es exactamente lo que se decidió arriesgar en ella.' },
+                ]
+            },
+        ]
+    },
+
+    '27-6': {
+        moduleId: 27,
+        lessonIndex: 5,
+        title: 'Leer la Pantalla — Las Tarjetas de Cabecera',
+        duration: '9 min',
+        intro: 'Al abrir la Cartera, lo primero que aparece es una fila de tarjetas con las cifras generales. Cada una responde a una pregunta distinta y varias se confunden con facilidad. Esta lección las separa una por una.',
+        sections: [
+            {
+                heading: 'Las seis cifras de arriba',
+                blocks: [
+                    { type: 'table', headers: ['Tarjeta', 'Qué responde exactamente'], rows: [
+                        ['P&L Hoy', 'Cuánto se ha movido la cartera HOY, en dólares y en porcentaje, sumando todas las posiciones abiertas. Se calcula contra el cierre de ayer.'],
+                        ['Capital Invertido', 'La suma de lo que costó comprar lo que hay abierto ahora mismo. Es la base de referencia; no cambia con el precio.'],
+                        ['Valor de Mercado', 'Lo que valdría hoy todo lo abierto si se vendiera al precio actual, y cuánto es eso frente al precio de compra.'],
+                        ['P&L Neto', 'La ganancia o pérdida de lo abierto, ya descontadas las comisiones pagadas. Es la cifra más cercana a lo que se ganaría vendiendo hoy.'],
+                        ['Capital Disponible', 'Cuánto del capital base queda libre para abrir posiciones nuevas, según las reglas de nivel.'],
+                        ['P&L Realizado', 'Lo que ya está cobrado de verdad: el resultado acumulado de las operaciones cerradas. No depende de ningún precio actual.'],
+                    ]},
+                    { type: 'text', content: 'Las dos últimas solo aparecen cuando el reparto por niveles se puede calcular. Si faltan, es que la hoja no tiene niveles válidos en las posiciones — y la terminal prefiere no enseñar la tarjeta antes que enseñar un número inventado.' },
+                ]
+            },
+            {
+                heading: 'La confusión más común: realizado contra no realizado',
+                blocks: [
+                    { type: 'concept', title: 'P&L no realizado', content: 'La ganancia o pérdida de una posición que sigue abierta. Existe solo sobre el papel: cambia cada día con el precio y puede desaparecer entera antes de vender. Es lo que miden Valor de Mercado y P&L Neto.' },
+                    { type: 'concept', title: 'P&L realizado', content: 'La ganancia o pérdida de una posición ya cerrada. Ese dinero ya está, no vuelve a moverse pase lo que pase con el precio del valor. Es lo que mide la tarjeta P&L Realizado.' },
+                    { type: 'text', content: 'Confundirlas lleva a dos errores opuestos: creerse rico por un no realizado grande que aún puede evaporarse, o creerse en pérdidas ignorando un realizado que ya está cobrado.' },
+                ]
+            },
+            {
+                heading: 'El aviso pequeño que hay debajo de las tarjetas',
+                blocks: [
+                    { type: 'warning', content: 'Bajo la fila de tarjetas hay una línea que dice que esas cifras son SOLO de posiciones abiertas. Es importante: las operaciones cerradas no están ahí, se calculan aparte en la sección Historial Cerradas. Una cartera puede tener un P&L Neto flojo y un historial de cerradas excelente, o al revés.' },
+                ]
+            },
+            {
+                heading: 'Los precios en vivo y el punto que parpadea',
+                blocks: [
+                    { type: 'text', content: 'Junto al título de la tabla de posiciones hay un punto de estado. En verde significa que la terminal está recibiendo precios y actualizando las cifras sola, sin recargar la página. En gris o apagado significa que lo que se ve es la última carga.' },
+                    { type: 'text', content: 'Hay dos matices que conviene tener claros para no desconfiar del dato sin motivo:' },
+                    { type: 'table', headers: ['Situación', 'Qué se ve y por qué'], rows: [
+                        ['Mercado cerrado', 'Los precios no cambian aunque la conexión esté activa. No hay operaciones que reflejar.'],
+                        ['Antes de la apertura o después del cierre', 'El precio puede moverse en el mercado extendido, pero el porcentaje del día se sigue calculando contra el último cierre oficial.'],
+                        ['Una posición muy poco negociada', 'Puede quedarse con el precio de la última operación real durante bastante rato. No es un fallo: es que nadie ha comprado ni vendido.'],
+                    ]},
+                ]
+            },
+        ]
+    },
+
+    '27-7': {
+        moduleId: 27,
+        lessonIndex: 6,
+        title: 'La Tabla, el Riesgo y la Asignación',
+        duration: '10 min',
+        intro: 'El cuerpo de la pantalla son la tabla de posiciones abiertas, los paneles de riesgo y el reparto objetivo contra el real. Esta lección explica columna por columna qué está mirando y qué decisiones permite tomar.',
+        sections: [
+            {
+                heading: 'Las columnas de la tabla',
+                blocks: [
+                    { type: 'table', headers: ['Columna', 'Qué dice'], rows: [
+                        ['FECHA', 'Cuándo se abrió la posición.'],
+                        ['TICKER', 'El valor. Al pulsarlo se abre su ficha completa en Research.'],
+                        ['NIVEL', 'CORE, HIGH o LOTTERY — el tamaño que le corresponde (lección 27-5).'],
+                        ['SECTOR', 'A qué sector pertenece. Alimenta el panel de exposición de más abajo.'],
+                        ['P. COMPRA y P. ACTUAL', 'Precio de entrada y precio de ahora mismo.'],
+                        ['HOY %', 'Cuánto se mueve el valor en la sesión de hoy. Si no hay dato de cierre anterior, aparece un guion, no un cero.'],
+                        ['P&L %', 'El retorno de la posición desde que se abrió.'],
+                        ['P&L $', 'El mismo retorno, en dinero. Es el que dice el impacto real: un +40% en una posición pequeña pesa menos que un +5% en una grande.'],
+                        ['DÍAS', 'Cuánto tiempo lleva abierta. Pone en contexto el retorno.'],
+                        ['PESO', 'Qué porcentaje de la cartera representa, con una barra para compararlo de un vistazo.'],
+                        ['7D', 'Mini-gráfico de los últimos siete días.'],
+                        ['COMENTARIO', 'La nota que acompaña a la posición, si la tiene.'],
+                    ]},
+                    { type: 'tip', label: 'ORDENAR Y FILTRAR', content: 'Las cabeceras con flecha se pueden pulsar para ordenar. Ordenar por P&L $ (no por P&L %) es el mejor primer vistazo para saber qué posiciones están moviendo de verdad el resultado de la cartera.' },
+                ]
+            },
+            {
+                heading: 'Peso 0% y el aviso SIN ASIGNAR',
+                blocks: [
+                    { type: 'text', content: 'Si una posición aparece marcada como <b>sin asignar</b>, no significa que valga cero. Significa que las reglas de nivel se quedaron sin capital antes de llegar a ella (la situación explicada en la lección 27-5).' },
+                    { type: 'warning', content: 'La distinción importa porque un 0% a secas se lee como «esto no pesa nada» cuando en realidad significa «esto todavía no tiene tamaño asignado en el modelo». Son cosas muy distintas, y la terminal las escribe distinto a propósito.' },
+                ]
+            },
+            {
+                heading: 'Los paneles de riesgo',
+                blocks: [
+                    { type: 'text', content: 'Debajo de las tarjetas hay dos bloques que responden a «dónde está el riesgo de verdad»:' },
+                    { type: 'table', headers: ['Panel', 'Qué muestra', 'Cómo leerlo'], rows: [
+                        ['Mayor / Menor posición, Mejor / Peor P&L', 'Los cuatro extremos de la cartera.', 'La mayor posición es la que puede hacer más daño si la tesis falla. Conviene que coincida con la que más convicción tiene, no con la que más ha subido.'],
+                        ['Exposición por sector', 'Cuánto peso hay en cada sector, ordenado.', 'Revela concentración que no se ve mirando posición a posición: cinco valores distintos pueden ser en realidad la misma apuesta.'],
+                        ['Concentración por sector', 'Un índice de 0 a 100 que resume lo repartida que está la cartera.', 'Cuanto más alto, más concentrada. Se etiqueta como baja, moderada o alta para poder leerlo sin saber la fórmula.'],
+                    ]},
+                    { type: 'concept', title: 'Por qué un índice y no solo la lista', content: 'La lista de sectores dice dónde estás; el índice dice cuánto dependes de acertar. Una cartera repartida entre ocho sectores y otra con el 60% en uno solo pueden parecerse en la lista, pero no se comportan igual cuando ese sector cae.' },
+                ]
+            },
+            {
+                heading: 'El panel de ASIGNACIÓN: objetivo contra real',
+                blocks: [
+                    { type: 'text', content: 'Es el panel que conecta la teoría de los niveles con la realidad del capital. Por cada nivel muestra cuántas posiciones hay, cuánto capital deberían llevar según las reglas, cuánto llevan de verdad y cuántas se han quedado sin asignar.' },
+                    { type: 'text', content: 'Al final da un veredicto en una frase: si todo lo abierto cabe dentro de las reglas, lo dice; y si no cabe, dice exactamente cuánto falta y recuerda las tres formas de arreglarlo (cerrar posiciones, bajar los pesos o subir el capital base).' },
+                    { type: 'tip', label: 'LA LECTURA ÚTIL', content: 'Un déficit grande y persistente en este panel no es un problema técnico: es la cartera diciendo que hay más ideas abiertas de las que el capital puede sostener con el tamaño que se les ha asignado. Es la señal más honesta que da la pantalla.' },
+                ]
+            },
+        ]
+    },
+
+    '27-8': {
+        moduleId: 27,
+        lessonIndex: 7,
+        title: 'Evolución, Cerradas, Límites y Glosario',
+        duration: '10 min',
+        intro: 'Cierre del módulo: la curva de patrimonio y por qué su porcentaje no es el que parece, el historial de operaciones cerradas, lo que esta pantalla NO hace, y un glosario de todo lo que aparece en ella.',
+        sections: [
+            {
+                heading: 'La curva de patrimonio y el retorno de verdad',
+                blocks: [
+                    { type: 'text', content: 'El gráfico de evolución dibuja dos líneas: el patrimonio total y el capital aportado. La distancia entre ambas es lo que ha generado la cartera; la subida de la línea de aportado es dinero nuevo que ha entrado.' },
+                    { type: 'concept', title: 'Por qué la resta simple engaña', content: 'En una cartera que se está construyendo, comparar el valor de hoy con el del primer día no mide rentabilidad: mide sobre todo cuánto dinero nuevo se ha ido metiendo. Una cartera que empieza con 10.000 y acaba con 30.000 tras aportar 18.000 no ha ganado un 200%.' },
+                    { type: 'text', content: 'Por eso el porcentaje que muestra la terminal es el <b>retorno ponderado por tiempo</b>: descuenta cada aportación del día en que entró antes de medir el rendimiento. Es la forma estándar de comparar una cartera con entradas y salidas de dinero contra un índice.' },
+                    { type: 'warning', content: 'La curva incluye las posiciones ya cerradas: al vender, su importe sigue contando como caja. Es deliberado. Si solo se dibujaran las posiciones abiertas, cerrar las que salieron mal mejoraría la curva sola, que es la forma más silenciosa de mentirse con un gráfico.' },
+                ]
+            },
+            {
+                heading: 'El historial de cerradas',
+                blocks: [
+                    { type: 'table', headers: ['Cifra', 'Qué mide', 'Cuidado con'], rows: [
+                        ['Trades Cerrados', 'Cuántas operaciones se han cerrado, y cuántas en ganancia y en pérdida.', 'Un número bajo hace que las otras dos cifras signifiquen poco.'],
+                        ['Win Rate', 'Qué porcentaje de las cerradas acabó en positivo.', 'Un win rate alto con ganancias diminutas y pérdidas enormes es peor que uno bajo al revés. Por sí solo no dice si se gana dinero.'],
+                        ['P&L Total Acum.', 'El retorno medio de las cerradas, PONDERADO por el capital de cada una.', 'Ponderado significa que una operación de 12.000 pesa más que una de 500. Sumar los porcentajes sin ponderar daría un número sin significado económico.'],
+                    ]},
+                    { type: 'text', content: 'Debajo, el histograma reparte las operaciones cerradas por tramos de resultado. Sirve para ver la forma de los resultados de un vistazo: si las ganancias son grandes y las pérdidas pequeñas, o al revés.' },
+                ]
+            },
+            {
+                heading: 'Lo que esta pantalla no hace',
+                blocks: [
+                    { type: 'table', headers: ['Límite', 'Detalle'], rows: [
+                        ['No es una recomendación', 'Es un reparto real mostrado como material de estudio. Ver una posición aquí no es una indicación de comprarla.'],
+                        ['No ejecuta nada', 'La terminal muestra y calcula. No compra, no vende y no está conectada a ningún bróker.'],
+                        ['Los datos entran a mano', 'Las posiciones vienen de una hoja que se mantiene manualmente. Un dato mal escrito ahí se propaga a toda la pantalla, y por eso la terminal avisa cuando detecta fechas o cifras incoherentes en vez de calcular sobre ellas en silencio.'],
+                        ['Los precios pueden ir con retraso', 'No es un terminal profesional de mercado. Para una decisión de años eso es irrelevante; para una operación intradía, no valdría.'],
+                        ['No cubre la cartera entera', 'Solo dos de los cuatro bloques del reparto (lección 27-1). SPXL y la parte de criptomonedas tienen su propio módulo.'],
+                        ['El pasado no se repite igual', 'El historial de cerradas describe lo que ocurrió. No es una previsión de lo que va a ocurrir.'],
+                    ]},
+                ]
+            },
+            {
+                heading: 'Glosario de la pantalla',
+                blocks: [
+                    { type: 'table', headers: ['Término', 'Qué significa'], rows: [
+                        ['P&L', 'Del inglés profit and loss: la ganancia o pérdida de una posición.'],
+                        ['Realizado / No realizado', 'Realizado es lo ya cobrado al cerrar la posición. No realizado es lo que existe solo mientras la posición sigue abierta.'],
+                        ['Capital base', 'La cifra de referencia sobre la que se calculan los pesos por nivel. No es el valor de mercado del día.'],
+                        ['Nivel (CORE / HIGH / LOTTERY)', 'La etiqueta que determina el tamaño de una posición: 5%, 3% o 1% del capital base.'],
+                        ['Peso', 'Qué porcentaje de la cartera representa una posición.'],
+                        ['Sin asignar', 'Posición abierta a la que las reglas de nivel no han podido dar tamaño porque el capital se agotó antes. No es un peso del 0%.'],
+                        ['Déficit de asignación', 'Cuánto dinero falta para dar tamaño completo a todo lo que está abierto.'],
+                        ['Concentración por sector', 'Índice de 0 a 100 que resume cuánto depende la cartera de un solo sector. Alto = concentrada.'],
+                        ['Retorno ponderado por tiempo', 'Rentabilidad calculada descontando las aportaciones de dinero nuevo, para que midan el rendimiento y no el ahorro.'],
+                        ['Win Rate', 'Porcentaje de operaciones cerradas que acabaron en positivo.'],
+                        ['Media ponderada por capital', 'Media en la que cada operación pesa según el dinero que llevaba, no todas igual.'],
+                        ['Prima de valoración', 'Lo que el mercado paga por encima de la media por una empresa, a cuenta de su crecimiento o de lo difícil que es sustituirla.'],
+                        ['Misión crítica', 'Una compañía cuyo producto o servicio no se puede quitar del proceso sin detenerlo, y que es cara o lenta de sustituir.'],
+                        ['Mercado extendido', 'Las horas de negociación antes de la apertura y después del cierre oficial, con mucho menos volumen.'],
+                    ]},
+                ]
+            },
+            {
+                heading: 'Resumen del módulo',
+                blocks: [
+                    { type: 'tip', label: 'LA CARTERA RSU — LA REGLA', content: 'Un reparto decidido de antemano en cuatro bloques, del que esta pantalla muestra dos. Las posiciones se eligen por estar dentro de tendencias de varios años y ser difíciles de sustituir; se paga una prima por eso y se cobra en forma de volatilidad. El tamaño se decide ANTES de comprar con tres niveles fijos (5/3/1%), las decisiones se toman en gráfico semanal o mensual, y la rentabilidad se juzga con el retorno ponderado por tiempo, no con la resta del principio al final. Todo lo que la pantalla no puede calcular con datos reales, lo deja en blanco en vez de rellenarlo.' },
+                ]
+            },
+        ]
+    },
 };

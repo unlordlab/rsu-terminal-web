@@ -11529,6 +11529,105 @@ function leveraged_decay_example() {
     </svg>`;
 }
 
+// ── Módulo 27 — La Cartera RSU ───────────────────────────────────────────────
+
+function rsu_asignacion_donut() {
+    const W=680, H=300;
+    const cx=190, cy=150, rOut=105, rIn=58;
+    // Reparto de diseño de la cartera RSU (septiembre 2025). Son los pesos
+    // OBJETIVO del reparto, no una foto de lo que hay abierto hoy -- por eso
+    // la fecha va escrita en el propio gráfico, no implícita.
+    const segs = [
+        { label: 'Estrategia SPXL', pct: 40, color: C.accent,  modulo: 'módulo SPXL' },
+        { label: 'RSU Stocks',      pct: 30, color: C.cyan,    modulo: 'Cartera — CORE / HIGH' },
+        { label: 'Cryptos',         pct: 20, color: C.orange,  modulo: 'BTC Stratum + tickers cripto' },
+        { label: 'Beta Stocks',     pct: 10, color: C.yellow,  modulo: 'Cartera — LOTTERY' },
+    ];
+    const toXY = (deg, r) => {
+        const rad = (deg - 90) * Math.PI / 180;
+        return [(cx + r * Math.cos(rad)).toFixed(1), (cy + r * Math.sin(rad)).toFixed(1)];
+    };
+    let acc = 0, paths = '', leyenda = '';
+    segs.forEach((s, i) => {
+        const a0 = acc * 3.6, a1 = (acc + s.pct) * 3.6;
+        acc += s.pct;
+        const large = (a1 - a0) > 180 ? 1 : 0;
+        const [x0o, y0o] = toXY(a0, rOut), [x1o, y1o] = toXY(a1, rOut);
+        const [x1i, y1i] = toXY(a1, rIn),  [x0i, y0i] = toXY(a0, rIn);
+        paths += `<path d="M${x0o},${y0o} A${rOut},${rOut} 0 ${large} 1 ${x1o},${y1o} L${x1i},${y1i} A${rIn},${rIn} 0 ${large} 0 ${x0i},${y0i} Z" fill="${s.color}" opacity="0.85"/>`;
+        const ly = 62 + i * 52;
+        leyenda += `<rect x="360" y="${ly-11}" width="12" height="12" fill="${s.color}" opacity="0.85" rx="2"/>
+            <text x="380" y="${ly}" fill="${C.text}" font-size="13" font-family="monospace">${s.label} — ${s.pct}%</text>
+            <text x="380" y="${ly+17}" fill="${C.textDim}" font-size="10" font-family="monospace">Se sigue en: ${s.modulo}</text>`;
+    });
+    return `<svg viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg">
+        <rect width="${W}" height="${H}" fill="${C.bg}" rx="6"/>
+        ${paths}
+        <text x="${cx}" y="${cy-4}" fill="${C.text}" font-size="12" font-family="monospace" text-anchor="middle">CARTERA RSU</text>
+        <text x="${cx}" y="${cy+14}" fill="${C.textDim}" font-size="10" font-family="monospace" text-anchor="middle">reparto objetivo</text>
+        ${leyenda}
+        <text x="${W/2}" y="${H-12}" fill="${C.textDim}" font-size="9" font-family="monospace" text-anchor="middle">Reparto de diseño publicado en septiembre de 2025 — los pesos reales de hoy los da la sección ASIGNACIÓN de la Cartera</text>
+    </svg>`;
+}
+
+function rsu_cuatro_bloques() {
+    const W=680, H=260;
+    // Los 4 bloques del reparto NO viven todos en la misma pantalla: esta
+    // tabla dice dónde se sigue cada uno, para que nadie busque la estrategia
+    // SPXL dentro de la tabla de posiciones.
+    const filas = [
+        { bloque: 'Estrategia SPXL', donde: 'Módulo SPXL',            que: 'Fases de compra, runner y backtest propio' },
+        { bloque: 'RSU Stocks',      donde: 'Cartera (CORE / HIGH)',  que: 'Posiciones abiertas con tesis de largo plazo' },
+        { bloque: 'Cryptos',         donde: 'BTC Stratum + Cartera',  que: 'Semáforo de BTC y tickers como IBIT o MSTR' },
+        { bloque: 'Beta Stocks',     donde: 'Cartera (LOTTERY)',      que: 'Posiciones pequeñas, alto riesgo asumido' },
+    ];
+    const colores = [C.accent, C.cyan, C.orange, C.yellow];
+    let rows = '';
+    filas.forEach((f, i) => {
+        const y = 78 + i * 42;
+        rows += `<rect x="20" y="${y-22}" width="${W-40}" height="34" fill="${C.surface}" rx="4"/>
+            <rect x="20" y="${y-22}" width="4" height="34" fill="${colores[i]}" rx="2"/>
+            <text x="36" y="${y-3}" fill="${C.text}" font-size="12" font-family="monospace">${f.bloque}</text>
+            <text x="210" y="${y-3}" fill="${colores[i]}" font-size="11" font-family="monospace">${f.donde}</text>
+            <text x="36" y="${y+11}" fill="${C.textDim}" font-size="9.5" font-family="monospace">${f.que}</text>`;
+    });
+    return `<svg viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg">
+        <rect width="${W}" height="${H}" fill="${C.bg}" rx="6"/>
+        <text x="20" y="30" fill="${C.text}" font-size="13" font-family="monospace">Dónde se sigue cada bloque del reparto</text>
+        <text x="20" y="48" fill="${C.textDim}" font-size="10" font-family="monospace">La Cartera muestra dos de los cuatro; los otros dos tienen su propia pantalla</text>
+        ${rows}
+        <text x="${W/2}" y="${H-10}" fill="${C.textDim}" font-size="9" font-family="monospace" text-anchor="middle">CORE / HIGH / LOTTERY es otra clasificación: dice cuánto capital lleva cada posición, no a qué bloque pertenece</text>
+    </svg>`;
+}
+
+function rsu_prima_correccion() {
+    const W=680, H=280;
+    const ox=55, oy=30, w=560, h=185;
+    // Dos trayectorias ilustrativas: una empresa con prima de valoración cae
+    // más fuerte en la corrección y recupera antes; una defensiva cae poco y
+    // recupera despacio. Es el patrón que describe la tesis, no un backtest.
+    const prima     = [100, 104, 108, 112, 84, 72, 80, 96, 112, 128, 140];
+    const defensiva = [100, 101, 103, 104,  96,  92,  94,  97, 100, 103, 106];
+    const mn = 65, mx = 145;
+    const toY = (v) => (oy + h - ((v - mn) / (mx - mn)) * h).toFixed(1);
+    const toX = (i, n) => (ox + (i / (n - 1)) * w).toFixed(1);
+    const path = (a) => a.map((v, i) => (i === 0 ? 'M' : 'L') + toX(i, a.length) + ' ' + toY(v)).join(' ');
+    const xCaida = toX(5, prima.length);
+    return `<svg viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg">
+        <rect width="${W}" height="${H}" fill="${C.bg}" rx="6"/>
+        ${gridLines(ox, oy, w, h, 4)}
+        <line x1="${xCaida}" y1="${oy}" x2="${xCaida}" y2="${oy+h}" stroke="${C.red}" stroke-width="1" stroke-dasharray="4,4" opacity="0.6"/>
+        <text x="${xCaida}" y="${oy-8}" fill="${C.red}" font-size="10" font-family="monospace" text-anchor="middle">corrección de mercado</text>
+        <line x1="${ox}" y1="${toY(100)}" x2="${ox+w}" y2="${toY(100)}" stroke="${C.textDim}" stroke-width="1" stroke-dasharray="3,3" opacity="0.5"/>
+        <path d="${path(defensiva)}" stroke="${C.textDim}" stroke-width="2" fill="none"/>
+        <path d="${path(prima)}" stroke="${C.accent}" stroke-width="2.5" fill="none"/>
+        <text x="${ox+w}" y="${toY(prima[prima.length-1])-8}" fill="${C.accent}" font-size="11" font-family="monospace" text-anchor="end">Con prima de valoración: cae -36%, luego recupera y supera</text>
+        <text x="${ox+w}" y="${toY(defensiva[defensiva.length-1])+16}" fill="${C.textDim}" font-size="11" font-family="monospace" text-anchor="end">Defensiva: cae -12%, recupera despacio</text>
+        <text x="${W/2}" y="${H-28}" fill="${C.text}" font-size="10.5" font-family="monospace" text-anchor="middle">La volatilidad es el precio que se paga por estar en el sitio correcto — pero solo si la tesis sigue intacta</text>
+        <text x="${W/2}" y="${H-10}" fill="${C.textDim}" font-size="9" font-family="monospace" text-anchor="middle">Trayectorias ilustrativas del patrón descrito, no datos históricos de ninguna empresa concreta</text>
+    </svg>`;
+}
+
 export const CHARTS = {
     // Módulo 0
     rsu_philosophy, rsu_community, rsu_for_who,
@@ -11650,4 +11749,6 @@ export const CHARTS = {
     volatility_vs_permanent_loss, vix_direction_neutral, fear_spike_mean_reversion,
     // Módulo 25
     dca_mechanics, dca_vs_lumpsum, leveraged_decay_example,
+    // Módulo 27
+    rsu_asignacion_donut, rsu_cuatro_bloques, rsu_prima_correccion,
 };
