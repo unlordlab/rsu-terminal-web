@@ -1392,6 +1392,16 @@ Hasta el 1 de agosto de 2026 esta columna sumaba además +10 puntos por "retorno
 LA MISMA CIFRA EN LAS DOS PANTALLAS:
 Esta columna y el SCORE TÉCNICO del análisis individual usan ya la misma fórmula. Antes eran dos escalas distintas que coincidían solo el 16% de las veces, con hasta 38 puntos de diferencia para el mismo valor el mismo día.
 
+LOS TRES UMBRALES DEL SELECTOR:
+▸ 85 — Estricto: el suelo de "fuerte en todo lo que importa". Por debajo empiezan a colarse valores a los que les falta acumulación o les falta RS.
+▸ 75 — Estándar: exige RS alto Y tendencia aprobada Y estar cerca de máximos. Deja fuera el perfil que va bien pero está lejos de su máximo — y estar cerca de máximos es la letra N, no un extra.
+▸ 60 — Amplio: red de arrastre para explorar, no una lista corta.
+
+Están elegidos por el PERFIL que dejan pasar, no para que salga un número concreto de candidatos. Junto a cada opción se muestra cuántos pasan hoy.
+
+QUE SALGAN POCOS CANDIDATOS ES INFORMACIÓN, NO UNA AVERÍA:
+Este es un umbral absoluto, así que el número de candidatos sube y baja con el mercado — y debe hacerlo. En una corrección seria pueden quedar cuatro nombres, o ninguno. Eso es exactamente lo que dice la letra M de CAN SLIM: hay momentos en los que no hay nada que comprar. Un filtro que siempre devolviera "los 50 mejores" nunca podría decirte eso.
+
 CÓMO USARLO:
 No es una señal de compra. Es un filtro para reducir 503 acciones a un puñado que merezca análisis en detalle — que es donde entran los fundamentales (beneficios, ventas, participación institucional) que esta cifra no mira.`
     },

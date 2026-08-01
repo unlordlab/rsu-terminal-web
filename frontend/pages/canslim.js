@@ -130,10 +130,21 @@ function scannerPanel() {
         + '<div style="color:var(--color-accent);font-size:13px;letter-spacing:0.08em;margin-bottom:1rem;">SCANNER S&P 500 COMPLETO</div>'
         + '<div style="display:flex;gap:8px;align-items:center;">'
         + '<div style="color:var(--color-muted);font-size:12px;">Score mínimo:</div>'
+        // Umbrales recalibrados el 01/08/2026, al unificar el score con el del
+        // análisis individual (hallazgo #6). Con la fórmula nueva el score
+        // medio sube 18 puntos, así que los antiguos 40/60/80 seleccionaban
+        // 297/148/33 en vez de los 159/58/12 de antes: las etiquetas dejaban
+        // de describir lo que hacían.
+        //
+        // Los números NO se eligen para que salga un recuento concreto, sino
+        // por el PERFIL que dejan pasar (ver tooltip): 85 es el suelo de
+        // "fuerte en todo", 75 exige RS alto + tendencia + estar cerca de
+        // máximos, y 60 es red de arrastre. Que el recuento suba o baje con
+        // el mercado es justo lo que debe hacer un umbral absoluto.
         + '<select id="min-score" style="background:var(--color-bg);border:1px solid var(--color-border);border-radius:var(--radius);padding:8px 12px;color:var(--color-text);font-family:var(--font-mono);font-size:12px;flex:1;">'
-        + '<option value="40">40 — Amplio</option>'
-        + '<option value="60" selected>60 — Estándar</option>'
-        + '<option value="80">80 — Estricto</option>'
+        + '<option value="60">60 — Amplio</option>'
+        + '<option value="75" selected>75 — Estándar</option>'
+        + '<option value="85">85 — Estricto</option>'
         + '</select>'
         + '</div>'
         + '<div style="color:var(--color-muted);font-size:11px;margin-top:8px;">RS real calculado como percentil vs universo · Scan nocturno automático, sin scan on-demand</div>'
@@ -206,6 +217,7 @@ async function loadScan(container) {
         if (!data.ok) throw new Error(data.error || 'Scan nocturno no disponible todavía');
         _lastScanData = data;
         const select = container.querySelector('#min-score');
+        etiquetarOpciones(select, data.candidates || []);
         _lastMinScore = parseInt(select.value, 10);
         result.innerHTML = renderScanResults(data, _lastMinScore);
     } catch(e) {
@@ -554,6 +566,24 @@ function marcas(r) {
     if (r.en_cartera)   out += '<span title="Tienes una posición abierta en Cartera" style="font-size:11px;">💼</span>';
     if (r.in_watchlist) out += '<span title="Está en tu Watchlist" style="font-size:11px;">⭐</span>';
     return out ? '<span style="margin-left:5px;">' + out + '</span>' : '';
+}
+
+// Escribe cuántos candidatos deja pasar cada umbral en la propia opción del
+// desplegable ("75 — Estándar · 66 candidatos").
+//
+// No es adorno: la razón por la que los umbrales se descalibraron sin que
+// nadie lo notara es que el efecto de cada uno era invisible hasta pulsarlo.
+// Con el recuento delante, si un cambio futuro de la fórmula vuelve a mover
+// la escala, se ve al abrir el desplegable. Y en un mercado malo el número
+// bajará -- eso es información, no una avería (ver el tooltip del SCORE).
+function etiquetarOpciones(select, candidatos) {
+    if (!select) return;
+    [...select.options].forEach(op => {
+        const umbral = parseInt(op.value, 10);
+        const n = candidatos.filter(c => c.score >= umbral).length;
+        const base = op.textContent.split(' · ')[0];
+        op.textContent = base + ' · ' + n + (n === 1 ? ' candidato' : ' candidatos');
+    });
 }
 
 // Enlace a otra pantalla de la terminal con el ticker ya cargado. El ticker
