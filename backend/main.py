@@ -133,12 +133,35 @@ app.include_router(track_record.router, dependencies=rl)
 # router, igual que los endpoints /admin/* de auth.py.
 app.include_router(analytics.router,    dependencies=rl)
 
+class CodigoDeLaApp(StaticFiles):
+    """StaticFiles que obliga a revalidar en cada carga.
+
+    StaticFiles ya manda ETag y Last-Modified, pero NO manda Cache-Control.
+    Sin esa cabecera el navegador aplica "frescura heurística" (RFC 9111):
+    puede reutilizar el fichero sin preguntar al servidor, y cada fichero
+    decide por su cuenta cuándo revalidar. Con módulos ES que se importan
+    entre sí, eso permite que la app cargue con una MEZCLA de versiones --
+    exactamente el fallo que dejó el módulo 27 de Academy sin lecciones el
+    01/08/2026 (ver frontend/sw.js).
+
+    `no-cache` no significa "no guardes", significa "guarda pero pregunta
+    siempre": con el ETag que ya se manda, la respuesta habitual es un 304
+    vacío, así que no cuesta ancho de banda. Solo se aplica al CÓDIGO
+    (JS/CSS); las imágenes, iconos y fuentes de /static y /assets se dejan
+    con el comportamiento de siempre, que ahí sí es el adecuado.
+    """
+    async def get_response(self, path, scope):
+        response = await super().get_response(path, scope)
+        response.headers["Cache-Control"] = "no-cache"
+        return response
+
+
 app.mount("/static",     StaticFiles(directory="../static"),          name="static")
 app.mount("/assets",     StaticFiles(directory="../frontend/assets"), name="assets")
-app.mount("/themes",     StaticFiles(directory="../frontend/themes"), name="themes")
-app.mount("/core",       StaticFiles(directory="../frontend/core"),   name="core")
-app.mount("/components", StaticFiles(directory="../frontend/components"), name="components")
-app.mount("/pages",      StaticFiles(directory="../frontend/pages"),  name="pages")
+app.mount("/themes",     CodigoDeLaApp(directory="../frontend/themes"), name="themes")
+app.mount("/core",       CodigoDeLaApp(directory="../frontend/core"),   name="core")
+app.mount("/components", CodigoDeLaApp(directory="../frontend/components"), name="components")
+app.mount("/pages",      CodigoDeLaApp(directory="../frontend/pages"),  name="pages")
 
 @app.get("/health")
 async def health():
@@ -168,7 +191,12 @@ async def service_worker():
     # Necesita ruta explícita — si no, cae en el comodín del SPA de más abajo
     # y se sirve index.html (HTML) en vez del JS real, que el navegador
     # rechaza al intentar registrarlo como service worker.
-    return FileResponse("../frontend/sw.js", media_type="application/javascript")
+    #
+    # no-cache aquí es lo más importante de todo: si el navegador se queda
+    # con un sw.js viejo, la estrategia nueva no llega a activarse nunca y
+    # da igual lo que hagan las demás cabeceras.
+    return FileResponse("../frontend/sw.js", media_type="application/javascript",
+                        headers={"Cache-Control": "no-cache"})
 
 @app.get("/manifest.json")
 async def pwa_manifest():
@@ -177,4 +205,7 @@ async def pwa_manifest():
 @app.get("/{full_path:path}")
 async def spa_fallback(full_path: str):
     if not full_path.startswith("api/"):
-        return FileResponse("../frontend/index.html")
+        # index.html es el punto de entrada del grafo de módulos: si se
+        # sirve cacheado, arrastra consigo la versión vieja de todo lo demás.
+        return FileResponse("../frontend/index.html",
+                            headers={"Cache-Control": "no-cache"})
