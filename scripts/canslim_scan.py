@@ -35,7 +35,9 @@ import requests
 # corre standalone en el runner de GitHub Actions).
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "shared"))
 from sp500_universe import SP500_SECTOR_MAP  # noqa: E402
-from canslim_engine import perf_12m, acc_dis_rating  # noqa: E402
+from canslim_engine import (  # noqa: E402
+    perf_12m, acc_dis_rating, trend_template, technical_score, NEAR_HIGH_PCT,
+)
 from yf_batch import download_batch  # noqa: E402
 
 GIST_TOKEN = os.environ.get("GIST_TOKEN", "")
@@ -87,16 +89,19 @@ def run_scan() -> dict:
         if len(hist) < 20:
             continue
 
-        ma50  = float(closes.tail(50).mean())
-        ma150 = float(closes.tail(150).mean()) if len(closes) >= 150 else ma50
-        trend_ok = bool(price > ma50 and price > ma150 and ma50 > ma150)
+        # Trend Template de 7 condiciones, el MISMO que la letra L del
+        # análisis individual. Hasta el 01/08/2026 esto era un chequeo de 3
+        # condiciones propio de este script, y las dos definiciones
+        # discrepaban en el 23,8% del universo: había tickers que salían con
+        # la tendencia en verde en la tabla y suspendían al abrirlos. Cuesta
+        # 157 ms más para 500 tickers, frente a los ~35 s de la descarga.
+        trend = trend_template(hist, price)
 
         vol_today = float(vols.iloc[-1])
         vol_ratio = vol_today / vol_avg if vol_avg > 0 else 1.0
         acc_dis   = acc_dis_rating(hist)
 
-        high_52w = float(closes.tail(252).max())
-        pct_from_high = (price - high_52w) / high_52w * 100 if high_52w > 0 else -100
+        pct_from_high = trend["pct_from_high"]
 
         # 3 Weeks Tight: agrega Close/High/Low diarios a semanal (cierre =
         # último de la semana, high/low = máximo/mínimo de la semana) y
@@ -117,7 +122,11 @@ def run_scan() -> dict:
             "perf_12m":      round(perf_12m(hist), 2),
             "acc_dis":       acc_dis,
             "vol_ratio":     round(vol_ratio, 2),
-            "trend":         trend_ok,
+            "trend":         trend["passed"],
+            # Cuántas de las 7 condiciones se cumplen: la tabla lo pinta como
+            # "5/7" en vez de un tick, para que el umbral (5 de 7) deje de ser
+            # invisible y se distinga un aprobado raspado de uno perfecto.
+            "trend_score":   trend["score"],
             "pct_from_high": round(pct_from_high, 1),
             "is_3wt":        is_3wt,
         })
@@ -134,17 +143,15 @@ def run_scan() -> dict:
         rank = sum(1 for p in perfs if p < r["perf_12m"])
         r["rs"] = max(1, min(99, int(rank / len(perfs) * 99) + 1)) if perfs else 50
 
+    # Score técnico: MISMA fórmula que el análisis individual del backend
+    # (shared/canslim_engine.py). La anterior era propia de aquí, con otros
+    # pesos, sin crédito parcial y sumando +10 por «perf_12m >= 20%» cuando
+    # el RS ya ES el percentil de perf_12m -- el mismo dato contaba dos veces.
     candidates = []
     for r in raw_results:
-        near_new_high = r["pct_from_high"] >= -15
-        score = 0
-        if r["rs"] >= 80:             score += 25
-        if r["trend"]:                score += 25
-        if r["acc_dis"] in ["A", "B"]: score += 20
-        if r["vol_ratio"] >= 1.5:     score += 15
-        if r["perf_12m"] >= 20:       score += 10
-        if near_new_high:             score += 5
-        r["score"]         = score
+        near_new_high = r["pct_from_high"] >= NEAR_HIGH_PCT
+        r["score"]         = technical_score(r["rs"], r["trend"], r["trend_score"],
+                                             r["acc_dis"], near_new_high, r["vol_ratio"])
         r["near_new_high"] = near_new_high
         candidates.append(r)
 

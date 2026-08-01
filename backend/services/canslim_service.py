@@ -17,7 +17,13 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "..", "shared")
 from time_utils import get_timestamp  # noqa: E402
 from sp500_universe import SP500_SECTOR_MAP  # noqa: E402
 from market_regime import spy_trend_snapshot  # noqa: E402
-from canslim_engine import perf_12m as _perf_12m, acc_dis_rating as _acc_dis_rating  # noqa: E402
+from canslim_engine import (  # noqa: E402
+    perf_12m as _perf_12m,
+    acc_dis_rating as _acc_dis_rating,
+    trend_template as _trend_template,
+    technical_score as _technical_score,
+    NEAR_HIGH_PCT,
+)
 from services.cache import cache, TTL  # noqa: E402
 warnings.filterwarnings('ignore')
 
@@ -83,57 +89,11 @@ def _smr_rating(sales_g: float, roe: float, margins: float) -> str:
     if score >= 1: return 'D'
     return 'E'
 
-def _trend_template(hist: pd.DataFrame, price: float) -> dict:
-    """Minervini Trend Template — 7 condiciones."""
-    n = len(hist)
-    closes = hist['Close']
-
-    ma50  = float(closes.tail(50).mean())  if n >= 50  else price
-    ma150 = float(closes.tail(150).mean()) if n >= 150 else ma50
-    ma200 = float(closes.tail(200).mean()) if n >= 200 else ma150
-
-    # 200 MA trend (slope over last 20 days)
-    if n >= 220:
-        ma200_20ago = float(closes.iloc[-220:-20].tail(200).mean())
-        ma200_rising = ma200 > ma200_20ago
-    else:
-        # Antes: True por defecto -- sesgo optimista, daba por buena una
-        # condición que en realidad no se puede verificar por falta de
-        # histórico (típico en salidas a bolsa recientes). El resto de
-        # condiciones del Trend Template exigen datos reales para pasar;
-        # esta debe tratarse igual: si no se puede comprobar, no se
-        # concede. Ver conversación 19/07/2026.
-        ma200_rising = False
-
-    high_52w = float(closes.tail(252).max()) if n >= 252 else float(closes.max())
-    low_52w  = float(closes.tail(252).min()) if n >= 252 else float(closes.min())
-
-    pct_from_high = ((price - high_52w) / high_52w * 100) if high_52w > 0 else -100
-
-    conditions = {
-        "Precio > MA150 y MA200":    bool(price > ma150 and price > ma200),
-        "MA150 > MA200":             bool(ma150 > ma200),
-        "MA200 subiendo (20d)":      bool(ma200_rising),
-        "MA50 > MA150 y MA200":      bool(ma50 > ma150 and ma50 > ma200),
-        "Precio > MA50":             bool(price > ma50),
-        ">30% sobre mínimo 52s":     bool(price >= low_52w * 1.30),
-        "< 25% del máximo 52s":      bool(pct_from_high >= -25),
-    }
-
-    score  = sum(conditions.values())
-    passed = score >= 5
-
-    return {
-        "passed":      passed,
-        "score":       score,
-        "conditions":  conditions,
-        "ma50":        round(ma50, 2),
-        "ma150":       round(ma150, 2),
-        "ma200":       round(ma200, 2),
-        "high_52w":    round(high_52w, 2),
-        "low_52w":     round(low_52w, 2),
-        "pct_from_high": round(pct_from_high, 1),
-    }
+# _trend_template() vivía aquí hasta el 01/08/2026. Se movió tal cual a
+# shared/canslim_engine.py porque el scan usaba su propia versión de 3
+# condiciones y la terminal se contradecía a sí misma: la tabla daba la
+# tendencia por buena en tickers que suspendían la letra L al abrirlos.
+# El porqué, con los números medidos, está en la cabecera de ese módulo.
 
 # ── MARKET ANALYZER ───────────────────────────────────────────────────────────
 
@@ -429,18 +389,13 @@ def analyze_ticker(ticker: str, universe_perfs: list = None) -> dict:
         }
 
         # ── Score técnico (lo que puede evaluar sin fundamentales) ───────────
-        # Mismo patrón de reescalado proporcional que fund_score: el
-        # componente RS (25 pts) solo entra si hay percentil real; sin él,
-        # el resto se reescala a /100 en vez de tratar el hueco como un 0.
-        tech_sub, tech_max = [], 0
-        if rs_r is not None:
-            tech_sub.append(25 if rs_r >= 80 else (15 if rs_r >= 70 else 0)); tech_max += 25
-        tech_sub.append(25 if trend['passed']  else (10 if trend['score'] >= 4 else 0)); tech_max += 25
-        tech_sub.append(20 if acc_dis in ['A','B'] else (10 if acc_dis == 'C' else 0)); tech_max += 20
-        tech_sub.append(15 if near_new_high    else 0); tech_max += 15
-        tech_sub.append(15 if vol_ratio >= 1.5 else (8 if vol_ratio >= 1.0 else 0)); tech_max += 15
-        tech_score = int(sum(tech_sub) / tech_max * 100) if tech_max > 0 else 0
-        tech_score = min(100, tech_score)
+        # La fórmula vive en shared/canslim_engine.py desde el 01/08/2026:
+        # el scan usaba antes otra distinta, con otros pesos y contando
+        # perf_12m dos veces. Aquí el resultado no cambia -- es un traslado
+        # literal, y el reescalado proporcional cuando falta el RS sigue
+        # siendo el mismo criterio que usa fund_score justo debajo.
+        tech_score = _technical_score(rs_r, trend['passed'], trend['score'],
+                                      acc_dis, near_new_high, vol_ratio)
 
         # ── Score fundamental ─────────────────────────────────────────────────
         # Sin dato → no penaliza (tratado como ausente, no como "0% malo").
@@ -672,20 +627,16 @@ def _scan_single(ticker: str) -> dict | None:
         except Exception:
             mktcap = 0
 
-        closes  = hist['Close']
-        ma50    = float(closes.tail(50).mean())
-        ma150   = float(closes.tail(150).mean()) if len(closes) >= 150 else ma50
-        ma200   = float(closes.tail(200).mean()) if len(closes) >= 200 else ma150
-
-        trend_ok = bool(price > ma50 and price > ma150 and ma50 > ma150)
+        # Trend Template de 7 condiciones, el MISMO que la letra L del
+        # análisis individual. Antes esto era un chequeo de 3 condiciones
+        # aparte (`price > ma50 and price > ma150 and ma50 > ma150`), y las
+        # dos definiciones discrepaban en el 23,8% del universo -- ver
+        # shared/canslim_engine.py.
+        trend = _trend_template(hist, price)
 
         vol_today = _safe(hist['Volume'].iloc[-1])
         vol_ratio = vol_today / vol_avg if vol_avg > 0 else 1.0
         acc_dis   = _acc_dis_rating(hist)
-
-        high_52w = float(closes.tail(252).max())
-        low_52w  = float(closes.tail(252).min())
-        pct_from_high = (price - high_52w) / high_52w * 100 if high_52w > 0 else -100
 
         return {
             "ticker":      ticker,
@@ -693,13 +644,17 @@ def _scan_single(ticker: str) -> dict | None:
             "perf_12m":    round(perf_12m, 2),
             "acc_dis":     acc_dis,
             "vol_ratio":   round(vol_ratio, 2),
-            "trend":       trend_ok,
-            "ma50":        round(ma50, 2),
-            "ma150":       round(ma150, 2),
-            "ma200":       round(ma200, 2),
-            "high_52w":    round(high_52w, 2),
-            "low_52w":     round(low_52w, 2),
-            "pct_from_high": round(pct_from_high, 1),
+            "trend":       trend["passed"],
+            # Cuántas de las 7 condiciones se cumplen. La tabla lo pinta como
+            # "5/7" en vez de un tick: un aprobado raspado y uno perfecto no
+            # son lo mismo, y el umbral (5 de 7) deja de ser invisible.
+            "trend_score": trend["score"],
+            "ma50":        trend["ma50"],
+            "ma150":       trend["ma150"],
+            "ma200":       trend["ma200"],
+            "high_52w":    trend["high_52w"],
+            "low_52w":     trend["low_52w"],
+            "pct_from_high": trend["pct_from_high"],
             "mktcap":      mktcap,
         }
     except Exception:
@@ -736,17 +691,16 @@ def scan_canslim(min_score: int = 40, max_results: int = 50) -> dict:
         rank = sum(1 for p in perfs if p < r['perf_12m'])
         r['rs'] = max(1, min(99, int(rank / len(perfs) * 99) + 1)) if perfs else 50
 
-    # Paso 3: Score con RS real
+    # Paso 3: Score con RS real -- MISMA fórmula que el análisis individual
+    # (shared/canslim_engine.py). La versión anterior era propia de aquí, con
+    # otros pesos, sin crédito parcial y sumando +10 por «perf_12m >= 20%»
+    # cuando el RS ya ES el percentil de perf_12m: el mismo dato puntuaba dos
+    # veces. Ver la cabecera de canslim_engine.py.
     candidates = []
     for r in raw_results:
-        near_new_high = r['pct_from_high'] >= -15
-        score = 0
-        if r['rs'] >= 80:            score += 25
-        if r['trend']:               score += 25
-        if r['acc_dis'] in ['A','B']:score += 20
-        if r['vol_ratio'] >= 1.5:    score += 15
-        if r['perf_12m'] >= 20:      score += 10
-        if near_new_high:            score += 5
+        near_new_high = r['pct_from_high'] >= NEAR_HIGH_PCT
+        score = _technical_score(r['rs'], r['trend'], r['trend_score'],
+                                 r['acc_dis'], near_new_high, r['vol_ratio'])
 
         if score >= min_score:
             r['score'] = score

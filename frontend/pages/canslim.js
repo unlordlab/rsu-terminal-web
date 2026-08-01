@@ -490,6 +490,20 @@ function renderChart(data) {
 
 // ── SCAN RESULTS ──────────────────────────────────────────────────────────────
 
+// Desde el 01/08/2026 el scan usa el mismo Trend Template de 7 condiciones
+// que el análisis individual, y publica cuántas cumple cada ticker. Se pinta
+// "5/7" en vez de un tick: así se ve la diferencia entre un aprobado raspado
+// y uno perfecto, y el umbral (5 de 7) deja de ser invisible.
+//
+// El `trend_score == null` no es defensivo por si acaso: entre que se
+// despliega esto y corre el primer scan nocturno, el Gist todavía trae los
+// datos del scan anterior, que no tienen ese campo. Durante esas horas se
+// sigue pintando el tick de siempre en vez de un "undefined/7".
+function trendCelda(c) {
+    if (c.trend_score == null) return c.trend ? '✓' : '✗';
+    return esc(c.trend_score) + '/7';
+}
+
 function renderScanResults(data, minScore) {
     // El Gist nocturno trae TODOS los candidatos ya puntuados (sesión 32) --
     // el filtro por score mínimo, antes resuelto en el backend vía query
@@ -527,7 +541,7 @@ function renderScanResults(data, minScore) {
             + '<div style="color:' + gradeColor(c.acc_dis) + ';">' + esc(c.acc_dis) + '</div>'
             + '<div style="color:' + nearColor + ';">' + (c.near_new_high ? '✓' : esc(c.pct_from_high) + '%') + '</div>'
             + '<div style="color:' + (c.vol_ratio >= 1.5 ? 'var(--color-accent)' : 'var(--color-muted)') + ';">' + c.vol_ratio.toFixed(1) + 'x</div>'
-            + '<div style="color:' + (c.trend ? 'var(--color-accent)' : '#f23645') + ';">' + (c.trend ? '✓' : '✗') + '</div>'
+            + '<div style="color:' + (c.trend ? 'var(--color-accent)' : '#f23645') + ';">' + trendCelda(c) + '</div>'
             + '<div style="color:' + (c.is_3wt ? 'var(--color-accent)' : 'var(--color-muted)') + ';">' + (c.is_3wt ? '✓' : '—') + '</div>'
             + '<div style="color:' + scoreColor + ';font-weight:500;">' + esc(c.score) + '</div>'
             + '</div>';

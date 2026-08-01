@@ -1352,37 +1352,48 @@ CÓMO USARLO:
     },
 
     "canslim-scan-trend": {
-        title: "TREND (scanner) — Alineación rápida de medias móviles",
-        short: "Chequeo ligero de 3 condiciones (Precio > MA50, Precio > MA150, MA50 > MA150) usado en el scan de las 503 acciones.",
-        long: `Esta es una versión SIMPLIFICADA del filtro técnico, pensada para poder evaluar las 503 acciones del S&P 500 cada noche sin ralentizar el scan. Comprueba solo 3 condiciones:
+        title: "TREND — Trend Template de Minervini (X de 7)",
+        short: "Cuántas de las 7 condiciones del Trend Template cumple el valor. Se aprueba con 5. Es exactamente el mismo criterio que la letra L del análisis individual.",
+        long: `Las 7 condiciones, tal como las define Minervini:
 
-1. Precio > MA50
-2. Precio > MA150
-3. MA50 > MA150
+1. Precio por encima de la MA150 y de la MA200
+2. MA150 por encima de la MA200
+3. MA200 subiendo (comparada con hace 20 sesiones)
+4. MA50 por encima de la MA150 y de la MA200
+5. Precio por encima de la MA50
+6. Precio al menos un 30% por encima del mínimo de 52 semanas
+7. Precio a menos de un 25% del máximo de 52 semanas
 
-✓ = las 3 se cumplen (tendencia alcista de corto/medio plazo confirmada)
-✗ = al menos una falla
+Se aprueba con 5 de las 7. Por eso la columna muestra "5/7" y no un simple ✓: un aprobado raspado y uno perfecto no son la misma situación, y con un tick no se distinguen.
 
-NO ES EL TREND TEMPLATE COMPLETO:
-El análisis individual de un ticker (pestaña "ANALIZAR") usa el Trend Template completo de Minervini, con 7 condiciones — incluye MA200, la pendiente de la MA200, y el rango de 52 semanas, no solo la alineación de medias cortas. Este chequeo de 3 condiciones del scan es un filtro rápido para descartar candidatos débiles a gran escala, no un sustituto del análisis completo — usa el candidato del scan como punto de partida, luego analízalo individualmente antes de decidir nada.`
+MISMO CRITERIO QUE EL ANÁLISIS INDIVIDUAL:
+Hasta el 1 de agosto de 2026 esta columna usaba un chequeo distinto, de solo 3 condiciones (precio sobre MA50 y MA150, y MA50 sobre MA150), mientras el análisis individual usaba las 7. Las dos definiciones discrepaban en el 23,8% del S&P 500: había valores que aparecían aquí con la tendencia en verde y suspendían la letra L al abrirlos, porque el chequeo corto no miraba las 52 semanas y no podía distinguir un rebote dentro de una caída de una tendencia real. Ahora las dos pantallas dicen lo mismo.
+
+SIGUE SIN SER EL ANÁLISIS COMPLETO:
+Esta columna es solo la parte técnica. El análisis individual añade los fundamentales (beneficios, ventas, participación institucional), que no se pueden calcular para las 503 acciones cada noche. Usa el candidato del scan como punto de partida, no como conclusión.`
     },
 
     "canslim-scan-score": {
-        title: "SCORE (scan) — Puntuación técnica 0-100",
-        short: "Suma de 6 factores técnicos, cada uno con su propio peso: RS, tendencia, Acc/Dis, volumen, retorno 12m y cercanía al máximo.",
-        long: `El score del scanner combina 6 señales puramente técnicas (sin fundamentales — esos solo se calculan en el análisis individual, sería demasiado caro pedirlos cada noche para 503 acciones):
+        title: "SCORE — Puntuación técnica 0-100",
+        short: "Cinco factores técnicos con crédito parcial: RS, tendencia, Acc/Dis, cercanía al máximo y volumen. Es la misma cifra que el SCORE TÉCNICO del análisis individual.",
+        long: `Cinco factores, con crédito parcial (no es todo o nada):
 
-▸ RS ≥ 80 → +25 puntos
-▸ TREND (las 3 condiciones de medias móviles) ✓ → +25 puntos
-▸ ACC/DIS en A o B → +20 puntos
-▸ VOL RATIO ≥ 1.5x → +15 puntos
-▸ 12M PERF ≥ 20% → +10 puntos
-▸ NEAR HIGH (dentro del 15% del máximo) → +5 puntos
+▸ RS Rating — 25 pts si ≥80, 15 pts si ≥70
+▸ TREND — 25 pts si aprueba el Trend Template (5 de 7), 10 pts si cumple 4
+▸ ACC/DIS — 20 pts si es A o B, 10 pts si es C
+▸ NEAR HIGH — 15 pts si está a menos del 15% de su máximo de 52 semanas
+▸ VOL RATIO — 15 pts si ≥1.5x, 8 pts si ≥1.0x
 
-Máximo posible: 100 puntos, si se cumplen los 6 factores a la vez.
+Máximo: 100 puntos. Si no hay RS Rating disponible (hace falta el universo completo para calcular el percentil), ese componente no cuenta y el resto se reescala sobre 100 — el hueco no se rellena con un cero, que sería tratarlo como "malo" en vez de como "desconocido".
+
+POR QUÉ EL RETORNO A 12 MESES NO SUMA APARTE:
+Hasta el 1 de agosto de 2026 esta columna sumaba además +10 puntos por "retorno a 12 meses ≥ 20%". Era contar el mismo dato dos veces: el RS Rating ES el percentil del retorno a 12 meses dentro del universo. Medido sobre el S&P 500 real, los valores que cobraban ese bonus tenían un RS medio de 78,5 frente a 29,0 los que no — premiaba exactamente lo que el RS ya había premiado.
+
+LA MISMA CIFRA EN LAS DOS PANTALLAS:
+Esta columna y el SCORE TÉCNICO del análisis individual usan ya la misma fórmula. Antes eran dos escalas distintas que coincidían solo el 16% de las veces, con hasta 38 puntos de diferencia para el mismo valor el mismo día.
 
 CÓMO USARLO:
-No es una señal de compra por sí sola — es un filtro para reducir 503 acciones a un puñado de candidatos que merece la pena analizar en detalle. Un score alto (70+) significa que el candidato pasa la mayoría de los filtros técnicos de CAN SLIM; el paso siguiente es siempre el análisis individual, que añade fundamentales (EPS, ventas, sponsorship institucional) antes de considerar cualquier decisión real.`
+No es una señal de compra. Es un filtro para reducir 503 acciones a un puñado que merezca análisis en detalle — que es donde entran los fundamentales (beneficios, ventas, participación institucional) que esta cifra no mira.`
     },
     "canslim-3wt": {
         title: "3 Weeks Tight (3WT) — Consolidación en rango estrecho",
