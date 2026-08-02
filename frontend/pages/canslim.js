@@ -137,13 +137,18 @@ function scannerPanel() {
         // de describir lo que hacían.
         //
         // Los números NO se eligen para que salga un recuento concreto, sino
-        // por el PERFIL que dejan pasar (ver tooltip): 85 es el suelo de
-        // "fuerte en todo", 75 exige RS alto + tendencia + estar cerca de
-        // máximos, y 60 es red de arrastre. Que el recuento suba o baje con
-        // el mercado es justo lo que debe hacer un umbral absoluto.
+        // por el PERFIL que dejan pasar (ver tooltip). Que el recuento suba o
+        // baje con el mercado es justo lo que debe hacer un umbral absoluto.
+        //
+        // "Estándar" fue 75 durante unas horas y era un mal número: el máximo
+        // alcanzable SIN un solo punto de RS es exactamente 75, así que el
+        // umbral que presumía de exigir fuerza relativa era justo el único
+        // que no la exigía. Caso real que lo destapó: DXCM, con RS 36 y un
+        // +3,3% a 12 meses, puntuaba 75 clavado. A partir de 76 desaparecen
+        // todos los de RS<70; se sube a 80, que es el corte redondo.
         + '<select id="min-score" style="background:var(--color-bg);border:1px solid var(--color-border);border-radius:var(--radius);padding:8px 12px;color:var(--color-text);font-family:var(--font-mono);font-size:12px;flex:1;">'
         + '<option value="60">60 — Amplio</option>'
-        + '<option value="75" selected>75 — Estándar</option>'
+        + '<option value="80" selected>80 — Estándar</option>'
         + '<option value="85">85 — Estricto</option>'
         + '</select>'
         + '</div>'
@@ -240,6 +245,12 @@ function renderAnalysis(data) {
     const fundScore  = scores.fundamental || 0;
     const combined   = data.canslim_score || 0;
     const fundAvail  = scores.fund_available !== false;
+    // La etiqueta lista los componentes que DE VERDAD entraron en el score
+    // (los manda el backend). Antes prometía siempre los cuatro aunque
+    // alguno se hubiera excluido por falta de dato.
+    const compFund   = (scores.fund_componentes && scores.fund_componentes.length)
+        ? scores.fund_componentes.join(' + ')
+        : 'sin datos disponibles';
 
     const techColor  = techScore  >= 70 ? 'var(--color-accent)' : techScore  >= 50 ? '#ffb800' : '#f23645';
     const fundColor  = !fundAvail ? '#555' : fundScore  >= 70 ? 'var(--color-accent)' : fundScore  >= 40 ? '#ffb800' : '#f23645';
@@ -318,11 +329,26 @@ function renderAnalysis(data) {
     const instColor  = !instOk ? '#555' : instPct > 60 ? 'var(--color-accent)' : instPct > 40 ? '#ffb800' : '#f23645';
     const instVal    = instOk ? instPct.toFixed(1) + '%' : 'Sin dato';
 
+    // Mismo criterio de "hay dato" que usa el backend para el score
+    // fundamental (abs(x) > 0.1): yfinance devuelve 0.0 tanto cuando el
+    // crecimiento es realmente cero como cuando no trae el campo, y no hay
+    // forma de distinguirlos, así que se trata como ausencia.
+    //
+    // Hasta el 01/08/2026 esta tabla pintaba "0.0%" en rojo para un dato que
+    // el bloque de letras de arriba, leyendo EXACTAMENTE el mismo valor,
+    // etiquetaba como "sin dato". El caso lo destapó VTRS: EPS Growth 0.0%
+    // abajo y "C · sin dato" arriba. Es el mismo cero engañoso que se ha ido
+    // quitando del resto del proyecto.
+    const hayDato = (v) => v != null && Math.abs(v) > 0.1;
+    const celdaFund = (v, verde, ambar) => hayDato(v)
+        ? { val: v.toFixed(1) + '%', color: v >= verde ? 'var(--color-accent)' : v >= ambar ? '#ffb800' : '#f23645' }
+        : { val: 'sin dato', color: '#888' };
+
     const fundRows = [
-        ['EPS Growth',    (f.eps_growth   || 0).toFixed(1) + '%', f.eps_growth   >= 25 ? 'var(--color-accent)' : f.eps_growth >= 10 ? '#ffb800' : '#f23645'],
-        ['Sales Growth',  (f.sales_growth || 0).toFixed(1) + '%', f.sales_growth >= 25 ? 'var(--color-accent)' : f.sales_growth >= 10 ? '#ffb800' : '#f23645'],
-        ['ROE',           (f.roe          || 0).toFixed(1) + '%', f.roe >= 20 ? 'var(--color-accent)' : f.roe >= 10 ? '#ffb800' : '#f23645'],
-        ['Profit Margin', (f.margins      || 0).toFixed(1) + '%', f.margins >= 15 ? 'var(--color-accent)' : f.margins >= 5 ? '#ffb800' : '#f23645'],
+        ['EPS Growth',    ...Object.values(celdaFund(f.eps_growth,   25, 10))],
+        ['Sales Growth',  ...Object.values(celdaFund(f.sales_growth, 25, 10))],
+        ['ROE',           ...Object.values(celdaFund(f.roe,          20, 10))],
+        ['Profit Margin', ...Object.values(celdaFund(f.margins,      15,  5))],
     ].map(([label, val, c]) =>
         '<div style="display:flex;justify-content:space-between;padding:7px 0;border-bottom:1px solid var(--color-border);font-size:12px;">'
         + '<span style="color:var(--color-muted);">' + label + '</span>'
@@ -348,7 +374,7 @@ function renderAnalysis(data) {
     const scoreBars = '<div style="margin-top:1rem;padding-top:1rem;border-top:1px solid var(--color-border);">'
         // Score técnico
         + '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">'
-        + '<span style="color:var(--color-muted);font-size:10px;letter-spacing:.06em;">SCORE TÉCNICO <span style="font-size:9px;opacity:.6;">(RS + Trend + Vol)</span></span>'
+        + '<span style="color:var(--color-muted);font-size:10px;letter-spacing:.06em;">SCORE TÉCNICO <span style="font-size:9px;opacity:.6;">(RS + Trend + Acc/Dis + Near High + Vol)</span> ' + tt('canslim-score-tecnico') + '</span>'
         + '<span style="color:' + techColor + ';font-size:13px;font-weight:500;">' + techScore + '/100</span>'
         + '</div>'
         + '<div style="background:var(--color-border);border-radius:3px;height:5px;margin-bottom:10px;">'
@@ -356,7 +382,7 @@ function renderAnalysis(data) {
         + '</div>'
         // Score fundamental
         + '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">'
-        + '<span style="color:var(--color-muted);font-size:10px;letter-spacing:.06em;">SCORE FUNDAMENTAL <span style="font-size:9px;opacity:.6;">(EPS + Sales + ROE + Margin)</span></span>'
+        + '<span style="color:var(--color-muted);font-size:10px;letter-spacing:.06em;">SCORE FUNDAMENTAL <span style="font-size:9px;opacity:.6;">(' + esc(compFund) + ')</span> ' + tt('canslim-score-fundamental') + '</span>'
         + '<span style="color:' + fundColor + ';font-size:13px;font-weight:500;">' + (fundAvail ? fundScore + '/100' : 'Sin datos') + '</span>'
         + '</div>'
         + '<div style="background:var(--color-border);border-radius:3px;height:5px;margin-bottom:10px;">'
@@ -364,7 +390,7 @@ function renderAnalysis(data) {
         + '</div>'
         // Score combinado
         + '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">'
-        + '<span style="color:var(--color-muted);font-size:10px;letter-spacing:.06em;">CAN SLIM SCORE ' + (fundAvail ? '(60% Téc + 40% Fund)' : '(solo técnico · sin fundamentales)') + '</span>'
+        + '<span style="color:var(--color-muted);font-size:10px;letter-spacing:.06em;">CAN SLIM SCORE <span style="font-size:9px;opacity:.6;">' + (fundAvail ? '(60% Téc + 40% Fund)' : '(solo técnico · sin fundamentales)') + '</span> ' + tt('canslim-score-combinado') + '</span>'
         + '<span style="color:' + combColor + ';font-size:16px;font-weight:500;">' + combined + '/100</span>'
         + '</div>'
         + '<div style="background:var(--color-border);border-radius:3px;height:7px;">'

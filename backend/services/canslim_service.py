@@ -493,6 +493,19 @@ def analyze_ticker(ticker: str, universe_perfs: list = None) -> dict:
         # Si no hay NINGÚN dato fundamental, marcar como sin dato
         fund_data_available = len(sub_scores) > 0
 
+        # Qué componentes han entrado DE VERDAD en el score. La etiqueta del
+        # frontend prometía siempre "(EPS + Sales + ROE + Margin)" aunque
+        # alguno se hubiera excluido por falta de dato — caso real de VTRS,
+        # que no tiene EPS y aun así anunciaba los cuatro. Se manda la lista
+        # desde aquí en vez de re-deducirla en el frontend: la regla de
+        # "¿hay dato?" tiene que vivir en un solo sitio.
+        fund_componentes = [
+            etiqueta for etiqueta, hay in (
+                ("EPS", eps_has_data), ("Sales", sales_has_data),
+                ("ROE", roe_has_data), ("Margin", margins_has_data),
+            ) if hay
+        ]
+
         # Score CAN SLIM unificado (60% técnico + 40% fundamental)
         # Si no hay fundamentales, usar solo técnico con disclaimer
         if fund_data_available:
@@ -559,6 +572,9 @@ def analyze_ticker(ticker: str, universe_perfs: list = None) -> dict:
                 "fundamental":  fund_score,
                 "combined":     canslim_score,
                 "fund_available": fund_data_available,
+                # Componentes que de verdad entraron en fund_score, para que
+                # la etiqueta no prometa más de lo que midió.
+                "fund_componentes": fund_componentes,
             },
             "trend":            trend,
             "can_slim_letters": can_slim_letters,

@@ -1351,6 +1351,58 @@ CÓMO USARLO:
 ▸ Vol ratio muy alto sin movimiento de precio → indecisión, mucha gente comprando y vendiendo sin que nadie gane la partida todavía`
     },
 
+    "canslim-score-tecnico": {
+        title: "SCORE TÉCNICO — 0 a 100, solo precio y volumen",
+        short: "Cinco factores con crédito parcial: RS Rating, Trend Template, Acumulación/Distribución, cercanía al máximo y volumen relativo. Es la misma cifra que la columna SCORE del scanner.",
+        long: `Los cinco componentes y sus puntos:
+
+▸ RS RATING — 25 si ≥80, 15 si ≥70. Percentil de rentabilidad a 12 meses frente al resto del universo.
+▸ TREND TEMPLATE — 25 si aprueba (5 de 7 condiciones de Minervini), 10 si cumple 4.
+▸ ACC/DIS — 20 si es A o B, 10 si es C. Mide si el volumen acompaña a las subidas o a las bajadas.
+▸ NEAR HIGH — 15 si está a menos del 15% de su máximo de 52 semanas.
+▸ VOL RATIO — 15 si negocia ≥1,5 veces su volumen medio, 8 si ≥1,0.
+
+Si falta el RS Rating (hace falta el universo completo para calcular el percentil), ese componente no cuenta y el resto se reescala sobre 100. El hueco no se rellena con un cero: eso sería tratar "no lo sé" como "es malo".
+
+LO QUE NO MIRA:
+Nada de la empresa. Ni beneficios, ni ventas, ni deuda, ni márgenes. Un valor puede sacar 90 aquí y ser un negocio en pérdidas — de hecho ocurre. Para eso está el SCORE FUNDAMENTAL, al lado.
+
+UN 100 ES ALCANZABLE:
+Significa que los cinco factores están en su tramo máximo a la vez. No es un error de cálculo, pero conviene mirar si alguno está justo en el límite (un volumen de 1,5x exacto vale 15 puntos; con 1,49x valdría 0).`
+    },
+
+    "canslim-score-fundamental": {
+        title: "SCORE FUNDAMENTAL — 0 a 100, solo el negocio",
+        short: "Cuatro componentes: crecimiento de beneficios, crecimiento de ventas, rentabilidad sobre fondos propios y margen de beneficio. Entre paréntesis se listan los que de verdad se han podido medir.",
+        long: `Los cuatro componentes y sus puntos:
+
+▸ EPS GROWTH — 30 si ≥25%, 15 si ≥10%. Crecimiento del beneficio por acción.
+▸ SALES GROWTH — 30 si ≥25%, 15 si ≥10%. Crecimiento de ventas.
+▸ ROE — 20 si ≥15%, 10 si ≥8%. Cuánto beneficio saca la empresa del dinero de sus accionistas.
+▸ PROFIT MARGIN — 20 si ≥10%, 10 si ≥3%. Qué parte de cada euro vendido acaba siendo beneficio.
+
+POR QUÉ LA ETIQUETA CAMBIA SEGÚN EL VALOR:
+Entre paréntesis solo aparecen los componentes que se han podido calcular. Si la fuente de datos no trae el beneficio de una empresa, ese componente se excluye y el resto se reescala sobre 100 — y la etiqueta lo dice, en vez de prometer cuatro y medir tres.
+
+UN 0 PUEDE SER REAL:
+No significa "no hay datos". Significa que ninguno de los componentes medidos llega ni al tramo más bajo. Una empresa con ROE negativo, márgenes negativos y ventas creciendo por debajo del 10% saca un 0 legítimo. Cuando de verdad no hay ningún dato, la cifra no dice 0: dice "Sin datos".`
+    },
+
+    "canslim-score-combinado": {
+        title: "CAN SLIM SCORE — la nota conjunta",
+        short: "60% del score técnico más 40% del fundamental. Si no hay fundamentales, se calcula solo con el técnico y se avisa.",
+        long: `La fórmula es directa: 60% de la parte técnica y 40% de la fundamental.
+
+POR QUÉ PESA MÁS LA TÉCNICA:
+Porque es la parte que se puede medir todos los días, para todos los valores y sin depender de que la fuente traiga los estados financieros. Los fundamentales llegan por trimestres y faltan con más frecuencia.
+
+CÓMO LEER UN NÚMERO INTERMEDIO:
+Un 54 puede salir de dos sitios muy distintos: de un valor mediocre en todo, o de uno excelente técnicamente (90) y suspenso en el negocio (0). No son la misma situación, y la nota conjunta no las distingue — para eso están las dos barras de arriba y el desglose por letras. Míralas antes que esta.
+
+NO ES UNA RECOMENDACIÓN:
+Es un resumen de criterios mecánicos. No sabe nada del sector, de la competencia, de una demanda judicial pendiente ni de si la empresa presenta resultados mañana.`
+    },
+
     "canslim-scan-trend": {
         title: "TREND — Trend Template de Minervini (X de 7)",
         short: "Cuántas de las 7 condiciones del Trend Template cumple el valor. Se aprueba con 5. Es exactamente el mismo criterio que la letra L del análisis individual.",
@@ -1393,11 +1445,14 @@ LA MISMA CIFRA EN LAS DOS PANTALLAS:
 Esta columna y el SCORE TÉCNICO del análisis individual usan ya la misma fórmula. Antes eran dos escalas distintas que coincidían solo el 16% de las veces, con hasta 38 puntos de diferencia para el mismo valor el mismo día.
 
 LOS TRES UMBRALES DEL SELECTOR:
-▸ 85 — Estricto: el suelo de "fuerte en todo lo que importa". Por debajo empiezan a colarse valores a los que les falta acumulación o les falta RS.
-▸ 75 — Estándar: exige RS alto Y tendencia aprobada Y estar cerca de máximos. Deja fuera el perfil que va bien pero está lejos de su máximo — y estar cerca de máximos es la letra N, no un extra.
-▸ 60 — Amplio: red de arrastre para explorar, no una lista corta.
+▸ 85 — Estricto: el suelo de "fuerte en todo lo que importa". Por debajo empiezan a colarse valores a los que les falta acumulación.
+▸ 80 — Estándar: el corte más bajo que GARANTIZA fuerza relativa. El máximo alcanzable sin un solo punto de RS es 75, así que a partir de 76 todo candidato tiene por fuerza un RS de 70 o más. En 80 no queda ninguno con rentabilidad negativa a 12 meses.
+▸ 60 — Amplio: red de arrastre para explorar, no una lista corta. Aquí sí entran valores con RS bajo que puntúan por tendencia, volumen y cercanía al máximo.
 
 Están elegidos por el PERFIL que dejan pasar, no para que salga un número concreto de candidatos. Junto a cada opción se muestra cuántos pasan hoy.
+
+OJO CON EL UMBRAL BAJO:
+Un score alto NO significa fuerza relativa alta. El RS es uno de los cinco componentes y puede valer cero: un valor con RS 29 y un −1% a doce meses puede sumar 60 puntos por tendencia, acumulación y volumen. Si lo que buscas es fuerza relativa, mira la columna RS, no solo el SCORE.
 
 QUE SALGAN POCOS CANDIDATOS ES INFORMACIÓN, NO UNA AVERÍA:
 Este es un umbral absoluto, así que el número de candidatos sube y baja con el mercado — y debe hacerlo. En una corrección seria pueden quedar cuatro nombres, o ninguno. Eso es exactamente lo que dice la letra M de CAN SLIM: hay momentos en los que no hay nada que comprar. Un filtro que siempre devolviera "los 50 mejores" nunca podría decirte eso.
