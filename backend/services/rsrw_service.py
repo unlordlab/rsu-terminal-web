@@ -235,6 +235,87 @@ def get_rsrw_from_gist() -> dict:
     except Exception as e:
         return {"ok": False, "error": str(e), "mode": "gist"}
 
+# Mismos cortes que ya usa get_rsrw_from_gist() para separar líderes de
+# rezagados. No se inventan bandas nuevas: si la pantalla llama "líder" a un
+# RS de 80, el histórico tiene que usar ese mismo número o estaría contando
+# cruces de una frontera que el usuario no ve en ninguna parte.
+UMBRAL_LIDER   = 80
+UMBRAL_REZAGO  = 20
+
+# Por debajo de esto, comparar dos fotos es medir ruido: el percentil se
+# mueve solo con que otro ticker suba. No se oculta el dato, se marca.
+MIN_SESIONES_FIABLE = 5
+
+
+def get_rs_movimientos(ventana: int = 10) -> dict:
+    """Cómo ha cambiado el percentil RS de cada valor en las últimas sesiones.
+
+    Responde a lo que una foto no puede: un valor que ha pasado de RS 65 a RS
+    88 en dos semanas es liderazgo EMERGENTE; otro lleva seis meses clavado
+    en 88 y es liderazgo consolidado. En la tabla de líderes los dos aparecen
+    igual.
+
+    Los datos salen de `snapshot_ticker` (snapshots.db), que guarda el
+    percentil de ~500 tickers cada sesión desde el 25/07/2026. **Verificado
+    el 01/08 que ese `rs_pct` es EXACTAMENTE el mismo número que el `RS_Pct`
+    del Gist de RS/RW**: diferencia 0,00 en los 501 tickers comparados. Los
+    calculan dos scans distintos con ventanas de descarga distintas, pero el
+    percentil es un rango y los rangos no se mueven por diferencias pequeñas
+    en el valor subyacente. Sin esa comprobación esto estaría mezclando dos
+    varas de medir, que es el error que costó caro en CANSLIM #6.
+    """
+    from services.snapshots_service import fechas_snapshot_ticker, rs_pct_en_fecha
+
+    fechas = fechas_snapshot_ticker(limite=max(ventana, 2))
+    if len(fechas) < 2:
+        return {
+            "ok": False,
+            "error": "Hacen falta al menos dos sesiones guardadas para comparar.",
+            "sesiones_disponibles": len(fechas),
+        }
+
+    fecha_hoy   = fechas[0]
+    fecha_antes = fechas[-1]          # la más antigua DENTRO de la ventana
+    hoy   = rs_pct_en_fecha(fecha_hoy)
+    antes = rs_pct_en_fecha(fecha_antes)
+
+    movimientos = []
+    for ticker, rs_hoy in hoy.items():
+        rs_antes = antes.get(ticker)
+        if rs_antes is None:
+            continue          # no estaba en el universo entonces: no hay variación
+        movimientos.append({
+            "ticker":     ticker,
+            "rs_actual":  round(rs_hoy, 1),
+            "rs_previo":  round(rs_antes, 1),
+            "variacion":  round(rs_hoy - rs_antes, 1),
+            "cruce_alza": rs_antes <  UMBRAL_LIDER  and rs_hoy >= UMBRAL_LIDER,
+            "cruce_baja": rs_antes >= UMBRAL_LIDER  and rs_hoy <  UMBRAL_LIDER,
+        })
+
+    por_variacion = sorted(movimientos, key=lambda m: -m["variacion"])
+    nuevos  = sorted([m for m in movimientos if m["cruce_alza"]], key=lambda m: -m["rs_actual"])
+    perdidos = sorted([m for m in movimientos if m["cruce_baja"]], key=lambda m: m["rs_actual"])
+
+    return {
+        "ok": True,
+        # Se reporta la ventana REAL, no la pedida: si se piden 10 sesiones y
+        # solo hay 4 guardadas, se compara con lo que hay y se dice cuánto es.
+        "sesiones":        len(fechas),
+        "sesiones_pedidas": ventana,
+        "desde":           fecha_antes,
+        "hasta":           fecha_hoy,
+        "fiable":          len(fechas) >= MIN_SESIONES_FIABLE,
+        "umbral_lider":    UMBRAL_LIDER,
+        "comparados":      len(movimientos),
+        "nuevos_lideres":  _tag_cartera(nuevos[:20]),
+        "lideres_perdidos": _tag_cartera(perdidos[:20]),
+        "mas_suben":       _tag_cartera(por_variacion[:15]),
+        "mas_bajan":       _tag_cartera(list(reversed(por_variacion[-15:]))),
+        "timestamp":       get_timestamp(),
+    }
+
+
 def get_rsrw_ticker(ticker: str) -> dict:
     try:
         ticker_up = ticker.upper()

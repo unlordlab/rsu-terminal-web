@@ -183,4 +183,38 @@ def _maybe_write_cartera(conn, fecha):
     print(f"[Snapshots] snapshot_cartera guardado para {fecha}")
 
 
+# ── LECTURA ───────────────────────────────────────────────────────────────────
+# Hasta el 01/08/2026 este módulo era solo de ESCRITURA: guardaba cada noche
+# sin que nadie leyera nunca. Estas dos funciones abren la puerta de lectura
+# para RS/RW #20 (histórico del percentil RS). El escritor no se toca.
+
+def fechas_snapshot_ticker(limite: int = 60) -> list:
+    """Fechas de sesión con datos, de la más reciente a la más antigua."""
+    conn = _conn()
+    try:
+        return [r["fecha"] for r in conn.execute(
+            "SELECT DISTINCT fecha FROM snapshot_ticker ORDER BY fecha DESC LIMIT ?",
+            (limite,)
+        ).fetchall()]
+    finally:
+        conn.close()
+
+
+def rs_pct_en_fecha(fecha: str) -> dict:
+    """{ticker: rs_pct} de una sesión concreta. Se excluyen los nulos: un
+    ticker sin percentil ese día no puede compararse, y arrastrarlo como 0
+    lo convertiría en una caída inventada de 80 puntos."""
+    conn = _conn()
+    try:
+        return {
+            r["ticker"]: r["rs_pct"]
+            for r in conn.execute(
+                "SELECT ticker, rs_pct FROM snapshot_ticker "
+                "WHERE fecha = ? AND rs_pct IS NOT NULL", (fecha,)
+            ).fetchall()
+        }
+    finally:
+        conn.close()
+
+
 init_db()

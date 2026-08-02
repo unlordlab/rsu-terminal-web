@@ -444,7 +444,7 @@ alimenta el modal "Resumen de Mercado Diario", aunque sea un script aparte.
 | ❓ | 25 | 🟢 | Histórico del RSU Score | *sin comprobar* |
 | ❓ | 26 | 🟢 | Alertas de cambio de fase | *sin comprobar* |
 
-## Rsrw  (22 hallazgos — ❌3 · ✅15 · ❓4)
+## Rsrw  (22 hallazgos — ❌2 · ✅16 · ❓4)
 
 **Pasada completa el 30/07** (commit `34a659f`): los 22 hallazgos revisados uno
 a uno contra el código, seis cerrados en esa sesión. Es, junto a Research, el
@@ -471,7 +471,7 @@ a uno contra el código, seis cerrados en esa sesión. Es, junto a Research, el
 | ✅ | 17 | 🔵 | Badge 💼/⭐ de Cartera y Watchlist | `_tag_cartera()` en el servicio + `in_watchlist` en el router (sesión 16) |
 | ✅ | 18 | 🔵 | Deep-link `?ticker=` | `rsrw.js` lee `?ticker=` y auto-analiza (sesión 16) |
 | ❓ | 19 | 🔵 | Columna de fase Weinstein | *sin comprobar* |
-| ❌ | 20 | 🟢 | Histórico del percentil RS | verificado 30/07: la persistencia YA EXISTE — `snapshot_ticker` de `snapshots.db` guarda `rs_pct` de ~500 tickers a diario. Solo falta el lado de LECTURA (detección de cruces). Es el pendiente de RS/RW con mejor relación valor/coste |
+| ✅ | 20 | 🟢 | Histórico del percentil RS | HECHO 01/08. Sección nueva **MOVIMIENTOS DEL PERCENTIL RS** bajo las tablas de líderes y rezagados, con cuatro bloques: los que **cruzan el 80 al alza** (liderazgo emergente), los que **caen por debajo** (aviso, sobre todo si están en cartera), y los que más suben y bajan en puntos. Las tablas de arriba son una foto — un RS 88 se ve igual lleve seis meses ahí o acabe de llegar desde 65 —, y esta sección separa las dos cosas. **La comprobación que había que hacer antes de nada**: el `rs_pct` de `snapshot_ticker` lo escribe el scan de Scanner, no el de RS/RW, así que podían ser dos varas de medir distintas — el error de CANSLIM #6. Medido: **diferencia 0,00 en los 501 tickers** contra el `RS_Pct` del Gist. Coinciden porque el percentil es un RANGO y los rangos no se mueven por diferencias pequeñas en el valor subyacente. Se usan los **mismos cortes** que ya separan líderes de rezagados en la pantalla (80/20), no bandas nuevas. La ventana real puede ser más corta que la pedida y **se reporta la real, no la pedida**, con aviso explícito cuando hay menos de 5 sesiones: el percentil se mueve también cuando suben los demás, así que con poco recorrido parte de lo que se ve es ruido. **No arranca de cero**: `snapshots.db` ya guardaba el dato desde el 25/07 sin que nadie lo leyera — solo faltaba el lado de lectura, que es lo que decía este hallazgo. Con 4 sesiones ya hay 17 valores entrando y 17 saliendo del grupo de líderes, entre ellos COHR (82,6 → 42,1) que está en cartera. Verificado en navegador: cabecera con ventana y fechas reales, aviso de muestra corta que desaparece al haber suficiente, y texto propio cuando no hay cruces |
 | ❓ | 21 | 🟢 | Rotación sectorial en el tiempo | *sin comprobar* |
 | ❓ | 22 | 🟢 | Alerta de entrada en el top decil | *sin comprobar* |
 

@@ -1351,6 +1351,27 @@ CÓMO USARLO:
 ▸ Vol ratio muy alto sin movimiento de precio → indecisión, mucha gente comprando y vendiendo sin que nadie gane la partida todavía`
     },
 
+    "rsrw-movimientos": {
+        title: "MOVIMIENTOS DEL PERCENTIL RS — liderazgo emergente vs consolidado",
+        short: "Compara el percentil de fuerza relativa de hoy con el de hace unas sesiones. Separa a los que acaban de entrar en el grupo de líderes de los que llevan tiempo ahí.",
+        long: `QUÉ AÑADE SOBRE LAS TABLAS DE ARRIBA:
+Las tablas de líderes y rezagados son una foto. En ellas, un valor con RS 88 aparece exactamente igual tanto si lleva seis meses en esa zona como si acaba de llegar desde 65 en dos semanas. No son la misma situación: la segunda es liderazgo que está NACIENDO, y esa transición es lo que el método busca.
+
+LOS CUATRO BLOQUES:
+▸ NUEVOS LÍDERES — han cruzado el 80 al alza en el periodo. Es el grupo más interesante: dinero entrando.
+▸ PIERDEN EL LIDERAZGO — han caído por debajo del 80. Aviso, sobre todo si tienes alguno en cartera.
+▸ LOS QUE MÁS SUBEN / MÁS BAJAN — los mayores cambios en puntos de percentil, crucen o no el umbral.
+
+POR QUÉ EL UMBRAL ES 80:
+Es exactamente el mismo corte que separa líderes de no líderes en la tabla de arriba. Si aquí se usara otro número, estarías viendo cruces de una frontera que no aparece en ninguna otra parte de la pantalla.
+
+CUIDADO CON LAS VENTANAS CORTAS:
+El percentil es una posición relativa, así que se mueve también cuando suben los demás — un valor puede perder cinco puntos sin haber bajado de precio. Con pocas sesiones guardadas, parte de lo que ves es ruido, y la pantalla lo avisa cuando es el caso. El histórico se va formando con cada scan nocturno y la señal mejora con el tiempo.
+
+DE DÓNDE SALEN LOS DATOS:
+De los registros que la terminal guarda cada noche con el percentil de las ~500 acciones del índice. No se recalcula nada: se leen dos fotos y se restan.`
+    },
+
     "canslim-scanner": {
         title: "SCANNER S&P 500 — qué es y de dónde salen los datos",
         short: "Recorre las 503 acciones del S&P 500 cada noche y las puntúa con los criterios técnicos de CAN SLIM. No se ejecuta al abrir la página: los datos vienen del scan de la noche anterior.",

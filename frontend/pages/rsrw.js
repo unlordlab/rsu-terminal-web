@@ -37,11 +37,13 @@ export async function render(container) {
         + '<div id="rsrw-leaders"></div>'
         + '<div id="rsrw-laggards"></div>'
         + '</div>'
+        + '<div id="rsrw-movimientos" style="margin-bottom:1.5rem;"></div>'
         + tickerPanel()
         + '<div id="rsrw-ticker-result"></div>';
 
     setupTicker(container);
     loadGist(container);
+    loadMovimientos(container);
 }
 
 function pageHeader() {
@@ -89,6 +91,92 @@ async function loadGist(container) {
         if (leadersEl)  leadersEl.innerHTML  = errorCard('LÍDERES RS', e.message);
         if (laggardsEl) laggardsEl.innerHTML = errorCard('REZAGADOS RW', e.message);
     }
+}
+
+// ── Movimientos del percentil RS ─────────────────────────────────────────────
+//
+// Las tablas de arriba son una FOTO: un valor con RS 88 aparece igual tanto si
+// lleva seis meses ahí como si acaba de llegar desde 65. Esta sección compara
+// la foto de hoy con la de hace unas sesiones y separa las dos cosas — que es
+// la diferencia entre liderazgo consolidado y liderazgo emergente.
+//
+// El dato sale de los snapshots que la terminal ya venía guardando cada noche
+// sin que nadie los leyera.
+
+async function loadMovimientos(container) {
+    const el = container.querySelector('#rsrw-movimientos');
+    if (!el) return;
+    el.innerHTML = loadingCard('MOVIMIENTOS DEL PERCENTIL RS');
+    try {
+        const token = sessionStorage.getItem('rsu_token');
+        const res   = await fetch('/api/v1/rsrw/movimientos?ventana=10', {
+            headers: token ? { 'Authorization': 'Bearer ' + token } : {}
+        });
+        const data = await res.json();
+        if (!data.ok) {
+            // Con menos de dos sesiones guardadas no hay nada que comparar, y
+            // eso NO es un error: es que el histórico acaba de empezar.
+            el.innerHTML = '<div style="background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius);padding:1rem;">'
+                + '<div style="color:var(--color-accent);font-size:12px;letter-spacing:0.08em;margin-bottom:6px;">MOVIMIENTOS DEL PERCENTIL RS</div>'
+                + '<div style="color:var(--color-muted);font-size:11px;line-height:1.6;">' + esc(data.error || 'Sin datos todavía.')
+                + ' El histórico se va formando con cada scan nocturno.</div></div>';
+            return;
+        }
+        el.innerHTML = renderMovimientos(data);
+    } catch (e) {
+        el.innerHTML = errorCard('MOVIMIENTOS DEL PERCENTIL RS', e.message);
+    }
+}
+
+function renderMovimientos(d) {
+    const fila = (m) => {
+        const col = m.variacion >= 0 ? 'var(--color-accent)' : '#f23645';
+        let mk = '';
+        if (m.en_cartera)   mk += '<span title="En Cartera" style="font-size:10px;">💼</span>';
+        if (m.in_watchlist) mk += '<span title="En tu Watchlist" style="font-size:10px;">⭐</span>';
+        return '<div style="display:grid;grid-template-columns:1fr 62px 16px 62px 60px;gap:6px;padding:5px 12px;border-top:1px solid var(--color-border);font-size:11px;align-items:center;">'
+            + '<span class="ticker-link" onclick="window.__navigate(\'/research?ticker=' + esc(m.ticker) + '\')" style="color:var(--color-accent);cursor:pointer;">' + esc(m.ticker) + mk + '</span>'
+            + '<span style="color:var(--color-muted);text-align:right;">' + esc(m.rs_previo) + '</span>'
+            + '<span style="color:var(--color-muted);text-align:center;">→</span>'
+            + '<span style="color:var(--color-text);text-align:right;">' + esc(m.rs_actual) + '</span>'
+            + '<span style="color:' + col + ';text-align:right;">' + (m.variacion >= 0 ? '+' : '') + esc(m.variacion) + '</span>'
+            + '</div>';
+    };
+
+    const bloque = (titulo, filas, vacio, color) =>
+        '<div style="background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius);overflow:hidden;">'
+        + '<div style="padding:8px 12px;border-bottom:1px solid var(--color-border);color:' + color + ';font-size:11px;letter-spacing:0.06em;">'
+        + esc(titulo) + ' <span style="color:var(--color-muted);">(' + filas.length + ')</span></div>'
+        + (filas.length ? filas.map(fila).join('')
+            : '<div style="padding:10px 12px;color:var(--color-muted);font-size:11px;">' + esc(vacio) + '</div>')
+        + '</div>';
+
+    // La ventana REAL puede ser más corta que la pedida: con pocas sesiones
+    // guardadas se compara con lo que hay y se dice cuánto es, en vez de
+    // presentar cuatro días como si fueran dos semanas.
+    const avisoMuestra = d.fiable ? ''
+        : '<div style="background:rgba(255,152,0,.08);border-left:3px solid #ff9800;padding:7px 12px;margin-bottom:10px;">'
+          + '<span style="color:#ff9800;font-size:11px;">Solo hay ' + esc(d.sesiones) + ' sesiones guardadas. '
+          + 'Con tan poco recorrido, una parte de estos movimientos es ruido: el percentil se mueve también cuando suben los demás. '
+          + 'El histórico crece con cada scan nocturno.</span></div>';
+
+    return '<div>'
+        + '<div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:8px;">'
+        + '<div style="color:var(--color-accent);font-size:13px;letter-spacing:0.08em;">MOVIMIENTOS DEL PERCENTIL RS ' + tt('rsrw-movimientos') + '</div>'
+        + '<div style="color:var(--color-muted);font-size:10px;">' + esc(d.desde) + ' → ' + esc(d.hasta)
+        + ' · ' + esc(d.sesiones) + ' sesiones · ' + esc(d.comparados) + ' valores</div>'
+        + '</div>'
+        + avisoMuestra
+        + '<div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem;margin-bottom:1rem;">'
+        + bloque('NUEVOS LÍDERES · cruzan el ' + d.umbral_lider + ' al alza', d.nuevos_lideres,
+                 'Ninguno ha entrado en el grupo de líderes en este periodo.', 'var(--color-accent)')
+        + bloque('PIERDEN EL LIDERAZGO · caen por debajo del ' + d.umbral_lider, d.lideres_perdidos,
+                 'Ninguno ha salido del grupo de líderes en este periodo.', '#f23645')
+        + '</div>'
+        + '<div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem;">'
+        + bloque('LOS QUE MÁS SUBEN', d.mas_suben, 'Sin datos.', 'var(--color-secondary)')
+        + bloque('LOS QUE MÁS BAJAN', d.mas_bajan, 'Sin datos.', 'var(--color-secondary)')
+        + '</div></div>';
 }
 
 function renderSectors(el, sectors) {
