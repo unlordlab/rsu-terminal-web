@@ -157,12 +157,22 @@ def run_scan() -> dict:
 
     candidates.sort(key=lambda x: -x["score"])
 
+    # Fecha de la SESIÓN que describen los datos, no la de ejecución. El cron
+    # corre de lunes a viernes, así que en un festivo de mercado el scan se
+    # ejecuta igual y descarga lo mismo que la víspera. Sin este campo, el
+    # tracking de candidatos guardaría los precios de la sesión anterior
+    # fechados en el festivo, y los retornos saldrían desplazados una sesión.
+    # Se toma del propio índice descargado -- por definición es una sesión
+    # real, así que no hace falta calendario de festivos. Ver RS/RW #6.
+    ultima_sesion = max(s.index[-1].date() for s in close_d.values())
+
     return {
         "ok":         True,
         "candidates": candidates,
         "perfs":      perfs,   # universo completo -- lo usa analyze_ticker() para el percentil real
         "scanned":    len(tickers),
         "total":      len(candidates),
+        "ultima_sesion": str(ultima_sesion),
         "generated_at": datetime.now(timezone.utc).isoformat(),
     }
 

@@ -95,7 +95,12 @@ def _registrar_scan_para_track_record(data: dict) -> None:
     fecha del SCAN, no la de ejecución del backend."""
     from services.canslim_tracking_service import registrar_scan, ya_registrado
 
-    fecha = (data.get("generated_at") or "")[:10]
+    # La fecha de la SESIÓN, no la de ejecución. En un festivo de mercado el
+    # scan corre igual y descarga la sesión anterior: fechar esas filas en el
+    # festivo desplazaría una sesión todos los retornos del track record.
+    # `generated_at` queda como respaldo para los Gists escritos antes de que
+    # el scan publicara `ultima_sesion`. Ver RS/RW #6.
+    fecha = (data.get("ultima_sesion") or data.get("generated_at") or "")[:10]
     if not fecha or ya_registrado(fecha):
         return
     res = registrar_scan(data.get("candidates", []), fecha)

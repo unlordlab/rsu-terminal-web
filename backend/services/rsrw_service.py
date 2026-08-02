@@ -107,14 +107,42 @@ def _parse_gist(data: dict) -> tuple:
     return df, sdf, meta
 
 def _freshness(meta: dict) -> str:
+    """Antigüedad de los DATOS, no de la ejecución del scan.
+
+    Antes esto medía el tiempo desde `generated_at`, que es cuándo corrió el
+    proceso. El cron va de lunes a viernes, así que en un festivo de mercado
+    el scan se ejecuta igual, vuelve a descargar la sesión anterior y
+    reescribe el Gist — y la etiqueta decía "Hace 20 min" sobre datos del día
+    anterior. El usuario leía como fresco algo que no lo era, que es la
+    versión más silenciosa de mentir. Ver auditoría RS/RW, hallazgo #6.
+
+    Ahora se usa `ultima_sesion`, la fecha del último cierre REAL contenido
+    en los datos. No hace falta calendario de festivos: esa fecha sale del
+    propio índice del benchmark y por definición es una sesión de mercado.
+
+    Los Gists escritos antes de este cambio no traen el campo, así que se
+    mantiene el cálculo anterior como respaldo — pero diciendo que es la hora
+    del scan, no la de los datos, en vez de dejar la ambigüedad de antes.
+    """
+    sesion = meta.get("ultima_sesion")
+    if sesion:
+        try:
+            d    = datetime.strptime(sesion, "%Y-%m-%d").date()
+            hoy  = datetime.now(timezone.utc).date()
+            dias = (hoy - d).days
+            if dias <= 0:  return "Cierre de hoy"
+            if dias == 1:  return "Cierre de ayer"
+            return f"Cierre del {sesion} ({dias} días)"
+        except Exception:
+            pass
     try:
         ts  = meta.get("generated_at", "")
         dt  = datetime.fromisoformat(ts.replace("Z", "+00:00"))
         ago = datetime.now(timezone.utc) - dt
         mins = int(ago.total_seconds() / 60)
-        if mins < 60:   return f"Hace {mins} min"
-        if mins < 1440: return f"Hace {mins//60}h"
-        return f"Hace {mins//1440}d"
+        if mins < 60:   return f"Scan hace {mins} min"
+        if mins < 1440: return f"Scan hace {mins//60}h"
+        return f"Scan hace {mins//1440}d"
     except Exception:
         return "Desconocido"
 

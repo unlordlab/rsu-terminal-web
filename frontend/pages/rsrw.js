@@ -107,7 +107,7 @@ async function loadGist(container) {
 async function loadCartera(container) {
     const el = container.querySelector('#rsrw-cartera');
     if (!el) return;
-    el.innerHTML = loadingCard('TUS POSICIONES · FUERZA RELATIVA');
+    el.innerHTML = loadingCard('ACTIVOS CARTERA RSU · FUERZA RELATIVA');
     try {
         const token = sessionStorage.getItem('rsu_token');
         const res   = await fetch('/api/v1/rsrw/cartera', {
@@ -116,13 +116,13 @@ async function loadCartera(container) {
         const data = await res.json();
         if (!data.ok) {
             el.innerHTML = '<div style="background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius);padding:1rem;">'
-                + '<div style="color:var(--color-accent);font-size:12px;letter-spacing:0.08em;margin-bottom:6px;">TUS POSICIONES · FUERZA RELATIVA</div>'
+                + '<div style="color:var(--color-accent);font-size:12px;letter-spacing:0.08em;margin-bottom:6px;">ACTIVOS CARTERA RSU · FUERZA RELATIVA</div>'
                 + '<div style="color:var(--color-muted);font-size:11px;">' + esc(data.error || 'Sin datos.') + '</div></div>';
             return;
         }
         el.innerHTML = renderCartera(data);
     } catch (e) {
-        el.innerHTML = errorCard('TUS POSICIONES · FUERZA RELATIVA', e.message);
+        el.innerHTML = errorCard('ACTIVOS CARTERA RSU · FUERZA RELATIVA', e.message);
     }
 }
 
@@ -160,7 +160,7 @@ function renderCartera(d) {
 
     return '<div>'
         + '<div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:8px;">'
-        + '<div style="color:var(--color-accent);font-size:13px;letter-spacing:0.08em;">TUS POSICIONES · FUERZA RELATIVA ' + tt('rsrw-cartera') + '</div>'
+        + '<div style="color:var(--color-accent);font-size:13px;letter-spacing:0.08em;">ACTIVOS CARTERA RSU · FUERZA RELATIVA ' + tt('rsrw-cartera') + '</div>'
         + '<div style="color:var(--color-muted);font-size:10px;">' + esc(d.calculadas) + ' de ' + esc(d.posiciones)
         + ' · ' + esc(d.fuera_indice) + ' fuera del índice · percentil contra ' + esc(d.referencia) + '</div>'
         + '</div>'

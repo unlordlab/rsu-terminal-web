@@ -159,6 +159,17 @@ def run_scan(max_tickers: int = 525) -> dict:
         "universe_size": len(stocks),
         "meta": {
             "generated_at": datetime.now(timezone.utc).isoformat(),
+            # Fecha de la SESIÓN que describen estos datos, no la de ejecución.
+            # El cron corre de lunes a viernes, así que en un festivo de
+            # mercado el scan se ejecuta igual, descarga lo mismo que ayer y
+            # reescribe el Gist -- y `generated_at` decía "hace 20 minutos",
+            # presentando datos de la sesión anterior como recién salidos.
+            #
+            # No hace falta un calendario de festivos: el último índice del
+            # benchmark ES, por definición, una sesión real de mercado. El
+            # dato se saca de lo ya descargado y no puede desincronizarse.
+            # Ver auditoría RS/RW, hallazgo #6.
+            "ultima_sesion": str(close_d[BENCHMARK].index[-1].date()),
             "mode":         "nightly_scan",
             "n_stocks":     len(stocks),
             "n_requested":  len(tickers),

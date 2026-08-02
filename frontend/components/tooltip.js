@@ -1352,7 +1352,7 @@ CÓMO USARLO:
     },
 
     "rsrw-cartera": {
-        title: "TUS POSICIONES — fuerza relativa de lo que tienes comprado",
+        title: "ACTIVOS CARTERA RSU — fuerza relativa de lo que tienes comprado",
         short: "El percentil RS de cada posición abierta, incluidas las que no están en el S&P 500. Se calcula CONTRA el índice, sin que estos valores formen parte de él.",
         long: `POR QUÉ ESTÁ SEPARADO DE LAS TABLAS DE ARRIBA:
 El scan nocturno recorre las 503 acciones del S&P 500, y buena parte de una cartera real no está en ese índice. Sin esta sección, la herramienta que mide fuerza relativa no podría decir nada de la mayoría de lo que tienes comprado.
