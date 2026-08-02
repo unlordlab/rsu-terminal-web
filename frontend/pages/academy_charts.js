@@ -11628,6 +11628,104 @@ function rsu_prima_correccion() {
     </svg>`;
 }
 
+// ── Módulo 28 — CANSLIM ──────────────────────────────────────────────────────
+
+function canslim_siete_letras() {
+    const W=680, H=330;
+    const letras = [
+        ['C', 'Beneficios trimestrales', 'que hayan crecido con fuerza en el último trimestre', C.accent],
+        ['A', 'Ventas', 'que la empresa venda más que hace un año', C.accent],
+        ['N', 'Cerca de máximos', 'que el precio esté en la parte alta de su último año', C.cyan],
+        ['S', 'Fuerza relativa', 'que se comporte mejor que la mayoría del mercado', C.cyan],
+        ['L', 'Tendencia sana', 'que las medias de precio estén bien ordenadas', C.cyan],
+        ['I', 'Grandes inversores', 'que fondos y gestoras tengan una parte importante', C.orange],
+        ['M', 'Mercado general', 'que el mercado entero acompañe, no solo el valor', C.yellow],
+    ];
+    let filas = '';
+    letras.forEach((l, i) => {
+        const y = 70 + i * 34;
+        filas += `<rect x="20" y="${y-19}" width="${W-40}" height="28" fill="${C.surface}" rx="4"/>
+            <rect x="20" y="${y-19}" width="26" height="28" fill="${l[3]}" opacity="0.85" rx="4"/>
+            <text x="33" y="${y}" fill="#0f1117" font-size="14" font-weight="bold" font-family="monospace" text-anchor="middle">${l[0]}</text>
+            <text x="58" y="${y-3}" fill="${C.text}" font-size="11.5" font-family="monospace">${l[1]}</text>
+            <text x="58" y="${y+9}" fill="${C.textDim}" font-size="9.5" font-family="monospace">${l[2]}</text>`;
+    });
+    return `<svg viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg">
+        <rect width="${W}" height="${H}" fill="${C.bg}" rx="6"/>
+        <text x="20" y="30" fill="${C.text}" font-size="13" font-family="monospace">Las siete condiciones que dan nombre al método</text>
+        <text x="20" y="47" fill="${C.textDim}" font-size="10" font-family="monospace">Verde: el negocio · Azul: el precio · Naranja y amarillo: el entorno</text>
+        ${filas}
+        <text x="${W/2}" y="${H-10}" fill="${C.textDim}" font-size="9" font-family="monospace" text-anchor="middle">No hace falta que se cumplan las siete: sirven para ver por dónde flojea cada valor</text>
+    </svg>`;
+}
+
+function canslim_embudo() {
+    const W=680, H=290;
+    // Embudo del uso previsto: de 503 acciones a un puñado que merezca
+    // análisis. Las cifras son las del propio scanner con el filtro Estándar.
+    const pasos = [
+        ['503 acciones del índice', 503, C.muted],
+        ['El scan las puntúa cada noche', 500, C.textDim],
+        ['Pasan el filtro Estándar', 33,  C.cyan],
+        ['Las analizas una a una', 5,   C.accent],
+    ];
+    const maxAncho = 520;
+    let bloques = '';
+    pasos.forEach((p, i) => {
+        const y = 60 + i * 55;
+        // Ancho por raíz cuadrada: si fuera lineal, los dos últimos pasos
+        // serían rayas invisibles y el gráfico no se leería.
+        const w = Math.max(90, maxAncho * Math.sqrt(p[1] / 503));
+        const x = (W - w) / 2;
+        bloques += `<rect x="${x}" y="${y}" width="${w}" height="34" fill="${p[2]}" opacity="0.28" rx="4"/>
+            <rect x="${x}" y="${y}" width="${w}" height="34" fill="none" stroke="${p[2]}" stroke-width="1.5" rx="4"/>
+            <text x="${W/2}" y="${y+15}" fill="${C.text}" font-size="11" font-family="monospace" text-anchor="middle">${p[0]}</text>
+            <text x="${W/2}" y="${y+28}" fill="${p[2]}" font-size="12" font-weight="bold" font-family="monospace" text-anchor="middle">${p[1]}</text>`;
+        if (i < pasos.length - 1) {
+            bloques += `<path d="M${W/2},${y+36} L${W/2},${y+50}" stroke="${C.textDim}" stroke-width="1"/>
+                <path d="M${W/2-4},${y+46} L${W/2},${y+51} L${W/2+4},${y+46}" fill="none" stroke="${C.textDim}" stroke-width="1"/>`;
+        }
+    });
+    return `<svg viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg">
+        <rect width="${W}" height="${H}" fill="${C.bg}" rx="6"/>
+        <text x="20" y="30" fill="${C.text}" font-size="13" font-family="monospace">Para qué sirve: reducir, no decidir</text>
+        ${bloques}
+        <text x="${W/2}" y="${H-8}" fill="${C.textDim}" font-size="9" font-family="monospace" text-anchor="middle">El último paso lo haces tú. La herramienta llega hasta el penúltimo — las cifras son las de un día real</text>
+    </svg>`;
+}
+
+function canslim_score_no_es_fuerza() {
+    const W=680, H=260;
+    // Por qué un score alto no implica fuerza relativa alta: caso real de un
+    // valor que puntúa por todo menos por lo que la gente cree.
+    const comps = [
+        ['Fuerza relativa',      0, 25, C.red],
+        ['Tendencia',           25, 25, C.accent],
+        ['Acumulación',         20, 20, C.accent],
+        ['Cerca del máximo',    15, 15, C.accent],
+        ['Volumen',             15, 15, C.accent],
+    ];
+    const ox=210, w=380;
+    let filas = '';
+    comps.forEach((c, i) => {
+        const y = 78 + i * 32;
+        const ancho = w * (c[2] / 25);
+        const relleno = w * (c[1] / 25);
+        filas += `<text x="${ox-12}" y="${y+4}" fill="${C.textDim}" font-size="10.5" font-family="monospace" text-anchor="end">${c[0]}</text>
+            <rect x="${ox}" y="${y-7}" width="${ancho}" height="14" fill="${C.surface}" rx="3"/>
+            <rect x="${ox}" y="${y-7}" width="${relleno}" height="14" fill="${c[3]}" opacity="0.8" rx="3"/>
+            <text x="${ox+ancho+8}" y="${y+4}" fill="${c[3]}" font-size="10.5" font-family="monospace">${c[1]} de ${c[2]}</text>`;
+    });
+    return `<svg viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg">
+        <rect width="${W}" height="${H}" fill="${C.bg}" rx="6"/>
+        <text x="20" y="30" fill="${C.text}" font-size="13" font-family="monospace">Un caso real: puntuación 75 sobre 100…</text>
+        <text x="20" y="48" fill="${C.textDim}" font-size="10.5" font-family="monospace">…y ni un solo punto de fuerza relativa. Rentabilidad a 12 meses: +3%</text>
+        ${filas}
+        <text x="${W/2}" y="${H-14}" fill="${C.text}" font-size="10.5" font-family="monospace" text-anchor="middle">La puntuación suma cinco cosas. Que sea alta no dice cuál de ellas la levantó.</text>
+        <text x="${W/2}" y="${H-2}" fill="${C.textDim}" font-size="9" font-family="monospace" text-anchor="middle">Por eso la columna RS está al lado: mírala, no te quedes solo con el total</text>
+    </svg>`;
+}
+
 export const CHARTS = {
     // Módulo 0
     rsu_philosophy, rsu_community, rsu_for_who,
@@ -11751,4 +11849,6 @@ export const CHARTS = {
     dca_mechanics, dca_vs_lumpsum, leveraged_decay_example,
     // Módulo 27
     rsu_asignacion_donut, rsu_cuatro_bloques, rsu_prima_correccion,
+    // Módulo 28
+    canslim_siete_letras, canslim_embudo, canslim_score_no_es_fuerza,
 };

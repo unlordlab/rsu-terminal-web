@@ -74,6 +74,7 @@ const MODULES = [
     { id:25, title:'Construir una Posición con DCA', icon:'🧱', description:'Promediar coste con aportaciones fijas no es lo mismo que escalar una posición en una caída — y confundirlas es un error caro, sobre todo en instrumentos apalancados. Cómo construir cualquiera de las dos con criterio, no a ciegas.' },
     { id:26, title:'RSU Algoritmo — El Semáforo de Suelos', icon:'🚦', description:'Manual completo del semáforo: qué mide cada uno de sus cinco factores, por qué hay una condición obligatoria que no se puede saltar, cómo se entra por tramos y sin stop, y qué ha hecho de verdad en las 16 señales de los últimos 18 años — incluidos los plazos en los que no aporta nada.' },
     { id:27, title:'La Cartera RSU',              icon:'💼', description:'Por qué la cartera está compuesta así y cómo se lee su pantalla: el reparto en cuatro bloques (de los que esta página muestra dos), la tesis de las cinco tendencias que sostienen la parte de acciones, por qué se paga una prima de valoración y se cobra en volatilidad, los niveles CORE/HIGH/LOTTERY que fijan el tamaño antes de comprar, y qué significa cada cifra de la pantalla — incluido lo que la Cartera no hace.' },
+    { id:28, title:'CANSLIM — El Buscador de Valores', icon:'🔎', description:'Manual del buscador: qué significa cada una de las siete letras y qué te dice cuando falla, cómo se lee la tabla —incluida la trampa de fijarse solo en la puntuación—, qué añade el análisis individual, y una rutina de uso con los tres errores que este tipo de herramienta invita a cometer.' },
 ];
 
 const PHASES = [
@@ -89,7 +90,7 @@ const PHASES = [
     // usan las herramientas (qué es el RSU Score, qué es el análisis
     // fundamental); esta explica CÓMO SE USA cada pantalla y qué ha hecho de
     // verdad. Se irá ampliando con un módulo por herramienta.
-    { label:'🛠️ GUÍA DE LA TERMINAL // CÓMO FUNCIONA CADA HERRAMIENTA', modules:[26,27] },
+    { label:'🛠️ GUÍA DE LA TERMINAL // CÓMO FUNCIONA CADA HERRAMIENTA', modules:[26,27,28] },
 ];
 
 // ── LECCIONES DE CADA MÓDULO ─────────────────────────────────────────────────

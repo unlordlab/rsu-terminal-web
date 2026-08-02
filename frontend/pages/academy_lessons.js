@@ -6617,4 +6617,269 @@ export const LESSONS = {
             },
         ]
     },
+
+    // ── MÓDULO 28 · GUÍA DE LA TERMINAL — CANSLIM ──────────────────────────
+    // Manual de usuario del buscador de valores. Las cifras de ejemplo (503
+    // acciones, 33 candidatos con el filtro Estándar) salen del scan real —
+    // si el universo o los umbrales cambian, hay que revisarlas aquí.
+
+    '28-1': {
+        moduleId: 28,
+        lessonIndex: 0,
+        title: 'Qué es CANSLIM y Para Qué Sirve',
+        duration: '7 min',
+        intro: 'CANSLIM es un buscador de valores. Su trabajo no es decirte qué comprar, sino reducir las 503 acciones del índice americano a un puñado que merezca que les dediques tiempo. Esta lección explica esa diferencia, que es la que más se malinterpreta.',
+        sections: [
+            {
+                heading: 'El problema que resuelve',
+                blocks: [
+                    { type: 'text', content: 'El índice americano tiene más de quinientas empresas. Nadie puede mirarlas todas, y mirar solo las que suenan en las noticias es dejar que otro elija por ti.' },
+                    { type: 'text', content: 'Esta herramienta aplica cada noche el mismo criterio a todas, sin cansarse y sin preferencias, y te devuelve las que lo cumplen. Lo que hace no es adivinar: es <b>filtrar</b>.' },
+                    { type: 'chart', id: 'canslim_embudo' },
+                    { type: 'concept', title: 'Reducir, no decidir', content: 'La herramienta llega hasta el penúltimo paso. El último —mirar cada candidato de verdad y decidir— es tuyo y no se puede automatizar. Un valor que aparece en la lista no es una recomendación: es una sugerencia de dónde mirar.' },
+                ]
+            },
+            {
+                heading: 'De dónde viene el nombre',
+                blocks: [
+                    { type: 'text', content: 'CAN SLIM son siete letras, y cada una es una condición. El método lo popularizó un inversor estadounidense que estudió qué tenían en común las acciones que más habían subido antes de subir, y encontró que se repetían estos siete rasgos.' },
+                    { type: 'chart', id: 'canslim_siete_letras' },
+                    { type: 'text', content: 'Fíjate en que hay tres tipos de condición mezclados: cómo va <b>el negocio</b> (C y A), cómo va <b>el precio</b> (N, S y L) y cómo va <b>el entorno</b> (I y M). Un valor puede ir estupendamente en el gráfico y ser un negocio en pérdidas, o al revés.' },
+                ]
+            },
+            {
+                heading: 'La letra que más se olvida',
+                blocks: [
+                    { type: 'text', content: 'La <b>M</b>, la del mercado general, es la última de la lista pero su autor la consideraba la más importante. La razón es sencilla: cuando el mercado entero cae, la mayoría de los valores caen con él, por buenos que sean.' },
+                    { type: 'tip', label: 'LA IDEA', content: 'Encontrar la mejor empresa del índice no sirve de nada si la compras el mes en que todo se desploma. Por eso la pantalla te enseña el estado del mercado ARRIBA DEL TODO, antes que cualquier candidato.' },
+                ]
+            },
+            {
+                heading: 'Lo que esta herramienta no es',
+                blocks: [
+                    { type: 'warning', content: 'No es una lista de compras, no predice nada y no sabe nada de la empresa más allá de sus números: ignora si tiene un juicio pendiente, si presenta resultados mañana o si su sector está a punto de cambiar de regulación. Es un filtro mecánico, y su valor está justo en eso — aplica el mismo criterio siempre, también los días en que a ti te apetecería saltártelo.' },
+                ]
+            },
+        ]
+    },
+
+    '28-2': {
+        moduleId: 28,
+        lessonIndex: 1,
+        title: 'Las Siete Letras, Una a Una',
+        duration: '11 min',
+        intro: 'Qué mide cada letra, con qué se compara y qué te está diciendo cuando aparece en rojo. Es la parte más larga del módulo, pero también la que hace que el resto se entienda.',
+        sections: [
+            {
+                heading: 'C y A — cómo va el negocio',
+                blocks: [
+                    { type: 'table', headers: ['Letra', 'Qué mira', 'Objetivo', 'Qué significa que falle'], rows: [
+                        ['C', 'Cuánto han crecido los beneficios en el último trimestre frente al mismo trimestre del año pasado', 'más del 25%', 'La empresa gana dinero, pero no lo está acelerando. No es necesariamente mala: es que no está en el momento que este método busca.'],
+                        ['A', 'Cuánto han crecido las ventas', 'más del 25%', 'Crece despacio. Ojo con el caso contrario: ventas creciendo mucho con beneficios planos suele significar que está comprando crecimiento a base de margen.'],
+                    ]},
+                    { type: 'text', content: 'Estas dos son las únicas que miran <b>la empresa</b>. Las cinco siguientes miran el precio o el entorno, y por eso pueden estar todas en verde en un negocio que pierde dinero.' },
+                ]
+            },
+            {
+                heading: 'N, S y L — cómo va el precio',
+                blocks: [
+                    { type: 'table', headers: ['Letra', 'Qué mira', 'Objetivo', 'Qué significa que falle'], rows: [
+                        ['N', 'A qué distancia está del precio más alto de las últimas 52 semanas', 'a menos del 15%', 'Está lejos de máximos. Puede ser una oportunidad o una caída en marcha, y esta letra sola no lo distingue.'],
+                        ['S', 'Cuántos valores del índice lo han hecho peor que él en el último año', 'mejor que el 80%', 'Va peor que la mayoría. Es la letra que más gente pasa por alto, y la más útil para descartar.'],
+                        ['L', 'Si las medias de precio están ordenadas como en una tendencia sana', '5 de 7 condiciones', 'La estructura del gráfico no acompaña, aunque el precio de hoy parezca bueno.'],
+                    ]},
+                    { type: 'concept', title: 'Por qué comprar cerca de máximos y no barato', content: 'Suena al revés de lo que dice el sentido común, y es deliberado. Un valor en máximos no tiene a nadie por encima esperando a recuperar lo perdido para vender. Uno que ha caído un 40% arrastra a todos los que compraron más arriba, y cada rebote les da la oportunidad de salir.' },
+                ]
+            },
+            {
+                heading: 'I y M — cómo va el entorno',
+                blocks: [
+                    { type: 'table', headers: ['Letra', 'Qué mira', 'Objetivo', 'Qué significa que falle'], rows: [
+                        ['I', 'Qué porcentaje de la empresa está en manos de fondos y grandes gestoras', 'más del 40%', 'Poca presencia institucional. Puede significar que aún no la han descubierto, o que la miraron y no les convenció.'],
+                        ['M', 'Si el mercado general está en condiciones de comprar', 'que las esté', 'El mercado no acompaña. Si esta falla, plantéate esperar aunque el valor esté impecable.'],
+                    ]},
+                    { type: 'warning', content: 'La I tiene un matiz: que un valor tenga mucha presencia institucional también significa que, si esos fondos deciden salir, la caída puede ser brusca. Es un respaldo, no un seguro.' },
+                ]
+            },
+            {
+                heading: 'Cuando una letra sale en gris',
+                blocks: [
+                    { type: 'text', content: 'Verde es que cumple, rojo es que no, y <b>gris significa que no hay dato</b>. No son lo mismo y la pantalla no los mezcla.' },
+                    { type: 'text', content: 'Que la fuente de datos no traiga el beneficio de una empresa no quiere decir que la empresa no gane dinero: quiere decir que ese número no está disponible. Tratar el hueco como un suspenso sería inventarse una nota.' },
+                    { type: 'tip', label: 'DÓNDE MIRARLO', content: 'Bajo las barras de puntuación tienes el detalle letra por letra, con el objetivo y el valor medido de cada una. Ahí se ve si una A en rojo falló por un pelo o por mucho — y eso cambia por completo la lectura.' },
+                ]
+            },
+        ]
+    },
+
+    '28-3': {
+        moduleId: 28,
+        lessonIndex: 2,
+        title: 'Cómo Leer la Tabla del Buscador',
+        duration: '9 min',
+        intro: 'La tabla es lo primero que ves al entrar. Cada columna responde a una pregunta distinta, y hay una que se malinterpreta casi siempre. Esta lección las recorre todas.',
+        sections: [
+            {
+                heading: 'Las columnas',
+                blocks: [
+                    { type: 'table', headers: ['Columna', 'Qué te dice'], rows: [
+                        ['TICKER', 'El valor. Los iconos de al lado indican si lo tienes en cartera, en tu lista de seguimiento, o si además aparece con compras de directivos y flujo alcista de opciones.'],
+                        ['PRECIO', 'El cierre de la última sesión.'],
+                        ['12M PERF', 'Cuánto ha subido o bajado en el último año.'],
+                        ['RS', 'Su fuerza relativa: el porcentaje del índice al que supera. 90 significa que va mejor que el 90% de las demás.'],
+                        ['ACC/DIS', 'Una nota de la A a la E sobre si el volumen acompaña a las subidas (acumulación) o a las bajadas (distribución).'],
+                        ['NEAR HIGH', 'Si está dentro del 15% de su máximo del año, o a cuánto está.'],
+                        ['VOL RATIO', 'Cuántas veces su volumen habitual se negoció en la última sesión. 2,0x es el doble de lo normal.'],
+                        ['TREND', 'Cuántas de las siete condiciones de tendencia cumple. Se aprueba con cinco.'],
+                        ['3WT', 'Si lleva tres semanas o más moviéndose en un rango muy estrecho — señal de que los vendedores se han agotado.'],
+                        ['SCORE', 'La puntuación total, de 0 a 100.'],
+                    ]},
+                ]
+            },
+            {
+                heading: 'La columna que más se malinterpreta',
+                blocks: [
+                    { type: 'text', content: 'La puntuación suma <b>cinco</b> cosas distintas, y la fuerza relativa es solo una de ellas. Eso significa que un valor puede sacar una nota alta sin tener nada de fuerza relativa:' },
+                    { type: 'chart', id: 'canslim_score_no_es_fuerza' },
+                    { type: 'warning', content: 'El caso del gráfico es real: 75 sobre 100 con una rentabilidad a doce meses del +3%. Puntúa por tendencia, acumulación, cercanía a máximos y volumen — y cero por fuerza relativa. Si lo que buscas es fuerza, mira la columna RS, no el total.' },
+                ]
+            },
+            {
+                heading: 'El filtro de puntuación mínima',
+                blocks: [
+                    { type: 'table', headers: ['Opción', 'Qué deja pasar'], rows: [
+                        ['85 — Estricto', 'Solo los fuertes en todo. Lista muy corta.'],
+                        ['80 — Estándar', 'El corte más bajo que garantiza fuerza relativa: por debajo de 80 se cuelan valores con RS baja. Es el que viene puesto por defecto.'],
+                        ['60 — Amplio', 'Red de arrastre para explorar. Aquí sí entran valores con poca fuerza relativa que puntúan por otras vías.'],
+                    ]},
+                    { type: 'text', content: 'Junto a cada opción verás cuántos candidatos deja pasar hoy, para que sepas lo que estás pidiendo antes de pedirlo.' },
+                    { type: 'concept', title: 'Que salgan pocos es información', content: 'El número de candidatos sube y baja con el mercado, y debe hacerlo. En una corrección seria pueden quedar cuatro nombres, o ninguno. Eso no es una avería: es exactamente lo que dice la letra M. Hay momentos en los que no hay nada que comprar, y una herramienta que siempre te diera cincuenta nombres nunca podría avisarte de eso.' },
+                ]
+            },
+            {
+                heading: 'Cuándo se actualiza',
+                blocks: [
+                    { type: 'text', content: 'El buscador no calcula nada cuando abres la página: los datos son del cierre de la sesión anterior. Para un método que mira medias de 50, 150 y 200 sesiones, eso es lo correcto — el precio de esta mañana no mueve una media de doscientos días.' },
+                    { type: 'warning', content: 'Pero significa que esta no es la herramienta para movimientos del día. Si buscas qué se está moviendo ahora mismo, esta pantalla no te lo va a decir.' },
+                ]
+            },
+        ]
+    },
+
+    '28-4': {
+        moduleId: 28,
+        lessonIndex: 3,
+        title: 'El Análisis Individual',
+        duration: '9 min',
+        intro: 'Cuando un candidato te interesa, lo escribes en el buscador de arriba y obtienes su ficha completa. Aquí sí entran los datos del negocio, que en la tabla no aparecen.',
+        sections: [
+            {
+                heading: 'Las tres puntuaciones',
+                blocks: [
+                    { type: 'table', headers: ['Puntuación', 'Qué mide', 'Qué NO mide'], rows: [
+                        ['Score técnico', 'Todo lo que se ve en el gráfico: fuerza relativa, tendencia, acumulación, cercanía a máximos y volumen.', 'Nada de la empresa. Un valor puede sacar 90 aquí y estar en pérdidas.'],
+                        ['Score fundamental', 'El negocio: crecimiento de beneficios, de ventas, rentabilidad y margen.', 'Nada del precio. Una gran empresa cara sigue siendo cara.'],
+                        ['CAN SLIM Score', 'Las dos anteriores combinadas: 60% técnico y 40% fundamental.', 'Un número intermedio no distingue "mediocre en todo" de "excelente en una cosa y suspenso en la otra".'],
+                    ]},
+                    { type: 'tip', label: 'LA REGLA DE LECTURA', content: 'Mira siempre las dos barras de arriba antes que el total. Un 54 puede salir de un valor gris en todo o de uno con 90 técnico y 0 fundamental, que son situaciones muy distintas y piden decisiones distintas.' },
+                ]
+            },
+            {
+                heading: 'Un cero fundamental puede ser real',
+                blocks: [
+                    { type: 'text', content: 'Si el score fundamental sale 0, no significa que falten datos. Significa que ninguno de los componentes medidos llega ni al escalón más bajo: una empresa con rentabilidad negativa, márgenes negativos y ventas creciendo por debajo del 10% saca un cero legítimo.' },
+                    { type: 'text', content: 'Cuando de verdad no hay datos, la cifra no dice 0: dice <b>«Sin datos»</b>. Y entre paréntesis, junto al título, verás siempre qué componentes se han podido medir — si falta alguno, no aparece en la lista.' },
+                ]
+            },
+            {
+                heading: 'El resto de la ficha',
+                blocks: [
+                    { type: 'steps', items: [
+                        'Los siete cuadrados de las letras, con el detalle debajo: objetivo y valor medido de cada una.',
+                        'Los ratings al estilo de la prensa financiera especializada: fuerza relativa, beneficios y una nota combinada.',
+                        'Las siete condiciones de tendencia, una a una, para ver cuáles cumple y cuáles no.',
+                        'Los fundamentales en crudo, y qué grandes fondos aparecen entre sus accionistas.',
+                        'El gráfico de los últimos 60 días con sus medias de 50 y 200.',
+                    ]},
+                    { type: 'text', content: 'Arriba del todo, junto al nombre, tienes enlaces para abrir el mismo valor en <b>Research</b> (ficha completa con noticias) y en <b>RS/RW</b> (el detalle de su fuerza relativa frente al mercado y a su sector).' },
+                ]
+            },
+            {
+                heading: 'Puedes analizar cualquier valor',
+                blocks: [
+                    { type: 'text', content: 'El buscador individual no se limita a los candidatos ni al índice americano: acepta cualquier valor del mercado estadounidense. Puedes usarlo para revisar algo que ya tienes en cartera, no solo para estudiar candidatos nuevos.' },
+                    { type: 'warning', content: 'Con una salvedad: la fuerza relativa se calcula comparando contra el universo escaneado. Si analizas un valor que no está en el índice, esa letra puede aparecer sin dato — no hay contra qué compararlo.' },
+                ]
+            },
+        ]
+    },
+
+    '28-5': {
+        moduleId: 28,
+        lessonIndex: 4,
+        title: 'Cómo Usarlo Sin Hacerse Daño',
+        duration: '8 min',
+        intro: 'Cierre del módulo: la rutina razonable, los errores que este tipo de herramienta invita a cometer, sus límites y un glosario.',
+        sections: [
+            {
+                heading: 'Una rutina razonable',
+                blocks: [
+                    { type: 'steps', items: [
+                        'Mira primero el estado del mercado, arriba del todo. Si no acompaña, lo demás es un ejercicio teórico.',
+                        'Revisa la lista de candidatos con el filtro por defecto. No hace falta hacerlo a diario: los cambios reales tardan semanas.',
+                        'Elige dos o tres que te llamen la atención y ábrelos uno a uno.',
+                        'En cada uno, mira las dos barras de puntuación por separado y el detalle de las letras que fallan.',
+                        'Si sigue interesándote, sal de esta herramienta: mira su gráfico, lee qué hace la empresa y por qué está donde está.',
+                        'Decide el tamaño de la posición ANTES de comprar, no después.',
+                    ]},
+                ]
+            },
+            {
+                heading: 'Los tres errores típicos',
+                blocks: [
+                    { type: 'table', headers: ['El error', 'Por qué pasa', 'Qué hacer'], rows: [
+                        ['Comprar la lista entera', 'Aparecen treinta candidatos y todos parecen buenos.', 'La lista es el principio del trabajo, no el final. Treinta posiciones no se pueden seguir, y comprar todo lo que sale es no filtrar nada.'],
+                        ['Mirar solo la puntuación', 'Es el número más grande de la pantalla.', 'Un 80 puede venir de sitios muy distintos. Las columnas de al lado están ahí por algo.'],
+                        ['Volver cada día a ver si cambió', 'La lista se actualiza cada noche y engancha.', 'El método mira medias de meses. Revisarlo a diario solo añade ruido y tentación de operar.'],
+                    ]},
+                ]
+            },
+            {
+                heading: 'Lo que la herramienta no puede hacer',
+                blocks: [
+                    { type: 'table', headers: ['Límite', 'Detalle'], rows: [
+                        ['No es una recomendación', 'Aplica un filtro mecánico. No sabe nada de tu situación, tu plazo ni tu tolerancia al riesgo.'],
+                        ['Solo mira el índice americano', 'Un RS de 95 significa "de las mejores entre las grandes de Estados Unidos", no del mundo.'],
+                        ['En un mercado bajista sigue habiendo RS altas', 'Porque todo se compara con todo: serán las que menos caen, no las que suben.'],
+                        ['No dice dónde comprar', 'Te dice qué valores están fuertes, no en qué precio conviene entrar ni cuándo salir.'],
+                        ['No dice cuándo vender', 'Es una herramienta de búsqueda. La salida es una decisión aparte.'],
+                        ['Los datos van con un día de retraso', 'Correcto para un método de medias largas; inservible para operar intradía.'],
+                    ]},
+                ]
+            },
+            {
+                heading: 'Glosario',
+                blocks: [
+                    { type: 'table', headers: ['Término', 'Qué significa'], rows: [
+                        ['Fuerza relativa (RS)', 'Cómo se comporta un valor comparado con los demás. Un 90 quiere decir que va mejor que el 90% del índice.'],
+                        ['Percentil', 'Tu puesto en una lista ordenada, en porcentaje. Estar en el percentil 90 es estar por delante del 90%.'],
+                        ['Media móvil', 'El precio medio de los últimos N días, recalculado cada día. Suaviza el ruido y enseña la dirección.'],
+                        ['Acumulación / Distribución', 'Si el volumen aparece sobre todo en los días de subida (alguien está comprando) o en los de bajada (alguien está vendiendo).'],
+                        ['Volumen relativo', 'Cuántas veces el volumen habitual se ha negociado hoy. 2,0x es el doble de lo normal.'],
+                        ['Máximo de 52 semanas', 'El precio más alto del último año.'],
+                        ['Trend Template', 'Un conjunto de siete condiciones sobre las medias móviles que describe una tendencia alcista sana.'],
+                        ['3 Weeks Tight', 'Tres o más semanas seguidas con el precio en un rango muy estrecho, tras una subida. Señal de que los vendedores se agotaron.'],
+                        ['Participación institucional', 'Qué porcentaje de la empresa está en manos de fondos y grandes gestoras.'],
+                        ['Confluencia (⚡)', 'Que un valor aparece a la vez en este buscador, con compras de directivos y con flujo alcista de opciones.'],
+                    ]},
+                ]
+            },
+            {
+                heading: 'Resumen del módulo',
+                blocks: [
+                    { type: 'tip', label: 'CANSLIM — LA REGLA', content: 'Es un filtro, no un oráculo: reduce 503 acciones a un puñado que merece análisis, y el análisis lo haces tú. Siete letras que mezclan negocio, precio y entorno, y la más importante es la del mercado general. La puntuación suma cinco cosas, así que una nota alta no significa fuerza relativa alta — mira la columna RS. Un cero fundamental puede ser real y un gris significa "sin dato", que no es lo mismo que un suspenso. Y que algunos días salgan pocos candidatos, o ninguno, es información: hay momentos en los que no hay nada que comprar.' },
+                ]
+            },
+        ]
+    },
 };

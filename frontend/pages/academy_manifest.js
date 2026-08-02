@@ -136,4 +136,9 @@ export const LESSON_INDEX = {
     '27-6': { title: 'Leer la Pantalla — Las Tarjetas de Cabecera', words: 577 },
     '27-7': { title: 'La Tabla, el Riesgo y la Asignación', words: 675 },
     '27-8': { title: 'Evolución, Cerradas, Límites y Glosario', words: 962 },
+    '28-1': { title: 'Qué es CANSLIM y Para Qué Sirve', words: 428 },
+    '28-2': { title: 'Las Siete Letras, Una a Una', words: 585 },
+    '28-3': { title: 'Cómo Leer la Tabla del Buscador', words: 543 },
+    '28-4': { title: 'El Análisis Individual', words: 454 },
+    '28-5': { title: 'Cómo Usarlo Sin Hacerse Daño', words: 683 },
 };
