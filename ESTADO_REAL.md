@@ -34,10 +34,9 @@ parecería completo y sería engañoso.
   y #28, Newsfeed/briefing #27–#31, Infraestructura #19 —la versión móvil—,
   CANSLIM #25 —umbrales descalibrados— y #29/#30, estos dos **encontrados por el
   usuario validando la herramienta con casos reales**, no por una auditoría).
-- **64 son críticos (🔴)**: todos revisados en la primera pasada.
-  33 cerrados · 11 abiertos ·
-  1 ya no aplican ·
-  19 pendientes de verificar.
+- **73 son críticos (🔴)**: 46 cerrados · 9 abiertos ·
+  3 ya no aplican ·
+  15 pendientes de verificar.
 - **Segunda pasada (30/07), parcial**: verificado además el tier ALTO/MEDIO de
   Research, RS/RW y Scanner. Los demás módulos siguen sin revisar en ese tier.
 - **RS/RW cerrado del todo (30/07, `34a659f`)**: los 22 hallazgos del módulo
@@ -81,37 +80,28 @@ reponderación 4.5 del RSU Score, la longitud del briefing diario.
 
 ## Lo que hay que atacar, por orden
 
-De los críticos verificados como abiertos:
+De los críticos verificados como ABIERTOS. Lista generada desde las
+propias filas del documento, no escrita a mano — así no vuelve a citar
+hallazgos ya cerrados.
 
-1. **BTC_STRATUM #1** — El MVRV Z-Score no usa Realized Cap — y la alerta le dice al usuario que sí
+1. **BTC STRATUM #1** — El MVRV Z-Score no usa Realized Cap — y la alerta le dice al usuario que sí
    `btc_stratum_service.py:189 documenta que el Realized Cap es una aproximación por EMA365 del market cap. El proxy sigue ahí; queda comprobar si la UI lo declara`
-1. **CARTERA #A2** — `auto_adjust=True` (default de yfinance) distorsiona el HOY % en días ex-dividendo
-   `verificado 30/07: cero apariciones de auto_adjust en cartera_service.py, sigue el default de yfinance`
-1. **CARTERA #A3** — El fallback FMP fabrica un "+0.00%" y lo cachea
-   `verificado 30/07: cartera_service.py:207 sigue usando /stable/quote-short, que no devuelve la variación real`
-1. **CARTERA #B1** — `clean_numeric` destroza importes con formato US de miles
-   `PROBADO 30/07 ejecutando la función: clean_numeric('1,234.56') → 1.23456. Un importe en formato US con separador de miles se divide por ~1000 en silencio. Con formato europeo ('1.234,56' → 1234.56) sí funciona`
-1. **INFRAESTRUCTURA_Y_VALORACION_GLOBAL #3** — Los endpoints de administración no tienen rate limiting: la clave maestra se puede probar a ciegas sin límite
+1. **CANSLIM #23** — **Detección de bases y pivot points — LA PIEZA QUE FALTA DEL MÉTODO**
+   `ABIERTO. **Subido a crítico el 01/08 por decisión del usuario**: es lo único de CANSLIM que queda sin construir y es el corazón del método de O'Neil. Hoy el módulo dice QUÉ valores están fuertes, pero no DÓNDE está el punto de compra — y O'Neil no compraba fuerza, compraba la ruptura de una base en…`
+1. **INFRAESTRUCTURA Y VALORACION GLOBAL #3** — Los endpoints de administración no tienen rate limiting: la clave maestra se puede probar a ciegas sin límite
    `main.py:90 include_router(auth.router) SIN dependencies=rl: los /admin/* no tienen rate limiting`
-1. **OPTIONS_FLOW #3** — `POST /options/save` permite a cualquier usuario inyectar datos falsos en tu histórico
+1. **OPTIONS FLOW #3** — `POST /options/save` permite a cualquier usuario inyectar datos falsos en tu histórico
    `options.py:80 POST /save sigue con solo verify_token: cualquier usuario autenticado puede inyectar en el histórico`
-1. **OPTIONS_FLOW #4** — `POST /options/scan-now` abierto a cualquier usuario, sin lock de concurrencia
+1. **OPTIONS FLOW #4** — `POST /options/scan-now` abierto a cualquier usuario, sin lock de concurrencia
    `options.py:56 POST /scan-now sin lock de concurrencia (ya lo dispara el cron, pero sigue abierto)`
-1. **OPTIONS_FLOW #5** — `GET /options/flow` (legacy) ejecuta el escaneo completo en vivo por petición
+1. **OPTIONS FLOW #5** — `GET /options/flow` (legacy) ejecuta el escaneo completo en vivo por petición
    `options.py:72 GET /flow legacy sigue llamando a get_options_flow() en vivo por petición`
-1. **PAGINAS_CONTENIDO #1** — No existe política de privacidad — y eso es un requisito legal, no una buena práctica
+1. **PAGINAS CONTENIDO #1** — No existe política de privacidad — y eso es un requisito legal, no una buena práctica
    `bloque legal Fase 1, nunca empezado. Bloquea la monetización`
-1. **PAGINAS_CONTENIDO #2** — El JWT se guarda en `localStorage` cuando marcas "recordarme" — persistente e indefinido
+1. **PAGINAS CONTENIDO #2** — El JWT se guarda en `localStorage` cuando marcas "recordarme" — persistente e indefinido
    `mismo bloque legal`
 1. **SPXL #4** — Ni `/live` ni `/backtest` tienen caché: cada visita descarga 17 años y ejecuta el motor completo
    `0 usos de cache.get en spxl_service.py: cada visita descarga 17 años y corre el motor`
-
-Los dos de `PAGINAS_CONTENIDO` son el **bloque legal de la Fase 1**, que sigue
-sin empezar y es lo único de toda la lista que no es deuda técnica sino
-exposición: con ~100 usuarios reales, no hay política de privacidad.
-
----
-
 ## Btc Stratum  (16 hallazgos — ❌1 · ✅1 · ❓14)
 
 | | # | Sev | Hallazgo | Estado / evidencia |
@@ -133,7 +123,7 @@ exposición: con ~100 usuarios reales, no hay política de privacidad.
 | ❓ | 15 | 🟡 | `ath = close.max()` sobre el histórico disponible | *sin comprobar* |
 | ❓ | 16 | 🟡 | `_get_zone` es la salida más prescriptiva de toda la terminal | *sin comprobar* |
 
-## Canslim  (27 hallazgos — ❌2 · ✅25 · ❓0)
+## Canslim  (27 hallazgos — ❌1 · ✅26 · ❓0)
 
 | | # | Sev | Hallazgo | Estado / evidencia |
 |-|---|-----|----------|--------------------|
@@ -162,8 +152,8 @@ exposición: con ~100 usuarios reales, no hay política de privacidad.
 | ✅ | 30 | 🔵 | Las tres barras de score no explicaban qué mide cada una | HECHO 01/08 a petición del usuario: tooltips nuevos `canslim-score-tecnico`, `canslim-score-fundamental` y `canslim-score-combinado`, con los componentes y sus puntos, qué NO mira cada uno, y dos avisos que salen de la validación de hoy — que un 100 técnico es alcanzable y qué mirar cuando lo es, y que un 0 fundamental puede ser real y no «sin datos». La etiqueta del score técnico también estaba incompleta: decía «(RS + Trend + Vol)» cuando son cinco componentes, ahora lista los cinco |
 | ✅ | 21 | 🔵 | Explicar por qué falla cada letra | HECHO 01/08. Bloque nuevo «POR QUÉ CUMPLE O FALLA CADA LETRA» bajo las barras de score, alimentado por `can_slim_detalle` (campo nuevo; `can_slim_letters` se deja intacto porque ya lo consume el frontend). Cada fila da letra, criterio, **objetivo** y **valor medido**. Ejemplo real de AXON: la N falla con −39,4% desde máximos, la S con RS 7 y la L con 3/7 — antes se veían tres cuadrados rojos sin un solo número. Se distingue **«sin dato» (gris)** de «no cumple» (rojo): un dato que yfinance no trae no es un suspenso, mismo criterio anti-fabricación del resto del proyecto. Verificado con las 7 filas renderizadas desde la función real del fichero servido, incluido el caso de valor ausente |
 | ✅ | 22 | 🟢 | Histórico de candidatos | HECHO 01/08. `services/canslim_tracking_service.py` + `canslim_history.db`: cada scan nocturno queda registrado con el precio de entrada de cada ticker, y un job diario (`canslim_resultados_loop`, task12) rellena el retorno real a 5/10/20/60 días. Mismo patrón ya probado en producción por `algoritmo_tracking_service` y `rsu_score_tracking_service`. **Decisión de diseño que lo hace útil: se guarda el UNIVERSO ENTERO (~500 tickers), no solo los que pasan el umbral** — la pregunta es «¿los de score 85 lo hacen mejor que los de 60?» y sin los de score bajo no hay grupo de control; guardar solo los buenos permitiría medir si suben, que en un mercado alcista se responde solo. Coste ~12 MB/año, y el fichero cae en el glob de `backup_dbs.sh`. Registro colgado de la lectura del Gist y deduplicado por la FECHA DEL SCAN (no la de ejecución), así que no hace falta un bucle de 24h que derive con los reinicios — el error que ya se corrigió en Options Flow. **Verificado end-to-end**: 500 tickers registrados del Gist real, segunda lectura sin duplicar, y el job contrastado contra un retorno calculado a mano (AAPL 20d: −6,83% las dos veces). **Sin backfill**: el Gist se sobrescribe cada noche, empieza a contar desde el despliegue |
-| ❌ | 23 | 🟢 | Detección de bases y pivot points | verificado 01/08: no existe. Sin `pivot` ni detección de bases en el servicio |
-| ❌ | 24 | 🟢 | Cruce con Insider y Options Flow | verificado 01/08: no existe. `canslim_service.py`/`routers/canslim.py` no importan nada de Insider ni de Options |
+| ❌ | 23 | 🔴 | **Detección de bases y pivot points — LA PIEZA QUE FALTA DEL MÉTODO** | ABIERTO. **Subido a crítico el 01/08 por decisión del usuario**: es lo único de CANSLIM que queda sin construir y es el corazón del método de O'Neil. Hoy el módulo dice QUÉ valores están fuertes, pero no DÓNDE está el punto de compra — y O'Neil no compraba fuerza, compraba la ruptura de una base en su pivote, con volumen. Sin eso, la L y la N dicen que el valor va bien, no si estás comprando en el sitio o persiguiendo una vela. **Diseño acordado, para no repetir errores ya cometidos**: (a) NO clasificar la figura («taza con asa», «doble suelo») — con 500 tickers y ventanas flexibles siempre se encuentran figuras, y cada parámetro que se toca para que «salgan mejor» es una decisión inauditable; en su lugar medir las propiedades estructurales que comparten todas las bases válidas (subida previa, profundidad, duración, contracción del rango, sequía de volumen) y derivar el pivote del máximo de la base, que es un hecho y no una interpretación. (b) Vivir en `shared/canslim_bases.py` y ser consumido por el scan nocturno Y el análisis individual **desde el primer día** — la lección de #6, donde una función que nació solo en el análisis acabó con dos definiciones contradiciéndose en el 23,8% del universo. (c) Guardar los campos de base en `canslim_history.db` para poder medirlo. **La prueba que puede matarlo antes de escribir la UI: la TASA BASE.** Si al correrlo sobre los 500 tickers resulta que el 60% «tiene base», el detector no detecta nada, describe el mercado. Más la sensibilidad: mover los parámetros ±20% y ver cuánto cambia esa tasa. **Por qué conviene esperar unas semanas**: los parámetros saldrían de libros, no de datos — igual que los umbrales de #25. Con `canslim_history.db` llenándose desde el 01/08, en unas semanas se pueden elegir con evidencia y contrastar si los candidatos con base rinden mejor que los que no la tienen |
+| ✅ | 24 | 🟢 | Cruce con Insider y Options Flow | HECHO 01/08: badge ⚡ en la tabla del scan y en el análisis individual, con el mismo patrón que 💼/⭐. Se consume `get_confluence_tickers()` de `insider_service`, que ya usan Insider y Options — no se recalcula ni se descarga nada, y falla en silencio a conjunto vacío para que un problema de esos dos módulos no deje sin scanner a CANSLIM. **Comprobado que las DOS fuentes están vivas** antes de dar por buena la intersección vacía de hoy: Insider devuelve 1 ticker (XAIR) y Options 6, sin solape — el cero es real, no una fuente muerta. **Limitación honesta que sale de esa comprobación**: con Insider aflorando un solo ticker, el badge apenas se encenderá. La causa está en Insider Flow, que tiene sus 23 hallazgos sin verificar |
 
 ## Cartera  (47 hallazgos — ❌3 · ✅33 · ❓7 · ⬜4)
 

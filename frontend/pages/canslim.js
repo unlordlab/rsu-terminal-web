@@ -589,8 +589,12 @@ function renderChart(data) {
 // lo pone el router con el usuario de la petición, nunca dentro de la caché.
 function marcas(r) {
     let out = '';
-    if (r.en_cartera)   out += '<span title="Tienes una posición abierta en Cartera" style="font-size:11px;">💼</span>';
-    if (r.in_watchlist) out += '<span title="Está en tu Watchlist" style="font-size:11px;">⭐</span>';
+    if (r.en_cartera)    out += '<span title="Tienes una posición abierta en Cartera" style="font-size:11px;">💼</span>';
+    if (r.in_watchlist)  out += '<span title="Está en tu Watchlist" style="font-size:11px;">⭐</span>';
+    // ⚡ Confluencia: además de pasar el filtro técnico, tiene compras de
+    // directivos Y flujo alcista de opciones. Tres módulos que miran cosas
+    // distintas coincidiendo en el mismo valor.
+    if (r.is_confluence) out += '<span title="Confluencia: también aparece con compras de directivos y flujo alcista de opciones" style="font-size:11px;">⚡</span>';
     return out ? '<span style="margin-left:5px;">' + out + '</span>' : '';
 }
 

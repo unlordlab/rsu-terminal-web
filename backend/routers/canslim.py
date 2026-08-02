@@ -17,9 +17,25 @@ def _watchlist_tickers(user) -> set:
     return {w["ticker"] for w in watchlist_service.get_watchlist_tickers(user_id)} if user_id else set()
 
 
-def _marcar_watchlist(filas: list, tickers: set) -> None:
+def _confluencia() -> set:
+    """Tickers con compras de directivos Y flujo alcista de opciones a la vez.
+    El motor vive en insider_service y ya lo usan Insider y Options Flow --
+    aquí solo se consume, no se recalcula nada. Falla en silencio a conjunto
+    vacío: que Insider u Options tengan un problema no puede dejar sin
+    scanner a CANSLIM, que no depende de ninguno de los dos."""
+    try:
+        from services.insider_service import get_confluence_tickers
+        return get_confluence_tickers()
+    except Exception as e:
+        print(f"[CANSLIM] Sin confluencia con Insider/Options: {type(e).__name__}: {e}")
+        return set()
+
+
+def _marcar(filas: list, watchlist: set, confluencia: set) -> None:
     for fila in filas:
-        fila["in_watchlist"] = fila.get("ticker") in tickers
+        t = fila.get("ticker")
+        fila["in_watchlist"]  = t in watchlist
+        fila["is_confluence"] = t in confluencia
 
 
 @router.get("/market")
@@ -35,7 +51,7 @@ async def gist(user=Depends(verify_token)):
     # siguiente. deepcopy porque lo que se muta es una lista de dicts
     # anidada, no una clave de primer nivel.
     result = copy.deepcopy(get_canslim_from_gist())
-    _marcar_watchlist(result.get("candidates", []), _watchlist_tickers(user))
+    _marcar(result.get("candidates", []), _watchlist_tickers(user), _confluencia())
     return result
 
 
@@ -43,7 +59,9 @@ async def gist(user=Depends(verify_token)):
 async def analyze(ticker: str, user=Depends(verify_token)):
     result = analyze_ticker(ticker)
     if result.get("ok"):
-        result["in_watchlist"] = result.get("ticker") in _watchlist_tickers(user)
+        t = result.get("ticker")
+        result["in_watchlist"]  = t in _watchlist_tickers(user)
+        result["is_confluence"] = t in _confluencia()
     return result
 
 
@@ -57,5 +75,5 @@ async def scan(
     # percentiles en caché como efecto secundario-, así que aquí no hace
     # falta copiar antes de marcar.
     result = scan_canslim(min_score, max_results)
-    _marcar_watchlist(result.get("candidates", []), _watchlist_tickers(user))
+    _marcar(result.get("candidates", []), _watchlist_tickers(user), _confluencia())
     return result
