@@ -37,12 +37,14 @@ export async function render(container) {
         + '<div id="rsrw-leaders"></div>'
         + '<div id="rsrw-laggards"></div>'
         + '</div>'
+        + '<div id="rsrw-cartera" style="margin-bottom:1.5rem;"></div>'
         + '<div id="rsrw-movimientos" style="margin-bottom:1.5rem;"></div>'
         + tickerPanel()
         + '<div id="rsrw-ticker-result"></div>';
 
     setupTicker(container);
     loadGist(container);
+    loadCartera(container);
     loadMovimientos(container);
 }
 
@@ -91,6 +93,84 @@ async function loadGist(container) {
         if (leadersEl)  leadersEl.innerHTML  = errorCard('LÍDERES RS', e.message);
         if (laggardsEl) laggardsEl.innerHTML = errorCard('REZAGADOS RW', e.message);
     }
+}
+
+// ── Fuerza relativa de tus posiciones ────────────────────────────────────────
+//
+// El scan nocturno recorre el S&P 500, y dos tercios de la cartera no están en
+// el índice — así que la herramienta que mide fuerza relativa no decía nada de
+// la mayoría de lo que hay comprado de verdad. Esta sección lo cubre.
+//
+// El percentil se calcula CONTRA el S&P 500, sin que estos valores formen
+// parte de él: ampliar el universo cambiaría la vara de medir para todos.
+
+async function loadCartera(container) {
+    const el = container.querySelector('#rsrw-cartera');
+    if (!el) return;
+    el.innerHTML = loadingCard('TUS POSICIONES · FUERZA RELATIVA');
+    try {
+        const token = sessionStorage.getItem('rsu_token');
+        const res   = await fetch('/api/v1/rsrw/cartera', {
+            headers: token ? { 'Authorization': 'Bearer ' + token } : {}
+        });
+        const data = await res.json();
+        if (!data.ok) {
+            el.innerHTML = '<div style="background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius);padding:1rem;">'
+                + '<div style="color:var(--color-accent);font-size:12px;letter-spacing:0.08em;margin-bottom:6px;">TUS POSICIONES · FUERZA RELATIVA</div>'
+                + '<div style="color:var(--color-muted);font-size:11px;">' + esc(data.error || 'Sin datos.') + '</div></div>';
+            return;
+        }
+        el.innerHTML = renderCartera(data);
+    } catch (e) {
+        el.innerHTML = errorCard('TUS POSICIONES · FUERZA RELATIVA', e.message);
+    }
+}
+
+function renderCartera(d) {
+    const colorPct = (p) => p == null ? 'var(--color-muted)'
+        : p >= 80 ? 'var(--color-accent)' : p <= 20 ? '#f23645' : '#ffb800';
+
+    const filas = d.filas.map(f => {
+        const mom = f.rs_mom ? '<span title="El ritmo reciente supera al de medio plazo" style="color:var(--color-accent);">▲</span>'
+                             : '<span title="El ritmo reciente NO supera al de medio plazo" style="color:var(--color-muted);">·</span>';
+        // Marcar los que no forman parte del índice: su percentil se calcula
+        // contra el S&P 500 pero no compiten dentro de él, y decirlo evita que
+        // alguien lo lea como "está entre las 500 mayores de EE.UU.".
+        const fuera = f.en_indice ? ''
+            : '<span title="No forma parte del S&P 500 — su percentil se calcula contra el índice, no dentro de él" style="color:var(--color-muted);font-size:9px;margin-left:4px;">ext</span>';
+        const star = f.in_watchlist ? '<span title="En tu Watchlist" style="font-size:10px;">⭐</span>' : '';
+        return '<div style="display:grid;grid-template-columns:1fr 54px 70px 70px 70px 24px;gap:6px;padding:5px 12px;border-top:1px solid var(--color-border);font-size:11px;align-items:center;">'
+            + '<span class="ticker-link" onclick="window.__navigate(\'/research?ticker=' + esc(f.ticker) + '\')" style="color:var(--color-accent);cursor:pointer;">' + esc(f.ticker) + star + fuera + '</span>'
+            + '<span style="color:' + colorPct(f.rs_pct) + ';text-align:right;font-weight:500;">' + (f.rs_pct == null ? '—' : esc(f.rs_pct)) + '</span>'
+            + '<span style="color:var(--color-muted);text-align:right;">' + esc(f.rs_21d) + '</span>'
+            + '<span style="color:var(--color-muted);text-align:right;">' + esc(f.rs_63d) + '</span>'
+            + '<span style="color:var(--color-muted);text-align:right;">' + esc(f.rs_126d) + '</span>'
+            + '<span style="text-align:center;">' + mom + '</span>'
+            + '</div>';
+    }).join('');
+
+    // Los que no se pudieron calcular se NOMBRAN. Omitirlos dejaría al usuario
+    // creyendo que esa posición no tiene fuerza relativa, cuando lo que pasa
+    // es que no hay histórico suficiente para medirla.
+    const sinDatos = (d.sin_datos && d.sin_datos.length)
+        ? '<div style="padding:7px 12px;border-top:1px solid var(--color-border);color:var(--color-muted);font-size:10px;">'
+          + 'Sin histórico suficiente para calcular su RS (hacen falta 63 sesiones): '
+          + d.sin_datos.map(t => esc(t)).join(', ') + '</div>'
+        : '';
+
+    return '<div>'
+        + '<div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:8px;">'
+        + '<div style="color:var(--color-accent);font-size:13px;letter-spacing:0.08em;">TUS POSICIONES · FUERZA RELATIVA ' + tt('rsrw-cartera') + '</div>'
+        + '<div style="color:var(--color-muted);font-size:10px;">' + esc(d.calculadas) + ' de ' + esc(d.posiciones)
+        + ' · ' + esc(d.fuera_indice) + ' fuera del índice · percentil contra ' + esc(d.referencia) + '</div>'
+        + '</div>'
+        + '<div style="background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius);overflow:hidden;">'
+        + '<div style="display:grid;grid-template-columns:1fr 54px 70px 70px 70px 24px;gap:6px;padding:7px 12px;font-size:10px;color:var(--color-muted);letter-spacing:0.05em;">'
+        + '<span>TICKER</span><span style="text-align:right;">RS%</span><span style="text-align:right;">21D</span>'
+        + '<span style="text-align:right;">63D</span><span style="text-align:right;">126D</span><span></span></div>'
+        + '<div style="max-height:420px;overflow-y:auto;">' + filas + '</div>'
+        + sinDatos
+        + '</div></div>';
 }
 
 // ── Movimientos del percentil RS ─────────────────────────────────────────────

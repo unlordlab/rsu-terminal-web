@@ -19,7 +19,7 @@ from sp500_universe import SP500_SECTOR_MAP  # noqa: E402
 from time_utils import get_timestamp  # noqa: E402
 from rsrw_engine import (  # noqa: E402
     rs_smooth as _rs_smooth, rs_trend_slope as _rs_trend_slope,
-    rs_percentile, rs_momentum, PERIODS, WEIGHTS, EMA_SMOOTH, TREND_WIN,
+    rs_percentile, rs_momentum, percentil_contra, PERIODS, WEIGHTS, EMA_SMOOTH, TREND_WIN,
     SECTOR_ETFS, GICS_MAP,
 )
 from yf_batch import download_batch  # noqa: E402
@@ -245,6 +245,98 @@ UMBRAL_REZAGO  = 20
 # Por debajo de esto, comparar dos fotos es medir ruido: el percentil se
 # mueve solo con que otro ticker suba. No se oculta el dato, se marca.
 MIN_SESIONES_FIABLE = 5
+
+
+def get_rs_cartera() -> dict:
+    """Fuerza relativa de las posiciones abiertas en Cartera.
+
+    POR QUÉ HACE FALTA
+    El scan nocturno recorre el S&P 500, y dos tercios de la cartera no están
+    en el índice (medido el 01/08: 33 de 50 posiciones). Es decir, la
+    herramienta que mide fuerza relativa no podía decir nada de la mayoría de
+    lo que hay realmente comprado. Ver auditoría RS/RW, hallazgo #7.
+
+    POR QUÉ NO SE AMPLÍA EL UNIVERSO DEL SCAN
+    Sería lo fácil y cambiaría el significado del número para todos. El RS es
+    un percentil, o sea una posición RELATIVA: si se meten las posiciones de
+    la cartera en el conjunto contra el que se comparan, el RS de AAPL pasa a
+    depender de qué haya en cartera. Aquí el S&P 500 sigue siendo la vara y
+    estos valores se miden CONTRA ella, con `percentil_contra()`, que
+    reproduce exactamente el convenio de `rs_percentile()` (verificado: 0,00
+    de diferencia en los 501 tickers del índice).
+
+    POR QUÉ EN EL BACKEND Y NO EN EL SCAN NOCTURNO
+    Porque una posición que se abra hoy tiene que aparecer hoy, no mañana por
+    la noche. El coste es una descarga en lote de unas decenas de tickers,
+    cacheada, frente a las 503 del scan.
+    """
+    from services.cache import cache
+    from services.cartera_service import get_cartera_tickers
+
+    cached = cache.get("rsrw:cartera")
+    if cached:
+        return cached
+
+    tickers = sorted(get_cartera_tickers())
+    if not tickers:
+        return {"ok": False, "error": "No hay posiciones abiertas en Cartera."}
+
+    data = _load_gist()
+    if not data:
+        return {"ok": False, "error": "Sin scan nocturno disponible: no hay universo contra el que comparar."}
+    df_ref, _, meta = _parse_gist(data)
+    if df_ref.empty:
+        return {"ok": False, "error": "El scan nocturno no trae universo."}
+    referencia = df_ref["RS_Score"]
+    en_indice  = set(df_ref.index)
+
+    close_d, _ = download_batch(
+        tickers + [BENCHMARK], period="260d", batch_size=40,
+        min_history=63, log_prefix="[RS Cartera] ",
+    )
+    spy = close_d.get(BENCHMARK)
+    if spy is None or spy.empty:
+        return {"ok": False, "error": "Sin datos del índice de referencia (SPY)."}
+
+    filas, sin_datos = [], []
+    for t in tickers:
+        prices = close_d.get(t)
+        # Menos de 63 sesiones no da ni para el tramo intermedio del RS: se
+        # dice cuáles quedan fuera en vez de omitirlas sin más, que dejaría
+        # al usuario pensando que ese ticker no tiene fuerza relativa.
+        if prices is None or len(prices) < 63:
+            sin_datos.append(t)
+            continue
+        spy_r = spy.reindex(prices.index).ffill()
+        raw = {p: (float(_rs_smooth(prices, spy_r, p).iloc[-1]) if not _rs_smooth(prices, spy_r, p).empty else 0.0)
+               for p in PERIODS}
+        rs_score = sum(raw[p] * WEIGHTS[p] for p in PERIODS) * 100
+        filas.append({
+            "ticker":     t,
+            "rs_score":   round(rs_score, 2),
+            "rs_pct":     percentil_contra(rs_score, referencia),
+            "rs_21d":     round(raw[21] * 100, 2),
+            "rs_63d":     round(raw[63] * 100, 2),
+            "rs_126d":    round(raw[126] * 100, 2),
+            "rs_mom":     rs_momentum(raw[21] * 100, raw[63] * 100),
+            "en_indice":  t in en_indice,
+            "en_cartera": True,
+        })
+
+    filas.sort(key=lambda r: -(r["rs_pct"] or 0))
+    result = {
+        "ok":          True,
+        "posiciones":  len(tickers),
+        "calculadas":  len(filas),
+        "sin_datos":   sin_datos,
+        "fuera_indice": sum(1 for f in filas if not f["en_indice"]),
+        "referencia":  f"S&P 500 ({len(referencia)} valores)",
+        "freshness":   _freshness(meta),
+        "filas":       filas,
+        "timestamp":   get_timestamp(),
+    }
+    cache.set("rsrw:cartera", result, 900)   # 15 min
+    return result
 
 
 def get_rs_movimientos(ventana: int = 10) -> dict:

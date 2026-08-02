@@ -1,7 +1,9 @@
 from fastapi import APIRouter, Depends
 from auth import verify_token
 from services import users_service, watchlist_service
-from services.rsrw_service import get_rsrw_from_gist, get_rsrw_ticker, get_rs_movimientos
+from services.rsrw_service import (
+    get_rsrw_from_gist, get_rsrw_ticker, get_rs_movimientos, get_rs_cartera,
+)
 
 router = APIRouter(prefix="/api/v1/rsrw", tags=["rsrw"])
 
@@ -44,6 +46,22 @@ async def rsrw_movimientos(ventana: int = 10, user=Depends(verify_token)):
         for key in ("nuevos_lideres", "lideres_perdidos", "mas_suben", "mas_bajan"):
             for row in result.get(key, []):
                 row["in_watchlist"] = row.get("ticker") in watchlist
+    return result
+
+
+@router.get("/cartera")
+async def rsrw_cartera(user=Depends(verify_token)):
+    """Fuerza relativa de las posiciones abiertas en Cartera, incluidas las
+    que no están en el S&P 500 (dos tercios de ellas). Descarga unas decenas
+    de tickers en el peor caso, así que va a un hilo aparte para no bloquear
+    el event loop -- mismo patrón que cartera.py con fetch_live_prices."""
+    import asyncio
+    loop = asyncio.get_event_loop()
+    result = await loop.run_in_executor(None, get_rs_cartera)
+    if result.get("ok"):
+        watchlist = _watchlist_tickers(user)
+        for row in result.get("filas", []):
+            row["in_watchlist"] = row.get("ticker") in watchlist
     return result
 
 

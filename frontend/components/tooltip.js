@@ -1351,6 +1351,28 @@ CÓMO USARLO:
 ▸ Vol ratio muy alto sin movimiento de precio → indecisión, mucha gente comprando y vendiendo sin que nadie gane la partida todavía`
     },
 
+    "rsrw-cartera": {
+        title: "TUS POSICIONES — fuerza relativa de lo que tienes comprado",
+        short: "El percentil RS de cada posición abierta, incluidas las que no están en el S&P 500. Se calcula CONTRA el índice, sin que estos valores formen parte de él.",
+        long: `POR QUÉ ESTÁ SEPARADO DE LAS TABLAS DE ARRIBA:
+El scan nocturno recorre las 503 acciones del S&P 500, y buena parte de una cartera real no está en ese índice. Sin esta sección, la herramienta que mide fuerza relativa no podría decir nada de la mayoría de lo que tienes comprado.
+
+CÓMO SE CALCULA EL PERCENTIL DE UN VALOR QUE NO ESTÁ EN EL ÍNDICE:
+Se compara su fuerza relativa contra la de las 503 del índice, pero SIN meterlo dentro del conjunto. La diferencia importa: el percentil es una posición relativa, así que si se ampliara el universo con las posiciones de cada uno, el RS de cualquier valor pasaría a depender de qué haya en cartera. Así "RS 87" significa lo mismo en toda la terminal.
+
+LA MARCA "ext":
+Señala los que no forman parte del S&P 500. Su percentil es válido y comparable, pero conviene no leerlo como "está entre las 500 mayores de Estados Unidos".
+
+LAS COLUMNAS 21D / 63D / 126D:
+El diferencial frente al índice en cada plazo. Positivo es que va mejor que el mercado en esa ventana. El percentil resume los tres, con más peso en el plazo largo.
+
+LA FLECHA:
+Aparece cuando el ritmo de las últimas semanas supera al de medio plazo — es decir, cuando la ventaja frente al mercado se está acelerando, no solo acumulando.
+
+SE ACTUALIZA SOLO:
+La lista sale de las posiciones abiertas en Cartera, así que una posición nueva aparece aquí sin esperar al scan nocturno. Si algún valor no tiene 63 sesiones de histórico, se dice cuál en vez de omitirlo — no es que no tenga fuerza relativa, es que todavía no se puede medir.`
+    },
+
     "rsrw-movimientos": {
         title: "MOVIMIENTOS DEL PERCENTIL RS — liderazgo emergente vs consolidado",
         short: "Compara el percentil de fuerza relativa de hoy con el de hace unas sesiones. Separa a los que acaban de entrar en el grupo de líderes de los que llevan tiempo ahí.",

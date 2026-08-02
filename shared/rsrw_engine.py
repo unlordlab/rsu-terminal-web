@@ -82,6 +82,40 @@ def rs_percentile(scores: pd.Series) -> pd.Series:
     return scores.rank(pct=True).mul(100).round(1)
 
 
+def percentil_contra(score: float, referencia) -> float:
+    """Percentil de UN score contra un universo de referencia del que NO
+    forma parte.
+
+    Para qué: las posiciones de la cartera que no están en el S&P 500 (dos
+    tercios de ellas) necesitan un percentil comparable con el del resto de
+    la pantalla. Meterlas en el universo sería lo fácil y lo incorrecto: el
+    percentil es una posición RELATIVA, así que ampliar el conjunto cambia
+    la vara de medir para todos, y el RS de AAPL pasaría a depender de qué
+    tenga cada uno en cartera. Aquí el S&P 500 sigue siendo la referencia y
+    el valor externo se mide CONTRA ella.
+
+    Reproduce exactamente el convenio de rs_percentile() -- que usa
+    rank(pct=True), es decir, promedia los rangos empatados:
+
+        rango = nº de scores menores + (nº de empates + 1) / 2
+        percentil = rango / n * 100
+
+    Para un miembro del propio universo esta fórmula da el MISMO número que
+    rs_percentile(), y está comprobado con datos reales sobre los 501
+    tickers del índice. Esa equivalencia es la razón de que las dos cifras
+    se puedan enseñar en la misma tabla sin engañar a nadie -- la lección de
+    CANSLIM #6, donde dos formas de calcular lo mismo acabaron
+    contradiciéndose en el 23,8% del universo.
+    """
+    ref = pd.Series(referencia).dropna()
+    n = len(ref)
+    if n == 0:
+        return None
+    menores = int((ref < score).sum())
+    empates = int((ref == score).sum())
+    return round((menores + (empates + 1) / 2) / n * 100, 1)
+
+
 def rs_momentum(rs_21d: float, rs_63d: float) -> int:
     """¿El ritmo de outperformance RECIENTE es más rápido que el de medio
     plazo? Compara diferenciales normalizados por nº de días -- comparar
