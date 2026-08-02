@@ -1351,6 +1351,38 @@ CÓMO USARLO:
 ▸ Vol ratio muy alto sin movimiento de precio → indecisión, mucha gente comprando y vendiendo sin que nadie gane la partida todavía`
     },
 
+    "canslim-scanner": {
+        title: "SCANNER S&P 500 — qué es y de dónde salen los datos",
+        short: "Recorre las 503 acciones del S&P 500 cada noche y las puntúa con los criterios técnicos de CAN SLIM. No se ejecuta al abrir la página: los datos vienen del scan de la noche anterior.",
+        long: `QUÉ HACE:
+Cada noche entre semana, después del cierre del mercado americano, un proceso automático descarga dos años de precios y volumen de las 503 acciones del índice y calcula para cada una: fuerza relativa, Trend Template, Acumulación/Distribución, distancia al máximo de 52 semanas y volumen relativo.
+
+POR QUÉ NO SE CALCULA AL ABRIR LA PÁGINA:
+Porque son 503 descargas y tarda varios minutos. Antes había un botón que lo lanzaba en caliente, y bastaba con que dos personas lo pulsaran a la vez para castigar al servidor. Ahora el resultado está precalculado y la página solo lo lee — es el mismo patrón que usan RS/RW, Scanner técnico y Thematic.
+
+CONSECUENCIA QUE CONVIENE TENER PRESENTE:
+Los datos son del cierre de la sesión anterior, no de ahora mismo. Para un screener que mira medias de 50, 150 y 200 sesiones eso es lo correcto: el precio de esta mañana no cambia una media de doscientos días. Pero si buscas movimientos intradía, esta no es la herramienta.
+
+QUÉ NO INCLUYE:
+Nada de fundamentales — ni beneficios, ni ventas, ni participación institucional. Eso cuesta una llamada aparte por empresa y solo se calcula cuando abres un valor concreto en ANÁLISIS INDIVIDUAL.`
+    },
+
+    "canslim-resultados": {
+        title: "RESULTADOS — qué significa «RS real (percentil vs universo)»",
+        short: "Cada valor se compara con los otros 502 del índice, no con una escala fija. Un RS de 90 significa que va mejor que el 90% del S&P 500 ese mismo día.",
+        long: `QUÉ ES UN PERCENTIL Y POR QUÉ IMPORTA AQUÍ:
+El RS Rating no mide cuánto ha subido un valor, sino cuántos lo han hecho peor que él. Un RS de 90 quiere decir que su rentabilidad a 12 meses supera a la del 90% del índice.
+
+POR QUÉ SE DICE "REAL":
+Porque se calcula contra el universo completo escaneado esa noche. Hasta julio de 2026, cuando no había universo disponible, el módulo rellenaba el hueco con una fórmula aproximada que producía un número con la misma pinta que uno de verdad. Se eliminó: ahora, sin universo, el RS aparece como "N/D" en vez de inventarse.
+
+LA VENTAJA DE COMPARAR CONTRA EL ÍNDICE:
+Se ajusta solo al mercado. En un año en que todo sube un 30%, subir un 30% no es mérito — y el percentil lo refleja, porque quedaría en la mitad de la tabla. Una escala fija de "más de 20% es bueno" diría lo contrario.
+
+EL LÍMITE:
+El universo es el S&P 500. Un RS de 95 significa "de los mejores entre las grandes americanas", no "de los mejores del mundo". Y como todos se comparan entre sí, en un mercado bajista habrá igualmente valores con RS 95 — serán los que menos caen.`
+    },
+
     "canslim-score-tecnico": {
         title: "SCORE TÉCNICO — 0 a 100, solo precio y volumen",
         short: "Cinco factores con crédito parcial: RS Rating, Trend Template, Acumulación/Distribución, cercanía al máximo y volumen relativo. Es la misma cifra que la columna SCORE del scanner.",

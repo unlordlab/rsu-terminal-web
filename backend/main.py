@@ -54,6 +54,9 @@ async def lifespan(app: FastAPI):
     # propia corrutina sale de inmediato si FINNHUB_REALTIME no está activo, así
     # que apagarlo no deja ninguna tarea colgando ni conexión abierta.
     task11 = asyncio.create_task(ws.supervisar("finnhub_stream_loop", ws.finnhub_stream_loop))
+    # Track record de CANSLIM: rellena el retorno real de los candidatos que
+    # propuso cada scan nocturno (ver services/canslim_tracking_service.py).
+    task12 = asyncio.create_task(ws.supervisar("canslim_resultados_loop", ws.canslim_resultados_loop))
     yield
     task1.cancel()
     task2.cancel()
@@ -66,6 +69,7 @@ async def lifespan(app: FastAPI):
     task9.cancel()
     task10.cancel()
     task11.cancel()
+    task12.cancel()
 
 app = FastAPI(
     title=settings.app_name,

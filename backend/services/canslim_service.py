@@ -89,6 +89,20 @@ def _smr_rating(sales_g: float, roe: float, margins: float) -> str:
     if score >= 1: return 'D'
     return 'E'
 
+def _registrar_scan_para_track_record(data: dict) -> None:
+    """Guarda el universo del scan nocturno en canslim_history.db, una sola
+    vez por scan. La fecha sale de `generated_at` del propio Gist -- la
+    fecha del SCAN, no la de ejecución del backend."""
+    from services.canslim_tracking_service import registrar_scan, ya_registrado
+
+    fecha = (data.get("generated_at") or "")[:10]
+    if not fecha or ya_registrado(fecha):
+        return
+    res = registrar_scan(data.get("candidates", []), fecha)
+    if res.get("insertados"):
+        print(f"[CANSLIMTracking] Scan del {fecha} registrado: {res['insertados']} tickers")
+
+
 def _marcar_cartera(filas: list) -> None:
     """Marca `en_cartera` en cada fila, in-place.
 
@@ -142,7 +156,12 @@ def get_market_status() -> dict:
             raise ValueError("Sin datos SPY")
 
         spy_price  = _safe(spy_hist['Close'].iloc[-1])
-        spy_prev   = _safe(spy_hist['Close'].iloc[-2])
+        # iloc[-2] necesita DOS sesiones, no solo que el DataFrame no esté
+        # vacío. Todas las líneas de alrededor ya llevan su `len(...) >= N`;
+        # esta era la única que no, y con una sola sesión reventaría. Con SPY
+        # a un año es inalcanzable en la práctica — se cierra por coherencia,
+        # no por riesgo. Ver auditoría CANSLIM, hallazgo #15.
+        spy_prev   = _safe(spy_hist['Close'].iloc[-2]) if len(spy_hist) >= 2 else 0.0
         spy_chg    = (spy_price - spy_prev) / spy_prev * 100 if spy_prev else 0
         spy_high52 = float(spy_hist['Close'].tail(252).max())
         spy_pct_from_high = (spy_price - spy_high52) / spy_high52 * 100
@@ -664,6 +683,18 @@ def get_canslim_from_gist() -> dict:
         perfs = data.get("perfs")
         if perfs:
             cache.set("canslim:universe_perfs", perfs, TTL["canslim"])
+
+        # Registrar el scan para el track record (hallazgo #22). Se hace
+        # aquí, en la lectura del Gist, y no con un bucle propio de 24h:
+        # ese patrón ancla la hora a cuándo se reinició el contenedor -- el
+        # mismo error que ya se corrigió en Options Flow (sesión 35). Aquí
+        # la fecha del SCAN decide, así que da igual cuántas veces se llame.
+        # En try/except propio: que el tracking falle no puede dejar sin
+        # scanner a quien solo quería mirar la tabla.
+        try:
+            _registrar_scan_para_track_record(data)
+        except Exception as e:
+            print(f"[CANSLIMTracking] No se pudo registrar el scan: {type(e).__name__}: {e}")
     cache.set(cache_key, result, 600)  # 10 min -- el dato en sí solo cambia 1x/día
     return result
 

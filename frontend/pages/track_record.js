@@ -39,7 +39,8 @@ async function cargar(container) {
         });
         const data = await res.json();
         if (!data.ok) { body.innerHTML = errorMessage(data.error || 'Sin datos'); return; }
-        body.innerHTML = seccionAlgoritmo(data.algoritmo) + seccionTesis(data.tesis) + nota();
+        body.innerHTML = seccionAlgoritmo(data.algoritmo) + seccionCanslim(data.canslim)
+                       + seccionTesis(data.tesis) + nota();
     } catch (e) {
         body.innerHTML = errorMessage(e.message);
     }
@@ -90,6 +91,71 @@ function tablaHorizontes(porHorizonte, titulo) {
     return '<div style="display:grid;grid-template-columns:60px 60px 1fr 1fr 1fr 1fr;gap:8px;padding:7px 16px;font-size:10px;color:var(--color-muted);letter-spacing:0.05em;">'
         + '<span>' + esc(titulo) + '</span><span>MUESTRA</span><span>MEDIA</span><span>MEDIANA</span><span>ACIERTO</span><span></span></div>'
         + filas;
+}
+
+// ── CANSLIM · candidatos del scan nocturno ──────────────────────────────────
+//
+// Es la única de las tres fuentes con GRUPO DE CONTROL: se guarda el universo
+// entero de cada scan, no solo los que pasaban el filtro, así que la tabla
+// permite comparar los de score alto contra los de score bajo. Sin esa última
+// fila, lo único que se podría contestar es «¿subieron?», que en un mercado
+// alcista se responde solo y no dice nada del módulo.
+
+function seccionCanslim(c) {
+    if (!c) return caja('CANSLIM · CANDIDATOS', '<div style="padding:1rem 16px;color:var(--color-muted);font-size:12px;">No disponible.</div>');
+
+    if (!c.n_filas) {
+        return caja('CANSLIM · CANDIDATOS DEL SCAN NOCTURNO',
+            '<div style="padding:1rem 16px;color:var(--color-muted);font-size:12px;line-height:1.6;">'
+            + 'Todavía sin datos. El registro empieza con el primer scan tras activarlo: el Gist del scan se sobrescribe cada noche, '
+            + 'así que el pasado no se puede reconstruir. Los primeros resultados a 5 días aparecen en una semana; los de 60 días, en unos tres meses.'
+            + '</div>');
+    }
+
+    const filas = (c.por_tramo || []).map(t => {
+        const control = t.tramo.indexOf('<60') === 0;
+        const h20 = (t.por_horizonte || {})['20d'] || { n: 0 };
+        const v20 = (t.por_horizonte_vs_spy || {})['20d'] || { n: 0 };
+        const h60 = (t.por_horizonte || {})['60d'] || { n: 0 };
+        const v60 = (t.por_horizonte_vs_spy || {})['60d'] || { n: 0 };
+        return '<div style="display:grid;grid-template-columns:170px 70px 1fr 1fr 1fr 1fr;gap:8px;padding:8px 16px;border-top:1px solid var(--color-border);font-size:11px;align-items:center;'
+            + (control ? 'opacity:.75;' : '') + '">'
+            + '<span style="color:' + (control ? 'var(--color-muted)' : 'var(--color-text)') + ';">' + esc(t.tramo) + (control ? ' <span style="font-size:9px;">(control)</span>' : '') + '</span>'
+            + '<span style="color:var(--color-muted);">n=' + esc(t.n_filas) + '</span>'
+            + '<span>' + pct(h20.media) + '</span>'
+            + '<span>' + pct(v20.media) + '</span>'
+            + '<span>' + pct(h60.media) + '</span>'
+            + '<span>' + pct(v60.media) + '</span>'
+            + '</div>';
+    }).join('');
+
+    const cabeceraTabla = '<div style="display:grid;grid-template-columns:170px 70px 1fr 1fr 1fr 1fr;gap:8px;padding:7px 16px;font-size:10px;color:var(--color-muted);letter-spacing:0.05em;">'
+        + '<span>TRAMO DE SCORE</span><span>MUESTRA</span><span>20D MEDIA</span><span>20D vs SPY</span><span>60D MEDIA</span><span>60D vs SPY</span></div>';
+
+    // El aviso de baseline ausente NO es decorativo: sin él, un "+6%" se lee
+    // como si ya estuviera comparado con el mercado, y no lo estaría. Se
+    // distingue la causa: que falle la descarga es una avería, que el scan
+    // sea de hoy y aún no haya sesión es lo normal el primer día.
+    let avisoBaseline = '';
+    if (!c.baseline_disponible) {
+        const esAveria = c.baseline_motivo === 'sin_spy';
+        const texto = esAveria
+            ? 'No se ha podido descargar el SPY, así que las columnas «vs SPY» están vacías. Los retornos de al lado NO están comparados con el mercado.'
+            : 'Todavía no hay una sesión de mercado posterior al scan a la que anclar el SPY, así que las columnas «vs SPY» están vacías. Se rellenarán con el próximo cierre.';
+        avisoBaseline = '<div style="background:rgba(255,152,0,.08);border-left:3px solid #ff9800;padding:8px 14px;">'
+            + '<span style="color:#ff9800;font-size:11px;">' + esc(texto) + '</span></div>';
+    }
+
+    const pendientes = c.n_pendientes
+        ? '<div style="padding:8px 16px;color:var(--color-muted);font-size:10px;border-top:1px solid var(--color-border);">'
+          + esc(c.n_pendientes) + ' de ' + esc(c.n_filas) + ' filas todavía sin cumplir los 60 días — la muestra de los horizontes largos irá creciendo sola.</div>'
+        : '';
+
+    const sub = esc(c.n_scans + (c.n_scans === 1 ? ' scan registrado' : ' scans registrados')
+        + (c.primera_fecha ? ' · desde ' + c.primera_fecha : '')
+        + ' · universo completo, no solo los candidatos');
+
+    return caja('CANSLIM · CANDIDATOS DEL SCAN NOCTURNO', avisoBaseline + cabeceraTabla + filas + pendientes, sub);
 }
 
 // ── RSU Algoritmo ────────────────────────────────────────────────────────────

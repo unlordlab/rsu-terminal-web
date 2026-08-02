@@ -6,7 +6,7 @@ un backtest se puede reajustar hasta que dé bien; un registro de señales
 reales con su desenlace, no. Por eso esto muestra TODAS las señales, las que
 salieron bien y las que salieron mal, sin filtrar ninguna.
 
-Dos fuentes, con naturalezas distintas y por eso separadas en la respuesta:
+Tres fuentes, con naturalezas distintas y por eso separadas en la respuesta:
 
 1. RSU Algoritmo — señales VERDE/VERDE-VOL registradas en vivo desde que se
    activó el tracking (algoritmo_tracking_service.py), con su retorno real a
@@ -18,6 +18,13 @@ Dos fuentes, con naturalezas distintas y por eso separadas en la respuesta:
    resultado se puede reconstruir hacia atrás con precios históricos reales
    (la tesis guarda ticker, fecha y precio objetivo), así que el track record
    arranca con todo el histórico, no desde cero.
+
+3. Candidatos de CANSLIM — el universo COMPLETO de cada scan nocturno
+   (canslim_tracking_service.py), no solo los que pasaban el filtro. Es la
+   única de las tres que tiene grupo de control: permite comparar los de
+   score alto contra los de score bajo, y no solo preguntarse si subieron.
+   Como el Algoritmo, empieza a contar desde que se activó -- el Gist del
+   scan se sobrescribe cada noche y el pasado no se puede reconstruir.
 
 Baseline obligatorio: cada retorno se acompaña del retorno del SPY en EL
 MISMO periodo. "+8%" no significa nada si el mercado hizo +12%; sin esa
@@ -102,6 +109,116 @@ def _track_record_algoritmo() -> dict:
             }
             for s in senales
         ],
+    }
+
+
+# Tramos de score con los que se agrupa el track record de CANSLIM. Los
+# cortes son los MISMOS que ofrece el selector del scanner (60/80/85), más
+# el tramo de los que no llegan a ninguno: si se agrupara por rangos
+# inventados, el usuario no podría relacionar la tabla con lo que ve en el
+# módulo. El tramo "<60" es el grupo de control -- sin él solo se podría
+# medir si los candidatos suben, no si suben MÁS que el resto.
+TRAMOS_CANSLIM = [
+    (85, 101, "85+  Estricto"),
+    (80,  85, "80-84  Estándar"),
+    (60,  80, "60-79  Amplio"),
+    (0,   60, "<60  no candidatos"),
+]
+
+
+def _track_record_canslim() -> dict:
+    """Qué hicieron los candidatos que propuso el scan nocturno, por tramo de
+    score y contra el SPY del mismo periodo.
+
+    Es la única fuente de las tres que puede responder «¿el score sirve para
+    algo?», porque guarda el UNIVERSO entero y no solo los que pasaban el
+    filtro: comparar los de 85+ contra los de <60 es la pregunta, y sin
+    grupo de control no hay comparación posible.
+
+    Baseline: el SPY del MISMO periodo, calculado por fecha de scan. Un +6%
+    a 20 días no dice nada si el mercado hizo +9% -- ahí el módulo habría
+    restado valor, no aportado.
+    """
+    from services.canslim_tracking_service import obtener_filas, fechas_registradas
+
+    filas = obtener_filas()
+    fechas = fechas_registradas()
+    if not filas:
+        # Misma FORMA que la respuesta con datos, para que el frontend no
+        # tenga que distinguir "vacío" de "roto".
+        return {"n_filas": 0, "n_scans": 0, "primera_fecha": None,
+                "por_tramo": [], "spy": {}, "n_pendientes": 0}
+
+    # SPY por fecha de scan y horizonte. Se descarga UNA vez y se reutiliza
+    # para todos los tramos -- todas las filas de un mismo scan comparten
+    # exactamente el mismo baseline.
+    spy_por_fecha = {}
+    spy_descargado = False
+    try:
+        close_d, _ = download_batch(["SPY"], period="2y", min_history=1,
+                                    log_prefix="[TrackRecord CANSLIM] ")
+        serie = close_d.get("SPY")
+        if serie is not None and not serie.empty:
+            spy_descargado = True
+            idx = [d.date() for d in serie.index]
+            for f in fechas:
+                try:
+                    objetivo = datetime.strptime(f, "%Y-%m-%d").date()
+                except (ValueError, TypeError):
+                    continue
+                pos = next((i for i, d in enumerate(idx) if d >= objetivo), None)
+                if pos is None:
+                    continue
+                base = float(serie.iloc[pos])
+                if base <= 0:
+                    continue
+                retornos = {}
+                for dias, campo in [(5, "5d"), (10, "10d"), (20, "20d"), (60, "60d")]:
+                    if pos + dias < len(serie):
+                        retornos[campo] = round(
+                            (float(serie.iloc[pos + dias]) - base) / base * 100, 2)
+                spy_por_fecha[f] = retornos
+    except Exception as e:
+        # Sin baseline la tabla sigue siendo legible, pero hay que DECIRLO --
+        # no dejar que se lea como si el +6% ya estuviera comparado.
+        print(f"[TrackRecord] Sin baseline SPY para CANSLIM: {type(e).__name__}: {e}")
+
+    def _exceso(fila, etiqueta, campo):
+        """Retorno de la fila MENOS el del SPY en el mismo periodo."""
+        propio = fila.get(campo)
+        base   = spy_por_fecha.get(fila.get("fecha"), {}).get(etiqueta)
+        if propio is None or base is None:
+            return None
+        return round(propio - base, 2)
+
+    por_tramo = []
+    for lo, hi, etiqueta in TRAMOS_CANSLIM:
+        grupo = [f for f in filas if lo <= (f.get("score") or 0) < hi]
+        horizontes, vs_spy = {}, {}
+        for et, campo in HORIZONTES:
+            horizontes[et] = _stats([f.get(campo) for f in grupo])
+            vs_spy[et]     = _stats([_exceso(f, et, campo) for f in grupo])
+        por_tramo.append({
+            "tramo": etiqueta, "rango": f"{lo}-{hi - 1}",
+            "n_filas": len(grupo),
+            "por_horizonte": horizontes,
+            "por_horizonte_vs_spy": vs_spy,
+        })
+
+    return {
+        "n_filas": len(filas),
+        "n_scans": len(fechas),
+        "primera_fecha": fechas[0] if fechas else None,
+        "ultima_fecha": fechas[-1] if fechas else None,
+        "n_pendientes": sum(1 for f in filas if f.get("resultado_60d") is None),
+        "baseline_disponible": bool(spy_por_fecha),
+        # No es lo mismo «falló la descarga del SPY» que «el scan es tan
+        # reciente que todavía no hay sesión a la que anclarlo» -- el segundo
+        # caso es lo normal el primer día, y decir lo primero sería anunciar
+        # una avería que no existe.
+        "baseline_motivo": (None if spy_por_fecha
+                            else ("sin_sesion_todavia" if spy_descargado else "sin_spy")),
+        "por_tramo": por_tramo,
     }
 
 
@@ -234,6 +351,12 @@ def get_track_record() -> dict:
         print(f"[TrackRecord] Error con las tesis: {type(e).__name__}: {e}")
         tesis = None
 
+    try:
+        canslim = _track_record_canslim()
+    except Exception as e:
+        print(f"[TrackRecord] Error con el tracking de CANSLIM: {type(e).__name__}: {e}")
+        canslim = None
+
     if algoritmo is None and tesis is None:
         # Sin ninguna de las dos fuentes no hay track record que enseñar --
         # y no se cachea el fallo, para que el siguiente intento lo reintente.
@@ -243,6 +366,7 @@ def get_track_record() -> dict:
         "ok": True,
         "algoritmo": algoritmo,
         "tesis": tesis,
+        "canslim": canslim,
         "generado_en": datetime.now(timezone.utc).isoformat(),
         "timestamp": get_timestamp(),
     }

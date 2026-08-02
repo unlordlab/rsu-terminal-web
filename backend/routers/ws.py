@@ -508,6 +508,25 @@ async def rsu_score_resultados_loop():
             print(f"[RSUScoreResultados] Error: {e}")
 
 
+# El tercero del mismo patrón: rellena el retorno real de los candidatos que
+# propuso el scan de CANSLIM (services/canslim_tracking_service.py). Es el
+# más pesado de los tres -- decenas de miles de filas pendientes-, pero los
+# tickers distintos son ~500, así que se resuelve con una sola descarga en
+# lote. Una vez al día basta: el resultado solo cambia con el cierre.
+async def canslim_resultados_loop():
+    while True:
+        await asyncio.sleep(86400)  # 24h
+        try:
+            from services.canslim_tracking_service import actualizar_resultados_pendientes
+            loop = asyncio.get_event_loop()
+            res = await loop.run_in_executor(None, actualizar_resultados_pendientes)
+            if res and res.get("actualizadas"):
+                print(f"[CANSLIMResultados] {res['actualizadas']} filas actualizadas "
+                      f"de {res['pendientes']} pendientes")
+        except Exception as e:
+            print(f"[CANSLIMResultados] Error: {e}")
+
+
 # Revisa Cartera (Google Sheet) cada 15 min buscando aperturas/cierres nuevos
 # y notifica por Telegram — el sheet lo edita Marc a mano, así que no hace
 # falta más frecuencia que esta para no perderse cambios durante horario de

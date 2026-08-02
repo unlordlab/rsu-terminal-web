@@ -127,7 +127,7 @@ function analyzerPanel() {
 
 function scannerPanel() {
     return '<div style="background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius);padding:1.25rem;">'
-        + '<div style="color:var(--color-accent);font-size:13px;letter-spacing:0.08em;margin-bottom:1rem;">SCANNER S&P 500 COMPLETO</div>'
+        + '<div style="color:var(--color-accent);font-size:13px;letter-spacing:0.08em;margin-bottom:1rem;">SCANNER S&P 500 COMPLETO ' + tt('canslim-scanner') + '</div>'
         + '<div style="display:flex;gap:8px;align-items:center;">'
         + '<div style="color:var(--color-muted);font-size:12px;">Score mínimo:</div>'
         // Umbrales recalibrados el 01/08/2026, al unificar el score con el del
@@ -676,7 +676,7 @@ function renderScanResults(data, minScore) {
         + '</div>';
 
     const html = '<div style="margin-top:1.5rem;background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius);overflow:hidden;">'
-        + '<div style="padding:10px 14px;border-bottom:1px solid var(--color-border);color:var(--color-accent);font-size:13px;letter-spacing:0.08em;">RESULTADOS — RS REAL (PERCENTIL vs UNIVERSO)</div>'
+        + '<div style="padding:10px 14px;border-bottom:1px solid var(--color-border);color:var(--color-accent);font-size:13px;letter-spacing:0.08em;">RESULTADOS — RS REAL (PERCENTIL vs UNIVERSO) ' + tt('canslim-resultados') + '</div>'
         + summary + header + '<div style="max-height:600px;overflow-y:auto;">' + rows + '</div>'
         + '</div>';
 
