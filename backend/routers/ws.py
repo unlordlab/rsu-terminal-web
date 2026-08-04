@@ -377,8 +377,11 @@ async def insider_ingest_loop():
             from services.insider_service import _ingest_cycle
             loop = asyncio.get_event_loop()
             await loop.run_in_executor(None, _ingest_cycle)
-        except Exception:
-            pass
+        except Exception as e:
+            # Antes era `except Exception: pass`: si este bucle se rompía, el
+            # feed se quedaba congelado sin dejar el menor rastro. Mismo
+            # criterio que el resto de bucles de este fichero.
+            print(f"[InsiderIngest] Error en el bucle: {type(e).__name__}: {e}")
         await asyncio.sleep(1200)
 
 

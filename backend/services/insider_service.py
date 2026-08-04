@@ -69,6 +69,64 @@ def _conn():
     return conn
 
 
+# ── IDENTIDAD DE UN FILING ───────────────────────────────────────────────────
+#
+# EDGAR publica el MISMO Form 4 dos veces en el feed "getcurrent": una bajo el
+# CIK del emisor y otra bajo el del directivo que lo presenta. Las dos URLs
+# apuntan al mismo documento y traen exactamente las mismas transacciones:
+#
+#   /Archives/edgar/data/2058103/000176962826000336/0001769628-26-000336-index.htm
+#   /Archives/edgar/data/1769628/000176962826000336/0001769628-26-000336-index.htm
+#                        ^^^^^^^ solo cambia el CIK
+#
+# Hasta el 04/08/2026 la clave de deduplicación era la URL COMPLETA, así que
+# las dos entraban como transacciones distintas. Medido sobre la base real:
+# 50 de 98 filas eran duplicados (el 51%) y los importes salían inflados
+# exactamente el 101% -- $180M donde en realidad había $89M. Ese doble conteo
+# también fabricaba clusters: la misma persona contada dos veces parecía dos
+# directivos comprando a la vez.
+#
+# El número de accession identifica el documento con independencia de bajo qué
+# CIK se liste, así que es la identidad correcta.
+import re as _re
+
+_ACCESSION_GUION = _re.compile(r'(\d{10}-\d{2}-\d{6})')
+_ACCESSION_PLANO = _re.compile(r'/(\d{18})/')
+
+
+def _accession(filing_url: str) -> str:
+    """Número de accession normalizado (con guiones) de una URL de EDGAR.
+
+    Si la URL no tiene una forma reconocible se devuelve tal cual: es
+    preferible dejar pasar un duplicado a colapsar dos filings distintos en
+    uno, que borraría una transacción real."""
+    if not filing_url:
+        return ""
+    m = _ACCESSION_GUION.search(filing_url)
+    if m:
+        return m.group(1)
+    m = _ACCESSION_PLANO.search(filing_url)
+    if m:
+        d = m.group(1)
+        return f"{d[:10]}-{d[10:12]}-{d[12:]}"
+    return filing_url
+
+
+def _dedup_key(t: dict) -> str:
+    """Identidad de una transacción: el documento que la reporta más sus
+    datos. Nota conocida: si un mismo Form 4 declarase dos líneas idénticas
+    (misma fecha, acciones, precio y tipo) se contarían como una. Es el mismo
+    comportamiento que ya tenía la clave anterior y no se ha observado en los
+    datos reales -- los filers agregan esos lotes."""
+    return "|".join([
+        _accession(t.get("filing_url", "")),
+        str(t.get("tx_date", t.get("date", ""))),
+        str(t.get("shares", "")),
+        str(t.get("price", "")),
+        t.get("type_code", ""),
+    ])
+
+
 def init_db():
     conn = _conn()
     conn.execute('''
@@ -104,8 +162,105 @@ def init_db():
             error       TEXT
         )
     ''')
+    # Filings ya procesados, den o no transacciones. Sin esto, cada ciclo
+    # volvía a descargar los ~100 filings del feed getcurrent aunque ya se
+    # hubieran mirado: medido en el log real, seis ciclos seguidos con
+    # scanned=100 y new_rows=0, es decir ~1.200 peticiones a la SEC para nada.
+    # No basta con mirar insider_tx: la mayoría de Form 4 no producen ninguna
+    # fila (son ejercicios de opciones, o quedan por debajo del mínimo), y esos
+    # son justamente los que se re-descargaban eternamente.
+    conn.execute('''
+        CREATE TABLE IF NOT EXISTS insider_seen_filing (
+            accession TEXT PRIMARY KEY,
+            seen_at   TEXT NOT NULL
+        )
+    ''')
     conn.commit()
+    _migrar_dedupe_por_accession(conn)
     conn.close()
+
+
+def _migrar_dedupe_por_accession(conn) -> int:
+    """Recalcula las claves de deduplicación al formato por accession y
+    colapsa los duplicados que dejó pasar la clave anterior (ver el bloque
+    de _accession). Idempotente: las claves viejas empiezan por la URL
+    completa, así que basta con mirar si queda alguna con ese formato.
+
+    Se conserva la fila de id más bajo de cada grupo -- la primera que se
+    ingirió. Da igual cuál se quede: los duplicados son el mismo documento
+    con los mismos datos, solo cambia el CIK del enlace."""
+    try:
+        pendiente = conn.execute(
+            "SELECT 1 FROM insider_tx WHERE dedup_key LIKE 'http%' LIMIT 1"
+        ).fetchone()
+        if not pendiente:
+            return 0
+
+        filas = conn.execute(
+            "SELECT id, filing_url, tx_date, shares, price, type_code FROM insider_tx ORDER BY id"
+        ).fetchall()
+
+        grupos, sobrantes = {}, []
+        for f in filas:
+            clave = _dedup_key({
+                "filing_url": f["filing_url"], "tx_date": f["tx_date"],
+                "shares": f["shares"], "price": f["price"], "type_code": f["type_code"],
+            })
+            if clave in grupos:
+                sobrantes.append(f["id"])
+            else:
+                grupos[clave] = f["id"]
+
+        # Primero se borran los duplicados y después se reescriben las claves:
+        # al revés, el UPDATE chocaría contra el UNIQUE de dedup_key.
+        if sobrantes:
+            conn.executemany("DELETE FROM insider_tx WHERE id = ?", [(i,) for i in sobrantes])
+        conn.executemany(
+            "UPDATE insider_tx SET dedup_key = ? WHERE id = ?",
+            [(clave, rid) for clave, rid in grupos.items()]
+        )
+        conn.commit()
+        print(f"[Insider] Migración de deduplicación: {len(sobrantes)} filas duplicadas eliminadas, "
+              f"{len(grupos)} claves reescritas por accession")
+        return len(sobrantes)
+    except Exception as e:
+        print(f"[Insider] La migración de deduplicación falló, se reintenta al arrancar: {type(e).__name__}: {e}")
+        return 0
+
+
+def _filings_ya_vistos(accessions: list) -> set:
+    if not accessions:
+        return set()
+    conn = _conn()
+    try:
+        marcas = ",".join("?" * len(accessions))
+        return {r["accession"] for r in conn.execute(
+            f"SELECT accession FROM insider_seen_filing WHERE accession IN ({marcas})", accessions
+        ).fetchall()}
+    finally:
+        conn.close()
+
+
+def _marcar_filings_vistos(accessions: list) -> None:
+    """Se marcan DESPUÉS de procesarlos, no antes: si el ciclo se cae a mitad,
+    los que no llegaron a mirarse se reintentan en la pasada siguiente."""
+    if not accessions:
+        return
+    ahora = datetime.now().isoformat()
+    conn = _conn()
+    try:
+        conn.executemany(
+            "INSERT OR IGNORE INTO insider_seen_filing (accession, seen_at) VALUES (?, ?)",
+            [(a, ahora) for a in accessions]
+        )
+        # El feed getcurrent solo lista lo que se está presentando ahora, así
+        # que un filing de hace un mes no puede reaparecer. Se poda para que la
+        # tabla no crezca sin fin.
+        corte = (datetime.now() - timedelta(days=30)).isoformat()
+        conn.execute("DELETE FROM insider_seen_filing WHERE seen_at < ?", (corte,))
+        conn.commit()
+    finally:
+        conn.close()
 
 
 def _save_transactions(rows: list) -> int:
@@ -118,10 +273,7 @@ def _save_transactions(rows: list) -> int:
     try:
         now_iso = datetime.now().isoformat()
         for t in rows:
-            dedup_key = "|".join([
-                t.get("filing_url", ""), str(t.get("tx_date", "")),
-                str(t.get("shares", "")), str(t.get("price", "")), t.get("type_code", ""),
-            ])
+            dedup_key = _dedup_key(t)
             cur = conn.execute(
                 "INSERT OR IGNORE INTO insider_tx "
                 "(dedup_key, ticker, company, insider_name, title, is_director, is_officer, "
@@ -150,7 +302,15 @@ def _cleanup_old_transactions(days: int = RETENTION_DAYS) -> int:
     cutoff = (datetime.now() - timedelta(days=days)).strftime('%Y-%m-%d')
     conn = _conn()
     try:
-        cur = conn.execute("DELETE FROM insider_tx WHERE tx_date != '' AND tx_date < ?", (cutoff,))
+        # Las filas sin fecha de transacción envejecen por su fecha de
+        # ingesta. Antes quedaban EXENTAS de la purga y del filtro de ventana
+        # (`tx_date != ''`), así que eran inmortales: se quedaban en el feed
+        # para siempre. Hoy no hay ninguna en la base, pero el camino existía.
+        cur = conn.execute(
+            "DELETE FROM insider_tx WHERE (tx_date != '' AND tx_date < ?) "
+            "OR (tx_date = '' AND ingested_at < ?)",
+            (cutoff, cutoff)
+        )
         conn.commit()
         return cur.rowcount
     finally:
@@ -161,9 +321,12 @@ def _read_transactions(days: int = FEED_WINDOW_DAYS) -> list:
     cutoff = (datetime.now() - timedelta(days=days)).strftime('%Y-%m-%d')
     conn = _conn()
     try:
+        # Mismo criterio que la purga: sin fecha de transacción se usa la de
+        # ingesta, en vez de dejar la fila fuera del filtro de ventana.
         rows = conn.execute(
-            "SELECT * FROM insider_tx WHERE tx_date >= ? OR tx_date = '' ORDER BY value DESC",
-            (cutoff,)
+            "SELECT * FROM insider_tx WHERE (tx_date != '' AND tx_date >= ?) "
+            "OR (tx_date = '' AND ingested_at >= ?) ORDER BY value DESC",
+            (cutoff, cutoff)
         ).fetchall()
         return [dict(r) for r in rows]
     finally:
@@ -194,11 +357,21 @@ def _log_ingest_attempt(ok: bool, scanned: int = 0, found: int = 0, new_rows: in
         conn.close()
 
 
-def _last_ingest_log() -> dict:
+def _last_ingest_log(incluir_error: bool = False) -> dict:
+    """Último intento de ingesta. `incluir_error` trae el texto crudo de la
+    excepción, que NO debe salir en la respuesta pública: iba al feed de todos
+    los usuarios y podía llevar rutas internas, URLs con parámetros o el
+    mensaje de una librería. Para el usuario basta con saber si el último
+    ciclo funcionó y cuándo fue; el detalle sigue en los logs del servidor."""
     conn = _conn()
     try:
         row = conn.execute("SELECT * FROM insider_ingest_log ORDER BY id DESC LIMIT 1").fetchone()
-        return dict(row) if row else None
+        if not row:
+            return None
+        d = dict(row)
+        if not incluir_error:
+            d["error"] = "El último intento de actualización falló" if not d.get("ok") else None
+        return d
     finally:
         conn.close()
 
@@ -342,8 +515,34 @@ def _ingest_cycle(max_filings: int = 100) -> dict:
             link_href    = link.get('href', '') if link is not None else ''
             updated_text = updated.text[:10] if updated is not None else ''
             if link_href:
-                filings.append({"url": link_href, "date": updated_text})
-        print(f"[InsiderIngest] {len(filings)} filings con URL válida a procesar")
+                filings.append({"url": link_href, "date": updated_text, "acc": _accession(link_href)})
+
+        # Dos filtros antes de descargar nada, y los dos importan:
+        #
+        #  1. El mismo Form 4 aparece DOS veces en el feed (una por el CIK del
+        #     emisor y otra por el del directivo). Sin esto se descargaba dos
+        #     veces el mismo documento dentro de la MISMA pasada.
+        #  2. Los filings de pasadas anteriores no hace falta volver a mirarlos.
+        #
+        # Antes se descargaba todo y se deduplicaba al guardar, o sea después
+        # de haber gastado las peticiones. Ahora se descarta primero.
+        unicos, vistos_en_esta_pasada = [], set()
+        for f in filings:
+            if f["acc"] in vistos_en_esta_pasada:
+                continue
+            vistos_en_esta_pasada.add(f["acc"])
+            unicos.append(f)
+
+        ya_vistos = _filings_ya_vistos([f["acc"] for f in unicos])
+        pendientes = [f for f in unicos if f["acc"] not in ya_vistos]
+        print(f"[InsiderIngest] {len(filings)} entries -> {len(unicos)} documentos distintos -> "
+              f"{len(pendientes)} sin procesar todavía ({len(ya_vistos)} ya vistos, no se descargan)")
+        filings = pendientes
+
+        if not filings:
+            print("[InsiderIngest] Nada nuevo en el feed; ciclo terminado sin descargar ningún filing")
+            _log_ingest_attempt(True, scanned=0, found=0, new_rows=0)
+            return {"ok": True, "scanned": 0, "found": 0, "new": 0, "purged": 0}
 
         def parse_filing(f):
             try:
@@ -411,6 +610,12 @@ def _ingest_cycle(max_filings: int = 100) -> dict:
 
         all_tx = [t for sub in results for t in sub if t.get('ticker')]
         print(f"[InsiderIngest] {len(all_tx)} transacciones válidas (P/S ≥ $50k) extraídas de {len(filings)} filings")
+
+        # Se marcan todos los procesados, también los que no dieron ninguna
+        # transacción: son la mayoría, y son justamente los que se
+        # re-descargaban ciclo tras ciclo por no dejar constancia de haberlos
+        # mirado.
+        _marcar_filings_vistos([f["acc"] for f in filings])
 
         new_count = _save_transactions(all_tx)
         print(f"[InsiderIngest] Ciclo completo -> {new_count} nuevas guardadas (resto ya existían por dedupe)")
@@ -499,14 +704,10 @@ def get_insider_ticker(ticker: str) -> dict:
     if cached: return cached
 
     try:
-        # Buscar CIK por ticker
-        r = _sec_get(
-            f"https://efts.sec.gov/LATEST/search-index?q=%22{ticker}%22&forms=4&dateRange=custom&startdt={(datetime.now()-timedelta(days=180)).strftime('%Y-%m-%d')}",
-            headers={"User-Agent": "RSU Terminal contact@rsu-terminal.com"},
-            timeout=10,
-        )
-
-        # Alternativa: usar EDGAR company search
+        # Aquí había una petición a efts.sec.gov/LATEST/search-index cuyo
+        # resultado no se leía NUNCA: se asignaba a una variable y la línea
+        # siguiente la pisaba con la búsqueda de verdad. Una petición a la SEC
+        # por cada búsqueda de ticker, tirada. Eliminada el 04/08/2026.
         r2 = _sec_get(
             "https://www.sec.gov/cgi-bin/browse-edgar",
             params={
@@ -515,7 +716,9 @@ def get_insider_ticker(ticker: str) -> dict:
                 "type":      "4",
                 "dateb":     "",
                 "owner":     "include",
-                "count":     "20",
+                # Se pedían 20 y se procesaban 10 (entries[:10] más abajo):
+                # EDGAR devolvía el doble de lo que se iba a mirar.
+                "count":     "10",
                 "search_text": "",
                 "action":    "getcompany",
                 "output":    "atom",
@@ -630,42 +833,73 @@ def get_confluence_tickers() -> set:
 # ── CLUSTER BUYING ────────────────────────────────────────────────────────────
 
 def get_insider_clusters() -> dict:
-    """Detecta cuando múltiples insiders del mismo ticker compran simultáneamente"""
+    """Varios directivos DISTINTOS del mismo valor comprando en el mismo
+    periodo. Es la señal más fuerte del módulo: que uno compre puede ser
+    cualquier cosa, que compren tres a la vez es mucho más difícil de
+    explicar por casualidad.
+
+    DOS FALLOS CORREGIDOS EL 04/08/2026, los dos convertían la señal en ruido:
+
+    1. Contaba TRANSACCIONES, no personas. Una misma persona con dos líneas
+       de compra aparecía como «2 insiders». Caso real que estaba en pantalla:
+       XAIR salía como cluster con Goodman Robert Scott contado dos veces —
+       el mismo documento listado bajo dos CIK (ver _accession). Ahora se
+       cuentan nombres distintos, y las transacciones se reportan aparte.
+
+    2. Leía del feed ya recortado a las 15 compras mayores, así que un
+       cluster de tres compras modestas era invisible mientras una sola
+       compra grande ocupaba sitio. Ahora lee la ventana completa.
+    """
     from services.cache import cache
     cached = cache.get("insider:clusters")
     if cached: return cached
 
     try:
-        feed = get_insider_feed()
-        if not feed.get('ok'):
-            raise ValueError("Sin datos feed")
+        # Ventana completa desde la base, no el top 15 del feed.
+        rows = _read_transactions(FEED_WINDOW_DAYS)
 
-        # Agrupar compras por ticker
         from collections import defaultdict
         ticker_buys = defaultdict(list)
-        for buy in feed.get('buys', []):
-            if buy.get('ticker'):
-                ticker_buys[buy['ticker']].append(buy)
+        for t in rows:
+            if t.get('type_code') == 'P' and t.get('ticker'):
+                ticker_buys[t['ticker']].append(t)
 
-        # Clusters = tickers con 2+ insiders comprando
         from services.cartera_service import get_cartera_tickers
         cartera_tickers = get_cartera_tickers()
         clusters = []
         for ticker, buys in ticker_buys.items():
-            if len(buys) >= 2:
-                total_value   = sum(b.get('value', 0) for b in buys)
-                total_shares  = sum(b.get('shares', 0) for b in buys)
-                clusters.append({
-                    "ticker":       ticker,
-                    "company":      buys[0].get('company', ''),
-                    "n_insiders":   len(buys),
-                    "total_value":  total_value,
-                    "total_shares": total_shares,
-                    "insiders":     [{"name": b['insider_name'], "title": b['title'], "value": b['value']} for b in buys],
-                    "signal":       "FUERTE" if len(buys) >= 3 else "MODERADA",
-                    "signal_color": "#00ffad" if len(buys) >= 3 else "#ffb800",
-                    "en_cartera":   ticker in cartera_tickers,
-                })
+            # Un cluster son PERSONAS, no operaciones.
+            por_persona = defaultdict(list)
+            for b in buys:
+                nombre = (b.get('insider_name') or '').strip().upper()
+                if nombre:
+                    por_persona[nombre].append(b)
+            n_personas = len(por_persona)
+            if n_personas < 2:
+                continue
+
+            total_value  = sum(b.get('value', 0) for b in buys)
+            total_shares = sum(b.get('shares', 0) for b in buys)
+            insiders = [{
+                "name":  ops[0].get('insider_name', ''),
+                "title": next((o.get('title') for o in ops if o.get('title')), ''),
+                "value": sum(o.get('value', 0) for o in ops),
+                "n_ops": len(ops),
+            } for ops in por_persona.values()]
+            insiders.sort(key=lambda i: -i["value"])
+
+            clusters.append({
+                "ticker":       ticker,
+                "company":      buys[0].get('company', ''),
+                "n_insiders":   n_personas,
+                "n_operaciones": len(buys),
+                "total_value":  total_value,
+                "total_shares": total_shares,
+                "insiders":     insiders,
+                "signal":       "FUERTE" if n_personas >= 3 else "MODERADA",
+                "signal_color": "#00ffad" if n_personas >= 3 else "#ffb800",
+                "en_cartera":   ticker in cartera_tickers,
+            })
 
         clusters.sort(key=lambda x: x['total_value'], reverse=True)
 

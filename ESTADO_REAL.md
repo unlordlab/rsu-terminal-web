@@ -34,9 +34,9 @@ parecería completo y sería engañoso.
   y #28, Newsfeed/briefing #27–#31, Infraestructura #19 —la versión móvil—,
   CANSLIM #25 —umbrales descalibrados— y #29/#30, estos dos **encontrados por el
   usuario validando la herramienta con casos reales**, no por una auditoría).
-- **73 son críticos (🔴)**: 46 cerrados · 9 abiertos ·
+- **73 son críticos (🔴)**: 49 cerrados · 10 abiertos ·
   3 ya no aplican ·
-  15 pendientes de verificar.
+  11 pendientes de verificar.
 - **Segunda pasada (30/07), parcial**: verificado además el tier ALTO/MEDIO de
   Research, RS/RW y Scanner. Los demás módulos siguen sin revisar en ese tier.
 - **RS/RW sin ningún hallazgo abierto (02/08)**: los 22 revisados uno a uno.
@@ -112,6 +112,8 @@ hallazgos ya cerrados.
    `ABIERTO. **Subido a crítico el 01/08 por decisión del usuario**: es lo único de CANSLIM que queda sin construir y es el corazón del método de O'Neil. Hoy el módulo dice QUÉ valores están fuertes, pero no DÓNDE está el punto de compra — y O'Neil no compraba fuerza, compraba la ruptura de una base en…`
 1. **INFRAESTRUCTURA Y VALORACION GLOBAL #3** — Los endpoints de administración no tienen rate limiting: la clave maestra se puede probar a ciegas sin límite
    `main.py:90 include_router(auth.router) SIN dependencies=rl: los /admin/* no tienen rate limiting`
+1. **INSIDER FLOW #4** — Primera visita con BD vacía = ingesta síncrona con el usuario esperando, y sin lock
+   `insider_service.py: el cooldown de 5 min evita la avalancha pero NO es un lock — dos peticiones concurrentes con la base vacía pasan las dos. Mucho menos grave desde que el ciclo salta los filings ya vistos (#1), pero el arranque en frío sigue bloqueando la petición`
 1. **OPTIONS FLOW #3** — `POST /options/save` permite a cualquier usuario inyectar datos falsos en tu histórico
    `options.py:80 POST /save sigue con solo verify_token: cualquier usuario autenticado puede inyectar en el histórico`
 1. **OPTIONS FLOW #4** — `POST /options/scan-now` abierto a cualquier usuario, sin lock de concurrencia
@@ -254,33 +256,40 @@ hallazgos ya cerrados.
 | ❓ | 18 | 🟡 | `sector_medians.yml` existe pero su Gist no está configurado | *sin comprobar* |
 | ❌ | 19 | 🟠 | **La terminal no es usable en móvil, y la vista móvil que existe no la encuentra nadie** | ANOTADO 01/08 a petición del usuario. Sale de la medición de Cartera #23 (31/07) pero **no es un problema de Cartera ni de ninguna página concreta: es del armazón**. Medido a 375px: la página entera desborda (contenido de 708px) porque la barra lateral sigue en `display:block` y la barra superior mide 435px; a 768px ya no desborda. Las tablas NO son la causa — tienen `overflow-x:auto` y hacen scroll propio. Además existe una vista `/mobile` construida a propósito (una columna: Algoritmo, Mercado, Cartera, Watchlist) a la que **no redirige ni enlaza nada**: es una ruta manual que ningún usuario va a descubrir. Son dos decisiones, no una: (a) qué hacer con el armazón a <768px, y (b) si `/mobile` se adopta como destino real (con redirección por ancho o por user-agent) o se borra por ser código muerto |
 
-## Insider Flow  (23 hallazgos — ❓23)
+## Insider Flow  (23 hallazgos — ❌5 · ✅14 · ❓4)
+
+**Pasada completa el 04/08**: los 23 revisados uno a uno contra el código y
+contra la base real. Seis ya estaban resueltos por sesiones anteriores sin que
+el documento lo reflejara, ocho se arreglaron ese día y cuatro son funciones
+que nunca se construyeron. **El hallazgo #8 estaba mal diagnosticado y la
+realidad era mucho peor**: no eran enmiendas 4/A, era que el 51% de la base
+estaba duplicada — ver su fila.
 
 | | # | Sev | Hallazgo | Estado / evidencia |
 |-|---|-----|----------|--------------------|
-| ❓ | 1 | 🔴 | Cada ciclo de 20 min re-descarga los mismos ~100 filings ya procesados (~200 requests a la SEC, el 90% desperdiciadas) | *sin comprobar* |
-| ❓ | 2 | 🔴 | Cluster Buying cuenta transacciones, no personas — y solo mira el top 15 | *sin comprobar* |
-| ❓ | 3 | 🔴 | Las filas sin fecha de transacción son inmortales y siempre encabezan el feed | *sin comprobar* |
-| ❓ | 4 | 🔴 | Primera visita con BD vacía = ingesta síncrona de ~200 requests con el usuario esperando (y sin lock) | *sin comprobar* |
-| ❓ | 5 | 🟠 | Petición muerta a EDGAR en cada búsqueda de ticker | *sin comprobar* |
-| ❓ | 6 | 🟠 | El filtro "persona real" descarta a los fundadores 10%-owner sin cargo | *sin comprobar* |
-| ❓ | 7 | 🟠 | "COMPRAS RECIENTES" ordenadas por tamaño, no por fecha | *sin comprobar* |
-| ❓ | 8 | 🟠 | Form 4/A (enmiendas) crean duplicados en vez de corregir | *sin comprobar* |
-| ❓ | 9 | 🟠 | Los directores sin cargo de officer salen con CARGO "—" | *sin comprobar* |
-| ❓ | 10 | 🟠 | El diagnóstico de ingesta expone errores internos a todos los usuarios | *sin comprobar* |
-| ❓ | 11 | 🟠 | `_get_timestamp` con CET fijo (UTC+1) | *sin comprobar* |
-| ❓ | 12 | 🟠 | La vista de ticker ignora el histórico local ya acumulado | *sin comprobar* |
-| ❓ | 13 | 🟡 | Escape de contenido EDGAR en el frontend | *sin comprobar* |
-| ❓ | 14 | 🟡 | Pide 20 entries a EDGAR, procesa 10 | *sin comprobar* |
-| ❓ | 15 | 🟡 | `except Exception: pass` en el loop de ws.py | *sin comprobar* |
-| ❓ | 16 | 🟡 | `insider_history.db` en la lista de BDs sin backup | *sin comprobar* |
-| ❓ | 17 | 🔵 | Columna "% desde la compra" | *sin comprobar* |
-| ❓ | 18 | 🔵 | Badge 💼/⭐ de Cartera y Watchlist | *sin comprobar* |
-| ❓ | 19 | 🔵 | Deep-link `?ticker=` | *sin comprobar* |
-| ❓ | 20 | 🔵 | Filtro por tipo/cargo | *sin comprobar* |
-| ❓ | 21 | 🟢 | Alerta Telegram de cluster | *sin comprobar* |
-| ❓ | 22 | 🟢 | Efectividad del insider | *sin comprobar* |
-| ❓ | 23 | 🟢 | Cruce Insider × Options Flow | *sin comprobar* |
+| ✅ | 1 | 🔴 | Cada ciclo de 20 min re-descarga los mismos ~100 filings ya procesados (~200 requests a la SEC, el 90% desperdiciadas) | HECHO 04/08. **Medido en el log de ingesta real antes de tocar nada**: seis ciclos consecutivos con `scanned=100`, `found=20` y `new_rows=0` — unas 1.200 peticiones a la SEC sin guardar una sola fila. La deduplicación ocurría al GUARDAR, o sea después de haber gastado la petición. Tabla nueva `insider_seen_filing`: se registra cada documento procesado **produzca o no transacciones** — ese matiz es el que importa, porque la mayoría de Form 4 no generan ninguna fila (son ejercicios de opciones o quedan bajo el mínimo) y eran justamente los que se re-descargaban eternamente. Se marcan DESPUÉS de procesarlos, así un ciclo interrumpido se reintenta. **Medido con dos ciclos reales seguidos contra la SEC: 94 peticiones y 18s el primero, 1 petición y 1s el segundo — un 99% menos.** De paso apareció que dentro de UNA sola pasada las 100 entries del feed son solo 58 documentos distintos (ver #8), así que incluso el primer ciclo baja un 42% |
+| ✅ | 2 | 🔴 | Cluster Buying cuenta transacciones, no personas — y solo mira el top 15 | HECHO 04/08. Los dos fallos eran reales y **había un falso positivo en pantalla**: el único cluster que mostraba la herramienta era XAIR con «2 insiders», y eran la misma persona (Goodman Robert Scott, $199.999 dos veces) por el duplicado de #8. `len(buys)` contaba operaciones, no nombres. Y leía de `feed['buys']`, ya recortado a las 15 compras mayores, así que un cluster de tres compras modestas era invisible mientras una sola compra grande ocupaba sitio. Ahora cuenta **personas distintas** sobre la **ventana completa**, y reporta las dos cifras por separado (`n_insiders` y `n_operaciones`), porque no son lo mismo. Verificado con tres casos sintéticos: 3 personas → cluster FUERTE; **la misma persona 3 veces → NO es cluster**; 2 personas con importes pequeños desplazadas fuera del top 15 → sí se detecta, que es lo que el código viejo perdía |
+| ✅ | 3 | 🔴 | Las filas sin fecha de transacción son inmortales y siempre encabezan el feed | HECHO 04/08, con un matiz: **la primera mitad era cierta y la segunda no**. El filtro de ventana (`tx_date >= ? OR tx_date = ''`) y la purga (`tx_date != '' AND ...`) EXIMÍAN a esas filas, así que nunca caducaban. Pero no encabezaban el feed: el orden es por importe. Arreglado usando la fecha de INGESTA como respaldo en los dos sitios, en vez de quitarlas sin más — así siguen siendo visibles pero envejecen igual que las demás. Hoy hay cero filas en ese estado; el camino existía |
+| ❌ | 4 | 🔴 | Primera visita con BD vacía = ingesta síncrona de ~200 requests con el usuario esperando (y sin lock) | ABIERTO, parcialmente mitigado. Existe `INGEST_RETRY_COOLDOWN_S` (5 min) que evita que cada petición dispare su propio ciclo, pero **no es un lock**: dos peticiones concurrentes con la base vacía y sin intento reciente pasan las dos. Y sigue siendo síncrono dentro de la petición HTTP. Mucho menos grave tras #1 (el ciclo ya no descarga 100 filings, salta los vistos), pero el arranque en frío sigue bloqueando |
+| ✅ | 5 | 🟠 | Petición muerta a EDGAR en cada búsqueda de ticker | HECHO 04/08. Confirmado leyendo el código: la primera llamada a `efts.sec.gov/LATEST/search-index` se asignaba a una variable que la línea siguiente pisaba con la búsqueda de verdad. Una petición a la SEC por cada búsqueda de ticker, tirada. Eliminada |
+| ❌ | 6 | 🟠 | El filtro "persona real" descarta a los fundadores 10%-owner sin cargo | ABIERTO. Confirmado: `if not (is_director or is_officer): return []`. Un fundador con el 10% que no figure como consejero ni directivo se descarta. `is_ten_pct` se parsea del Form 4 pero **no se usa en ninguna parte**. El filtro existe para excluir fondos y holdings institucionales, y hacerlo por nombre es frágil — la decisión de si un 10%-owner con nombre de persona debe entrar es de producto, no técnica |
+| ❌ | 7 | 🟠 | "COMPRAS RECIENTES" ordenadas por tamaño, no por fecha | ABIERTO. Confirmado: `deduped.sort(key=value, reverse=True)` y luego `buys[:15]`. La cabecera dice «RECIENTES» y el orden es por importe, así que una compra grande de hace nueve días sale por encima de una de ayer |
+| ✅ | 8 | 🟠 | Form 4/A (enmiendas) crean duplicados en vez de corregir | HECHO 04/08. **El diagnóstico era incorrecto y la realidad mucho peor.** No son enmiendas: EDGAR publica el MISMO Form 4 dos veces en el feed `getcurrent`, una bajo el CIK del emisor y otra bajo el del directivo. Las dos URLs apuntan al mismo documento con las mismas transacciones, y como `dedup_key` era la URL COMPLETA, las dos entraban. **Medido sobre la base real: 50 de 98 filas duplicadas (el 51%), con los importes inflados exactamente el 101% — $180.037.056 donde en realidad había $89.394.124.** La clave pasa a ser el número de accession, que identifica el documento con independencia del CIK. Incluye migración idempotente que limpia lo ya guardado: verificada sobre una copia de la base real (98 → 48 filas, cero duplicados restantes, cero claves en formato viejo, y una segunda pasada no cambia nada). Una URL con formato irreconocible se deja tal cual: es preferible un duplicado a colapsar dos filings distintos, que borraría una transacción real |
+| ❌ | 9 | 🟠 | Los directores sin cargo de officer salen con CARGO "—" | ABIERTO. Confirmado y medido: **20 de 98 filas sin cargo, y las 20 son directores**. `title = officerTitle or reportingOwnerRelationship`, y para un consejero que no es directivo el primero no existe y el segundo es un contenedor sin texto. Debería decir «Director» en vez de un guion |
+| ✅ | 10 | 🟠 | El diagnóstico de ingesta expone errores internos a todos los usuarios | HECHO 04/08. `last_ingest_log` viajaba entero en `/feed`, con el texto crudo de la excepción — que puede llevar rutas internas, URLs con parámetros o el mensaje de una librería. Ahora el campo público dice solo si el último intento falló; el detalle sigue en los logs del servidor. Verificado en el endpoint real: `error: null` |
+| ✅ | 11 | 🟠 | `_get_timestamp` con CET fijo (UTC+1) | Ya resuelto: usa `get_timestamp()` de `shared/time_utils.py` |
+| ❌ | 12 | 🟠 | La vista de ticker ignora el histórico local ya acumulado | ABIERTO. `get_insider_ticker()` va directo a EDGAR y nunca consulta `insider_tx`, que ya tiene datos y **un índice por ticker**. Cada búsqueda son ~11 peticiones a la SEC para datos que en parte ya están en disco |
+| ✅ | 13 | 🟡 | Escape de contenido EDGAR en el frontend | Ya resuelto: `esc()` aplicado en `insider.js` |
+| ✅ | 14 | 🟡 | Pide 20 entries a EDGAR, procesa 10 | HECHO 04/08: `count` pasa de 20 a 10, que es lo que de verdad se recorre (`entries[:10]`) |
+| ✅ | 15 | 🟡 | `except Exception: pass` en el loop de ws.py | HECHO 04/08: si el bucle se rompía, el feed se congelaba sin dejar rastro. Ahora loguea, mismo criterio que el resto de bucles del fichero |
+| ✅ | 16 | 🟡 | `insider_history.db` en la lista de BDs sin backup | Ya resuelto: `backup_dbs.sh` descubre con `glob('/app/backend/*.db')`, sin lista fija, así que ya lo cubre |
+| ❓ | 17 | 🔵 | Columna "% desde la compra" | No construido |
+| ✅ | 18 | 🔵 | Badge 💼/⭐ de Cartera y Watchlist | Ya resuelto (sesión 16) |
+| ✅ | 19 | 🔵 | Deep-link `?ticker=` | Ya resuelto (sesión 16) |
+| ❓ | 20 | 🔵 | Filtro por tipo/cargo | No construido |
+| ❓ | 21 | 🟢 | Alerta Telegram de cluster | No construido. Ahora es barato: la infraestructura de notificación por usuario ya existe (sesión 49) |
+| ❓ | 22 | 🟢 | Efectividad del insider | No construido |
+| ✅ | 23 | 🟢 | Cruce Insider × Options Flow | Ya resuelto: `get_confluence_tickers()`, badge ⚡ (sesión 16) |
 
 ## Market  (33 hallazgos — ✅3 · ❓30)
 

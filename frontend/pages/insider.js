@@ -154,11 +154,16 @@ function renderClusters(clusters) {
         + '<span style="background:' + esc(c.signal_color) + '22;color:' + esc(c.signal_color) + ';border:1px solid ' + esc(c.signal_color) + '44;border-radius:3px;padding:2px 8px;font-size:10px;">' + esc(c.signal) + '</span>'
         + '</div>'
         + '<div style="display:flex;gap:2rem;font-size:11px;margin-bottom:6px;">'
-        + '<span style="color:var(--color-muted);">' + esc(c.n_insiders) + ' insiders · <span style="color:var(--color-accent);">' + esc(fmtVal(c.total_value)) + ' total</span></span>'
+        // Personas y operaciones son cifras distintas y ahora se dicen las dos:
+        // un cluster son directivos DISTINTOS comprando, no compras sueltas.
+        + '<span style="color:var(--color-muted);">' + esc(c.n_insiders) + (c.n_insiders === 1 ? ' directivo' : ' directivos')
+        + (c.n_operaciones && c.n_operaciones !== c.n_insiders ? ' <span style="color:var(--color-muted);">(' + esc(c.n_operaciones) + ' compras)</span>' : '')
+        + ' · <span style="color:var(--color-accent);">' + esc(fmtVal(c.total_value)) + ' total</span></span>'
         + '<span style="color:var(--color-muted);">' + Number(c.total_shares).toLocaleString('en-US') + ' acciones</span>'
         + '</div>'
         + '<div style="display:flex;gap:8px;flex-wrap:wrap;">'
-        + c.insiders.map(i => '<span style="background:var(--color-surface2);border-radius:3px;padding:2px 8px;font-size:10px;color:var(--color-muted);">' + esc(i.name) + ' · ' + esc(fmtVal(i.value)) + '</span>').join('')
+        + c.insiders.map(i => '<span style="background:var(--color-surface2);border-radius:3px;padding:2px 8px;font-size:10px;color:var(--color-muted);">' + esc(i.name) + ' · ' + esc(fmtVal(i.value))
+            + (i.n_ops > 1 ? ' <span style="color:var(--color-muted);">×' + esc(i.n_ops) + '</span>' : '') + '</span>').join('')
         + '</div>'
         + '</div>'
     ).join('');
