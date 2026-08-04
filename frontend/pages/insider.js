@@ -69,7 +69,8 @@ async function loadAll(container) {
 
         if (!feed.ok) throw new Error(feed.error || 'Sin datos');
 
-        const coverage = 'Últimos ' + (feed.window_days || 10) + ' días · ' + (feed.total || 0) + ' transacciones acumuladas';
+        const coverage = 'Últimos ' + (feed.window_days || 10) + ' días · ' + (feed.total || 0)
+            + ' transacciones acumuladas · más recientes primero';
         buyEl.innerHTML     = renderBuys(feed.buys || [], coverage);
         sellEl.innerHTML    = renderSells(feed.sells || [], coverage);
         clusterEl.innerHTML = renderClusters(clusters.clusters || []);

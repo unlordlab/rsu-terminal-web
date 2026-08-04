@@ -177,7 +177,41 @@ def init_db():
     ''')
     conn.commit()
     _migrar_dedupe_por_accession(conn)
+    _migrar_cargos_vacios(conn)
     conn.close()
+
+
+def _migrar_cargos_vacios(conn) -> int:
+    """Rellena el cargo de las filas ya guardadas que se quedaron sin él.
+
+    El arreglo de `_cargo()` solo actúa al ingerir, así que sin esto las filas
+    que ya estaban en la base seguirían enseñando un guion durante días. Las
+    banderas is_director/is_officer SÍ están guardadas, que es justo lo que
+    hace falta. `is_ten_pct` no se guarda como columna, así que esas filas —si
+    las hubiera— se quedan como están en vez de adivinar.
+
+    Idempotente: solo toca filas con el cargo vacío, y tras pasar ya no
+    quedan."""
+    try:
+        pares = [
+            ("Directivo · Consejero", "is_officer = 1 AND is_director = 1"),
+            ("Directivo",             "is_officer = 1 AND is_director = 0"),
+            ("Consejero",             "is_officer = 0 AND is_director = 1"),
+        ]
+        total = 0
+        for cargo, cond in pares:
+            cur = conn.execute(
+                f"UPDATE insider_tx SET title = ? WHERE (title = '' OR title IS NULL) AND {cond}",
+                (cargo,)
+            )
+            total += cur.rowcount
+        conn.commit()
+        if total:
+            print(f"[Insider] Migración de cargos: {total} filas sin cargo rellenadas desde las banderas del Form 4")
+        return total
+    except Exception as e:
+        print(f"[Insider] La migración de cargos falló, se reintenta al arrancar: {type(e).__name__}: {e}")
+        return 0
 
 
 def _migrar_dedupe_por_accession(conn) -> int:
@@ -393,6 +427,57 @@ def _looks_like_entity(name: str) -> bool:
     upper = name.upper()
     return any(marker in upper for marker in _ENTITY_MARKERS)
 
+# ¿Entran los dueños del 10% que no son consejeros ni directivos?
+#
+# El filtro existe para dejar fuera a fondos, gestoras y holdings, que
+# declaran isTenPercentOwner=1 sin ningún cargo. Pero se llevaba por delante
+# también a los fundadores y grandes accionistas individuales, que son
+# exactamente el tipo de comprador que este módulo busca — y `is_ten_pct` se
+# parseaba del Form 4 sin usarse en ninguna parte.
+#
+# Con esto activado siguen pasando por el filtro de nombre (_looks_like_entity),
+# que es el que descarta LLC, TRUST, PARTNERS, CAPITAL y compañía. Es una
+# decisión de producto, no técnica: si en producción se cuelan demasiadas
+# entidades con nombre de persona, se pone a False y vuelve al comportamiento
+# anterior sin tocar nada más.
+INCLUIR_10_PCT = True
+
+
+def _es_persona_reportante(parsed: dict) -> bool:
+    """Filtro de «persona real», en un solo sitio: lo aplicaban por separado
+    el feed principal y la búsqueda por ticker, con el riesgo de que uno se
+    corrigiera y el otro no."""
+    declarado = parsed.get('is_director') or parsed.get('is_officer')
+    if INCLUIR_10_PCT:
+        declarado = declarado or parsed.get('is_ten_pct')
+    if not declarado:
+        return False
+    # Red de seguridad por nombre: aunque venga marcado como persona, si se
+    # llama como un fondo o un holding, fuera.
+    return not _looks_like_entity(parsed.get('insider_name', ''))
+
+
+def _cargo(titulo: str, is_director: bool, is_officer: bool, is_ten_pct: bool) -> str:
+    """Cargo legible cuando el Form 4 no trae `officerTitle`.
+
+    Un consejero que no es directivo NO tiene ese campo — es exclusivo de los
+    officers — y el otro candidato (`reportingOwnerRelationship`) es un
+    contenedor sin texto, así que salía vacío y la pantalla pintaba un guion.
+    Medido el 04/08/2026 sobre la base real: 20 de 98 filas sin cargo, y las
+    20 eran consejeros. El dato existía en las banderas del propio Form 4, solo
+    que no se leía.
+
+    «Consejero» y «Directivo» traducen director y officer en su sentido de la
+    SEC: miembro del consejo frente a alto cargo ejecutivo."""
+    if titulo:
+        return titulo
+    partes = []
+    if is_officer:  partes.append("Directivo")
+    if is_director: partes.append("Consejero")
+    if is_ten_pct:  partes.append("10% del capital")
+    return " · ".join(partes)
+
+
 def _parse_form4(filing_url: str) -> dict:
     """Parsea un Form 4 de SEC EDGAR"""
     try:
@@ -461,7 +546,7 @@ def _parse_form4(filing_url: str) -> dict:
             "ticker":         ticker,
             "company":        company,
             "insider_name":   name,
-            "title":          title,
+            "title":          _cargo(title, is_dir, is_off, is_10pct),
             "is_director":    is_dir,
             "is_officer":     is_off,
             "is_ten_pct":     is_10pct,
@@ -563,19 +648,7 @@ def _ingest_cycle(max_filings: int = 100) -> dict:
                 parsed = _parse_form4(xml_url)
                 if not parsed or not parsed.get('transactions'): return []
 
-                # Filtro de "persona real": nos quedamos solo con directivos y
-                # consejeros (isDirector / isOfficer en el propio Form 4) —
-                # esto excluye estructuralmente a los "10% owners" que son
-                # fondos/holdings institucionales (isTenPercentOwner=1,
-                # isDirector=0, isOfficer=0), en vez de adivinar por el nombre.
-                if not (parsed.get('is_director') or parsed.get('is_officer')):
-                    return []
-
-                # Red de seguridad adicional: si por lo que sea el nombre del
-                # reporting owner tiene pinta de entidad (fondo, LLC, holding,
-                # trust...) en vez de una persona, se descarta igualmente,
-                # aunque estuviera marcado como director/officer.
-                if _looks_like_entity(parsed.get('insider_name', '')):
+                if not _es_persona_reportante(parsed):
                     return []
 
                 # Todas las transacciones que pasan el filtro de este filing,
@@ -636,6 +709,14 @@ def _ingest_cycle(max_filings: int = 100) -> dict:
 
 INGEST_RETRY_COOLDOWN_S = 300  # 5 min
 
+# El cooldown evita reintentar en bucle, pero NO es un lock: dos peticiones
+# concurrentes con la base vacía y sin intento reciente pasaban las dos y
+# lanzaban su propio ciclo completo contra la SEC. Este lock es NO BLOQUEANTE
+# a propósito -- si otra petición ya está ingiriendo, esta sigue y sirve lo que
+# haya, en vez de quedarse esperando. Encolar peticiones HTTP detrás de una
+# descarga de decenas de segundos sería cambiar un problema por otro peor.
+_ingest_lock = threading.Lock()
+
 def get_insider_feed() -> dict:
     """Sirve el feed desde el histórico acumulado en SQLite (ver _ingest_cycle
     e insider_ingest_loop en routers/ws.py). Si la base está vacía — típico
@@ -656,8 +737,14 @@ def get_insider_feed() -> dict:
             last_log and last_log.get("ran_at") and
             (datetime.now() - datetime.fromisoformat(last_log["ran_at"])).total_seconds() < INGEST_RETRY_COOLDOWN_S
         )
-        if not recently_tried:
-            _ingest_cycle()
+        if not recently_tried and _ingest_lock.acquire(blocking=False):
+            try:
+                # Se relee dentro del lock: si otra petición acabó de ingerir
+                # mientras esta esperaba su turno, ya no hace falta repetirlo.
+                if not _last_ingest_info()["total_stored"]:
+                    _ingest_cycle()
+            finally:
+                _ingest_lock.release()
 
     rows = _read_transactions(FEED_WINDOW_DAYS)
 
@@ -671,7 +758,13 @@ def get_insider_feed() -> dict:
             seen.add(key)
             deduped.append(t)
 
-    deduped.sort(key=lambda x: x.get('value', 0), reverse=True)
+    # Por FECHA, no por importe. La cabecera de la pantalla dice «RECIENTES» y
+    # el orden era por tamaño, así que una compra grande de hace nueve días
+    # salía por encima de una de ayer. El importe queda como desempate dentro
+    # del mismo día, que es donde de verdad ayuda a priorizar.
+    # Las filas sin fecha caen al final: '' ordena por debajo de cualquier
+    # fecha en descendente, y así no encabezan nada.
+    deduped.sort(key=lambda x: (x.get('tx_date') or '', x.get('value', 0)), reverse=True)
     for t in deduped:
         t['date'] = t.get('tx_date', '')  # alias para compatibilidad con el frontend existente
 
@@ -698,10 +791,73 @@ def get_insider_feed() -> dict:
 
 # ── TICKER ESPECÍFICO ─────────────────────────────────────────────────────────
 
+def _transacciones_locales(ticker: str) -> list:
+    """Lo que la terminal ya tiene guardado de este valor, con el mismo shape
+    que devuelve la consulta a EDGAR. `insider_tx` tiene índice por ticker y
+    hasta diez años de retención, y hasta ahora esta vista no lo miraba
+    siquiera: iba a EDGAR y se conformaba con los diez últimos filings."""
+    conn = _conn()
+    try:
+        filas = conn.execute(
+            "SELECT * FROM insider_tx WHERE ticker = ? ORDER BY tx_date DESC",
+            (ticker.upper(),)
+        ).fetchall()
+    finally:
+        conn.close()
+    return [{
+        "ticker":       r["ticker"],
+        "company":      r["company"],
+        "insider_name": r["insider_name"],
+        "title":        r["title"],
+        "type":         r["type"],
+        "type_code":    r["type_code"],
+        "shares":       r["shares"],
+        "price":        r["price"],
+        "value":        r["value"],
+        "date":         r["tx_date"],
+        "owned_after":  "",
+        "filing_url":   r["filing_url"],
+    } for r in filas]
+
+
+def _fusionar_transacciones(*fuentes) -> list:
+    """Une varias listas quitando lo repetido y ordenando por fecha.
+
+    La clave es la misma que la de la ingesta —documento más datos de la
+    operación— para que una transacción presente a la vez en la base local y
+    en la respuesta de EDGAR aparezca una sola vez.
+
+    Si alguna fila llegara sin `filing_url` se identifica por sus propios
+    datos. Eso NO basta para casar con una fila local (que sí lo tiene), así
+    que las dos fuentes deben traerlo — se comprobó midiendo: sin `filing_url`
+    en las filas de EDGAR salían las 10 transacciones de SCHW por duplicado."""
+    vistas, salida = set(), []
+    for fuente in fuentes:
+        for t in fuente or []:
+            if t.get("filing_url"):
+                clave = _dedup_key(t)
+            else:
+                clave = "|".join(str(t.get(c, "")) for c in
+                                 ("insider_name", "date", "shares", "price", "type_code"))
+            if clave in vistas:
+                continue
+            vistas.add(clave)
+            salida.append(t)
+    salida.sort(key=lambda t: (t.get("date") or "", t.get("value", 0)), reverse=True)
+    return salida
+
+
 def get_insider_ticker(ticker: str) -> dict:
     from services.cache import cache
     cached = cache.get(f"insider:ticker:{ticker}")
     if cached: return cached
+
+    # El histórico local se lee FUERA del try de EDGAR, y eso es lo que hace
+    # que este hallazgo valga de algo: si la SEC da timeout —pasó al verificar
+    # este mismo cambio— antes se perdía todo y la pantalla decía «sin datos»
+    # aunque hubiera diez transacciones guardadas en disco. Ahora lo local se
+    # sirve igualmente y solo se pierde lo que EDGAR habría añadido.
+    locales = _transacciones_locales(ticker)
 
     try:
         # Aquí había una petición a efts.sec.gov/LATEST/search-index cuyo
@@ -758,9 +914,7 @@ def get_insider_ticker(ticker: str) -> dict:
                 parsed  = _parse_form4(xml_url)
                 if not parsed or not parsed.get('transactions'): return None
 
-                # Mismo filtro de persona real que en el feed principal
-                if not (parsed.get('is_director') or parsed.get('is_officer')): return None
-                if _looks_like_entity(parsed.get('insider_name', '')): return None
+                if not _es_persona_reportante(parsed): return None
 
                 results = []
                 for tx in parsed['transactions']:
@@ -776,6 +930,11 @@ def get_insider_ticker(ticker: str) -> dict:
                         "value":        tx['value'],
                         "date":         tx['date'],
                         "owned_after":  tx.get('owned_after', ''),
+                        # Sin esto, la fusión con el histórico local no puede
+                        # reconocer que es el MISMO documento: las filas de la
+                        # base identifican por accession y estas caerían a una
+                        # clave distinta, duplicando cada transacción.
+                        "filing_url":   url,
                     })
                 return results
             except Exception:
@@ -788,13 +947,16 @@ def get_insider_ticker(ticker: str) -> dict:
             if r_list:
                 transactions.extend(r_list)
 
-        transactions.sort(key=lambda x: x.get('date', ''), reverse=True)
+        # El histórico local va PRIMERO en la fusión, así que ante una misma
+        # transacción presente en los dos sitios gana la fila ya guardada.
+        transactions = _fusionar_transacciones(locales, transactions)
 
         from services.cartera_service import get_cartera_tickers
         result = {
             "ok":           True,
             "ticker":       ticker,
             "transactions": transactions[:20],
+            "n_locales":    len(locales),
             "buys":         len([t for t in transactions if t['type_code'] == 'P']),
             "sells":        len([t for t in transactions if t['type_code'] == 'S']),
             "en_cartera":   ticker.upper() in get_cartera_tickers(),
@@ -805,7 +967,28 @@ def get_insider_ticker(ticker: str) -> dict:
         return result
 
     except Exception as e:
-        return {"ok": False, "error": str(e), "ticker": ticker}
+        print(f"[Insider] EDGAR falló para {ticker}: {type(e).__name__}: {e}")
+        if not locales:
+            return {"ok": False, "error": "No se pudo consultar SEC EDGAR y no hay histórico guardado de este valor.",
+                    "ticker": ticker}
+        # Con datos en disco no se devuelve un error: se sirve lo que hay y se
+        # dice de dónde viene y qué falta. NO se cachea, para que la próxima
+        # búsqueda vuelva a intentar EDGAR en vez de quedarse con la versión
+        # incompleta durante una hora.
+        from services.cartera_service import get_cartera_tickers
+        transactions = _fusionar_transacciones(locales)
+        return {
+            "ok":           True,
+            "ticker":       ticker,
+            "transactions": transactions[:20],
+            "n_locales":    len(locales),
+            "buys":         len([t for t in transactions if t['type_code'] == 'P']),
+            "sells":        len([t for t in transactions if t['type_code'] == 'S']),
+            "en_cartera":   ticker.upper() in get_cartera_tickers(),
+            "timestamp":    get_timestamp(),
+            "source":       "Histórico guardado en la terminal — SEC EDGAR no respondió, puede faltar lo más reciente",
+            "parcial":      True,
+        }
 
 # ── CONFLUENCIA CON OPTIONS FLOW ─────────────────────────────────────────────
 
