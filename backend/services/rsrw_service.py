@@ -436,6 +436,215 @@ def get_rs_movimientos(ventana: int = 10) -> dict:
     }
 
 
+# Top decil del universo. Es el corte que usa la amplitud del liderazgo, no
+# el UMBRAL_LIDER de 80 de la tabla: con 80 entra el 20% del universo (unos
+# 100 valores) y la composición por sectores se aplana tanto que deja de
+# distinguir un mercado estrecho de uno ancho.
+UMBRAL_TOP_DECIL = 90
+
+
+def _media(valores: list):
+    """Media, no mediana, y la diferencia importa: la media ponderada de los
+    sectores es EXACTAMENTE constante (verificado el 02/08/2026 sobre las
+    sesiones reales: 25100,0 en las dos fechas comparadas, diferencia 0,0),
+    porque el percentil medio de un universo es su propio rango medio. Con
+    medianas la suma se movió 771 puntos entre las mismas dos fechas, así
+    que un sector podía "subir" sin que ningún otro bajase -- y entonces la
+    palabra rotación dejaría de describir lo que la pantalla enseña."""
+    if not valores:
+        return None
+    return round(sum(valores) / len(valores), 1)
+
+
+def get_rs_sectores(ventana: int = 10) -> dict:
+    """Rotación sectorial: qué sectores ganan y pierden fuerza relativa.
+
+    POR QUÉ ESTO SÍ SE PUEDE MEDIR Y LA AMPLITUD CLÁSICA NO
+    `rs_pct` es un rango dentro del universo, así que el RS medio de TODO el
+    universo está clavado en 50 por construcción, todos los días. Lo que no
+    está fijado es cómo se reparte esa fuerza entre sectores: si el RS medio
+    de Tecnología sube de 45 a 70, el de algún otro sector ha bajado, y la
+    suma ponderada sigue valiendo exactamente lo mismo. Eso es justamente lo
+    que significa rotación -- el dinero no aparece, cambia de sitio. Ver
+    _media() para por qué el estadístico es la media y no la mediana.
+
+    Se compara la sesión más reciente contra la más antigua de la ventana,
+    igual que get_rs_movimientos(), para que las dos pantallas hablen del
+    mismo periodo.
+    """
+    from services.snapshots_service import fechas_snapshot_ticker, filas_rs_sector
+
+    fechas = fechas_snapshot_ticker(limite=max(ventana, 2))
+    if len(fechas) < 2:
+        return {
+            "ok": False,
+            "error": "Hacen falta al menos dos sesiones guardadas para medir rotación.",
+            "sesiones_disponibles": len(fechas),
+        }
+
+    fecha_hoy, fecha_antes = fechas[0], fechas[-1]
+    datos = filas_rs_sector([fecha_hoy, fecha_antes])
+
+    def _por_sector(filas):
+        agrupado = {}
+        for f in filas:
+            agrupado.setdefault(f["sector"], []).append(f["rs_pct"])
+        return agrupado
+
+    hoy   = _por_sector(datos.get(fecha_hoy, []))
+    antes = _por_sector(datos.get(fecha_antes, []))
+    if not hoy:
+        return {"ok": False, "error": f"Sin datos sectoriales para {fecha_hoy}."}
+
+    sectores = []
+    for sector, valores in hoy.items():
+        med_hoy   = _media(valores)
+        med_antes = _media(antes.get(sector, []))
+        sectores.append({
+            "sector":     GICS_MAP.get(sector, sector),
+            "sector_en":  sector,
+            "etf":        SECTOR_ETFS.get(GICS_MAP.get(sector, sector)),
+            "n":          len(valores),
+            "rs_medio":   med_hoy,
+            "rs_previa":  med_antes,
+            # Sin lectura previa no hay variación que calcular. Un sector que
+            # aparece por primera vez en el universo no ha "subido desde 0".
+            "variacion":  None if med_antes is None else round(med_hoy - med_antes, 1),
+            "n_lideres":  sum(1 for v in valores if v >= UMBRAL_LIDER),
+        })
+
+    con_variacion = [s for s in sectores if s["variacion"] is not None]
+    con_variacion.sort(key=lambda s: -s["variacion"])
+    sectores.sort(key=lambda s: -s["rs_medio"])
+
+    return {
+        "ok":               True,
+        "sesiones":         len(fechas),
+        "sesiones_pedidas": ventana,
+        "desde":            fecha_antes,
+        "hasta":            fecha_hoy,
+        "fiable":           len(fechas) >= MIN_SESIONES_FIABLE,
+        "sectores":         sectores,
+        "entrando":         con_variacion[:3],
+        "saliendo":         list(reversed(con_variacion[-3:])) if len(con_variacion) >= 3 else [],
+        "timestamp":        get_timestamp(),
+    }
+
+
+def get_rs_amplitud(ventana: int = 20) -> dict:
+    """¿El liderazgo del mercado es ancho o estrecho?
+
+    LA PREGUNTA DE LA AUDITORÍA ERA BUENA; LA MÉTRICA QUE PROPONÍA, NO
+    El hallazgo pedía "cuántos valores del universo tienen RS alto". Ese
+    número es constante: `rs_pct` es un percentil DEL PROPIO universo, así
+    que el 20% siempre está por encima de 80 -- medido el 02/08/2026 sobre
+    las cuatro sesiones guardadas, salía 20,2% en las cuatro, hasta el
+    decimal. Un gráfico de eso sería una línea recta.
+
+    Lo que sí distingue un mercado ancho de uno estrecho es CÓMO se reparte
+    ese top decil entre sectores. Si los 50 valores más fuertes salen de dos
+    sectores, el liderazgo es estrecho aunque el recuento no se mueva.
+
+    La referencia no es "un onceavo por sector": los sectores no tienen el
+    mismo tamaño, y a Tecnología le corresponde más liderazgo solo por tener
+    más valores. Se compara la cuota de cada sector en el top decil contra
+    su cuota en el universo -- 1,0 es exactamente lo que le tocaría por
+    tamaño, 3,0 es tres veces más de lo que le tocaría.
+    """
+    from services.snapshots_service import fechas_snapshot_ticker, filas_rs_sector
+
+    fechas = fechas_snapshot_ticker(limite=max(ventana, 1))
+    if not fechas:
+        return {"ok": False, "error": "Todavía no hay ninguna sesión guardada."}
+
+    fechas_asc = sorted(fechas)
+    datos = filas_rs_sector(fechas_asc)
+
+    serie = []
+    for fecha in fechas_asc:
+        filas = datos.get(fecha, [])
+        if not filas:
+            continue
+        universo = len(filas)
+        top = [f for f in filas if f["rs_pct"] >= UMBRAL_TOP_DECIL]
+        if not top:
+            continue
+
+        cuenta_top, cuenta_uni = {}, {}
+        for f in filas:
+            cuenta_uni[f["sector"]] = cuenta_uni.get(f["sector"], 0) + 1
+        for f in top:
+            cuenta_top[f["sector"]] = cuenta_top.get(f["sector"], 0) + 1
+
+        dominante, n_dom = max(cuenta_top.items(), key=lambda kv: kv[1])
+        cuota_dom = n_dom / len(top) * 100
+        cuota_uni = cuenta_uni.get(dominante, 0) / universo * 100
+
+        # Solo tiene sentido con rs_score, que es absoluto. Es NULL en todas
+        # las sesiones anteriores al 02/08/2026, cuando el scan empezó a
+        # publicarlo -- se devuelve None, no un 0 que parecería "nadie bate
+        # al índice", que es una afirmación muy distinta de "no lo sé".
+        con_score = [f["rs_score"] for f in filas if f["rs_score"] is not None]
+        pct_bate  = round(sum(1 for v in con_score if v > 0) / len(con_score) * 100, 1) if con_score else None
+
+        serie.append({
+            "fecha":            fecha,
+            "universo":         universo,
+            "n_top":            len(top),
+            "sectores_totales": len(cuenta_uni),
+            "sectores_top":     len(cuenta_top),
+            "dominante":        GICS_MAP.get(dominante, dominante),
+            "cuota_dominante":  round(cuota_dom, 1),
+            "cuota_universo":   round(cuota_uni, 1),
+            "sobre_representacion": round(cuota_dom / cuota_uni, 2) if cuota_uni > 0 else None,
+            "pct_bate_spy":     pct_bate,
+        })
+
+    if not serie:
+        return {"ok": False, "error": "Ninguna sesión guardada tiene valores en el top decil."}
+
+    actual  = serie[-1]
+    previa  = serie[0] if len(serie) > 1 else None
+    reparto = []
+    filas_hoy = datos.get(actual["fecha"], [])
+    top_hoy   = [f for f in filas_hoy if f["rs_pct"] >= UMBRAL_TOP_DECIL]
+    cuenta_uni_hoy = {}
+    for f in filas_hoy:
+        cuenta_uni_hoy[f["sector"]] = cuenta_uni_hoy.get(f["sector"], 0) + 1
+    cuenta_top_hoy = {}
+    for f in top_hoy:
+        cuenta_top_hoy[f["sector"]] = cuenta_top_hoy.get(f["sector"], 0) + 1
+    # Se recorre el universo, no el top: un sector con CERO representantes
+    # entre los más fuertes es información, y si solo se listara lo que está
+    # en el top desaparecería de la pantalla justo cuando más dice.
+    for sector, n_uni in cuenta_uni_hoy.items():
+        n_top_s   = cuenta_top_hoy.get(sector, 0)
+        cuota_top = n_top_s / len(top_hoy) * 100 if top_hoy else 0.0
+        cuota_u   = n_uni / len(filas_hoy) * 100 if filas_hoy else 0.0
+        reparto.append({
+            "sector":         GICS_MAP.get(sector, sector),
+            "n_top":          n_top_s,
+            "n_universo":     n_uni,
+            "cuota_top":      round(cuota_top, 1),
+            "cuota_universo": round(cuota_u, 1),
+            "sobre_representacion": round(cuota_top / cuota_u, 2) if cuota_u > 0 else None,
+        })
+    reparto.sort(key=lambda s: -s["n_top"])
+
+    return {
+        "ok":               True,
+        "sesiones":         len(serie),
+        "sesiones_pedidas": ventana,
+        "fiable":           len(serie) >= MIN_SESIONES_FIABLE,
+        "umbral_top":       UMBRAL_TOP_DECIL,
+        "actual":           actual,
+        "previa":           previa,
+        "serie":            serie,
+        "reparto":          reparto,
+        "timestamp":        get_timestamp(),
+    }
+
+
 def get_rsrw_ticker(ticker: str) -> dict:
     try:
         ticker_up = ticker.upper()

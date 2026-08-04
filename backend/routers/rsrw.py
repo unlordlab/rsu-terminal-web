@@ -3,6 +3,7 @@ from auth import verify_token
 from services import users_service, watchlist_service
 from services.rsrw_service import (
     get_rsrw_from_gist, get_rsrw_ticker, get_rs_movimientos, get_rs_cartera,
+    get_rs_sectores, get_rs_amplitud,
 )
 
 router = APIRouter(prefix="/api/v1/rsrw", tags=["rsrw"])
@@ -63,6 +64,24 @@ async def rsrw_cartera(user=Depends(verify_token)):
         for row in result.get("filas", []):
             row["in_watchlist"] = row.get("ticker") in watchlist
     return result
+
+
+@router.get("/sectores")
+async def rsrw_sectores(ventana: int = 10, user=Depends(verify_token)):
+    """Rotación sectorial: qué sectores ganan y pierden fuerza relativa entre
+    dos sesiones guardadas. No lleva tagging de watchlist ni de cartera --
+    devuelve sectores, no tickers. Mismo acotado de ventana que /movimientos,
+    para que las dos pantallas no puedan hablar de periodos distintos."""
+    ventana = max(2, min(int(ventana), 60))
+    return get_rs_sectores(ventana)
+
+
+@router.get("/amplitud")
+async def rsrw_amplitud(ventana: int = 20, user=Depends(verify_token)):
+    """Si el liderazgo del mercado es ancho o estrecho, medido por cómo se
+    reparte el top decil entre sectores. Tampoco devuelve tickers."""
+    ventana = max(1, min(int(ventana), 60))
+    return get_rs_amplitud(ventana)
 
 
 @router.get("/ticker/{ticker}")

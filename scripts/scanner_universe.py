@@ -511,6 +511,16 @@ def run_scan() -> dict:
             "precio":        r["precio"],
             "rvol":          r["rvol"],
             "rs_pct":        r["rs_pct"],
+            # rs_score es la única medida ABSOLUTA de fuerza relativa que
+            # produce este scan: el diferencial ponderado contra el SPY. Se
+            # calculaba desde siempre (ver `rows`) pero se quedaba fuera de
+            # este diccionario, así que nunca salía del Gist -- mismo olvido
+            # que sufrieron los 4 campos de abajo. Sin él no existe amplitud
+            # RS posible: rs_pct es un RANGO dentro del universo, y el
+            # porcentaje que supera cualquier corte es constante por
+            # construcción (20,2% por encima de 80, todos los días). Ver
+            # RS/RW #16, 02/08/2026.
+            "rs_score":      round(float(r["rs_score"]), 2),
             "phase":         None if pd.isna(r["phase"]) else int(r["phase"]),
             "phase_label":   r["phase_label"],
             "phase_confirmed": None if pd.isna(r.get("phase_confirmed")) else bool(r.get("phase_confirmed")),

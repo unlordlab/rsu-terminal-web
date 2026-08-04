@@ -39,6 +39,8 @@ export async function render(container) {
         + '</div>'
         + '<div id="rsrw-cartera" style="margin-bottom:1.5rem;"></div>'
         + '<div id="rsrw-movimientos" style="margin-bottom:1.5rem;"></div>'
+        + '<div id="rsrw-rotacion" style="margin-bottom:1.5rem;"></div>'
+        + '<div id="rsrw-amplitud" style="margin-bottom:1.5rem;"></div>'
         + tickerPanel()
         + '<div id="rsrw-ticker-result"></div>';
 
@@ -46,6 +48,173 @@ export async function render(container) {
     loadGist(container);
     loadCartera(container);
     loadMovimientos(container);
+    loadRotacion(container);
+    loadAmplitud(container);
+}
+
+// Las secciones que leen de snapshots.db comparten el mismo estado de "todavía
+// no hay histórico", que no es un error sino el punto de partida: la base
+// empezó a llenarse el 25/07/2026 y crece una fila por sesión.
+function sinHistorico(titulo, mensaje) {
+    return '<div style="background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius);padding:1rem;">'
+        + '<div style="color:var(--color-accent);font-size:12px;letter-spacing:0.08em;margin-bottom:6px;">' + esc(titulo) + '</div>'
+        + '<div style="color:var(--color-muted);font-size:11px;line-height:1.6;">' + esc(mensaje)
+        + ' El histórico se va formando con cada scan nocturno.</div></div>';
+}
+
+async function cargarSeccion(container, id, titulo, url, render) {
+    const el = container.querySelector(id);
+    if (!el) return;
+    el.innerHTML = loadingCard(titulo);
+    try {
+        const token = sessionStorage.getItem('rsu_token');
+        const res   = await fetch(url, { headers: token ? { 'Authorization': 'Bearer ' + token } : {} });
+        const data  = await res.json();
+        if (!data.ok) { el.innerHTML = sinHistorico(titulo, data.error || 'Sin datos todavía.'); return; }
+        el.innerHTML = render(data);
+    } catch (e) {
+        el.innerHTML = errorCard(titulo, e.message);
+    }
+}
+
+const loadRotacion = (c) => cargarSeccion(c, '#rsrw-rotacion', 'ROTACIÓN SECTORIAL',
+    '/api/v1/rsrw/sectores?ventana=10', renderRotacion);
+
+const loadAmplitud = (c) => cargarSeccion(c, '#rsrw-amplitud', 'AMPLITUD DEL LIDERAZGO',
+    '/api/v1/rsrw/amplitud?ventana=20', renderAmplitud);
+
+function renderRotacion(d) {
+    const fila = (s) => {
+        const col = s.variacion == null ? 'var(--color-muted)'
+                  : s.variacion > 0 ? 'var(--color-accent)'
+                  : s.variacion < 0 ? '#f23645' : 'var(--color-muted)';
+        // El RS medio va de 0 a 100, así que la barra usa el valor tal cual —
+        // sin escalar al máximo del día, que haría parecer fortísimo al mejor
+        // sector aunque todo el mercado estuviera plano.
+        return '<div style="display:grid;grid-template-columns:150px 1fr 52px 52px 46px;gap:8px;padding:5px 12px;border-top:1px solid var(--color-border);font-size:11px;align-items:center;">'
+            + '<span style="color:var(--color-text);">' + esc(s.sector)
+            + (s.etf ? ' <span style="color:var(--color-muted);font-size:9px;">' + esc(s.etf) + '</span>' : '') + '</span>'
+            + '<div style="background:var(--color-bg,#0a0a0a);border-radius:3px;height:7px;">'
+            + '<div style="height:100%;width:' + s.rs_medio + '%;background:' + col + ';border-radius:3px;"></div></div>'
+            + '<span style="color:var(--color-text);text-align:right;">' + esc(s.rs_medio.toFixed(1)) + '</span>'
+            + '<span style="color:' + col + ';text-align:right;">'
+            + (s.variacion == null ? 's/d' : (s.variacion > 0 ? '+' : '') + esc(s.variacion)) + '</span>'
+            + '<span style="color:var(--color-muted);text-align:right;">' + esc(s.n_lideres) + '</span>'
+            + '</div>';
+    };
+
+    const resumen = (titulo, lista, color) => {
+        if (!lista || !lista.length) return '';
+        return '<span style="color:var(--color-muted);">' + esc(titulo) + ' </span>'
+            + lista.map(s => '<span style="color:' + color + ';">' + esc(s.sector)
+                + ' (' + (s.variacion > 0 ? '+' : '') + esc(s.variacion) + ')</span>').join('<span style="color:var(--color-muted);">, </span>');
+    };
+
+    const aviso = d.fiable ? ''
+        : '<div style="background:rgba(255,152,0,.08);border-left:3px solid #ff9800;padding:7px 12px;margin-bottom:10px;">'
+          + '<span style="color:#ff9800;font-size:11px;">Solo hay ' + esc(d.sesiones) + ' sesiones guardadas: '
+          + 'una rotación de verdad se ve en semanas, no en días.</span></div>';
+
+    return '<div>'
+        + '<div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:8px;">'
+        + '<div style="color:var(--color-accent);font-size:13px;letter-spacing:0.08em;">ROTACIÓN SECTORIAL ' + tt('rsrw-rotacion') + '</div>'
+        + '<div style="color:var(--color-muted);font-size:10px;">' + esc(d.desde) + ' → ' + esc(d.hasta)
+        + ' · ' + esc(d.sesiones) + ' sesiones</div>'
+        + '</div>'
+        + aviso
+        + '<div style="background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius);overflow:hidden;">'
+        + '<div style="display:grid;grid-template-columns:150px 1fr 52px 52px 46px;gap:8px;padding:7px 12px;border-bottom:1px solid var(--color-border);font-size:10px;color:var(--color-muted);letter-spacing:0.05em;">'
+        + '<span>SECTOR</span><span>RS MEDIO DEL SECTOR</span><span style="text-align:right;">RS</span>'
+        + '<span style="text-align:right;">VAR</span><span style="text-align:right;">LÍD.</span></div>'
+        + d.sectores.map(fila).join('')
+        + '<div style="padding:8px 12px;border-top:1px solid var(--color-border);font-size:10px;line-height:1.7;">'
+        + resumen('Entra dinero:', d.entrando, 'var(--color-accent)') + '<br>'
+        + resumen('Sale dinero:', d.saliendo, '#f23645')
+        + '<div style="color:var(--color-muted);margin-top:5px;">La suma ponderada de todos los sectores es constante: '
+        + 'si uno sube, otro baja. Por eso es rotación y no fuerza general del mercado.</div>'
+        + '</div></div></div>';
+}
+
+function renderAmplitud(d) {
+    const a = d.actual;
+    const p = d.previa;
+
+    // Cuántos sectores tienen al menos un valor entre los más fuertes. Es la
+    // lectura de "ancho o estrecho" que el recuento de líderes no puede dar:
+    // ese porcentaje es fijo por construcción, este número no.
+    const deltaSect = (p && p.fecha !== a.fecha) ? a.sectores_top - p.sectores_top : null;
+    // El delta de concentración se mide sobre el MISMO número que muestra la
+    // tarjeta (el ratio, no la cuota en puntos porcentuales): poner "-5,9" al
+    // lado de "2,92×" invita a restar dos cosas que no son la misma magnitud.
+    const deltaConc = (p && p.fecha !== a.fecha && a.sobre_representacion != null && p.sobre_representacion != null)
+        ? +(a.sobre_representacion - p.sobre_representacion).toFixed(2) : null;
+    const flecha = (v, invertir, dec) => {
+        if (v == null || v === 0) return '<span style="color:var(--color-muted);"> ·</span>';
+        // Más sectores en el top = liderazgo más ancho = bueno. Más
+        // concentración = lo contrario, de ahí el invertir.
+        const bueno = invertir ? v < 0 : v > 0;
+        return '<span style="color:' + (bueno ? 'var(--color-accent)' : '#f23645') + ';font-size:10px;"> '
+            + (v > 0 ? '+' : '') + esc(dec ? v.toFixed(dec) : v) + '</span>';
+    };
+
+    const kpi = (label, valor, sub, color) =>
+        '<div style="background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius);padding:10px 12px;">'
+        + '<div style="color:var(--color-muted);font-size:10px;letter-spacing:0.06em;margin-bottom:4px;">' + label + '</div>'
+        + '<div style="color:' + color + ';font-size:17px;">' + valor + '</div>'
+        + '<div style="color:var(--color-muted);font-size:10px;margin-top:2px;">' + sub + '</div></div>';
+
+    const fila = (r) => {
+        const sr = r.sobre_representacion;
+        const col = sr == null ? 'var(--color-muted)' : sr >= 1 ? 'var(--color-accent)' : 'var(--color-muted)';
+        const ancho = a.n_top > 0 ? (r.n_top / a.n_top * 100) : 0;
+        return '<div style="display:grid;grid-template-columns:150px 1fr 62px 52px;gap:8px;padding:5px 12px;border-top:1px solid var(--color-border);font-size:11px;align-items:center;">'
+            + '<span style="color:var(--color-text);">' + esc(r.sector) + '</span>'
+            + '<div style="background:var(--color-bg,#0a0a0a);border-radius:3px;height:7px;">'
+            + '<div style="height:100%;width:' + ancho + '%;background:' + col + ';border-radius:3px;"></div></div>'
+            + '<span style="color:var(--color-muted);text-align:right;">' + esc(r.n_top) + ' de ' + esc(r.n_universo) + '</span>'
+            + '<span style="color:' + col + ';text-align:right;">' + (sr == null ? 's/d' : esc(sr.toFixed(2)) + '×') + '</span>'
+            + '</div>';
+    };
+
+    // pct_bate_spy necesita rs_score, que el scan no publicaba hasta el
+    // 02/08/2026. Mientras esté vacío se dice por qué, en vez de enseñar un
+    // hueco sin explicación o, peor, un cero.
+    const bateSpy = a.pct_bate_spy != null
+        ? kpi('BATEN AL SPY', esc(a.pct_bate_spy) + '%', 'del universo, a 12 meses', 'var(--color-text)')
+        : kpi('BATEN AL SPY', '<span style="color:var(--color-muted);font-size:13px;">pendiente</span>',
+              'empieza con el próximo scan', 'var(--color-muted)');
+
+    const aviso = d.fiable ? ''
+        : '<div style="background:rgba(255,152,0,.08);border-left:3px solid #ff9800;padding:7px 12px;margin-bottom:10px;">'
+          + '<span style="color:#ff9800;font-size:11px;">Solo hay ' + esc(d.sesiones) + ' sesiones guardadas: '
+          + 'la lectura de hoy es válida, la tendencia todavía no.</span></div>';
+
+    return '<div>'
+        + '<div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:8px;">'
+        + '<div style="color:var(--color-accent);font-size:13px;letter-spacing:0.08em;">AMPLITUD DEL LIDERAZGO ' + tt('rsrw-amplitud') + '</div>'
+        + '<div style="color:var(--color-muted);font-size:10px;">top ' + esc(a.n_top) + ' valores (RS ≥ ' + esc(d.umbral_top) + ') · ' + esc(a.fecha) + '</div>'
+        + '</div>'
+        + aviso
+        + '<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:0.75rem;margin-bottom:0.75rem;">'
+        + kpi('SECTORES REPRESENTADOS', esc(a.sectores_top) + ' de ' + esc(a.sectores_totales) + flecha(deltaSect, false),
+              'con algún valor en el top decil', 'var(--color-text)')
+        + kpi('SECTOR DOMINANTE', esc(a.dominante),
+              esc(a.cuota_dominante) + '% del top · pesa ' + esc(a.cuota_universo) + '%', 'var(--color-text)')
+        + kpi('CONCENTRACIÓN', esc(a.sobre_representacion.toFixed(2)) + '×' + flecha(deltaConc, true, 2),
+              'lo que le tocaría por tamaño es 1,00×', a.sobre_representacion >= 2 ? '#ff9800' : 'var(--color-text)')
+        + '</div>'
+        + '<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:0.75rem;margin-bottom:0.75rem;">'
+        + bateSpy + '<div></div><div></div>'
+        + '</div>'
+        + '<div style="background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius);overflow:hidden;">'
+        + '<div style="display:grid;grid-template-columns:150px 1fr 62px 52px;gap:8px;padding:7px 12px;border-bottom:1px solid var(--color-border);font-size:10px;color:var(--color-muted);letter-spacing:0.05em;">'
+        + '<span>SECTOR</span><span>REPARTO DEL TOP DECIL</span><span style="text-align:right;">EN TOP</span>'
+        + '<span style="text-align:right;">VS PESO</span></div>'
+        + d.reparto.map(fila).join('')
+        + '<div style="padding:8px 12px;border-top:1px solid var(--color-border);font-size:10px;color:var(--color-muted);line-height:1.6;">'
+        + 'Cuántos valores del top decil aporta cada sector, comparado con lo que le tocaría por su tamaño en el índice. '
+        + 'Un sector a 0 no tiene ni un valor entre los más fuertes del mercado.</div>'
+        + '</div></div>';
 }
 
 function pageHeader() {

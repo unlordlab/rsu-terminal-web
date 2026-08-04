@@ -39,10 +39,15 @@ parecería completo y sería engañoso.
   15 pendientes de verificar.
 - **Segunda pasada (30/07), parcial**: verificado además el tier ALTO/MEDIO de
   Research, RS/RW y Scanner. Los demás módulos siguen sin revisar en ese tier.
-- **RS/RW cerrado del todo (30/07, `34a659f`)**: los 22 hallazgos del módulo
-  revisados uno a uno, seis arreglados en esa sesión. Quedan 3 abiertos (#6
-  festivos, #7 universo, #20 histórico de percentil) y 4 sin comprobar del
-  tier UX/NUEVO.
+- **RS/RW sin ningún hallazgo abierto (02/08)**: los 22 revisados uno a uno.
+  Los tres que quedaban abiertos (#6 festivos, #7 universo, #20 histórico de
+  percentil) se cerraron el 01/08, y de los 4 sin comprobar del tier UX se
+  verificó que **ninguno estaba construido** —al revés que en CANSLIM, donde
+  diez de diecinueve ya lo estaban— y se cerraron #16 y #21. Quedan #19 (fase
+  Weinstein) y #22 (alerta de top decil), los dos con la fontanería ya puesta.
+  **Dos de los tres hallazgos de esta racha estaban mal diagnosticados en el
+  propio documento**: #6 pedía un calendario de festivos que no hacía falta, y
+  #16 pedía una métrica que es constante por construcción.
 - **RSU Algoritmo cerrado del todo (30-31/07)**: tercer módulo con el tier
   completo verificado. Aparecieron **5 hallazgos nuevos** que no estaban en la
   auditoría (#14–#18), tres de ellos encadenados y con efecto real sobre las
@@ -444,11 +449,20 @@ alimenta el modal "Resumen de Mercado Diario", aunque sea un script aparte.
 | ❓ | 25 | 🟢 | Histórico del RSU Score | *sin comprobar* |
 | ❓ | 26 | 🟢 | Alertas de cambio de fase | *sin comprobar* |
 
-## Rsrw  (22 hallazgos — ❌0 · ✅18 · ❓4)
+## Rsrw  (22 hallazgos — ❌0 · ✅20 · ❓2)
 
 **Pasada completa el 30/07** (commit `34a659f`): los 22 hallazgos revisados uno
 a uno contra el código, seis cerrados en esa sesión. Es, junto a Research, el
 único módulo con el tier completo verificado.
+
+**Los cuatro ❓ del tier UX se verificaron el 02/08**: ninguno estaba construido
+(al contrario que en CANSLIM, donde diez de diecinueve ya lo estaban). #16 y #21
+se cerraron ese mismo día. **#16 obligó a reformular el hallazgo**: la métrica
+que pedía la auditoría es constante por construcción y habría dado una línea
+recta — ver su fila. Quedan #19 y #22, ambos baratos ahora: la fase Weinstein ya
+se calcula cada noche y está guardada en `snapshot_ticker` (no hay que
+computarla, solo traerla), y las alertas ya tienen precio/RVOL/toque de EMA con
+notificación por Telegram montada, así que el top decil es una métrica más.
 
 | | # | Sev | Hallazgo | Estado / evidencia |
 |-|---|-----|----------|--------------------|
@@ -467,12 +481,12 @@ a uno contra el código, seis cerrados en esa sesión. Es, junto a Research, el
 | ✅ | 13 | 🟡 | Las barras sectoriales se normalizan al máximo del día | 30/07: escala fija ±12, medida sobre el rango real (1,16–10,66 el 30/07) y declarada en la leyenda. El líder llena 88,8%, no el 100% |
 | ✅ | 14 | 🟡 | `leaders`/`laggards` duplicados entre las dos funciones de salida | 30/07: desaparece con #3 — la copia duplicada vivía en `get_rsrw_scan()` |
 | ✅ | 15 | 🟡 | Escapado en el frontend | esc()/safeUrl() aplicados en rsrw.js |
-| ❓ | 16 | 🔵 | Amplitud RS del universo | *sin comprobar* |
+| ✅ | 16 | 🔵 | Amplitud RS del universo | HECHO 02/08. **El hallazgo estaba mal planteado y hubo que reformularlo, no solo construirlo.** Pedía «cuántos valores del universo tienen RS alto». Ese número no puede variar: `rs_pct` es un percentil DEL PROPIO universo, así que por encima de 80 hay siempre el 20%, pase lo que pase en el mercado. Medido sobre las cuatro sesiones guardadas: **20,2% en las cuatro, hasta el decimal**. El gráfico habría sido una línea recta. Lo que sí distingue un mercado ancho de uno estrecho es **de dónde salen** esas acciones, y eso sí se mueve. Sección nueva **AMPLITUD DEL LIDERAZGO**: cuántos de los once sectores aportan algún valor al top decil, cuál domina y —la cifra clave— cuánto acapara **comparado con su propio tamaño en el índice**. La referencia NO es «uno de once»: los sectores tienen tamaños muy distintos y a Tecnología le corresponde más liderazgo solo por tener más valores; repartir a partes iguales marcaría como anómala la pura aritmética. Con datos reales: Tecnología tiene el **43,1% del top decil siendo el 14,8% del universo — 2,92× lo que le tocaría**, mientras Servicios Públicos y Comunicaciones no tienen ni un valor ahí. El corte es el percentil 90 y no el 80 de las tablas: con el 80 entran ~100 valores y el reparto se aplana tanto que deja de distinguir nada. **Hallazgo de paso**: `rs_score` —la única medida ABSOLUTA de fuerza relativa, el diferencial contra el SPY— se calculaba en `scanner_universe.py` y **se quedaba fuera del diccionario publicado**, igual que los 4 campos que ya se descubrieron perdidos en julio; ahora se publica y se guarda en `snapshot_ticker`, lo que habilita un «% del índice que bate al SPY» que hoy sale como *pendiente* porque no tiene ni una sesión de histórico |
 | ✅ | 17 | 🔵 | Badge 💼/⭐ de Cartera y Watchlist | `_tag_cartera()` en el servicio + `in_watchlist` en el router (sesión 16) |
 | ✅ | 18 | 🔵 | Deep-link `?ticker=` | `rsrw.js` lee `?ticker=` y auto-analiza (sesión 16) |
 | ❓ | 19 | 🔵 | Columna de fase Weinstein | *sin comprobar* |
 | ✅ | 20 | 🟢 | Histórico del percentil RS | HECHO 01/08. Sección nueva **MOVIMIENTOS DEL PERCENTIL RS** bajo las tablas de líderes y rezagados, con cuatro bloques: los que **cruzan el 80 al alza** (liderazgo emergente), los que **caen por debajo** (aviso, sobre todo si están en cartera), y los que más suben y bajan en puntos. Las tablas de arriba son una foto — un RS 88 se ve igual lleve seis meses ahí o acabe de llegar desde 65 —, y esta sección separa las dos cosas. **La comprobación que había que hacer antes de nada**: el `rs_pct` de `snapshot_ticker` lo escribe el scan de Scanner, no el de RS/RW, así que podían ser dos varas de medir distintas — el error de CANSLIM #6. Medido: **diferencia 0,00 en los 501 tickers** contra el `RS_Pct` del Gist. Coinciden porque el percentil es un RANGO y los rangos no se mueven por diferencias pequeñas en el valor subyacente. Se usan los **mismos cortes** que ya separan líderes de rezagados en la pantalla (80/20), no bandas nuevas. La ventana real puede ser más corta que la pedida y **se reporta la real, no la pedida**, con aviso explícito cuando hay menos de 5 sesiones: el percentil se mueve también cuando suben los demás, así que con poco recorrido parte de lo que se ve es ruido. **No arranca de cero**: `snapshots.db` ya guardaba el dato desde el 25/07 sin que nadie lo leyera — solo faltaba el lado de lectura, que es lo que decía este hallazgo. Con 4 sesiones ya hay 17 valores entrando y 17 saliendo del grupo de líderes, entre ellos COHR (82,6 → 42,1) que está en cartera. Verificado en navegador: cabecera con ventana y fechas reales, aviso de muestra corta que desaparece al haber suficiente, y texto propio cuando no hay cruces |
-| ❓ | 21 | 🟢 | Rotación sectorial en el tiempo | *sin comprobar* |
+| ✅ | 21 | 🟢 | Rotación sectorial en el tiempo | HECHO 02/08. Sección nueva **ROTACIÓN SECTORIAL**: RS medio de cada sector hoy frente al inicio de la ventana, con la variación y cuántos líderes aporta. La tabla sectorial que ya había es una foto; esto dice hacia dónde se mueve el dinero. **Es literalmente una suma cero, y se comprobó antes de escribirlo en la pantalla**: la media ponderada de todos los sectores dio 25100,0 en las dos fechas comparadas, **diferencia +0,0000000000**, porque el percentil medio de un universo es su propio rango medio. Por eso se usa la media y no la mediana: con medianas la suma se movía 771 puntos entre esas mismas dos fechas, o sea que un sector podía «subir» sin que ningún otro bajase — y entonces la palabra rotación dejaría de describir un trasvase. Con datos reales, cuatro sesiones: entra dinero en Salud (+4,9), Consumo Discrecional (+4,2) y Financieros (+2,1); sale de Servicios Públicos (−6,3), Energía (−4,1) e Industriales (−2,8). Misma ventana y mismas fechas que MOVIMIENTOS DEL PERCENTIL RS, para que las dos pantallas no puedan hablar de periodos distintos, y el mismo aviso cuando hay pocas sesiones |
 | ❓ | 22 | 🟢 | Alerta de entrada en el top decil | *sin comprobar* |
 
 ## Rsu Algoritmo  (30 hallazgos — ❌1 · ✅26 · ❓0 · ⬜3)

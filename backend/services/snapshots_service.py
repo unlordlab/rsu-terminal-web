@@ -72,6 +72,15 @@ def init_db():
             n_posiciones        INTEGER
         )
     ''')
+    # rs_score se añade el 02/08/2026 (RS/RW #16). Va por ALTER y no dentro
+    # del CREATE de arriba porque las bases que ya existen en producción no
+    # se recrean: el CREATE TABLE IF NOT EXISTS las deja intactas y la
+    # columna nueva nunca aparecería. Mismo patrón idempotente que
+    # users_service con las columnas de Telegram.
+    try:
+        conn.execute("ALTER TABLE snapshot_ticker ADD COLUMN rs_score REAL")
+    except sqlite3.OperationalError:
+        pass
     conn.commit()
     conn.close()
 
@@ -141,15 +150,16 @@ def _maybe_write_ticker(conn, fecha):
 
     rows = [
         (fecha, ticker, s.get("sector"), s.get("precio"), s.get("rvol"), s.get("rs_pct"),
+         s.get("rs_score"),
          s.get("phase"), _b(s.get("phase_confirmed")), s.get("phase_weekly"),
          _b(s.get("above_sma50")), _b(s.get("new_high")), _b(s.get("new_low")), s.get("dias_absorcion"))
         for ticker, s in stocks.items()
     ]
     conn.executemany(
         "INSERT OR IGNORE INTO snapshot_ticker "
-        "(fecha, ticker, sector, precio, rvol, rs_pct, phase, phase_confirmed, "
+        "(fecha, ticker, sector, precio, rvol, rs_pct, rs_score, phase, phase_confirmed, "
         "phase_weekly, above_sma50, new_high, new_low, dias_absorcion) "
-        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
         rows
     )
     conn.commit()
@@ -213,6 +223,41 @@ def rs_pct_en_fecha(fecha: str) -> dict:
                 "WHERE fecha = ? AND rs_pct IS NOT NULL", (fecha,)
             ).fetchall()
         }
+    finally:
+        conn.close()
+
+
+def filas_rs_sector(fechas: list) -> dict:
+    """{fecha: [{ticker, sector, rs_pct, rs_score}]} para varias sesiones.
+
+    Una sola consulta en vez de una por fecha: la amplitud del liderazgo
+    (RS/RW #16) recorre una ventana entera, y hacer un viaje a la base por
+    sesión multiplicaría por 20 lo que cabe en un `IN`.
+
+    Se excluyen las filas sin sector o sin percentil: los dos análisis que
+    leen esto agrupan POR sector, así que una fila sin sector no puede
+    entrar en ningún grupo, y meterla en uno de "desconocido" inventaría un
+    duodécimo sector que no existe.
+    """
+    if not fechas:
+        return {}
+    conn = _conn()
+    try:
+        marcas = ",".join("?" * len(fechas))
+        out = {f: [] for f in fechas}
+        for r in conn.execute(
+            f"SELECT fecha, ticker, sector, rs_pct, rs_score FROM snapshot_ticker "
+            f"WHERE fecha IN ({marcas}) AND rs_pct IS NOT NULL "
+            f"AND sector IS NOT NULL AND sector != ''",
+            list(fechas),
+        ).fetchall():
+            out[r["fecha"]].append({
+                "ticker":   r["ticker"],
+                "sector":   r["sector"],
+                "rs_pct":   r["rs_pct"],
+                "rs_score": r["rs_score"],
+            })
+        return out
     finally:
         conn.close()
 

@@ -1394,6 +1394,54 @@ DE DÓNDE SALEN LOS DATOS:
 De los registros que la terminal guarda cada noche con el percentil de las ~500 acciones del índice. No se recalcula nada: se leen dos fotos y se restan.`
     },
 
+    "rsrw-rotacion": {
+        title: "ROTACIÓN SECTORIAL — hacia dónde se mueve el dinero",
+        short: "Fuerza relativa media de cada sector, hoy comparada con el inicio del periodo. Muestra qué sectores están ganando terreno y cuáles lo están cediendo.",
+        long: `QUÉ MIDE:
+Para cada sector, la media del percentil de fuerza relativa de todas sus acciones. Un sector con RS medio 65 tiene, en conjunto, acciones más fuertes que la media del índice; uno con 35, más débiles.
+
+POR QUÉ ES LITERALMENTE UNA SUMA CERO:
+El percentil de un valor es su posición en la lista de las ~500 acciones del índice, así que la media de TODO el universo está fijada en 50 y no puede moverse. Lo único que cambia es cómo se reparte esa fuerza entre sectores. Si Tecnología sube tres puntos, otros sectores han bajado exactamente esos tres puntos ponderados. Por eso esto se llama rotación y no "fuerza del mercado": no mide si el mercado sube, mide dónde está el dinero dentro de él.
+
+CÓMO LEER LA VARIACIÓN:
+▸ Positiva — las acciones de ese sector están ganando posiciones frente al resto del índice.
+▸ Negativa — las están perdiendo, aunque sus precios hayan subido: basta con que otros suban más.
+▸ La columna LÍD. cuenta cuántas acciones del sector están en el grupo de líderes (percentil 80 o más).
+
+PARA QUÉ SIRVE:
+El liderazgo sectorial suele persistir semanas o meses. Un sector que lleva varias sesiones ganando terreno es donde conviene buscar candidatos; uno que lo pierde de forma sostenida es donde conviene revisar lo que ya se tiene.
+
+CUIDADO CON LAS VENTANAS CORTAS:
+Una rotación real se ve en semanas. Con pocas sesiones guardadas, buena parte del movimiento es ruido, y la pantalla lo avisa cuando es el caso.
+
+POR QUÉ MEDIA Y NO MEDIANA:
+Porque solo la media cumple la suma cero exacta. Con medianas, comprobado sobre las sesiones reales, la suma se movía y un sector podía "subir" sin que ningún otro bajase, lo que dejaría de describir un trasvase.`
+    },
+
+    "rsrw-amplitud": {
+        title: "AMPLITUD DEL LIDERAZGO — ¿tira el mercado entero o solo unos pocos?",
+        short: "Cuántos sectores distintos aportan acciones al grupo de las más fuertes, y hasta qué punto uno solo acapara ese grupo.",
+        long: `LA PREGUNTA QUE RESPONDE:
+Un mercado donde las acciones más fuertes salen de nueve sectores distintos es sano: sube mucha gente a la vez. Uno donde casi todas salen de un solo sector es frágil, aunque el índice marque máximos, porque depende de que ese sector aguante.
+
+POR QUÉ NO SE MIDE CONTANDO LÍDERES:
+Parece natural medir la amplitud contando cuántas acciones tienen fuerza relativa alta. No funciona: el percentil es una posición dentro del propio índice, así que por encima de 80 hay siempre el 20% del universo, todos los días, pase lo que pase en el mercado. Sería una línea recta. Lo que sí varía es de dónde salen esas acciones.
+
+LAS TRES LECTURAS:
+▸ SECTORES REPRESENTADOS — cuántos de los once tienen al menos una acción entre las más fuertes del índice. Cuantos más, más ancho el liderazgo.
+▸ SECTOR DOMINANTE — el que más aporta, y qué porcentaje del grupo acapara.
+▸ CONCENTRACIÓN — la cifra clave. Compara la cuota del sector dominante con su tamaño real en el índice. 1,00× significa que aporta exactamente lo que le corresponde por número de acciones. 3,00× significa que aporta el triple de lo que le tocaría: el liderazgo está concentrado ahí.
+
+POR QUÉ LA REFERENCIA NO ES "UNO DE ONCE":
+Los sectores no tienen el mismo tamaño. Tecnología tiene muchas más acciones en el índice que Energía, así que le corresponde aportar más líderes solo por eso. Repartir a partes iguales marcaría como anómalo lo que es simplemente aritmética. Por eso cada sector se compara contra su propio peso.
+
+EL TOP DECIL, NO EL 80:
+Aquí el corte es el percentil 90 (unas 50 acciones) y no el 80 de las tablas de arriba. Con el 80 entran unos 100 valores y el reparto por sectores se aplana tanto que deja de distinguir un mercado ancho de uno estrecho.
+
+BATEN AL SPY:
+Esta sí es una medida absoluta: qué porcentaje del índice tiene mejor comportamiento que el propio S&P 500 a doce meses. Aparece como pendiente hasta que se acumulen sesiones, porque el dato empezó a guardarse el 2 de agosto de 2026.`
+    },
+
     "canslim-scanner": {
         title: "SCANNER S&P 500 — qué es y de dónde salen los datos",
         short: "Recorre las 503 acciones del S&P 500 cada noche y las puntúa con los criterios técnicos de CAN SLIM. No se ejecuta al abrir la página: los datos vienen del scan de la noche anterior.",
