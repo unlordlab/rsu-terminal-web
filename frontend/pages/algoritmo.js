@@ -1,5 +1,5 @@
 import { tt } from '/components/tooltip.js';
-import { errorMessage, esc } from '/core/ui.js';
+import { errorMessage, esc, fmtFecha } from '/core/ui.js';
 
 export async function render(container) {
     container.innerHTML = '<div style="margin-bottom:1.5rem;">'
@@ -431,7 +431,7 @@ function renderBacktestResults(data) {
                   : '';
               const contexto = (ftdTag + creditTag).trim() || '<span style="color:#555;">—</span>';
               return '<div style="display:grid;grid-template-columns:80px 50px 74px 66px 74px 62px 44px 44px 44px 44px;gap:6px;padding:6px 0;border-bottom:1px solid var(--color-border);font-size:10px;align-items:center;">'
-                  + '<div style="color:var(--color-text);">' + s.fecha + '</div>'
+                  + '<div style="color:var(--color-text);">' + esc(fmtFecha(s.fecha)) + '</div>'
                   + '<div style="color:var(--color-muted);">' + s.score + '/' + (data.max_score || 100) + '</div>'
                   + '<div style="color:var(--color-accent);" title="El precio estaba a ' + (dist != null ? dist + '%' : '?') + ' de su media de 200 semanas — la condición obligatoria pide menos de +10%">' + (dist != null ? (dist >= 0 ? '+' : '') + dist + '%' : '—') + '</div>'
                   + '<div style="color:' + (s.drawdown_pct <= -15 ? '#f23645' : 'var(--color-muted)') + ';">' + s.drawdown_pct + '%</div>'

@@ -1,5 +1,5 @@
 import { tt } from '/components/tooltip.js';
-import { errorMessage, esc, safeUrl } from '/core/ui.js';
+import { errorMessage, esc, safeUrl, fmtFecha } from '/core/ui.js';
 
 // Los 6 canvas de Chart.js de esta página, por id. Se destruyen desde
 // cleanup(), que el router llama justo antes de tirar el contenedor
@@ -679,7 +679,7 @@ function analystChangesSection(data) {
                     : '<span style="color:var(--color-text);">' + c.cur_price_target + '</span>'
                 : '<span style="color:var(--color-muted);">—</span>';
             return '<div style="display:grid;grid-template-columns:80px 1fr 130px 1fr 90px;gap:8px;padding:8px 14px;border-bottom:1px solid var(--color-border);font-size:11px;align-items:center;">'
-                + '<div style="color:var(--color-muted);">' + c.date + '</div>'
+                + '<div style="color:var(--color-muted);">' + esc(fmtFecha(c.date)) + '</div>'
                 + '<div style="color:var(--color-text);">' + c.firm + '</div>'
                 + '<div style="background:' + c.action_color + '22;color:' + c.action_color + ';border:1px solid ' + c.action_color + '44;border-radius:3px;padding:2px 8px;font-size:10px;text-align:center;">' + c.action + '</div>'
                 + '<div style="color:var(--color-muted);">' + arrow + '</div>'
@@ -743,7 +743,7 @@ function newsSection(data) {
         + '<div style="color:var(--color-accent);font-size:12px;letter-spacing:0.08em;margin-bottom:0.75rem;">NOTICIAS RECIENTES</div>'
         + data.news.map(n => '<div style="padding:8px 0;border-bottom:1px solid var(--color-border);">'
             + '<a href="' + safeUrl(n.url) + '" target="_blank" style="color:var(--color-text);font-size:12px;line-height:1.4;display:block;">' + esc(n.headline) + '</a>'
-            + '<div style="color:var(--color-muted);font-size:10px;margin-top:3px;">' + esc(n.source) + (n.date ? ' · ' + esc(n.date) : '') + '</div>'
+            + '<div style="color:var(--color-muted);font-size:10px;margin-top:3px;">' + esc(n.source) + (n.date ? ' · ' + esc(fmtFecha(n.date)) : '') + '</div>'
             + '</div>').join('')
         + '</div>';
 }
@@ -814,7 +814,7 @@ function technicalSection(data) {
         + (s && s.squeeze_score != null ? squeezeGauge(s) : '')
         + (ne && ne.date
             ? '<div style="margin-top:12px;"><div style="color:var(--color-muted);font-size:10px;margin-bottom:4px;letter-spacing:0.05em;">PRÓXIMO EARNINGS</div>'
-              + '<div style="color:#ffb800;font-size:14px;font-weight:500;">📅 ' + ne.date + '</div>'
+              + '<div style="color:#ffb800;font-size:14px;font-weight:500;">📅 ' + esc(fmtFecha(ne.date)) + '</div>'
               + (ne.eps_est != null ? '<div style="color:var(--color-muted);font-size:11px;">EPS Est: $' + ne.eps_est.toFixed(2) + '</div>' : '')
               + (ne.hour ? '<div style="color:var(--color-muted);font-size:10px;">' + (ne.hour.toLowerCase().includes('bmo') ? 'BMO 🌅' : 'AMC 🌙') + '</div>' : '')
               + '</div>'
@@ -960,7 +960,7 @@ function insiderSection(data) {
         + '<div>FECHA</div><div>NOMBRE</div><div>CARGO</div><div>TIPO</div><div>ACCIONES</div><div>PRECIO</div><div>VALOR</div><div>NATURALEZA</div>'
         + '</div>'
         + insider.map(i => '<div style="display:grid;grid-template-columns:85px 1fr 110px 65px 75px 70px 75px 1fr;gap:8px;padding:8px 14px;border-bottom:1px solid var(--color-border);font-size:11px;align-items:center;">'
-            + '<div style="color:var(--color-muted);">' + i.date + '</div>'
+            + '<div style="color:var(--color-muted);">' + esc(fmtFecha(i.date)) + '</div>'
             + '<div style="color:var(--color-text);">' + i.name + '</div>'
             + '<div style="color:var(--color-muted);font-size:10px;">' + i.title + '</div>'
             + '<div style="background:' + i.type_color + '22;color:' + i.type_color + ';border:1px solid ' + i.type_color + '44;border-radius:3px;padding:2px 6px;font-size:10px;text-align:center;">' + i.type + '</div>'

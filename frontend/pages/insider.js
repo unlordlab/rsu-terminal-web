@@ -1,5 +1,5 @@
 import { tt } from '/components/tooltip.js';
-import { errorMessage, esc } from '/core/ui.js';
+import { errorMessage, esc, fmtFecha, fmtFechaHora } from '/core/ui.js';
 
 export async function render(container) {
     container.innerHTML = pageShell();
@@ -111,7 +111,7 @@ function renderBuys(buys, coverage) {
         + '</div>';
 
     const rows = buys.map(b => '<div style="display:grid;grid-template-columns:80px 70px 1fr 120px 90px 80px;gap:8px;padding:8px 14px;border-bottom:1px solid var(--color-border);font-size:11px;align-items:center;">'
-        + '<div style="color:var(--color-muted);">' + esc(b.date || '—') + '</div>'
+        + '<div style="color:var(--color-muted);">' + esc(fmtFecha(b.date)) + '</div>'
         + '<div onclick="goToResearch(\'' + esc(b.ticker) + '\')" class="ticker-link" style="color:var(--color-accent);font-weight:500;">' + esc(b.ticker) + badges(b) + '</div>'
         + '<div style="color:var(--color-text);">' + esc(b.insider_name || '—') + '</div>'
         + '<div style="color:var(--color-muted);font-size:10px;">' + esc((b.title || '—').substring(0, 20)) + '</div>'
@@ -131,7 +131,7 @@ function renderSells(sells, coverage) {
         + '</div>';
 
     const rows = sells.map(s => '<div style="display:grid;grid-template-columns:80px 70px 1fr 90px 80px;gap:8px;padding:8px 14px;border-bottom:1px solid var(--color-border);font-size:11px;align-items:center;">'
-        + '<div style="color:var(--color-muted);">' + esc(s.date || '—') + '</div>'
+        + '<div style="color:var(--color-muted);">' + esc(fmtFecha(s.date)) + '</div>'
         + '<div onclick="goToResearch(\'' + esc(s.ticker) + '\')" class="ticker-link" style="color:var(--color-accent);font-weight:500;">' + esc(s.ticker) + badges(s) + '</div>'
         + '<div style="color:var(--color-text);">' + esc(s.insider_name || '—') + '</div>'
         + '<div style="color:var(--color-text);">' + Number(s.shares || 0).toLocaleString('en-US') + '</div>'
@@ -190,7 +190,7 @@ function renderTickerResult(ticker, data) {
     const rows = data.transactions.map(t => {
         const isBuy = t.type_code === 'P';
         return '<div style="display:grid;grid-template-columns:90px 1fr 120px 70px 70px 80px;gap:8px;padding:8px 14px;border-bottom:1px solid var(--color-border);font-size:11px;align-items:center;">'
-            + '<div style="color:var(--color-muted);">' + esc(t.date || '—') + '</div>'
+            + '<div style="color:var(--color-muted);">' + esc(fmtFecha(t.date)) + '</div>'
             + '<div style="color:var(--color-text);">' + esc(t.insider_name || '—') + '</div>'
             + '<div style="color:var(--color-muted);font-size:10px;">' + esc((t.title || '—').substring(0, 20)) + '</div>'
             + '<div style="background:' + (isBuy ? 'rgba(0,255,173,0.1)' : 'rgba(242,54,69,0.1)') + ';color:' + (isBuy ? 'var(--color-accent)' : '#f23645') + ';border-radius:3px;padding:2px 6px;font-size:10px;text-align:center;">' + esc(t.type) + '</div>'
@@ -207,7 +207,7 @@ function renderDiagnostic(log) {
     const ok = !!log.ok;
     const color = ok ? 'var(--color-muted)' : '#f23645';
     const icon  = ok ? '✓' : '✗';
-    const when  = (log.ran_at || '').replace('T', ' ').substring(0, 19);
+    const when  = fmtFechaHora(log.ran_at);
     let text;
     if (ok) {
         text = 'Última ingesta ' + when + ' — ' + log.scanned + ' filings escaneados, ' + log.found + ' transacciones válidas, ' + log.new_rows + ' nuevas guardadas';

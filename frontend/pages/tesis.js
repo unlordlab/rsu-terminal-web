@@ -1,4 +1,4 @@
-import { errorMessage } from '/core/ui.js';
+import { errorMessage, fmtFecha } from '/core/ui.js';
 import { getToken } from '/core/api.js';
 
 let currentPage  = 1;
@@ -221,7 +221,7 @@ function tesisCard(item) {
         + (item.sector ? '<span style="color:var(--color-secondary);font-size:10px;padding:2px 6px;background:rgba(0,217,255,0.08);border-radius:3px;">' + item.sector + '</span>' : '')
         + (item.autor  ? '<span style="color:var(--color-muted);font-size:10px;">👤 ' + item.autor + '</span>' : '')
         + '</div>'
-        + '<div style="color:var(--color-muted);font-size:10px;margin-top:8px;margin-bottom:1rem;">📅 ' + item.fecha + '</div>'
+        + '<div style="color:var(--color-muted);font-size:10px;margin-top:8px;margin-bottom:1rem;">📅 ' + fmtFecha(item.fecha) + '</div>'
         + '<button class="tesis-card-btn" data-ticker="' + item.ticker + '" data-fecha="' + item.fecha + '" style="'
         + 'width:100%;background:transparent;border:1px solid var(--color-accent);color:var(--color-accent);'
         + 'border-radius:var(--radius);padding:8px;font-family:var(--font-mono);font-size:12px;cursor:pointer;'
@@ -345,7 +345,7 @@ function renderDetail(data) {
 
         // Footer
         + '<div style="text-align:center;padding:1rem;color:var(--color-muted);font-size:10px;letter-spacing:0.1em;">'
-        + '[END OF ANALYSIS // ' + data.ticker + '_v1.0] [FECHA: ' + data.fecha + '] [STATUS: ACTIVE]'
+        + '[END OF ANALYSIS // ' + data.ticker + '_v1.0] [FECHA: ' + fmtFecha(data.fecha) + '] [STATUS: ACTIVE]'
         + '</div>';
 }
 

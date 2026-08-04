@@ -1,5 +1,5 @@
 import { tt } from '/components/tooltip.js';
-import { errorMessage } from '/core/ui.js';
+import { errorMessage, fmtFecha } from '/core/ui.js';
 export async function render(container) {
     container.innerHTML = '<div style="margin-bottom:1.5rem;">'
         + '<div style="color:var(--color-accent);font-size:18px;letter-spacing:0.1em;text-shadow:var(--glow-text);margin-bottom:4px;">SPXL STRATEGY ' + tt('spxl') + '</div>'
@@ -168,7 +168,7 @@ async function loadBacktest(container, capital) {
             + [...data.trades].reverse().slice(0, 20).map(t => {
                 const c = t.pnl >= 0 ? 'var(--color-accent)' : '#f23645';
                 return '<tr style="border-bottom:1px solid var(--color-border);">'
-                    + '<td style="padding:7px 12px;color:var(--color-muted);">' + t.date + '</td>'
+                    + '<td style="padding:7px 12px;color:var(--color-muted);">' + fmtFecha(t.date) + '</td>'
                     + '<td style="padding:7px 12px;color:var(--color-text);">$' + t.exit_price + '</td>'
                     + '<td style="padding:7px 12px;color:var(--color-muted);">$' + t.avg_cost + '</td>'
                     + '<td style="padding:7px 12px;color:' + c + ';">' + (t.pnl >= 0 ? '+' : '') + '$' + t.pnl.toLocaleString('en-US', {maximumFractionDigits:0}) + '</td>'

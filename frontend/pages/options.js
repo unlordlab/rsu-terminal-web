@@ -1,13 +1,11 @@
 import { tt } from '/components/tooltip.js';
-import { errorMessage, esc } from '/core/ui.js';
+import { errorMessage, esc, fmtFecha } from '/core/ui.js';
 
-function _fmtFecha(iso) {
-    // "2026-07-14" -> "14/07/2026" — mismo formato d/m/a usado en el resto de la terminal
-    if (!iso || typeof iso !== 'string' || iso.length < 10) return iso || '—';
-    const [y, m, d] = iso.slice(0, 10).split('-');
-    if (!y || !m || !d) return iso;
-    return `${d}/${m}/${y}`;
-}
+// Esta página tenía su propia copia de este formateador, y su comentario decía
+// que era "el mismo formato usado en el resto de la terminal" — no lo era: la
+// mayoría de páginas pintaban el ISO crudo. Unificado en core/ui.js el
+// 04/08/2026; el alias se mantiene para no tocar los 8 sitios que ya lo usaban.
+const _fmtFecha = fmtFecha;
 
 function authHeader() {
     const token = sessionStorage.getItem('rsu_token');

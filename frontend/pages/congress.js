@@ -1,5 +1,5 @@
 import { tt } from '/components/tooltip.js';
-import { errorMessage, esc } from '/core/ui.js';
+import { errorMessage, esc, fmtFecha } from '/core/ui.js';
 
 export async function render(container) {
     container.innerHTML = pageShell();
@@ -121,7 +121,7 @@ function renderBuys(buys, coverage) {
         + '</div>';
 
     const rows = buys.map(b => '<div style="display:grid;grid-template-columns:80px 70px 1fr 60px 100px 60px;gap:8px;padding:8px 14px;border-bottom:1px solid var(--color-border);font-size:11px;align-items:center;">'
-        + '<div style="color:var(--color-muted);">' + esc(b.transaction_date || '—') + '</div>'
+        + '<div style="color:var(--color-muted);">' + esc(fmtFecha(b.transaction_date)) + '</div>'
         + '<div onclick="goToResearch(\'' + esc(b.ticker) + '\')" class="ticker-link" style="color:var(--color-accent);font-weight:500;">' + esc(b.ticker) + badges(b) + '</div>'
         + '<div style="color:var(--color-text);">' + esc(b.filer_name || '—') + ' <span style="color:var(--color-muted);font-size:10px;">(' + esc(chamberLabel(b.chamber)) + ')</span></div>'
         + '<div style="color:var(--color-muted);font-size:10px;">' + esc(partyState(b)) + '</div>'
@@ -141,7 +141,7 @@ function renderSells(sells, coverage) {
         + '</div>';
 
     const rows = sells.map(s => '<div style="display:grid;grid-template-columns:80px 70px 1fr 100px;gap:8px;padding:8px 14px;border-bottom:1px solid var(--color-border);font-size:11px;align-items:center;">'
-        + '<div style="color:var(--color-muted);">' + esc(s.transaction_date || '—') + '</div>'
+        + '<div style="color:var(--color-muted);">' + esc(fmtFecha(s.transaction_date)) + '</div>'
         + '<div onclick="goToResearch(\'' + esc(s.ticker) + '\')" class="ticker-link" style="color:var(--color-accent);font-weight:500;">' + esc(s.ticker) + badges(s) + '</div>'
         + '<div style="color:var(--color-text);">' + esc(s.filer_name || '—') + ' <span style="color:var(--color-muted);font-size:10px;">(' + esc(chamberLabel(s.chamber)) + ')</span></div>'
         + '<div style="color:#f23645;font-weight:500;">' + esc(s.amount_range_label || '—') + '</div>'
@@ -186,7 +186,7 @@ function renderTickerResult(ticker, data) {
     const rows = data.trades.map(t => {
         const isBuy = t.direction === 'buy';
         return '<div style="display:grid;grid-template-columns:80px 1fr 70px 60px 100px 60px 40px;gap:8px;padding:8px 14px;border-bottom:1px solid var(--color-border);font-size:11px;align-items:center;">'
-            + '<div style="color:var(--color-muted);">' + esc(t.transaction_date || '—') + '</div>'
+            + '<div style="color:var(--color-muted);">' + esc(fmtFecha(t.transaction_date)) + '</div>'
             + '<div style="color:var(--color-text);">' + esc(t.filer_name || '—') + ' <span style="color:var(--color-muted);font-size:10px;">(' + esc(partyState(t)) + ')</span></div>'
             + '<div style="color:var(--color-muted);font-size:10px;">' + esc(chamberLabel(t.chamber)) + '</div>'
             + '<div style="background:' + (isBuy ? 'rgba(0,255,173,0.1)' : 'rgba(242,54,69,0.1)') + ';color:' + (isBuy ? 'var(--color-accent)' : '#f23645') + ';border-radius:3px;padding:2px 6px;font-size:10px;text-align:center;">' + esc(isBuy ? 'COMPRA' : 'VENTA') + '</div>'

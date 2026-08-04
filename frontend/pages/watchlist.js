@@ -1,5 +1,5 @@
 import { tt } from '/components/tooltip.js';
-import { errorMessage, esc } from '/core/ui.js';
+import { errorMessage, esc, fmtFecha } from '/core/ui.js';
 
 function authHeader() {
     const token = sessionStorage.getItem('rsu_token') || localStorage.getItem('rsu_token');
@@ -216,8 +216,8 @@ async function loadAlerts(container) {
                 const bg        = a.status === 'triggered' && !a.seen ? 'rgba(0,255,173,0.05)' : 'transparent';
                 const fmtTriggerPrice = (v) => isRvol ? v.toFixed(2) + 'x' : '$' + v.toFixed(2);
                 const detail    = a.status === 'triggered'
-                    ? ('Disparada a ' + (a.triggered_price != null ? fmtTriggerPrice(a.triggered_price) : '?') + ' el ' + esc((a.triggered_at || '').substring(0, 10)))
-                    : ('Creada el ' + esc((a.created_at || '').substring(0, 10)));
+                    ? ('Disparada a ' + (a.triggered_price != null ? fmtTriggerPrice(a.triggered_price) : '?') + ' el ' + esc(fmtFecha(a.triggered_at)))
+                    : ('Creada el ' + esc(fmtFecha(a.created_at)));
                 return '<div style="display:grid;grid-template-columns:90px 130px 110px 100px 1fr 40px;gap:8px;padding:8px 14px;border-bottom:1px solid var(--color-border);font-size:12px;align-items:center;background:' + bg + ';">'
                     + '<div class="ticker-link" style="color:var(--color-accent);cursor:pointer;font-weight:500;" onclick="goToResearch(\'' + esc(a.ticker) + '\')">' + esc(a.ticker) + '</div>'
                     + '<div style="color:var(--color-muted);">' + condLabel + '</div>'

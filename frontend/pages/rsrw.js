@@ -1,5 +1,5 @@
 import { tt } from '/components/tooltip.js';
-import { isRateLimitMessage, errorMessage, esc } from '/core/ui.js';
+import { isRateLimitMessage, errorMessage, esc, fmtFecha } from '/core/ui.js';
 
 
 // Gráficos vivos de Chart.js de esta página. Se destruyen desde cleanup(),
@@ -118,7 +118,7 @@ function renderRotacion(d) {
     return '<div>'
         + '<div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:8px;">'
         + '<div style="color:var(--color-accent);font-size:13px;letter-spacing:0.08em;">ROTACIÓN SECTORIAL ' + tt('rsrw-rotacion') + '</div>'
-        + '<div style="color:var(--color-muted);font-size:10px;">' + esc(d.desde) + ' → ' + esc(d.hasta)
+        + '<div style="color:var(--color-muted);font-size:10px;">' + esc(fmtFecha(d.desde)) + ' → ' + esc(fmtFecha(d.hasta))
         + ' · ' + esc(d.sesiones) + ' sesiones</div>'
         + '</div>'
         + aviso
@@ -192,7 +192,7 @@ function renderAmplitud(d) {
     return '<div>'
         + '<div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:8px;">'
         + '<div style="color:var(--color-accent);font-size:13px;letter-spacing:0.08em;">AMPLITUD DEL LIDERAZGO ' + tt('rsrw-amplitud') + '</div>'
-        + '<div style="color:var(--color-muted);font-size:10px;">top ' + esc(a.n_top) + ' valores (RS ≥ ' + esc(d.umbral_top) + ') · ' + esc(a.fecha) + '</div>'
+        + '<div style="color:var(--color-muted);font-size:10px;">top ' + esc(a.n_top) + ' valores (RS ≥ ' + esc(d.umbral_top) + ') · ' + esc(fmtFecha(a.fecha)) + '</div>'
         + '</div>'
         + aviso
         + '<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:0.75rem;margin-bottom:0.75rem;">'
@@ -412,7 +412,7 @@ function renderMovimientos(d) {
     return '<div>'
         + '<div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:8px;">'
         + '<div style="color:var(--color-accent);font-size:13px;letter-spacing:0.08em;">MOVIMIENTOS DEL PERCENTIL RS ' + tt('rsrw-movimientos') + '</div>'
-        + '<div style="color:var(--color-muted);font-size:10px;">' + esc(d.desde) + ' → ' + esc(d.hasta)
+        + '<div style="color:var(--color-muted);font-size:10px;">' + esc(fmtFecha(d.desde)) + ' → ' + esc(fmtFecha(d.hasta))
         + ' · ' + esc(d.sesiones) + ' sesiones · ' + esc(d.comparados) + ' valores</div>'
         + '</div>'
         + avisoMuestra

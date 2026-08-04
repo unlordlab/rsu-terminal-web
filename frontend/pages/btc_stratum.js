@@ -1,5 +1,5 @@
 import { tt } from '/components/tooltip.js';
-import { errorMessage } from '/core/ui.js';
+import { errorMessage, fmtFecha } from '/core/ui.js';
 
 export async function render(container) {
     container.innerHTML = pageShell();
@@ -339,7 +339,7 @@ function renderBacktest(data) {
             + '<div>FECHA</div><div>TIPO</div><div>PRECIO</div><div>RSU</div>'
             + '</div>'
             + lastTrades.map(t => '<div style="display:grid;grid-template-columns:100px 80px 120px 80px;gap:8px;padding:8px 14px;border-bottom:1px solid var(--color-border);font-size:11px;align-items:center;">'
-                + '<div style="color:var(--color-muted);">' + t.date + '</div>'
+                + '<div style="color:var(--color-muted);">' + fmtFecha(t.date) + '</div>'
                 + '<div style="color:' + (t.type === 'BUY' ? 'var(--color-accent)' : '#f23645') + ';font-weight:500;">' + t.type + '</div>'
                 + '<div style="color:var(--color-text);">$' + Number(t.price).toLocaleString('en-US') + '</div>'
                 + '<div style="color:var(--color-muted);">' + t.rsu + '</div>'

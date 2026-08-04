@@ -1,5 +1,6 @@
 import { tt } from '/components/tooltip.js';
 import { onMarketUpdate } from '/core/websocket.js';
+import { fmtFecha } from '/core/ui.js';
 
 // IDs de canvas de los gráficos Chart.js creados por esta página cuyo
 // destroy() no está ya cubierto por una variable propia (_spreadsChart,
@@ -1221,7 +1222,7 @@ async function loadShillerCape(el) {
             ? '<div style="background:rgba(242,54,69,0.08);border-top:1px solid #f2364544;padding:8px 14px;color:#f23645;font-size:11px;">⚠ Estos números no parecen fiables (fuera del rango histórico plausible del CAPE) — probable fallo de parseo del fichero de origen. Revisa el log del backend (busca "[ShillerCAPE]").</div>'
             : '';
 
-        el.innerHTML = widgetShell('CAPE DE SHILLER ' + tt('shiller-cape'), 'Valoración de largo plazo · Yale · dato de ' + data.date + ' · niveles críticos marcados', summary + tabs + chartHtml + warningHtml, data.timestamp);
+        el.innerHTML = widgetShell('CAPE DE SHILLER ' + tt('shiller-cape'), 'Valoración de largo plazo · Yale · dato de ' + fmtFecha(data.date) + ' · niveles críticos marcados', summary + tabs + chartHtml + warningHtml, data.timestamp);
 
         _shillerRange = '5y';
         _loadChartJsThen(() => renderShillerChart());

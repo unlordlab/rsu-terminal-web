@@ -4,6 +4,45 @@
 
 const RATE_LIMIT_PATTERN = /demasiadas peticiones|rate limit|máximo \d+ requests/i;
 
+// ── FECHAS ───────────────────────────────────────────────────────────────────
+//
+// El backend y las fuentes externas (SEC, EDGAR, yfinance, los Gists de los
+// scans) trabajan en ISO — 2026-07-14 — porque así se ordena alfabéticamente
+// y se compara sin parsear. Pero al usuario se le enseña en el formato de
+// aquí: 14/07/2026.
+//
+// Hasta el 04/08/2026 la terminal mezclaba los dos: Options Flow y el
+// Algoritmo formateaban (cada uno por su cuenta) y otras diez páginas
+// pintaban el ISO crudo. Estos dos helpers son el único sitio donde se
+// decide el formato.
+//
+// IMPORTANTE: son solo para PINTAR. El valor ISO tiene que seguir siendo el
+// que se use para ordenar tablas y comparar fechas — formatear antes de
+// ordenar rompería el orden (31/01 iría después de 01/02).
+const _ISO_FECHA = /^(\d{4})-(\d{2})-(\d{2})/;
+const _ISO_FECHA_HORA = /^(\d{4})-(\d{2})-(\d{2})[T ](\d{2}:\d{2}(?::\d{2})?)/;
+
+/**
+ * "2026-07-14" -> "14/07/2026". Vacío -> "—". Si no es una fecha ISO
+ * reconocible se devuelve tal cual: mejor enseñar el dato original que
+ * inventarse una fecha a partir de algo que no lo era.
+ */
+export function fmtFecha(iso) {
+    if (!iso || typeof iso !== 'string') return '—';
+    const m = iso.match(_ISO_FECHA);
+    return m ? `${m[3]}/${m[2]}/${m[1]}` : iso;
+}
+
+/**
+ * Igual pero conservando la hora: "2026-07-14T16:22:28" -> "14/07/2026 16:22:28".
+ * Si no trae hora, cae en fmtFecha().
+ */
+export function fmtFechaHora(iso) {
+    if (!iso || typeof iso !== 'string') return '—';
+    const m = iso.match(_ISO_FECHA_HORA);
+    return m ? `${m[3]}/${m[2]}/${m[1]} ${m[4]}` : fmtFecha(iso);
+}
+
 /**
  * Detecta si un mensaje de error corresponde a un rate limit (429),
  * para poder darle un tratamiento visual distinto del de un error real.
