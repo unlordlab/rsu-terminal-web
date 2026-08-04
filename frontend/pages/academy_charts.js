@@ -11726,6 +11726,169 @@ function canslim_score_no_es_fuerza() {
     </svg>`;
 }
 
+// ── Módulo 29 · RS/RW ────────────────────────────────────────────────────────
+
+function rsrw_fuerza_no_es_subida() {
+    const W=680, H=300;
+    // Las tres series comparten escala a propósito: normalizar cada una por su
+    // cuenta destruiría justo lo que el gráfico quiere enseñar.
+    const MIN=94, MAX=136, ox=64, oy=58, pw=540, ph=180;
+    const y = v => oy + ph - ((v - MIN) / (MAX - MIN)) * ph;
+    const x = i => ox + (i / 11) * pw;
+    const linea = (serie, color, ancho) =>
+        `<path d="${serie.map((v,i)=>`${i?'L':'M'} ${x(i).toFixed(1)} ${y(v).toFixed(1)}`).join(' ')}" fill="none" stroke="${color}" stroke-width="${ancho}"/>`;
+    const indice = [100,101,103,105,107,109,112,114,116,117,119,120];
+    const fuerte = [100,102,106,110,114,118,122,125,128,130,131,132];
+    const flojo  = [100,101,102,104,105,106,107,108,109,110,111,112];
+    return `<svg viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg">
+        <rect width="${W}" height="${H}" fill="${C.bg}" rx="6"/>
+        <text x="20" y="28" fill="${C.text}" font-size="13" font-family="monospace">Los dos valores han SUBIDO. Solo uno tiene fuerza relativa.</text>
+        ${gridLines(ox, oy, pw, ph, 4)}
+        ${linea(indice, C.textDim, 1.5)}
+        ${linea(fuerte, C.accent, 2)}
+        ${linea(flojo,  C.red,    2)}
+        <text x="${ox+pw+8}" y="${y(132)+4}" fill="${C.accent}" font-size="10.5" font-family="monospace">+32%</text>
+        <text x="${ox+pw+8}" y="${y(120)+4}" fill="${C.textDim}" font-size="10.5" font-family="monospace">+20%</text>
+        <text x="${ox+pw+8}" y="${y(112)+4}" fill="${C.red}" font-size="10.5" font-family="monospace">+12%</text>
+        <text x="${ox}" y="${oy-12}" fill="${C.accent}" font-size="10.5" font-family="monospace">Valor fuerte</text>
+        <text x="${ox+112}" y="${oy-12}" fill="${C.textDim}" font-size="10.5" font-family="monospace">Índice</text>
+        <text x="${ox+180}" y="${oy-12}" fill="${C.red}" font-size="10.5" font-family="monospace">Valor flojo</text>
+        <text x="${W/2}" y="${H-26}" fill="${C.text}" font-size="10.5" font-family="monospace" text-anchor="middle">Un año después los dos ganan dinero. Pero el rojo ha ido peor que comprar el índice entero.</text>
+        <text x="${W/2}" y="${H-10}" fill="${C.textDim}" font-size="9.5" font-family="monospace" text-anchor="middle">La fuerza relativa no mide si sube: mide si sube MÁS que el mercado</text>
+    </svg>`;
+}
+
+function rsrw_percentil_reparto() {
+    const W=680, H=280;
+    // El percentil es un puesto en una lista, y esa lista siempre se reparte
+    // igual. Es la idea que evita leer el número como si fuera rentabilidad.
+    const ox=70, ow=540, oy=92, oh=44;
+    const bandas = [
+        [0,   20,  C.red,     'Rezagados', '100 valores'],
+        [20,  60,  C.muted,   'El montón', '200 valores'],
+        [60,  80,  C.textDim, '',          '100 valores'],
+        [80,  100, C.accent,  'Líderes',   '100 valores'],
+    ];
+    let barras = '';
+    bandas.forEach(b => {
+        const x1 = ox + (b[0]/100)*ow, w = ((b[1]-b[0])/100)*ow;
+        barras += `<rect x="${x1}" y="${oy}" width="${w}" height="${oh}" fill="${b[2]}" opacity="0.3"/>
+            <rect x="${x1}" y="${oy}" width="${w}" height="${oh}" fill="none" stroke="${b[2]}" stroke-width="1.5"/>
+            <text x="${x1+w/2}" y="${oy+19}" fill="${b[2]}" font-size="11" font-family="monospace" text-anchor="middle">${b[3]}</text>
+            <text x="${x1+w/2}" y="${oy+34}" fill="${C.textDim}" font-size="9.5" font-family="monospace" text-anchor="middle">${b[4]}</text>`;
+    });
+    let ejes = '';
+    [0,20,40,60,80,100].forEach(v => {
+        const px = ox + (v/100)*ow;
+        ejes += `<line x1="${px}" y1="${oy+oh}" x2="${px}" y2="${oy+oh+6}" stroke="${C.border}" stroke-width="1"/>
+            <text x="${px}" y="${oy+oh+20}" fill="${C.textDim}" font-size="10" font-family="monospace" text-anchor="middle">${v}</text>`;
+    });
+    return `<svg viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg">
+        <rect width="${W}" height="${H}" fill="${C.bg}" rx="6"/>
+        <text x="20" y="28" fill="${C.text}" font-size="13" font-family="monospace">El percentil es un PUESTO, no una rentabilidad</text>
+        <text x="20" y="48" fill="${C.textDim}" font-size="10.5" font-family="monospace">Los 500 valores del índice, ordenados de peor a mejor comportamiento frente al mercado</text>
+        ${barras}${ejes}
+        <text x="${W/2}" y="${oy+oh+48}" fill="${C.text}" font-size="10.5" font-family="monospace" text-anchor="middle">Este reparto es SIEMPRE el mismo: hoy, mañana y en pleno desplome.</text>
+        <text x="${W/2}" y="${oy+oh+66}" fill="${C.textDim}" font-size="10" font-family="monospace" text-anchor="middle">Siempre hay 100 valores por encima de 80, porque «80» significa «mejor que el 80% de la lista».</text>
+        <text x="${W/2}" y="${H-14}" fill="${C.orange}" font-size="10" font-family="monospace" text-anchor="middle">Por eso un RS de 95 en un mercado que cae significa «cae menos que casi todos», no «gana dinero»</text>
+    </svg>`;
+}
+
+function rsrw_foto_vs_pelicula() {
+    const W=680, H=290;
+    // Dos valores con el MISMO percentil hoy y una historia opuesta detrás.
+    const MIN=50, MAX=100, ox=68, oy=64, pw=500, ph=158;
+    const y = v => oy + ph - ((v - MIN) / (MAX - MIN)) * ph;
+    const x = i => ox + (i / 9) * pw;
+    const linea = (s, color) =>
+        `<path d="${s.map((v,i)=>`${i?'L':'M'} ${x(i).toFixed(1)} ${y(v).toFixed(1)}`).join(' ')}" fill="none" stroke="${color}" stroke-width="2"/>`;
+    const consolidado = [87,88,89,87,88,86,88,89,87,88];
+    const emergente   = [61,63,66,69,72,76,79,83,86,88];
+    return `<svg viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg">
+        <rect width="${W}" height="${H}" fill="${C.bg}" rx="6"/>
+        <text x="20" y="28" fill="${C.text}" font-size="13" font-family="monospace">Dos valores con el mismo 88 hoy — y no son lo mismo</text>
+        <text x="20" y="47" fill="${C.textDim}" font-size="10.5" font-family="monospace">Percentil RS a lo largo de las últimas semanas</text>
+        ${gridLines(ox, oy, pw, ph, 4)}
+        <line x1="${ox}" y1="${y(80)}" x2="${ox+pw}" y2="${y(80)}" stroke="${C.accent}" stroke-width="1" stroke-dasharray="4 3" opacity="0.45"/>
+        <text x="${ox+6}" y="${y(80)-6}" fill="${C.accent}" font-size="9" font-family="monospace" opacity="0.8">umbral de líder: 80</text>
+        ${linea(consolidado, C.textDim)}
+        ${linea(emergente, C.accent)}
+        <circle cx="${x(9)}" cy="${y(88)}" r="4.5" fill="${C.accent}"/>
+        <text x="${ox+pw+10}" y="${y(88)+4}" fill="${C.text}" font-size="11" font-family="monospace">88</text>
+        <text x="${ox+8}" y="${y(88)-10}" fill="${C.textDim}" font-size="10" font-family="monospace">Lleva meses aquí</text>
+        <text x="${ox+8}" y="${y(61)+16}" fill="${C.accent}" font-size="10" font-family="monospace">Venía de 61</text>
+        <text x="${W/2}" y="${H-26}" fill="${C.text}" font-size="10.5" font-family="monospace" text-anchor="middle">En la tabla de líderes los dos aparecen exactamente igual. La tabla es una foto.</text>
+        <text x="${W/2}" y="${H-10}" fill="${C.textDim}" font-size="9.5" font-family="monospace" text-anchor="middle">El verde es liderazgo naciendo; el gris lleva tiempo ahí y puede estar acabándose</text>
+    </svg>`;
+}
+
+function rsrw_rotacion_suma_cero() {
+    const W=680, H=300;
+    // El dinero no aparece: cambia de sitio. Las cifras suman cero a propósito.
+    const datos = [
+        ['Salud',                +4.9, C.accent],
+        ['Consumo Discrecional', +4.2, C.accent],
+        ['Financieros',          +2.1, C.accent],
+        ['Industriales',         -2.8, C.red],
+        ['Energía',              -4.1, C.red],
+        ['Servicios Públicos',   -6.3, C.red],
+    ];
+    const cx=392, escala=24, oy=84;
+    let filas = '';
+    datos.forEach((d,i) => {
+        const yy = oy + i*28;
+        const w  = Math.abs(d[1]) * escala;
+        const xx = d[1] >= 0 ? cx : cx - w;
+        filas += `<text x="${cx-166}" y="${yy+4}" fill="${C.textDim}" font-size="10.5" font-family="monospace" text-anchor="end">${d[0]}</text>
+            <rect x="${xx}" y="${yy-8}" width="${w}" height="16" fill="${d[2]}" opacity="0.75" rx="2"/>
+            <text x="${d[1]>=0 ? xx+w+7 : xx-7}" y="${yy+4}" fill="${d[2]}" font-size="10.5" font-family="monospace" text-anchor="${d[1]>=0?'start':'end'}">${d[1]>0?'+':''}${d[1]}</text>`;
+    });
+    return `<svg viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg">
+        <rect width="${W}" height="${H}" fill="${C.bg}" rx="6"/>
+        <text x="20" y="28" fill="${C.text}" font-size="13" font-family="monospace">Rotación: el dinero no aparece, cambia de sitio</text>
+        <text x="20" y="47" fill="${C.textDim}" font-size="10.5" font-family="monospace">Cuánta fuerza ha ganado o perdido cada sector en el periodo</text>
+        <text x="${cx-90}" y="${oy-16}" fill="${C.red}" font-size="9.5" font-family="monospace" text-anchor="middle">pierden fuerza</text>
+        <text x="${cx+90}" y="${oy-16}" fill="${C.accent}" font-size="9.5" font-family="monospace" text-anchor="middle">ganan fuerza</text>
+        <line x1="${cx}" y1="${oy-10}" x2="${cx}" y2="${oy+datos.length*28-8}" stroke="${C.border}" stroke-width="1"/>
+        ${filas}
+        <text x="${W/2}" y="${H-32}" fill="${C.text}" font-size="10.5" font-family="monospace" text-anchor="middle">Lo que sube a un lado baja al otro. La suma de todos los sectores es siempre cero.</text>
+        <text x="${W/2}" y="${H-14}" fill="${C.textDim}" font-size="9.5" font-family="monospace" text-anchor="middle">Por eso esto no dice si el mercado sube: dice DÓNDE está el dinero dentro de él</text>
+    </svg>`;
+}
+
+function rsrw_amplitud_ancho_estrecho() {
+    const W=680, H=300;
+    // Mismo número de valores fuertes, dos mercados muy distintos.
+    const bloque = (titulo, reparto, ox, subtitulo, color) => {
+        const bw=250, bh=28;
+        let seg = '', acc = 0;
+        reparto.forEach((r,i) => {
+            const w = (r[1]/100)*bw;
+            seg += `<rect x="${ox+acc}" y="126" width="${w}" height="${bh}" fill="${r[2]}" opacity="${(0.35 + i*0.05).toFixed(2)}"/>
+                <rect x="${ox+acc}" y="126" width="${w}" height="${bh}" fill="none" stroke="${C.bg}" stroke-width="1"/>`;
+            if (w > 36) seg += `<text x="${ox+acc+w/2}" y="144" fill="${C.text}" font-size="9" font-family="monospace" text-anchor="middle">${r[0]}</text>`;
+            acc += w;
+        });
+        return `<text x="${ox+bw/2}" y="90" fill="${color}" font-size="12" font-family="monospace" text-anchor="middle">${titulo}</text>
+            <text x="${ox+bw/2}" y="108" fill="${C.textDim}" font-size="9.5" font-family="monospace" text-anchor="middle">${subtitulo}</text>
+            ${seg}
+            <rect x="${ox}" y="126" width="${bw}" height="${bh}" fill="none" stroke="${color}" stroke-width="1.5"/>`;
+    };
+    const estrecho = [['Tecnología',68,C.cyan],['Salud',18,C.accent],['Resto',14,C.muted]];
+    const ancho    = [['Tec',20,C.cyan],['Salud',15,C.accent],['Fin',14,C.orange],['Ind',13,C.yellow],['Ene',12,C.red],['Cons',11,C.accent],['Mat',9,C.cyan],['Otr',6,C.muted]];
+    return `<svg viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg">
+        <rect width="${W}" height="${H}" fill="${C.bg}" rx="6"/>
+        <text x="20" y="28" fill="${C.text}" font-size="13" font-family="monospace">Los mismos 50 valores fuertes, dos mercados muy distintos</text>
+        <text x="20" y="47" fill="${C.textDim}" font-size="10.5" font-family="monospace">De qué sectores salen los 50 valores más fuertes del índice</text>
+        ${bloque('MERCADO ESTRECHO', estrecho, 52, 'casi todo sale de un sector', C.red)}
+        ${bloque('MERCADO ANCHO', ancho, 378, 'sube mucha gente a la vez', C.accent)}
+        <text x="${W/2}" y="196" fill="${C.text}" font-size="10.5" font-family="monospace" text-anchor="middle">Contar cuántos valores son fuertes daría el mismo número en los dos casos.</text>
+        <text x="${W/2}" y="216" fill="${C.textDim}" font-size="10" font-family="monospace" text-anchor="middle">Lo que los distingue es de dónde salen — y eso es lo que mide la amplitud del liderazgo.</text>
+        <text x="${W/2}" y="250" fill="${C.orange}" font-size="10.5" font-family="monospace" text-anchor="middle">El de la izquierda depende de que un solo sector aguante.</text>
+        <text x="${W/2}" y="268" fill="${C.textDim}" font-size="9.5" font-family="monospace" text-anchor="middle">Si ese sector se gira, se lleva por delante la subida entera aunque el índice pareciera fuerte</text>
+    </svg>`;
+}
+
 export const CHARTS = {
     // Módulo 0
     rsu_philosophy, rsu_community, rsu_for_who,
@@ -11851,4 +12014,7 @@ export const CHARTS = {
     rsu_asignacion_donut, rsu_cuatro_bloques, rsu_prima_correccion,
     // Módulo 28
     canslim_siete_letras, canslim_embudo, canslim_score_no_es_fuerza,
+    // Módulo 29
+    rsrw_fuerza_no_es_subida, rsrw_percentil_reparto, rsrw_foto_vs_pelicula,
+    rsrw_rotacion_suma_cero, rsrw_amplitud_ancho_estrecho,
 };

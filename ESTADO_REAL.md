@@ -48,6 +48,23 @@ parecería completo y sería engañoso.
   **Dos de los tres hallazgos de esta racha estaban mal diagnosticados en el
   propio documento**: #6 pedía un calendario de festivos que no hacía falta, y
   #16 pedía una métrica que es constante por construcción.
+
+**Manual en Academy (02/08)**: **módulo 29, «RS/RW — La Fuerza Relativa»**
+(5 lecciones, ~2.500 palabras, quiz de 12 preguntas, 5 gráficos SVG nuevos),
+en la fase GUÍA DE LA TERMINAL junto al 26, 27 y 28. No había hallazgo de
+auditoría que lo pidiera — se añade por el mismo criterio que los tres
+anteriores: la pantalla enseña siete secciones y ninguna se explicaba sola.
+Cubre por qué «ha subido» no dice nada sin el mercado al lado, qué es un
+percentil y por qué siempre hay un 20% de líderes también en un desplome, la
+diferencia entre RS% y RS Score, cómo se lee cada tabla, las tres secciones de
+evolución, la sección de cartera con la marca «ext», y una rutina de uso con
+los cuatro errores típicos. **Los avisos que salen de lo verificado están
+dentro en lenguaje de usuario**: que un percentil alto en un mercado bajista
+significa caer menos, no ganar; que el percentil baja también cuando suben los
+demás; y que la rotación es una suma cero. Verificado en navegador: 5 lecciones
+en el manifiesto con índices 0-4, los 5 SVG con contenido real y sin desbordar
+su viewBox, repartidos en las lecciones correctas (1 en la 1ª, 1 en la 2ª, 3 en
+la 4ª), quiz operativo con explicación al responder, y cero errores de consola.
 - **RSU Algoritmo cerrado del todo (30-31/07)**: tercer módulo con el tier
   completo verificado. Aparecieron **5 hallazgos nuevos** que no estaban en la
   auditoría (#14–#18), tres de ellos encadenados y con efecto real sobre las
@@ -388,7 +405,7 @@ alimenta el modal "Resumen de Mercado Diario", aunque sea un script aparte.
 | ❓ | 24 | 🟢 | Put/Call ratio agregado del día | *sin comprobar* |
 | ❓ | 25 | 🟢 | Seguimiento de aciertos del flow | *sin comprobar* |
 
-## Paginas Contenido  (25 hallazgos — ❌2 · ✅2 · ❓21)
+## Paginas Contenido  (25 hallazgos — ❌2 · ✅6 · ❓17)
 
 | | # | Sev | Hallazgo | Estado / evidencia |
 |-|---|-----|----------|--------------------|
@@ -396,8 +413,8 @@ alimenta el modal "Resumen de Mercado Diario", aunque sea un script aparte.
 | ❌ | 2 | 🔴 | El JWT se guarda en `localStorage` cuando marcas "recordarme" — persistente e indefinido | mismo bloque legal |
 | ✅ | 3 | 🔴 | Dos páginas anuncian "ENCRYPTION: AES-256" en un sitio sin HTTPS | textos de AES-256 retirados |
 | ✅ | 4 | 🔴 | Academy anuncia horas de vídeo que no existen | referencias a horas de vídeo retiradas de Academy |
-| ❓ | 5 | 🟠 | Academy carga ~1,3 MB de JavaScript de golpe | *sin comprobar* |
-| ❓ | 6 | 🟠 | La barra de progreso de Academy está fijada a 0% — no hay seguimiento | *sin comprobar* |
+| ✅ | 5 | 🟠 | Academy carga ~1,3 MB de JavaScript de golpe | RESUELTO, la fila estaba desactualizada (verificado 02/08). Lecciones, gráficos y quizzes se cargan con `await import()` bajo demanda; el índice se pinta desde `academy_manifest.js`, que solo trae título y número de palabras |
+| ✅ | 6 | 🟠 | La barra de progreso de Academy está fijada a 0% — no hay seguimiento | RESUELTO, la fila estaba desactualizada (verificado 02/08). El progreso es real y por usuario, vía `GET/POST /api/v1/academy/progress` y `academy_service.py`. Comprobado en navegador con el quiz del módulo nuevo: el contador avanza a 1/12 al responder |
 | ❓ | 7 | 🟠 | El Dashboard dispara el endpoint más pesado de la terminal en cada carga | *sin comprobar* |
 | ❓ | 8 | 🟠 | Citas del Dashboard: varias son apócrifas o parafraseadas, y una "diaria" que no es diaria | *sin comprobar* |
 | ❓ | 9 | 🟠 | El Roadmap 2026 es una previsión estática de la que ya ha pasado medio año | *sin comprobar* |
@@ -407,9 +424,9 @@ alimenta el modal "Resumen de Mercado Diario", aunque sea un script aparte.
 | ❓ | 13 | 🟡 | El Dashboard inyecta un `<style>` nuevo en cada render | *sin comprobar* |
 | ❓ | 14 | 🟡 | El disclaimer aceptado no tiene versión | *sin comprobar* |
 | ❓ | 15 | 🟡 | La sección 06 del disclaimer prohíbe algo que la propia terminal hace | *sin comprobar* |
-| ❓ | 16 | 🟡 | Academy: `[STATUS: ALL MODULES UNLOCKED // ACCESS: FULL]` | *sin comprobar* |
+| ✅ | 16 | 🟡 | Academy: `[STATUS: ALL MODULES UNLOCKED // ACCESS: FULL]` | RESUELTO, la fila estaba desactualizada (verificado 02/08): cero coincidencias de ese texto en `academy.js` |
 | ❓ | 17 | 🟡 | `equipo.js` y `roadmap.js` no escapan nada, pero todo su contenido es estático | *sin comprobar* |
-| ❓ | 18 | 🔵 | Academy: buscador de lecciones | *sin comprobar* |
+| ✅ | 18 | 🔵 | Academy: buscador de lecciones | RESUELTO, la fila estaba desactualizada (verificado 02/08): `buscar()` recorre el manifiesto y, si el contenido ya está cargado, también el texto de cada lección, con el término resaltado |
 | ❓ | 19 | 🔵 | Enlazar Academy desde los módulos | *sin comprobar* |
 | ❓ | 20 | 🔵 | Dashboard: continuidad | *sin comprobar* |
 | ❓ | 21 | 🔵 | Equipo: enlazar cada agente con su trabajo | *sin comprobar* |

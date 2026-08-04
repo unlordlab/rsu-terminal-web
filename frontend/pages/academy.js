@@ -75,6 +75,7 @@ const MODULES = [
     { id:26, title:'RSU Algoritmo — El Semáforo de Suelos', icon:'🚦', description:'Manual completo del semáforo: qué mide cada uno de sus cinco factores, por qué hay una condición obligatoria que no se puede saltar, cómo se entra por tramos y sin stop, y qué ha hecho de verdad en las 16 señales de los últimos 18 años — incluidos los plazos en los que no aporta nada.' },
     { id:27, title:'La Cartera RSU',              icon:'💼', description:'Por qué la cartera está compuesta así y cómo se lee su pantalla: el reparto en cuatro bloques (de los que esta página muestra dos), la tesis de las cinco tendencias que sostienen la parte de acciones, por qué se paga una prima de valoración y se cobra en volatilidad, los niveles CORE/HIGH/LOTTERY que fijan el tamaño antes de comprar, y qué significa cada cifra de la pantalla — incluido lo que la Cartera no hace.' },
     { id:28, title:'CANSLIM — El Buscador de Valores', icon:'🔎', description:'Manual del buscador: qué significa cada una de las siete letras y qué te dice cuando falla, cómo se lee la tabla —incluida la trampa de fijarse solo en la puntuación—, qué añade el análisis individual, y una rutina de uso con los tres errores que este tipo de herramienta invita a cometer.' },
+    { id:29, title:'RS/RW — La Fuerza Relativa',   icon:'📊', description:'Manual de la fuerza relativa: por qué «ha subido» no dice nada sin el mercado al lado, qué significa de verdad el percentil —y por qué siempre hay un 20% de líderes, también en un desplome—, cómo se lee cada tabla, y las tres secciones que convierten la foto del día en una película: quién entra y sale del liderazgo, hacia dónde rota el dinero entre sectores y si el mercado tira entero o solo unos pocos.' },
 ];
 
 const PHASES = [
@@ -90,7 +91,7 @@ const PHASES = [
     // usan las herramientas (qué es el RSU Score, qué es el análisis
     // fundamental); esta explica CÓMO SE USA cada pantalla y qué ha hecho de
     // verdad. Se irá ampliando con un módulo por herramienta.
-    { label:'🛠️ GUÍA DE LA TERMINAL // CÓMO FUNCIONA CADA HERRAMIENTA', modules:[26,27,28] },
+    { label:'🛠️ GUÍA DE LA TERMINAL // CÓMO FUNCIONA CADA HERRAMIENTA', modules:[26,27,28,29] },
 ];
 
 // ── LECCIONES DE CADA MÓDULO ─────────────────────────────────────────────────

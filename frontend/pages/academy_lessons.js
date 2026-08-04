@@ -6882,4 +6882,250 @@ export const LESSONS = {
             },
         ]
     },
+
+    '29-1': {
+        moduleId: 29,
+        lessonIndex: 0,
+        title: 'Qué es la Fuerza Relativa',
+        duration: '7 min',
+        intro: 'Saber que una acción ha subido un 12% no dice casi nada por sí solo. Depende de qué haya hecho el mercado mientras tanto. Esta herramienta responde a esa pregunta y solo a esa: ¿lo está haciendo mejor o peor que el conjunto?',
+        sections: [
+            {
+                heading: 'El número que falta',
+                blocks: [
+                    { type: 'text', content: 'Imagina dos valores en cartera. Uno ha subido un 32% en el año y otro un 12%. Los dos ganan dinero, así que los dos parecen buenas decisiones.' },
+                    { type: 'text', content: 'Ahora añade el dato que faltaba: el índice ha subido un 20%. El primero ha batido al mercado con holgura. El segundo ha ido <b>peor que no haber elegido nada</b> — con el mismo dinero puesto en el índice entero habrías ganado más, sin dedicarle ni un minuto.' },
+                    { type: 'chart', id: 'rsrw_fuerza_no_es_subida' },
+                    { type: 'concept', title: 'Fuerza relativa, en una línea', content: 'No mide si un valor sube. Mide si sube MÁS que el mercado. Un valor puede estar ganando dinero y ser débil, y puede estar perdiéndolo y ser fuerte.' },
+                ]
+            },
+            {
+                heading: 'Contra qué se compara',
+                blocks: [
+                    { type: 'text', content: 'La referencia es el índice de las quinientas mayores empresas americanas. Todo lo que ves aquí está medido contra él, no contra el sector del valor ni contra su propio pasado.' },
+                    { type: 'text', content: 'La comparación se hace en tres plazos a la vez —tres meses, seis meses y un año aproximadamente— y el plazo largo pesa más que el corto. Así una buena semana no convierte a un valor débil en líder, pero una mejora sostenida sí acaba notándose.' },
+                    { type: 'tip', label: 'POR QUÉ TRES PLAZOS', content: 'Con un solo plazo corto, la lista cambiaría entera cada semana y perseguirías ruido. Con uno solo largo, tardarías meses en enterarte de que algo ha cambiado. Mezclarlos da una lectura que se mueve, pero no cada día.' },
+                ]
+            },
+            {
+                heading: 'Por qué esto importa',
+                blocks: [
+                    { type: 'text', content: 'El dinero que tienes es limitado. Cada euro puesto en un valor rezagado es un euro que no está en uno fuerte, y esa diferencia se acumula año tras año sin que se note en el momento — porque el valor rezagado también sube y parece que va bien.' },
+                    { type: 'text', content: 'La otra razón es más práctica: los valores fuertes tienden a seguir siéndolo durante un tiempo. No siempre, y no eternamente, pero lo suficiente como para que empezar a buscar por ahí sea mejor que empezar al azar.' },
+                    { type: 'warning', content: 'Cuidado con el reflejo contrario. Ver un valor muy rezagado y pensar «está barato, ya rebotará» es exactamente lo que esta herramienta te está avisando de no hacer. Que algo lleve un año haciéndolo peor que el mercado no es un descuento: suele ser una razón.' },
+                ]
+            },
+            {
+                heading: 'Lo que esta herramienta no hace',
+                blocks: [
+                    { type: 'text', content: 'No predice. No sabe nada de la empresa: ni sus beneficios, ni su deuda, ni si presenta resultados mañana. Solo compara comportamientos de precio.' },
+                    { type: 'text', content: 'Y no dice cuándo comprar. Un valor fuerte puede estar fuerte y caro a la vez, o venir de subir mucho justo antes de corregir. La fuerza relativa te dice <b>dónde mirar</b>, no <b>cuándo entrar</b>.' },
+                ]
+            },
+        ]
+    },
+
+    '29-2': {
+        moduleId: 29,
+        lessonIndex: 1,
+        title: 'El Percentil — Qué Significa Ese Número',
+        duration: '8 min',
+        intro: 'El número grande que ves junto a cada valor va de 1 a 99, y es el que más se malinterpreta de toda la herramienta. No es un porcentaje de subida ni una nota: es un puesto en una clasificación.',
+        sections: [
+            {
+                heading: 'Es una posición, no un resultado',
+                blocks: [
+                    { type: 'text', content: 'Un percentil de 88 significa: <b>este valor lo ha hecho mejor que el 88% de los valores del índice</b>. Nada más y nada menos. No dice cuánto ha subido, ni cuánto ha batido al mercado. Dice en qué puesto va.' },
+                    { type: 'chart', id: 'rsrw_percentil_reparto' },
+                    { type: 'concept', title: 'La consecuencia que sorprende', content: 'Como es un puesto dentro de la propia lista, el reparto no puede cambiar. Siempre hay exactamente un 20% de valores por encima de 80 y un 20% por debajo de 20. Hoy, mañana, en una subida histórica y en un desplome. Ese número no mide la salud del mercado.' },
+                ]
+            },
+            {
+                heading: 'La trampa de los mercados bajistas',
+                blocks: [
+                    { type: 'text', content: 'De lo anterior sale el malentendido más caro. En un mercado que se está desplomando sigue habiendo cien valores con percentil por encima de 80.' },
+                    { type: 'text', content: 'Pero ahí «fuerte» significa <b>caer menos que casi todos</b>. Un valor puede estar perdiendo un 15% y ser de los mejores del índice, porque el resto pierde un 30%.' },
+                    { type: 'warning', content: 'Un percentil alto no es sinónimo de ganar dinero. Antes de usar esta lista para comprar, mira en qué estado está el mercado general — que para eso está el semáforo del Algoritmo y el estado de mercado de otras pantallas.' },
+                ]
+            },
+            {
+                heading: 'Percentil y puntuación no son lo mismo',
+                blocks: [
+                    { type: 'text', content: 'En el análisis individual verás dos números y conviene no confundirlos.' },
+                    { type: 'table', headers: ['Número', 'Qué es', 'Cómo se lee'], rows: [
+                        ['RS%', 'El puesto dentro del índice, de 1 a 99', 'Comparativo. 88 significa mejor que el 88% de los demás.'],
+                        ['RS Score', 'Cuánto ha batido al índice, sin ordenar a nadie', 'Absoluto. Puede ser negativo, y entonces está por debajo del mercado.'],
+                    ]},
+                    { type: 'text', content: 'El primero sirve para comparar valores entre sí. El segundo, para saber si de verdad va por delante del mercado o solo por delante de los peores.' },
+                ]
+            },
+            {
+                heading: 'Por qué un puesto es más fiable que un número suelto',
+                blocks: [
+                    { type: 'text', content: 'Los puestos son robustos. Una diferencia pequeña en el cálculo apenas mueve el orden de la lista, así que el percentil es estable aunque los datos de origen varíen un poco de un día para otro.' },
+                    { type: 'tip', label: 'EL LADO MALO', content: 'Esa misma virtud tiene un coste: tu valor puede bajar de percentil sin haber caído de precio, simplemente porque otros han subido más que él. Cuando veas un percentil bajar, mira también el precio antes de decidir nada.' },
+                ]
+            },
+        ]
+    },
+
+    '29-3': {
+        moduleId: 29,
+        lessonIndex: 2,
+        title: 'Cómo Leer la Pantalla',
+        duration: '8 min',
+        intro: 'Un recorrido por lo que aparece al entrar: las dos tablas principales, las barras de sectores, los iconos junto a los nombres y el aviso de antigüedad de los datos.',
+        sections: [
+            {
+                heading: 'Líderes y rezagados',
+                blocks: [
+                    { type: 'text', content: 'Las dos tablas de arriba son las mismas caras de la misma lista: los que van por delante del 80% del índice y los que van por detrás del 80%.' },
+                    { type: 'table', headers: ['Columna', 'Qué te dice'], rows: [
+                        ['RS%', 'El puesto en la clasificación, de 1 a 99.'],
+                        ['Sector', 'A qué sector pertenece. Útil para ver si los líderes se concentran en pocos sitios.'],
+                        ['Precio', 'El cierre de la última sesión.'],
+                        ['Flecha', 'Si el ritmo reciente es más rápido que el de medio plazo. Hacia arriba significa que está acelerando.'],
+                    ]},
+                    { type: 'concept', title: 'La flecha, con cuidado', content: 'Compara el ritmo de las últimas semanas con el de los últimos meses, ajustando por el tiempo transcurrido en cada caso. Una flecha hacia arriba no significa que el valor sea mejor: significa que últimamente va más deprisa de lo que venía.' },
+                ]
+            },
+            {
+                heading: 'Las barras de sectores',
+                blocks: [
+                    { type: 'text', content: 'Debajo tienes cada sector con su propia fuerza relativa. Las barras usan una escala fija, no relativa al mejor del día.' },
+                    { type: 'tip', label: 'POR QUÉ IMPORTA LA ESCALA FIJA', content: 'Si la barra más larga llenara siempre el ancho completo, el mejor sector parecería fortísimo incluso en un día en que todos están planos. Con escala fija, un día flojo se ve flojo.' },
+                ]
+            },
+            {
+                heading: 'Los iconos junto a los nombres',
+                blocks: [
+                    { type: 'table', headers: ['Icono', 'Significa'], rows: [
+                        ['💼', 'Lo tienes en cartera ahora mismo.'],
+                        ['⭐', 'Está en tu lista de seguimiento.'],
+                    ]},
+                    { type: 'text', content: 'Son atajos visuales para lo que más importa: ver de un vistazo si algo tuyo aparece entre los rezagados, que es la información más accionable de toda la pantalla.' },
+                ]
+            },
+            {
+                heading: 'De cuándo son los datos',
+                blocks: [
+                    { type: 'text', content: 'Arriba a la derecha verás una etiqueta como «Cierre de ayer» o «Cierre del 2026-07-31». Se refiere a la <b>sesión de mercado</b> que describen los datos, no a la hora en que se ejecutó el cálculo.' },
+                    { type: 'text', content: 'La distinción importa en festivos: el proceso se ejecuta igual, pero no hay cierre nuevo que descargar. Antes eso podía leerse como datos frescos; ahora la etiqueta dice de qué sesión son realmente.' },
+                    { type: 'warning', content: 'Todo esto se calcula una vez al día, después del cierre americano. No sirve para operar intradía. Si buscas qué se está moviendo ahora mismo, esta no es la pantalla.' },
+                ]
+            },
+            {
+                heading: 'El análisis individual',
+                blocks: [
+                    { type: 'text', content: 'Abajo puedes escribir cualquier símbolo y ver su ficha: percentil, cuánto ha batido al índice, los diferenciales a tres, seis y doce meses, y un gráfico de cómo ha evolucionado su fuerza relativa.' },
+                    { type: 'text', content: 'Ese gráfico es lo más útil de la ficha. Una línea que sube significa que el valor lleva tiempo ganando terreno al mercado; una que baja, que lo está cediendo aunque el precio suba.' },
+                ]
+            },
+        ]
+    },
+
+    '29-4': {
+        moduleId: 29,
+        lessonIndex: 3,
+        title: 'De la Foto a la Película',
+        duration: '10 min',
+        intro: 'Las tablas de líderes son una fotografía del día. Las tres secciones de abajo añaden la dimensión que falta: qué está cambiando. Son la parte más útil de la herramienta y la que más gente se salta.',
+        sections: [
+            {
+                heading: 'Movimientos del percentil',
+                blocks: [
+                    { type: 'text', content: 'En la tabla de líderes, un valor con percentil 88 aparece exactamente igual tanto si lleva meses ahí como si acaba de llegar desde 61 en unas semanas. Y no son la misma situación en absoluto.' },
+                    { type: 'chart', id: 'rsrw_foto_vs_pelicula' },
+                    { type: 'text', content: 'Esta sección separa las dos cosas en cuatro bloques:' },
+                    { type: 'table', headers: ['Bloque', 'Qué contiene', 'Por qué mirarlo'], rows: [
+                        ['Nuevos líderes', 'Han cruzado el 80 hacia arriba', 'Es liderazgo naciendo. El grupo más interesante para buscar ideas.'],
+                        ['Pierden el liderazgo', 'Han caído por debajo del 80', 'Aviso, sobre todo si tienes alguno en cartera.'],
+                        ['Los que más suben', 'Mayor ganancia de puestos', 'Movimiento fuerte aunque no crucen ningún umbral.'],
+                        ['Los que más bajan', 'Mayor pérdida de puestos', 'Deterioro en marcha, a veces antes de que se note en el precio.'],
+                    ]},
+                ]
+            },
+            {
+                heading: 'Rotación sectorial',
+                blocks: [
+                    { type: 'text', content: 'La misma idea, pero aplicada a sectores enteros: qué sectores están ganando fuerza y cuáles la están cediendo.' },
+                    { type: 'chart', id: 'rsrw_rotacion_suma_cero' },
+                    { type: 'concept', title: 'Es una suma cero, y eso es lo interesante', content: 'Como el percentil es un puesto, la media de todo el índice está fijada y no puede moverse. Si un sector gana fuerza, otro la ha perdido exactamente en la misma medida. Por eso esto no dice si el mercado sube: dice hacia dónde se está moviendo el dinero dentro de él.' },
+                    { type: 'text', content: 'El liderazgo sectorial suele durar semanas o meses. Un sector que lleva varias sesiones ganando terreno es un buen sitio donde buscar candidatos; uno que lo pierde de forma sostenida es un buen sitio donde revisar lo que ya tienes.' },
+                ]
+            },
+            {
+                heading: 'Amplitud del liderazgo',
+                blocks: [
+                    { type: 'text', content: 'La última sección responde a una pregunta distinta: <b>¿tira el mercado entero o solo unos pocos?</b>' },
+                    { type: 'chart', id: 'rsrw_amplitud_ancho_estrecho' },
+                    { type: 'text', content: 'Fíjate en que contar cuántos valores son fuertes no distingue los dos casos del gráfico — en ambos hay cincuenta. Lo que los separa es de qué sectores salen.' },
+                    { type: 'table', headers: ['Lectura', 'Qué significa'], rows: [
+                        ['Sectores representados', 'Cuántos de los once aportan algún valor al grupo de los más fuertes. Cuantos más, más ancho el liderazgo.'],
+                        ['Sector dominante', 'El que más aporta, y qué parte del grupo se lleva.'],
+                        ['Concentración', 'La cifra clave. Compara lo que aporta el dominante con su tamaño real en el índice.'],
+                    ]},
+                    { type: 'concept', title: 'Cómo leer la concentración', content: 'Un 1,00× significa que ese sector aporta exactamente lo que le corresponde por número de empresas. Un 3,00× significa que aporta el triple: el liderazgo está concentrado ahí. La comparación se hace contra su propio tamaño porque los sectores no son iguales — Tecnología tiene muchas más empresas que Energía, y le toca aportar más solo por eso.' },
+                    { type: 'warning', content: 'Un mercado estrecho puede marcar máximos y parecer sano. La fragilidad está en que depende de que un solo sector aguante: si ese se gira, se lleva la subida entera por delante.' },
+                ]
+            },
+            {
+                heading: 'Los avisos de muestra corta',
+                blocks: [
+                    { type: 'text', content: 'Estas tres secciones comparan el presente con el pasado, así que necesitan historial. La terminal lo va acumulando una sesión cada noche, y cuando todavía hay pocas lo dice con un aviso naranja.' },
+                    { type: 'tip', label: 'HAZLE CASO AL AVISO', content: 'Con pocas sesiones, buena parte del movimiento es ruido: recuerda que un valor puede perder puestos sin haber caído de precio. La lectura del día es válida desde el principio; la tendencia necesita semanas.' },
+                ]
+            },
+        ]
+    },
+
+    '29-5': {
+        moduleId: 29,
+        lessonIndex: 4,
+        title: 'Tu Cartera y Cómo Usarlo Sin Hacerse Daño',
+        duration: '9 min',
+        intro: 'La sección que mide tus propias posiciones, por qué algunas llevan una marca especial, y una rutina de uso con los cuatro errores que esta herramienta invita a cometer.',
+        sections: [
+            {
+                heading: 'Activos Cartera RSU',
+                blocks: [
+                    { type: 'text', content: 'Esta sección aplica exactamente la misma medida a las posiciones que tienes abiertas, incluidas las que no forman parte del índice americano — que suelen ser la mayoría.' },
+                    { type: 'text', content: 'Es la pantalla más incómoda de la herramienta y probablemente la más útil. Ver un valor propio con percentil 12 es información que cuesta buscar por voluntad propia.' },
+                    { type: 'concept', title: 'La marca «ext»', content: 'Los valores que no pertenecen al índice aparecen marcados. Se miden CONTRA el índice, pero no forman parte de él: la vara de medir sigue siendo la misma para todos, y así el percentil de una acción del índice no cambia según lo que tú tengas comprado.' },
+                    { type: 'text', content: 'Si alguna posición es demasiado reciente para medirla —hace falta alrededor de un trimestre de historial—, aparece nombrada con esa explicación en lugar de desaparecer de la lista. No es lo mismo «no tiene fuerza relativa» que «todavía no se puede calcular».' },
+                ]
+            },
+            {
+                heading: 'Una rutina que funciona',
+                blocks: [
+                    { type: 'steps', items: [
+                        'Mira primero el estado general del mercado. Con el mercado en contra, hasta los líderes suelen caer.',
+                        'Revisa la amplitud del liderazgo. Si está muy concentrada, sé más selectivo de lo normal.',
+                        'Mira la rotación sectorial y quédate con los dos o tres sectores que están ganando fuerza.',
+                        'Ve a los nuevos líderes y quédate con los de esos sectores. Ahí está el cruce más interesante.',
+                        'Antes de decidir nada, analiza cada candidato de verdad — negocio, gráfico, valoración. Esta herramienta no ha mirado ninguna de esas cosas.',
+                        'Por último, revisa tus posiciones. Cualquiera que haya perdido el liderazgo merece una segunda mirada.',
+                    ]},
+                ]
+            },
+            {
+                heading: 'Los cuatro errores típicos',
+                blocks: [
+                    { type: 'table', headers: ['Error', 'Por qué falla'], rows: [
+                        ['Comprar el rezagado porque «está barato»', 'Un año haciéndolo peor que el mercado rara vez es un descuento. Suele ser una razón.'],
+                        ['Confundir percentil con rentabilidad', 'En un mercado bajista, los líderes pierden dinero. Solo pierden menos.'],
+                        ['Vender en cuanto baja un puesto', 'El percentil se mueve también cuando suben los demás. Mira el precio antes de reaccionar.'],
+                        ['Comprar solo por fuerza relativa', 'Esta herramienta no sabe nada del negocio. Un valor puede ser el más fuerte del índice y estar en pérdidas.'],
+                    ]},
+                ]
+            },
+            {
+                heading: 'Cómo se combina con el resto',
+                blocks: [
+                    { type: 'text', content: 'La fuerza relativa es un filtro de partida, no una decisión. Encaja bien delante de otras herramientas: el buscador de valores mira si además el negocio crece, la ficha de análisis mira la empresa por dentro, y el semáforo del mercado dice si es momento de comprar algo.' },
+                    { type: 'tip', label: 'LA IDEA DE FONDO', content: 'Ninguna de estas pantallas decide por ti. Lo que hacen es reducir quinientas posibilidades a unas pocas y decirte por qué. La última mirada, la que de verdad importa, sigue siendo tuya.' },
+                ]
+            },
+        ]
+    },
 };

@@ -141,4 +141,9 @@ export const LESSON_INDEX = {
     '28-3': { title: 'Cómo Leer la Tabla del Buscador', words: 543 },
     '28-4': { title: 'El Análisis Individual', words: 454 },
     '28-5': { title: 'Cómo Usarlo Sin Hacerse Daño', words: 683 },
+    '29-1': { title: 'Qué es la Fuerza Relativa', words: 506 },
+    '29-2': { title: 'El Percentil — Qué Significa Ese Número', words: 445 },
+    '29-3': { title: 'Cómo Leer la Pantalla', words: 474 },
+    '29-4': { title: 'De la Foto a la Película', words: 593 },
+    '29-5': { title: 'Tu Cartera y Cómo Usarlo Sin Hacerse Daño', words: 486 },
 };
