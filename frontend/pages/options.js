@@ -186,45 +186,153 @@ async function loadTicker(ticker, period) {
         // GEX en paralelo, sin bloquear el render de flujo si falla o
         // tarda -- es una sección adicional, no crítica para la vista
         // principal (mismo criterio de resiliencia que el resto del proyecto).
+        const gexQs = new URLSearchParams({ max_dte: _gexParams.max_dte });
+        if (_gexParams.strike_range) gexQs.set('strike_range', _gexParams.strike_range);
         const [flowRes, gexRes] = await Promise.all([
             fetch('/api/v1/options/ticker-flow/' + ticker + '?period=' + period, { headers: authHeader() }),
-            fetch('/api/v1/options/gex/' + ticker, { headers: authHeader() }).catch(() => null),
+            fetch(`/api/v1/options/gex/${ticker}?${gexQs}`, { headers: authHeader() }).catch(() => null),
         ]);
         const data = await flowRes.json();
         const gex  = gexRes ? await gexRes.json().catch(() => ({ ok: false })) : { ok: false };
-        if (!data.ok) { body.innerHTML = errorMessage(data.error || 'Sin datos'); return; }
-        body.innerHTML = renderTicker(data) + renderGex(gex);
-        wireTickerPeriods(body);
+        // GEX/DEX se pintan AUNQUE no haya histórico de flujo para el ticker:
+        // se calculan sobre la cadena de opciones en vivo, no sobre lo que el
+        // escaneo nocturno haya llegado a registrar. Antes un `return` aquí
+        // escondía toda la sección para cualquier ticker sin señales
+        // guardadas, que es justo cuando más útil es tener el perfil.
+        const cabecera = data.ok ? renderTicker(data) : errorMessage(data.error || 'Sin datos de flujo');
+        // El bloque GEX/DEX va en su propio contenedor para poder recargarlo
+        // solo a él al cambiar Max DTE o el rango de strikes, sin volver a
+        // pedir todo el flujo del ticker.
+        body.innerHTML = cabecera + '<div id="gex-block">' + renderGex(gex) + '</div>';
+        if (data.ok) wireTickerPeriods(body);
+        wireGex(body.querySelector('#gex-block'), ticker);
     } catch (e) {
         body.innerHTML = errorMessage(e.message);
     }
 }
 
-function renderGex(gex) {
-    if (!gex || !gex.ok) return '';   // silencioso si falla -- GEX es un extra, no rompe la vista principal
-    const color = gex.total_gex >= 0 ? 'var(--color-accent)' : '#f23645';
-    const regimenTxt = gex.regimen === 'POSITIVO'
-        ? 'Dealers tienden a amortiguar el movimiento (compran en caídas, venden en subidas)'
-        : 'Dealers tienden a amplificar el movimiento (venden en caídas, compran en subidas)';
-    const maxAbs = Math.max(...gex.by_strike.map(x => Math.abs(x.gex)), 1);
-    const rows = gex.by_strike.map(r => {
-        const barColor = r.gex >= 0 ? 'var(--color-accent)' : '#f23645';
-        const pct = Math.abs(r.gex) / maxAbs * 100;
-        return `<div style="display:grid;grid-template-columns:80px 1fr 90px;gap:8px;padding:5px 14px;align-items:center;font-size:11px;">
-            <span style="color:var(--color-text);">$${esc(r.strike)}</span>
-            <div style="background:var(--color-bg,#0a0a0a);border-radius:3px;height:6px;"><div style="height:100%;width:${pct}%;background:${barColor};border-radius:3px;"></div></div>
-            <span style="color:${barColor};text-align:right;">${esc(r.gex_fmt)}</span>
+// Parámetros de la vista GEX/DEX, equivalentes a los controles de
+// tradingedge.club. strike_range vacío = rango automático (±12% del spot,
+// lo decide el backend) -- un ±15 fijo no significa lo mismo en un ticker
+// de $5 que en uno de $900.
+let _gexParams = { max_dte: 50, strike_range: '' };
+
+function _fmtExp(v) {
+    if (!v) return '$0';          // sin signo: un "+$0" no significa nada
+    const s = v > 0 ? '+' : '-';
+    const a = Math.abs(v);
+    if (a >= 1e9) return `${s}$${(a / 1e9).toFixed(2)}B`;
+    if (a >= 1e6) return `${s}$${(a / 1e6).toFixed(1)}M`;
+    if (a >= 1e3) return `${s}$${(a / 1e3).toFixed(0)}K`;
+    return `${s}$${a.toFixed(0)}`;
+}
+
+/** Gráfico de barras divergentes por strike: puts a la izquierda, calls a la
+ *  derecha, el strike en el centro. Mismo reparto visual que la herramienta
+ *  del PDF -- calls y puts SEPARADAS, no neteadas, que es justo lo que se
+ *  pierde al mostrar solo el neto. */
+function expChart(titulo, rows, keyCall, keyPut, spot, tooltipKey) {
+    const maxAbs = Math.max(...rows.map(r => Math.max(Math.abs(r[keyCall]), Math.abs(r[keyPut]))), 1);
+    // El strike más cercano al spot se resalta: es la referencia para leer
+    // todo el perfil y a ojo no siempre es evidente cuál es.
+    let iSpot = 0;
+    rows.forEach((r, i) => { if (Math.abs(r.strike - spot) < Math.abs(rows[iSpot].strike - spot)) iSpot = i; });
+    const barras = rows.map((r, i) => {
+        const pc = Math.abs(r[keyCall]) / maxAbs * 100;
+        const pp = Math.abs(r[keyPut])  / maxAbs * 100;
+        const esSpot = i === iSpot;
+        const bg = esSpot ? 'background:rgba(128,128,128,0.14);' : '';
+        return `<div style="display:grid;grid-template-columns:1fr 66px 1fr;gap:6px;align-items:center;padding:2px 14px;font-size:10px;${bg}">
+            <div style="display:flex;justify-content:flex-end;"><div title="Puts ${esc(_fmtExp(r[keyPut]))}" style="height:9px;width:${pp}%;background:#f23645;border-radius:2px 0 0 2px;"></div></div>
+            <span style="text-align:center;color:${esSpot ? 'var(--color-text)' : 'var(--color-muted)'};font-weight:${esSpot ? '700' : '400'};">${esc(r.strike)}${esSpot ? ' ◄' : ''}</span>
+            <div><div title="Calls ${esc(_fmtExp(r[keyCall]))}" style="height:9px;width:${pc}%;background:var(--color-accent);border-radius:0 2px 2px 0;"></div></div>
         </div>`;
     }).join('');
     return `
     <div style="background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius);overflow:hidden;margin-top:1rem;">
-        <div style="padding:10px 14px;border-bottom:1px solid var(--color-border);display:flex;justify-content:space-between;align-items:center;">
-            <span style="color:var(--color-muted);font-size:11px;letter-spacing:0.06em;">GAMMA EXPOSURE (GEX) ${tt('options-gex')}</span>
-            <span style="color:${color};font-size:16px;font-weight:700;">${esc(gex.total_gex_fmt)} <span style="font-size:10px;color:var(--color-muted);font-weight:400;">/ 1% mov.</span></span>
+        <div style="padding:10px 14px;border-bottom:1px solid var(--color-border);display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;">
+            <span style="color:var(--color-muted);font-size:11px;letter-spacing:0.06em;">${esc(titulo)} ${tooltipKey ? tt(tooltipKey) : ''}</span>
+            <span style="font-size:10px;color:var(--color-muted);">
+                <span style="color:#f23645;">■</span> PUTS &nbsp; <span style="color:var(--color-accent);">■</span> CALLS
+            </span>
         </div>
-        <div style="padding:8px 14px;font-size:11px;color:var(--color-muted);border-bottom:1px solid var(--color-border);">${esc(regimenTxt)}</div>
-        ${rows}
+        <div style="padding:6px 0;">${barras}</div>
     </div>`;
+}
+
+function renderGex(gex) {
+    // Los controles se pintan SIEMPRE, aunque la consulta falle: si un
+    // Max DTE o un rango demasiado estrecho deja la cadena vacía, el usuario
+    // tiene que poder ampliarlo sin recargar la página.
+    const controles = `
+    <div style="display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap;padding:10px 14px;background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius);margin-top:1rem;">
+        <label style="font-size:10px;color:var(--color-muted);display:flex;flex-direction:column;gap:3px;">MAX DTE (días)
+            <input id="gex-dte" type="number" min="1" max="365" value="${esc(_gexParams.max_dte)}" style="width:80px;padding:4px 6px;background:var(--color-bg);color:var(--color-text);border:1px solid var(--color-border);border-radius:3px;font-size:11px;">
+        </label>
+        <label style="font-size:10px;color:var(--color-muted);display:flex;flex-direction:column;gap:3px;">RANGO STRIKES (± $)
+            <input id="gex-range" type="number" min="0.5" step="0.5" placeholder="auto" value="${esc(_gexParams.strike_range)}" style="width:90px;padding:4px 6px;background:var(--color-bg);color:var(--color-text);border:1px solid var(--color-border);border-radius:3px;font-size:11px;">
+        </label>
+        <button id="gex-go" style="padding:5px 14px;background:var(--color-accent);color:var(--color-bg);border:none;border-radius:3px;font-size:11px;font-weight:700;cursor:pointer;">GENERAR</button>
+    </div>`;
+
+    if (!gex || !gex.ok) {
+        return controles + `<div style="padding:12px 14px;font-size:11px;color:var(--color-muted);">${esc(gex && gex.error ? gex.error : 'Sin datos de GEX/DEX para este ticker.')}</div>`;
+    }
+
+    const gexColor = gex.total_gex >= 0 ? 'var(--color-accent)' : '#f23645';
+    const regimenTxt = gex.regimen === 'POSITIVO'
+        ? 'GEX positivo: los dealers tienden a amortiguar el movimiento (compran en caídas, venden en subidas)'
+        : 'GEX negativo: los dealers tienden a amplificar el movimiento (venden en caídas, compran en subidas)';
+    const kpi = (label, valor, color, nota) => `
+        <div style="flex:1;min-width:120px;">
+            <div style="font-size:9px;color:var(--color-muted);letter-spacing:0.06em;">${esc(label)}</div>
+            <div style="font-size:15px;font-weight:700;color:${color};">${esc(valor)}</div>
+            ${nota ? `<div style="font-size:9px;color:var(--color-muted);">${esc(nota)}</div>` : ''}
+        </div>`;
+    const dte = gex.exp_days_range ? `${gex.exp_days_range[0]}-${gex.exp_days_range[1]} días` : '';
+
+    const cabecera = `
+    <div style="display:flex;gap:14px;flex-wrap:wrap;padding:12px 14px;background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius);margin-top:1rem;">
+        ${kpi('SPOT', '$' + gex.price, 'var(--color-text)', gex.ticker)}
+        ${kpi('GEX TOTAL', gex.total_gex_fmt, gexColor, 'por 1% de movimiento')}
+        ${kpi('DEX TOTAL', gex.total_dex_fmt, gex.total_dex >= 0 ? 'var(--color-accent)' : '#f23645', 'delta neta del OI')}
+        ${kpi('CALL/PUT', gex.call_put_ratio != null ? gex.call_put_ratio : 'N/D', 'var(--color-text)', 'sobre open interest')}
+        ${kpi('VENCIMIENTOS', dte || 'N/D', 'var(--color-text)', '± $' + gex.strike_range + ' en strikes')}
+    </div>
+    <div style="padding:8px 14px;font-size:11px;color:var(--color-muted);">${esc(regimenTxt)}</div>`;
+
+    return controles + cabecera
+        + expChart('GAMMA EXPOSURE (GEX)', gex.by_strike, 'gex_call', 'gex_put', gex.price, 'options-gex')
+        + expChart('DELTA EXPOSURE (DEX)', gex.by_strike, 'dex_call', 'dex_put', gex.price, 'options-dex');
+}
+
+async function loadGex(ticker) {
+    const bloque = document.querySelector('#gex-block');
+    if (!bloque) return;
+    const qs = new URLSearchParams({ max_dte: _gexParams.max_dte });
+    if (_gexParams.strike_range) qs.set('strike_range', _gexParams.strike_range);
+    let gex = { ok: false };
+    try {
+        const res = await fetch(`/api/v1/options/gex/${ticker}?${qs}`, { headers: authHeader() });
+        gex = await res.json();
+    } catch (e) {
+        gex = { ok: false, error: e.message };
+    }
+    bloque.innerHTML = renderGex(gex);
+    wireGex(bloque, ticker);
+}
+
+function wireGex(scope, ticker) {
+    const go = scope.querySelector('#gex-go');
+    if (!go) return;
+    go.addEventListener('click', () => {
+        const dte = parseInt(scope.querySelector('#gex-dte').value, 10);
+        const rng = scope.querySelector('#gex-range').value.trim();
+        _gexParams.max_dte      = (dte >= 1 && dte <= 365) ? dte : 50;
+        _gexParams.strike_range = rng;
+        go.textContent = 'CARGANDO…';
+        loadGex(ticker);
+    });
 }
 
 function wireTickerPeriods(scope) {

@@ -16,6 +16,68 @@ MASSIVE_KEY  = ""   # unused — placeholder for future provider
 MASSIVE_BASE = "https://api.massive.com"
 DB_PATH      = os.path.join(os.path.dirname(__file__), '..', 'options_flow.db')
 
+# Una cadena de opciones no se puede recuperar después: yfinance solo sirve la
+# de HOY, así que lo que no se guardó esa noche se perdió para siempre. Por eso
+# la retención es larga -- 3 años -- en vez del mínimo que harían falta: la
+# lectura más profunda de todo el módulo mira 90 días (get_history_from_db,
+# get_repeat_signals y get_ticker_history_summary), así que sobra muchísimo
+# margen. No es para ahorrar disco (~150 filas/día, unos pocos MB al año), es
+# para que la tabla tenga un techo en vez de crecer indefinidamente.
+# Ver auditoría Options Flow #17.
+RETENTION_DAYS = 1095
+
+_SESION_CACHE: dict = {"fecha": None, "ts": 0.0}
+
+
+def _fecha_sesion() -> str:
+    """Fecha de la última SESIÓN REAL de mercado, no la del reloj del proceso.
+
+    `datetime.now()` sin zona es UTC dentro del contenedor. El cron dispara a
+    las 23:00 UTC, pero GitHub Actions se retrasa con frecuencia: pasada la
+    medianoche UTC el scan se archivaría bajo el día siguiente aunque describa
+    la sesión anterior. Y en un festivo el cron corre igual (va de lunes a
+    viernes) y vuelve a descargar el cierre del día previo, así que fechar esas
+    filas en el festivo desplazaría una sesión todo el histórico.
+
+    Se resuelve como ya se resolvió en RS/RW #6 y CANSLIM: la fecha sale DEL
+    DATO, del índice del propio benchmark, que por definición solo contiene
+    sesiones reales -- así no hace falta ningún calendario de festivos. Si SPY
+    no responde se cae a la fecha en horario de Nueva York, que sigue siendo
+    mejor que UTC, en vez de fabricar una fecha.
+    """
+    ahora = time.time()
+    if _SESION_CACHE["fecha"] and (ahora - _SESION_CACHE["ts"]) < 3600:
+        return _SESION_CACHE["fecha"]
+    fecha = None
+    try:
+        hist = yf.Ticker("SPY").history(period="5d")
+        if not hist.empty:
+            fecha = hist.index[-1].strftime("%Y-%m-%d")
+    except Exception as e:
+        print(f"[OptionsFlow] No se pudo leer la última sesión de SPY: {type(e).__name__}: {e}")
+    if not fecha:
+        from zoneinfo import ZoneInfo
+        fecha = datetime.now(ZoneInfo("America/New_York")).strftime("%Y-%m-%d")
+    _SESION_CACHE["fecha"] = fecha
+    _SESION_CACHE["ts"]    = ahora
+    return fecha
+
+
+def purgar_antiguos(days: int = RETENTION_DAYS) -> int:
+    """Borra las filas más antiguas que `days`. Se llama al final de cada
+    escaneo -- mismo patrón que insider_service.py::_cleanup_old_transactions."""
+    try:
+        corte = (datetime.now() - timedelta(days=days)).strftime('%Y-%m-%d')
+        conn  = sqlite3.connect(DB_PATH)
+        cur   = conn.execute('DELETE FROM options_flow WHERE scan_date < ?', (corte,))
+        borradas = cur.rowcount or 0
+        conn.commit()
+        conn.close()
+        return borradas
+    except Exception as e:
+        print(f"[OptionsFlow] Purga fallida: {type(e).__name__}: {e}")
+        return 0
+
 # ── UNIVERSO ──────────────────────────────────────────────────────────────────
 
 WATCHLIST = [
@@ -138,15 +200,24 @@ def init_db():
     conn.commit()
     conn.close()
 
-def save_flow_to_db(flow_items: list, scan_ts: str):
+def save_flow_to_db(flow_items: list, scan_ts: str, scan_date: str = None):
+    """`scan_date` es la fecha de la SESIÓN que describen los datos; `scan_ts`
+    es cuándo corrió el proceso. Antes la primera se derivaba de la segunda
+    (`scan_ts[:10]`), que es el reloj UTC del contenedor -- ver _fecha_sesion()
+    y auditoría Options Flow #11."""
     init_db()
-    scan_date = scan_ts[:10]
+    if not scan_date:
+        scan_date = scan_ts[:10]
     conn      = sqlite3.connect(DB_PATH)
     inserted  = 0
     for item in flow_items:
+        # `type` va en la clave: una call y una put pueden compartir strike,
+        # vencimiento y acción perfectamente, y sin esta columna se
+        # consideraban la misma fila -- la segunda se descartaba en silencio.
+        # Ver auditoría Options Flow #6.
         existing = conn.execute(
-            'SELECT id FROM options_flow WHERE scan_date=? AND ticker=? AND strike=? AND exp=? AND action=?',
-            (scan_date, item['ticker'], item['strike'], item['exp'], item['action'])
+            'SELECT id FROM options_flow WHERE scan_date=? AND ticker=? AND strike=? AND exp=? AND type=? AND action=?',
+            (scan_date, item['ticker'], item['strike'], item['exp'], item['type'], item['action'])
         ).fetchone()
         if existing: continue
         conn.execute('''
@@ -435,7 +506,12 @@ def run_and_save_scan() -> dict:
         print(f"[OptionsFlow] Escaneo fallido: {data.get('error', 'desconocido')}")
         return {"ok": False}
     resultado = save_current_scan(data)
-    print(f"[OptionsFlow] Escaneo guardado: {resultado['inserted']}/{resultado['total']} entradas nuevas")
+    print(f"[OptionsFlow] Escaneo guardado: {resultado['inserted']}/{resultado['total']} entradas nuevas "
+          f"(sesión {data.get('scan_date')})")
+    purgadas = purgar_antiguos()
+    if purgadas:
+        print(f"[OptionsFlow] Purgadas {purgadas} filas con más de {RETENTION_DAYS} días")
+    resultado["purgadas"] = purgadas
     return resultado
 
 # ────────────────────────────────────────────────────────────────────────────
@@ -584,9 +660,23 @@ def get_ticker_history_summary(ticker: str) -> dict:
     }
 
 def _calc_sentiment_momentum(records: list) -> dict:
-    """Compara bull_prem hoy vs ayer para detectar cambio de sentimiento."""
-    today = datetime.now().strftime('%Y-%m-%d')
-    yesterday = (datetime.now() - timedelta(days=1)).strftime('%Y-%m-%d')
+    """Cambio de sentimiento entre los dos escaneos MÁS RECIENTES que existan.
+
+    Antes comparaba `hoy` contra `datetime.now() - 1 día`, o sea el día natural
+    anterior. El cron solo corre de lunes a viernes, así que un lunes comparaba
+    contra el domingo -- que nunca tiene scan -- y devolvía "sin datos"; lo
+    mismo tras cualquier festivo o fallo puntual del escaneo. En la práctica el
+    indicador estaba apagado buena parte de la semana sin decirlo.
+
+    Ahora se toman las dos fechas de sesión presentes en los propios datos, sin
+    suponer nada sobre el calendario. Se devuelven ambas fechas para que la UI
+    pueda decir contra qué se está comparando en vez de dar por hecho "ayer".
+    Ver auditoría Options Flow #12.
+    """
+    fechas = sorted({r['scan_date'] for r in records if r.get('scan_date')}, reverse=True)
+    if len(fechas) < 2:
+        return {"available": False}
+    fecha_actual, fecha_previa = fechas[0], fechas[1]
 
     def prem_score(recs):
         bull = sum(r['premium'] for r in recs
@@ -598,22 +688,28 @@ def _calc_sentiment_momentum(records: list) -> dict:
         tot = bull + bear
         return (bull - bear) / tot if tot > 0 else None
 
-    today_recs = [r for r in records if r['scan_date'] == today]
-    yest_recs  = [r for r in records if r['scan_date'] == yesterday]
-    today_nps  = prem_score(today_recs)
-    yest_nps   = prem_score(yest_recs)
+    today_nps = prem_score([r for r in records if r['scan_date'] == fecha_actual])
+    yest_nps  = prem_score([r for r in records if r['scan_date'] == fecha_previa])
 
     if today_nps is None or yest_nps is None:
         return {"available": False}
 
     delta = today_nps - yest_nps
     direction = "mejorando" if delta > 0.1 else "empeorando" if delta < -0.1 else "estable"
+    try:
+        dias_entre = (datetime.strptime(fecha_actual, '%Y-%m-%d')
+                      - datetime.strptime(fecha_previa, '%Y-%m-%d')).days
+    except Exception:
+        dias_entre = None
     return {
-        "available":  True,
-        "today_nps":  round(today_nps * 100, 1),
-        "yest_nps":   round(yest_nps * 100, 1),
-        "delta":      round(delta * 100, 1),
-        "direction":  direction,
+        "available":     True,
+        "today_nps":     round(today_nps * 100, 1),
+        "yest_nps":      round(yest_nps * 100, 1),
+        "delta":         round(delta * 100, 1),
+        "direction":     direction,
+        "fecha_actual":  fecha_actual,
+        "fecha_previa":  fecha_previa,
+        "dias_entre":    dias_entre,
     }
 
 # ── HELPERS ───────────────────────────────────────────────────────────────────
@@ -636,13 +732,31 @@ RISK_FREE_RATE = 0.045  # aproximado -- gamma es poco sensible a r, no
 def _norm_pdf(x: float) -> float:
     return math.exp(-x * x / 2) / math.sqrt(2 * math.pi)
 
+def _norm_cdf(x: float) -> float:
+    """N(x), normal acumulada. `math.erf` es de la librería estándar -- no
+    hace falta scipy, que no es dependencia del proyecto."""
+    return 0.5 * (1.0 + math.erf(x / math.sqrt(2.0)))
+
+def _d1(S: float, K: float, T: float, sigma: float, r: float = RISK_FREE_RATE) -> float:
+    return (math.log(S / K) + (r + sigma ** 2 / 2) * T) / (sigma * math.sqrt(T))
+
 def _bs_gamma(S: float, K: float, T: float, sigma: float, r: float = RISK_FREE_RATE) -> float:
     """Gamma de Black-Scholes -- idéntica para call y put al mismo
     strike/vencimiento. T en años, sigma = IV en decimal (0.30, no 30)."""
     if S <= 0 or K <= 0 or T <= 0 or sigma <= 0:
         return 0.0
-    d1 = (math.log(S / K) + (r + sigma ** 2 / 2) * T) / (sigma * math.sqrt(T))
-    return _norm_pdf(d1) / (S * sigma * math.sqrt(T))
+    return _norm_pdf(_d1(S, K, T, sigma, r)) / (S * sigma * math.sqrt(T))
+
+def _bs_delta(S: float, K: float, T: float, sigma: float, es_call: bool,
+              r: float = RISK_FREE_RATE) -> float:
+    """Delta de Black-Scholes. Call: N(d1), entre 0 y +1. Put: N(d1)-1,
+    entre -1 y 0. A diferencia de gamma, el signo distingue call de put por
+    sí solo -- por eso el DEX no necesita ningún convenio de inventario de
+    dealer para tener sentido (ver docstring de get_gamma_exposure)."""
+    if S <= 0 or K <= 0 or T <= 0 or sigma <= 0:
+        return 0.0
+    nd1 = _norm_cdf(_d1(S, K, T, sigma, r))
+    return nd1 if es_call else nd1 - 1.0
 
 def _fmt_gex(val: float) -> str:
     """Como _fmt_premium() pero con signo -- GEX puede ser negativo."""
@@ -653,24 +767,41 @@ def _fmt_gex(val: float) -> str:
     if v >= 1_000:         return f"{sign}${v/1_000:.0f}K"
     return f"{sign}${v:.0f}"
 
-def get_gamma_exposure(ticker: str) -> dict:
-    """GEX (Gamma Exposure) agregada por strike -- estimación de cuánta
-    gamma tienen los dealers según el convenio estándar de la industria
-    (calls = dealer largo gamma, puts = dealer corto gamma; ver
-    tooltip "options-gex" para el porqué -- los datos públicos de OI no
-    distinguen si el dealer está comprado o vendido en cada contrato,
-    esto es una estimación ampliamente usada, no una observación directa
-    de la posición real). Positivo → los dealers tienden a amortiguar el
-    movimiento (venden en subidas, compran en caídas). Negativo → tienden
-    a amplificarlo. Fórmula verificada contra SpotGamma/SqueezeMetrics
-    (quien acuñó el término): GEX = gamma × OI × 100 × spot² × 0.01.
+_GEX_MAX_EXPIRACIONES = 8   # techo de llamadas a option_chain() por petición
+_GEX_MAX_STRIKES      = 40  # strikes pintados, los más cercanos al spot
 
-    NO usa _process_chain() -- necesita el open interest de TODA la
-    cadena (incluidos contratos con volumen bajo/nulo hoy pero mucho OI
-    acumulado), no solo los contratos que pasarían el filtro de volumen/
-    prima del escaneo de flujo, que descartaría justo lo que más pesa
-    aquí. Ver sesión 24/07/2026."""
+def get_gamma_exposure(ticker: str, max_dte: int = 50,
+                       strike_range: float = None) -> dict:
+    """GEX y DEX por strike, con calls y puts separadas.
+
+    GEX (Gamma Exposure) = gamma × OI × 100 × spot² × 0.01. Fórmula
+    verificada contra SpotGamma/SqueezeMetrics, quien acuñó el término. El
+    signo sale de un CONVENIO de inventario de dealer (calls = dealer largo
+    gamma, puts = dealer corto), porque los datos públicos de OI no dicen si
+    el dealer está comprado o vendido en cada contrato. Es una estimación
+    ampliamente usada, no una observación directa -- el tooltip
+    "options-gex" lo dice explícitamente y debe seguir diciéndolo. GEX neto
+    positivo → los dealers tienden a amortiguar el movimiento (venden en
+    subidas, compran en caídas); negativo → tienden a amplificarlo.
+
+    DEX (Delta Exposure) = delta × OI × 100 × spot. **No necesita ningún
+    convenio de dealer**: el signo lo da la propia delta (call positiva, put
+    negativa), así que esto es literalmente la exposición direccional del
+    open interest, no una inferencia sobre quién está al otro lado. Es una
+    afirmación más fuerte que la del GEX y conviene no mezclarlas.
+
+    `max_dte` (días hasta vencimiento) y `strike_range` (± en unidades de
+    precio, no en porcentaje ni en número de strikes) replican los dos
+    controles de la herramienta de tradingedge.club. `strike_range=None`
+    calcula un rango automático del ±12% del spot -- un ±15 fijo es
+    razonable para un subyacente de $130 y absurdo para uno de $5 o de $900.
+
+    NO usa _process_chain() -- necesita el open interest de TODA la cadena
+    (incluidos contratos sin volumen hoy pero con mucho OI acumulado), no
+    solo los que pasarían el filtro de volumen/prima del escaneo de flujo,
+    que descartaría justo lo que más pesa aquí."""
     try:
+        max_dte = max(1, min(int(max_dte or 50), 365))
         tk    = yf.Ticker(ticker.upper())
         price = 0.0
         try:
@@ -687,29 +818,35 @@ def get_gamma_exposure(ticker: str) -> dict:
         if not expirations:
             return {"ok": False, "error": f"Sin cadena de opciones para {ticker}"}
 
+        # ±12% del spot por defecto: un ±15 fijo (el valor del PDF, para un
+        # subyacente de ~$130) no significa lo mismo en un ticker de $5 que
+        # en uno de $900.
+        rango = float(strike_range) if strike_range else round(price * 0.12, 2)
+        if rango <= 0:
+            rango = round(price * 0.12, 2)
+        k_min, k_max = price - rango, price + rango
+
         today = datetime.now().date()
-        gex_by_strike: dict = {}
-        total_gex = 0.0
+        por_strike: dict = {}
+        oi_call = oi_put = 0
         exp_days_min, exp_days_max = None, None
 
-        # Filtrar por 7-180 días ANTES de recortar a 5 -- tickers con
-        # vencimientos diarios (SPY, QQQ...) tienen sus primeros 5
-        # vencimientos cronológicos todos por debajo de 7 días, así que
-        # recortar antes de filtrar (como hacía _process_chain) dejaba la
-        # cadena completa vacía para justo los subyacentes con más
-        # liquidez de opciones del mercado. Verificado con datos reales:
-        # SPY fallaba con "sin OI/IV suficiente" hasta este fix.
+        # Filtrar por días hasta vencimiento ANTES de recortar el número de
+        # vencimientos -- tickers con vencimientos diarios (SPY, QQQ...)
+        # tienen sus primeros vencimientos cronológicos todos muy cortos, así
+        # que recortar antes de filtrar dejaba la cadena vacía para justo los
+        # subyacentes con más liquidez de opciones del mercado.
         valid_exps = []
         for exp in expirations:
             try:
                 exp_date = datetime.strptime(exp, '%Y-%m-%d').date()
                 exp_days = (exp_date - today).days
-                if 7 <= exp_days <= 180:
+                if 0 <= exp_days <= max_dte:
                     valid_exps.append((exp, exp_days))
             except Exception:
                 continue
 
-        for exp, exp_days in valid_exps[:5]:
+        for exp, exp_days in valid_exps[:_GEX_MAX_EXPIRACIONES]:
             chain = None
             for attempt in range(3):   # mismo patrón de reintentos que _process_chain
                 try:
@@ -719,31 +856,62 @@ def get_gamma_exposure(ticker: str) -> dict:
                     if attempt < 2: time.sleep(1.5)
             if chain is None: continue
 
-            T = exp_days / 365.0
-            for opt_type, df, sign in [('call', chain.calls, 1), ('put', chain.puts, -1)]:
+            # Un vencimiento de hoy (0 DTE) tiene T=0 y las griegas se van a
+            # infinito. Se le da medio día en vez de descartarlo: en tickers
+            # con vencimiento diario es donde más gamma hay concentrada.
+            T = max(exp_days, 0.5) / 365.0
+            for es_call, df in [(True, chain.calls), (False, chain.puts)]:
                 for _, row in df.iterrows():
                     oi     = _safe(row.get('openInterest', 0))
                     iv     = _safe(row.get('impliedVolatility', 0))
                     strike = _safe(row.get('strike', 0))
                     if oi <= 0 or iv <= 0 or strike <= 0: continue
-                    gamma   = _bs_gamma(price, strike, T, iv)
-                    contrib = sign * gamma * oi * 100 * price ** 2 * 0.01
-                    gex_by_strike[strike] = gex_by_strike.get(strike, 0.0) + contrib
-                    total_gex += contrib
+                    if not (k_min <= strike <= k_max): continue
+
+                    gamma = _bs_gamma(price, strike, T, iv)
+                    delta = _bs_delta(price, strike, T, iv, es_call)
+                    # GEX: el signo es el convenio de dealer (call larga,
+                    # put corta). DEX: el signo ya viene en la propia delta.
+                    gex = (1 if es_call else -1) * gamma * oi * 100 * price ** 2 * 0.01
+                    dex = delta * oi * 100 * price
+
+                    s = por_strike.setdefault(strike, {"gex_call": 0.0, "gex_put": 0.0,
+                                                       "dex_call": 0.0, "dex_put": 0.0})
+                    if es_call:
+                        s["gex_call"] += gex; s["dex_call"] += dex; oi_call += oi
+                    else:
+                        s["gex_put"]  += gex; s["dex_put"]  += dex; oi_put  += oi
 
             exp_days_min = exp_days if exp_days_min is None else min(exp_days_min, exp_days)
             exp_days_max = exp_days if exp_days_max is None else max(exp_days_max, exp_days)
 
-        if not gex_by_strike:
-            return {"ok": False, "error": f"Sin OI/IV suficiente para calcular GEX de {ticker}"}
+        if not por_strike:
+            return {"ok": False,
+                    "error": f"Sin OI/IV suficiente para {ticker.upper()} con "
+                             f"Max DTE {max_dte} y rango ±{rango}"}
 
-        by_strike = sorted(
-            [{"strike": k, "gex": round(v, 0), "gex_fmt": _fmt_gex(v)} for k, v in gex_by_strike.items()],
-            key=lambda x: -abs(x["gex"])
-        )[:15]
-        by_strike.sort(key=lambda x: x["strike"])   # tras recortar al top 15, ordenar por strike para la tabla
+        filas = []
+        for k, v in por_strike.items():
+            gex_net = v["gex_call"] + v["gex_put"]
+            dex_net = v["dex_call"] + v["dex_put"]
+            filas.append({
+                "strike":   k,
+                "gex_call": round(v["gex_call"], 0), "gex_put": round(v["gex_put"], 0),
+                "dex_call": round(v["dex_call"], 0), "dex_put": round(v["dex_put"], 0),
+                "gex":      round(gex_net, 0), "gex_fmt": _fmt_gex(gex_net),
+                "dex":      round(dex_net, 0), "dex_fmt": _fmt_gex(dex_net),
+            })
+        # Si el rango deja demasiados strikes, se conservan los más cercanos
+        # al spot (no los de mayor GEX: la forma del perfil alrededor del
+        # precio es justo lo que se está mirando, y quitarle los huecos
+        # intermedios la falsearía).
+        filas.sort(key=lambda x: abs(x["strike"] - price))
+        filas = filas[:_GEX_MAX_STRIKES]
+        filas.sort(key=lambda x: x["strike"])
 
-        regimen = "POSITIVO" if total_gex > 0 else "NEGATIVO"
+        total_gex = sum(f["gex"] for f in filas)
+        total_dex = sum(f["dex"] for f in filas)
+        regimen   = "POSITIVO" if total_gex > 0 else "NEGATIVO"
 
         return {
             "ok":            True,
@@ -751,8 +919,19 @@ def get_gamma_exposure(ticker: str) -> dict:
             "price":         round(price, 2),
             "total_gex":     round(total_gex, 0),
             "total_gex_fmt": _fmt_gex(total_gex),
+            "total_dex":     round(total_dex, 0),
+            "total_dex_fmt": _fmt_gex(total_dex),
             "regimen":       regimen,
-            "by_strike":     by_strike,
+            "by_strike":     filas,
+            "max_dte":       max_dte,
+            "strike_range":  rango,
+            "oi_call":       int(oi_call),
+            "oi_put":        int(oi_put),
+            # Ratio sobre OPEN INTEREST (no sobre volumen ni sobre prima) y
+            # solo dentro del rango de strikes pedido -- se dice explícito
+            # porque "call/put ratio" a secas es ambiguo y cada web usa una
+            # base distinta.
+            "call_put_ratio": round(oi_call / oi_put, 2) if oi_put > 0 else None,
             "exp_days_range": [exp_days_min, exp_days_max] if exp_days_min is not None else None,
             "timestamp":     get_timestamp(),
         }
@@ -1102,7 +1281,10 @@ def _process_chain(ticker: str, min_premium: float = 100_000, min_score: int = 4
 def get_options_flow(min_premium: float = 100_000, min_score: int = 4, tickers: list = None) -> dict:
     target  = tickers or WATCHLIST
     results = []
-    scan_ts = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+    # scan_ts = cuándo corrió el proceso. scan_date = qué sesión describen los
+    # datos. No son lo mismo y antes la segunda se derivaba de la primera.
+    scan_ts   = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+    scan_date = _fecha_sesion()
 
     from services.yf_pool import yf_executor
     futures = {yf_executor.submit(_process_chain, t, min_premium, min_score): t for t in target}
@@ -1152,6 +1334,7 @@ def get_options_flow(min_premium: float = 100_000, min_score: int = 4, tickers: 
         "scanned":      len(target),
         "matched":      len(results),
         "scan_ts":      scan_ts,
+        "scan_date":    scan_date,
         "calls_bought": sorted(all_calls_bought, key=lambda x: (-x['score'], -x['premium']))[:50],
         "puts_bought":  sorted(all_puts_bought,  key=lambda x: (-x['score'], -x['premium']))[:30],
         "calls_sold":   sorted(all_calls_sold,   key=lambda x: (-x['score'], -x['premium']))[:30],
@@ -1210,7 +1393,7 @@ def save_current_scan(flow_data: dict) -> dict:
         flow_data.get('calls_sold',   []) +
         flow_data.get('puts_sold',    [])
     )
-    inserted = save_flow_to_db(all_items, flow_data['scan_ts'])
+    inserted = save_flow_to_db(all_items, flow_data['scan_ts'], flow_data.get('scan_date'))
     return {"ok": True, "inserted": inserted, "total": len(all_items)}
 
 def get_options_ticker(ticker: str) -> dict:

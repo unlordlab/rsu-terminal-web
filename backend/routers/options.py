@@ -1,10 +1,15 @@
+import threading
 from fastapi import APIRouter, Depends, Query
-from auth import verify_token
+from auth import verify_token, verify_admin_key
+
+# Un escaneo tarda varios minutos y escribe en options_flow.db. El candado
+# impide que dos disparos solapados corran a la vez sobre la misma base.
+_scan_lock = threading.Lock()
 from services import users_service, watchlist_service
 from services.insider_service import get_confluence_tickers
 from services.options_service import (
-    get_options_flow, get_options_ticker,
-    save_current_scan, get_history_from_db,
+    get_options_ticker,
+    get_history_from_db,
     get_db_stats, get_repeat_signals,
     get_ticker_history_summary, init_db,
     get_options_flow_simple, get_ticker_flow_simple, get_oi_changes,
@@ -50,36 +55,66 @@ async def oi_changes(user=Depends(verify_token)):
     return get_oi_changes()
 
 @router.get("/gex/{ticker}")
-async def gex(ticker: str, user=Depends(verify_token)):
-    return get_gamma_exposure(ticker)
+async def gex(
+    ticker: str,
+    max_dte: int = Query(50, ge=1, le=365),
+    strike_range: float = Query(None, gt=0),
+    user=Depends(verify_token),
+):
+    """GEX y DEX por strike, con calls y puts separadas. Los dos parámetros
+    replican los controles de la herramienta de tradingedge.club: `max_dte`
+    son días hasta vencimiento y `strike_range` es un ± en unidades de
+    PRECIO (no en porcentaje ni en número de strikes). Sin `strike_range` se
+    usa un rango automático del ±12% del spot."""
+    return get_gamma_exposure(ticker, max_dte=max_dte, strike_range=strike_range)
 
 @router.post("/scan-now")
-async def scan_now(user=Depends(verify_token)):
-    """Dispara el escaneo+guardado ahora mismo. Desde la sesión 35, este
-    es el endpoint que llama el cron de GitHub Actions
-    (.github/workflows/options_scan.yml) a hora fija cada tarde tras el
-    cierre de mercado -- antes había un loop en el propio proceso del
-    backend que se auto-programaba 1h tras arrancar y luego cada 24h, así
-    que la hora real dependía de cuándo se había reiniciado el
-    contenedor. También sigue disponible para disparo manual (p.ej. justo
-    después de un deploy, si la base de datos está vacía). Escaneo pesado
-    (~570 tickers vía yfinance), puede tardar varios minutos."""
+async def scan_now(_admin: None = Depends(verify_admin_key)):
+    """Dispara el escaneo+guardado ahora mismo. Lo llama el cron de GitHub
+    Actions (.github/workflows/options_scan.yml) a hora fija tras el cierre.
+
+    DOS CAMBIOS DE SEGURIDAD EL 05/08/2026 (auditoría Options Flow #4):
+
+    1. Pasa de `verify_token` a `verify_admin_key`. Antes, cualquier usuario
+       registrado podía lanzar un escaneo de ~570 tickers contra yfinance
+       tantas veces como quisiera — no roba datos, pero deja el backend
+       ocupado varios minutos y agota el límite de Yahoo para todos. Un
+       escaneo del sistema no es una acción de usuario.
+
+    2. Candado de concurrencia NO BLOQUEANTE. Dos disparos solapados —el
+       cron y un disparo manual, o dos reintentos del workflow— lanzaban dos
+       escaneos completos a la vez contra la misma base y la misma API. Si
+       ya hay uno en marcha se responde diciéndolo, en vez de encolar la
+       petición detrás de varios minutos de descargas.
+
+    El workflow tuvo que cambiar de cabecera: ahora manda X-Admin-Key en vez
+    de Authorization. Requiere el secret ADMIN_KEY en GitHub."""
     from services.options_service import run_and_save_scan
-    return run_and_save_scan()
+    if not _scan_lock.acquire(blocking=False):
+        return {"ok": False, "error": "Ya hay un escaneo en curso; no se lanza otro.", "en_curso": True}
+    try:
+        return run_and_save_scan()
+    finally:
+        _scan_lock.release()
 
-# ── VERSIÓN ANTERIOR — se deja por compatibilidad, ya no la usa el frontend ────
-
-@router.get("/flow")
-async def options_flow(
-    min_premium: float = Query(100000, ge=0),
-    min_score:   int   = Query(4, ge=0, le=10),
-    user=Depends(verify_token)
-):
-    return get_options_flow(min_premium=min_premium, min_score=min_score)
-
-@router.post("/save")
-async def save_scan(body: dict, user=Depends(verify_token)):
-    return save_current_scan(body)
+# ── DOS ENDPOINTS RETIRADOS EL 05/08/2026 (auditoría Options Flow #3 y #5) ────
+#
+# GET /flow — «versión anterior, se deja por compatibilidad». Ejecutaba el
+# escaneo COMPLETO en vivo (~570 tickers contra yfinance) dentro de la
+# petición HTTP, con solo `verify_token`: cualquier usuario registrado podía
+# tumbar el backend y agotar el límite de Yahoo pidiendo una URL. Y no lo
+# llamaba nadie — cero referencias en todo frontend/, comprobado antes de
+# quitarlo.
+#
+# POST /save — aceptaba un cuerpo JSON arbitrario y lo escribía en el
+# histórico de flujo, también con solo `verify_token`. Es decir: cualquier
+# usuario podía inyectar señales falsas en los datos que ven todos los demás,
+# y en el baseline por ticker que alimenta el scoring. Tampoco lo llamaba
+# nadie.
+#
+# Las funciones de servicio NO se tocan: `get_options_flow()` y
+# `save_current_scan()` las sigue usando `run_and_save_scan()`, que es el
+# camino legítimo (cron nocturno). Lo que desaparece es la puerta HTTP.
 
 @router.get("/history")
 async def history(

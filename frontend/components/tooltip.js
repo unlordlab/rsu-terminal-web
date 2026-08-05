@@ -692,7 +692,25 @@ GEX = gamma × Open Interest × 100 × precio² × 0,01, sumado por cada contrat
 ⚠ IMPORTANTE — ES UNA ESTIMACIÓN, NO UN HECHO:
 El convenio "calls = dealer largo gamma, puts = dealer corto gamma" es el estándar de la industria (lo popularizó SqueezeMetrics), pero es una SUPOSICIÓN — los datos públicos de Open Interest no dicen si el dealer está comprado o vendido en cada contrato concreto, solo asumen el caso más común. Trátalo como una lectura orientativa del posicionamiento agregado del mercado, no como la posición real y verificada de los dealers.
 
-Solo se calcula sobre vencimientos de 7 a 180 días (mismo criterio que el resto de Options Flow) — no incluye 0DTE ni LEAPS muy lejanos.`
+QUÉ CONTROLAN LOS DOS CAMPOS DE ARRIBA:
+"Max DTE" son los días hasta vencimiento que entran en el cálculo (por defecto 50). "Rango strikes" es un ± en DÓLARES alrededor del precio actual, no un porcentaje ni un número de strikes: con el precio en $128 y un rango de 15, se miran los strikes de 113 a 143. Dejándolo vacío se usa un rango automático del ±12% del precio, que se adapta a cualquier ticker.
+
+Se leen como mucho los 8 vencimientos más cercanos dentro del Max DTE — cada uno es una descarga aparte, y en subyacentes con vencimiento diario (SPY, QQQ) podrían ser decenas.`
+    },
+
+    "options-dex": {
+        title: "DEX — Delta Exposure",
+        short: "Exposición direccional del open interest: cuánto dinero del subyacente representa la delta acumulada de todos los contratos abiertos, por strike.",
+        long: `DEX suma, para cada strike, la delta de cada contrato multiplicada por su Open Interest y por el precio del subyacente. Responde a: si el precio se mueve un dólar, ¿cuánta exposición direccional hay acumulada en opciones a ese nivel?
+
+FÓRMULA:
+DEX = delta × Open Interest × 100 × precio. La delta sale de Black-Scholes con la IV de cada contrato (yfinance no da los Griegos). Las calls tienen delta entre 0 y +1; las puts, entre -1 y 0.
+
+LA DIFERENCIA IMPORTANTE CON EL GEX:
+El GEX necesita SUPONER de qué lado está el dealer en cada contrato (calls = largo, puts = corto), porque la gamma es idéntica para una call y una put del mismo strike y el signo no puede salir del dato. El DEX no necesita esa suposición: el signo ya viene en la propia delta, positiva en calls y negativa en puts. Por eso el DEX es una afirmación más sólida — es literalmente la delta acumulada del open interest — mientras que el GEX es una estimación del posicionamiento de los dealers. Conviene no leerlos con el mismo grado de confianza.
+
+CÓMO SE LEE EL GRÁFICO:
+Las barras verdes (calls) van a la derecha y las rojas (puts) a la izquierda, SIN netearlas — a propósito. Un strike con mucha call y mucha put se vería casi vacío en un gráfico neteado, y no es lo mismo que un strike donde no hay nada. El strike marcado con ◄ es el más cercano al precio actual.`
     },
 
     "options-net-score": {

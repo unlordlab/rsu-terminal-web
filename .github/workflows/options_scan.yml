@@ -18,9 +18,14 @@ jobs:
     steps:
       - name: Disparar el scan de Options Flow en el backend
         run: |
+          # X-Admin-Key desde el 05/08/2026: el endpoint dejó de aceptar un
+          # token de usuario normal (auditoría Options Flow #4 — cualquier
+          # usuario registrado podía lanzar un escaneo de ~570 tickers).
+          # REQUIERE el secret ADMIN_KEY en GitHub, con el mismo valor que
+          # ADMIN_KEY tiene en el .env del VPS.
           status=$(curl -s -o /tmp/resp.json -w "%{http_code}" -X POST \
             --max-time 1500 \
-            -H "Authorization: Bearer ${{ secrets.BRIEFING_AUTH_TOKEN }}" \
+            -H "X-Admin-Key: ${{ secrets.ADMIN_KEY }}" \
             "${{ secrets.RSU_BACKEND_URL }}/api/v1/options/scan-now")
           echo "HTTP status: $status"
           cat /tmp/resp.json
