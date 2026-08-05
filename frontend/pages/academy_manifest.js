@@ -146,4 +146,9 @@ export const LESSON_INDEX = {
     '29-3': { title: 'Cómo Leer la Pantalla', words: 474 },
     '29-4': { title: 'De la Foto a la Película', words: 593 },
     '29-5': { title: 'Tu Cartera y Cómo Usarlo Sin Hacerse Daño', words: 486 },
+    '30-1': { title: 'Qué Es SPXL y Por Qué Necesita Reglas Propias', words: 319 },
+    '30-2': { title: 'La Premisa: Sin Ella, Nada de Esto Funciona', words: 363 },
+    '30-3': { title: 'Cómo Compra: Por Peldaños', words: 307 },
+    '30-4': { title: 'Cómo Vende: Tres Salidas Según Lo Honda Que Fue', words: 360 },
+    '30-5': { title: 'Por Qué Interesa Una Estrategia Que Gana Cuando El Mercado Cae', words: 599 },
 };

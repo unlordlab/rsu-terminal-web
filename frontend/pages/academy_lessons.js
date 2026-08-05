@@ -7128,4 +7128,185 @@ export const LESSONS = {
             },
         ]
     },
+
+    '30-1': {
+        moduleId: 30,
+        lessonIndex: 0,
+        title: 'Qué Es SPXL y Por Qué Necesita Reglas Propias',
+        duration: '7 min',
+        intro: 'SPXL es un fondo que replica al índice americano multiplicado por tres: si el índice sube un 1% en el día, SPXL sube alrededor de un 3%. Ese triple funciona en las dos direcciones, y eso lo cambia todo.',
+        sections: [
+            {
+                heading: 'El triple no es solo «más»',
+                blocks: [
+                    { type: 'text', content: 'Con un fondo normal del índice, una caída del 20% se recupera subiendo un 25%. Con el triple, esa misma caída del índice se convierte en un 60% de pérdida, y salir de ahí exige subir un 150%.' },
+                    { type: 'concept', title: 'La asimetría es el problema', content: 'Perder y ganar no son simétricos. Cuanto más pierdes, más tienes que ganar solo para volver al punto de partida. El triple no multiplica el riesgo por tres: lo multiplica bastante más.' },
+                    { type: 'text', content: 'Hay un segundo efecto, menos evidente. El triple se aplica <b>cada día por separado</b>, no al periodo entero. En un mercado que sube y baja sin ir a ninguna parte, el fondo pierde valor aunque el índice acabe donde empezó. Es el desgaste de la volatilidad, y es la razón de que estos productos no estén pensados para comprarlos y olvidarlos.' },
+                ]
+            },
+            {
+                heading: 'Por eso hace falta un plan escrito',
+                blocks: [
+                    { type: 'text', content: 'Con un instrumento así, improvisar sale caro. Las decisiones importantes —cuánto comprar, cuándo y cuándo salir— tienen que estar decididas <b>antes</b>, cuando no hay dinero en juego y la cabeza está fría.' },
+                    { type: 'text', content: 'Eso es esta herramienta: no una predicción de lo que va a hacer el mercado, sino un conjunto de reglas fijas que responden a lo que ya ha hecho. Nunca adivina. Solo reacciona a una caída que ya ocurrió.' },
+                    { type: 'warning', content: 'Nada de esto convierte al triple apalancamiento en un producto seguro. Sigue siendo el instrumento más agresivo de la terminal, y el que puede hacer más daño si se usa sin entenderlo o con dinero que se vaya a necesitar pronto.' },
+                ]
+            },
+        ]
+    },
+
+    '30-2': {
+        moduleId: 30,
+        lessonIndex: 1,
+        title: 'La Premisa: Sin Ella, Nada de Esto Funciona',
+        duration: '8 min',
+        intro: 'Toda estrategia descansa sobre una creencia de fondo. Si esa creencia falla, la estrategia falla entera por muy bien construidas que estén las reglas. Conviene saber cuál es la de esta.',
+        sections: [
+            {
+                heading: 'La premisa, dicha en voz alta',
+                blocks: [
+                    { type: 'concept', title: 'El índice americano sube a largo plazo', content: 'Las caídas son interrupciones del camino, no el final del camino. Puede tardar meses o años, pero el índice acaba recuperando y superando el máximo anterior.' },
+                    { type: 'chart', id: 'spxl_premisa' },
+                    { type: 'text', content: 'Toda la estrategia se apoya ahí. Comprar en las caídas solo tiene sentido si lo que compras acaba subiendo. Si el índice entrara en una década perdida, comprar cada tramo de caída sería ir poniendo dinero en algo que no vuelve.' },
+                ]
+            },
+            {
+                heading: 'Por qué es importante decirla',
+                blocks: [
+                    { type: 'text', content: 'Una estrategia sin premisa declarada no se puede evaluar. Si no sabes de qué depende, no puedes saber cuándo ha dejado de tener sentido, y acabas dándole vueltas a las reglas pequeñas mientras lo que falla es el cimiento.' },
+                    { type: 'text', content: 'Con la premisa a la vista, la pregunta se vuelve concreta y respondible: <b>¿sigo creyendo que el índice americano sube a largo plazo?</b> Si la respuesta es sí, la estrategia tiene sentido aunque atravieses un mal año. Si algún día es no, no hay ajuste de parámetros que la salve.' },
+                    { type: 'tip', label: 'APLÍCALO AL RESTO', content: 'Merece la pena hacerse esta pregunta con cualquier estrategia, propia o ajena: ¿cuál es la creencia que la sostiene? Si quien te la cuenta no sabe responder, probablemente no la ha pensado.' },
+                ]
+            },
+            {
+                heading: 'Qué pasa si la premisa falla',
+                blocks: [
+                    { type: 'text', content: 'Conviene ser explícito, porque es el escenario que más duele: si el índice entra en un periodo muy largo sin recuperar, esta estrategia se queda con el capital desplegado y sin salida, esperando una subida que no llega.' },
+                    { type: 'warning', content: 'La posición principal no tiene stop de pérdidas: solo vende con ganancia. Eso es coherente con la premisa —si el índice recupera, esperar funciona— pero significa que ante una caída que no se recupera, la estrategia no se protege sola. En el histórico probado, la operación que más tardó estuvo <b>744 días</b> abierta, más de dos años.' },
+                ]
+            },
+        ]
+    },
+
+    '30-3': {
+        moduleId: 30,
+        lessonIndex: 2,
+        title: 'Cómo Compra: Por Peldaños',
+        duration: '8 min',
+        intro: 'La estrategia no compra de golpe ni intenta acertar el suelo. Divide el capital en seis tramos y va soltando cada uno a medida que la caída se hace más profunda.',
+        sections: [
+            {
+                heading: 'La escalera',
+                blocks: [
+                    { type: 'text', content: 'Se parte de un máximo de referencia. Cuando el precio cae un 15% desde ahí, entra el primer tramo. Si sigue cayendo, entra el segundo, y así sucesivamente.' },
+                    { type: 'chart', id: 'spxl_escalera' },
+                    { type: 'text', content: 'Fíjate en el detalle importante: <b>solo se llega al último peldaño tras una caída acumulada del 48%</b>, y solo entonces está desplegado el 100% del capital. Lo normal es quedarse en los primeros peldaños y salir mucho antes.' },
+                ]
+            },
+            {
+                heading: 'Por qué por partes y no de una vez',
+                blocks: [
+                    { type: 'concept', title: 'Nadie acierta el suelo', content: 'Comprar de golpe obliga a acertar el punto exacto en que la caída termina. Comprar por tramos no lo necesita: si sigue bajando, compras más barato; si rebota desde el primer tramo, ya tienes posición. Se renuncia al mejor resultado posible a cambio de no depender de la puntería.' },
+                    { type: 'text', content: 'El efecto secundario es que el precio medio de compra va bajando conforme la caída avanza. Cuando llega el rebote, el punto desde el que se mide la ganancia está más abajo que si se hubiera comprado todo al principio.' },
+                ]
+            },
+            {
+                heading: 'Lo que la estrategia hace la mayor parte del tiempo',
+                blocks: [
+                    { type: 'text', content: 'Nada. Esperar en efectivo.' },
+                    { type: 'text', content: 'Si el mercado sube tranquilamente, ninguna condición se cumple y no hay ninguna operación que hacer. La pantalla mostrará el estado de espera y una distancia al primer peldaño. Eso no es un fallo ni una avería: es la estrategia funcionando como debe.' },
+                    { type: 'tip', label: 'ESTO CUESTA MÁS DE LO QUE PARECE', content: 'Estar meses sin hacer nada mientras el mercado sube es psicológicamente difícil, y es donde la mayoría abandona el plan. Saberlo de antemano ayuda.' },
+                ]
+            },
+        ]
+    },
+
+    '30-4': {
+        moduleId: 30,
+        lessonIndex: 3,
+        title: 'Cómo Vende: Tres Salidas Según Lo Honda Que Fue',
+        duration: '7 min',
+        intro: 'La regla de salida no es la misma siempre: depende de cuántos peldaños se llegaron a activar. Cuanto más honda fue la caída, antes se recoge el beneficio.',
+        sections: [
+            {
+                heading: 'Las tres salidas',
+                blocks: [
+                    { type: 'table', headers: ['Si se activaron…', 'Vende el grueso a…', 'Y deja…'], rows: [
+                        ['1 a 3 peldaños (caída normal)', '+20% de ganancia', 'un 5% corriendo, con parada dinámica'],
+                        ['4 o 5 peldaños (caída fuerte)', '+10% de ganancia', 'un 20% corriendo, con parada dinámica'],
+                        ['los 6 peldaños (caída severa)', 'por partes: +5%, +10% y +20%', 'nada al final'],
+                    ]},
+                    { type: 'concept', title: 'Por qué el objetivo baja cuando la caída es más honda', content: 'Suena al revés, y tiene su lógica: llegar al peldaño seis significa que la caída fue muy severa, así que hay mucho capital desplegado y el entorno es el más incierto. Ahí se prioriza asegurar el resultado antes que exprimirlo.' },
+                ]
+            },
+            {
+                heading: 'El resto que se deja corriendo',
+                blocks: [
+                    { type: 'text', content: 'En los dos primeros casos no se vende todo: queda una parte pequeña con una <b>parada dinámica</b>, un nivel de salida que sube cuando el precio sube y nunca baja. Si el rebote continúa, esa parte sigue ganando; si se da la vuelta, se cierra sola.' },
+                    { type: 'text', content: 'Es la forma de no cortar de raíz una subida que podría seguir, sin volver a arriesgar todo lo ya ganado.' },
+                ]
+            },
+            {
+                heading: 'El detalle que explica el 98% de aciertos',
+                blocks: [
+                    { type: 'text', content: 'En el histórico probado, prácticamente todas las operaciones cerraron con ganancia. Es una cifra que impresiona y que conviene entender antes de creérsela.' },
+                    { type: 'warning', content: 'La posición principal <b>solo tiene objetivo de venta, no de pérdida</b>. Si el precio no llega al objetivo, la operación no se cierra: se queda esperando. Por eso casi ninguna cierra en pérdidas — no es que la estrategia acierte casi siempre, es que no realiza las que van mal, las mantiene abiertas. La mediana fue de 74 días, pero una llegó a 744.' },
+                    { type: 'text', content: 'Con la premisa de la lección anterior, esperar tiene sentido. Pero un porcentaje de aciertos alto conseguido así <b>no significa lo mismo</b> que uno conseguido cerrando también las malas, y mezclarlos al comparar estrategias lleva a conclusiones equivocadas.' },
+                ]
+            },
+        ]
+    },
+
+    '30-5': {
+        moduleId: 30,
+        lessonIndex: 4,
+        title: 'Por Qué Interesa Una Estrategia Que Gana Cuando El Mercado Cae',
+        duration: '9 min',
+        intro: 'Lo más valioso de esta estrategia no es cuánto rinde, sino cuándo rinde. Está diseñada para dar su mejor resultado justo en los momentos en que casi todo lo demás va mal.',
+        sections: [
+            {
+                heading: 'Las ventajas de trabajar en las correcciones',
+                blocks: [
+                    { type: 'text', content: '<b>Compra barato por definición.</b> No entra nunca en máximos: solo actúa después de una caída ya consumada. El precio de entrada siempre está por debajo del máximo reciente, sin necesidad de predecir nada.' },
+                    { type: 'text', content: '<b>Convierte el miedo en una oportunidad medible.</b> Cuando el mercado cae, la mayoría de las carteras solo pueden aguantar. Aquí la caída es lo que dispara la actuación, así que el momento incómodo se vuelve el momento productivo.' },
+                    { type: 'text', content: '<b>Está en efectivo la mayor parte del tiempo.</b> Mientras no hay caída, el capital no está expuesto. Eso significa que una parte de tu dinero no sufre las bajadas normales del mercado — y que está disponible cuando aparece la oportunidad.' },
+                    { type: 'text', content: '<b>Complementa al resto de la cartera.</b> Si casi todo lo que tienes gana cuando el mercado sube, tener algo que trabaja al revés reduce los días en que absolutamente todo va en la misma dirección.' },
+                    { type: 'text', content: '<b>Los objetivos son modestos y por eso alcanzables.</b> Un rebote del 10% o el 20% tras una caída fuerte es algo que ocurre con frecuencia. La estrategia no necesita un mercado alcista para cerrar bien: le basta con un rebote.' },
+                ]
+            },
+            {
+                heading: 'Lo que cuesta, con los números delante',
+                blocks: [
+                    { type: 'chart', id: 'spxl_precio_de_dormir' },
+                    { type: 'table', headers: ['Sobre 17,7 años reales', 'La estrategia', 'Comprar y mantener'], rows: [
+                        ['Rentabilidad anual', '10,97%', '28,88%'],
+                        ['Resultado total', '+534%', '+8.922%'],
+                        ['Operaciones', '57', '1'],
+                    ]},
+                    { type: 'text', content: 'Comprar y mantener gana muchísimo más, y decirlo es obligatorio. Ahora bien, hay que leer ese número en su contexto: el periodo medido fue casi todo subida, que es exactamente el escenario en que esta estrategia peor se comporta y en el que mantener un producto apalancado mejor sale.' },
+                    { type: 'concept', title: 'La pregunta correcta', content: 'No es cuál rinde más en el papel, sino cuál puedes sostener de verdad. Mantener un fondo triple apalancado significa aguantar caídas que superan con holgura la mitad del capital sin vender. Casi nadie lo hace: se vende en el peor momento, y entonces esa rentabilidad histórica no la cobra nadie.' },
+                ]
+            },
+            {
+                heading: 'Cómo leer la pantalla',
+                blocks: [
+                    { type: 'table', headers: ['Qué ves', 'Qué significa'], rows: [
+                        ['Estado de espera', 'No hay caída suficiente. Es lo normal la mayor parte del tiempo.'],
+                        ['Distancia al siguiente peldaño', 'Cuánto tendría que caer para que entre el próximo tramo.'],
+                        ['Fase activa', 'Cuántos peldaños se han disparado ya en este ciclo.'],
+                        ['Backtest', 'Qué habría hecho la estrategia con datos reales desde 2008.'],
+                        ['Validación por periodos', 'El mismo cálculo partido en tramos, para ver si el resultado depende de haber empezado en una fecha afortunada.'],
+                    ]},
+                    { type: 'warning', content: 'El backtest asume ejecución perfecta: compras y ventas exactamente al precio de cierre, sin comisiones ni diferencia entre lo que pides y lo que te dan. La realidad siempre resta algo. La propia pantalla incluye escenarios con ese coste para que la cifra no se lea como una promesa.' },
+                ]
+            },
+            {
+                heading: 'En una frase',
+                blocks: [
+                    { type: 'text', content: 'Es una estrategia que <b>espera casi siempre</b>, actúa cuando el mercado corrige, aspira a rebotes modestos y descansa sobre una única creencia: que el índice americano sube a largo plazo.' },
+                    { type: 'tip', label: 'ANTES DE USARLA', content: 'Pregúntate si podrías cumplirla en el peor momento: sin comprar cuando el mercado está en máximos y todos ganan, y comprando cuando ha caído un 30% y las noticias dan miedo. Esa es la parte difícil, y no la resuelve ninguna herramienta.' },
+                ]
+            },
+        ]
+    },
 };

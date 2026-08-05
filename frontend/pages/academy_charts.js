@@ -11889,6 +11889,95 @@ function rsrw_amplitud_ancho_estrecho() {
     </svg>`;
 }
 
+// ── Módulo 30 · Estrategia SPXL ──────────────────────────────────────────────
+
+function spxl_premisa() {
+    const W=680, H=290;
+    // La premisa que sostiene TODO: el indice sube a largo plazo y las caidas
+    // son interrupciones, no el final. Sin eso, comprar caidas es tirar dinero.
+    const pts = [100,108,103,96,112,124,118,101,88,110,128,140,132,118,145,166,158,140,175,198];
+    const MIN=80, MAX=210, ox=60, oy=62, pw=560, ph=160;
+    const y = v => oy + ph - ((v-MIN)/(MAX-MIN))*ph;
+    const x = i => ox + (i/(pts.length-1))*pw;
+    const linea = `<path d="${pts.map((v,i)=>`${i?'L':'M'} ${x(i).toFixed(1)} ${y(v).toFixed(1)}`).join(' ')}" fill="none" stroke="${C.text}" stroke-width="2"/>`;
+    // Marcar las tres caidas: son donde la estrategia compra
+    let marcas = '';
+    [[2,4],[6,8],[12,13]].forEach(([a,b]) => {
+        marcas += `<rect x="${x(a)}" y="${oy}" width="${x(b)-x(a)}" height="${ph}" fill="${C.accent}" opacity="0.10"/>`;
+        marcas += `<text x="${(x(a)+x(b))/2}" y="${oy+ph+15}" fill="${C.accent}" font-size="9" font-family="monospace" text-anchor="middle">compra</text>`;
+    });
+    return `<svg viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg">
+        <rect width="${W}" height="${H}" fill="${C.bg}" rx="6"/>
+        <text x="20" y="28" fill="${C.text}" font-size="13" font-family="monospace">La premisa: el índice sube a largo plazo</text>
+        <text x="20" y="47" fill="${C.textDim}" font-size="10.5" font-family="monospace">Las caídas son interrupciones del camino, no el final del camino</text>
+        ${marcas}
+        <line x1="${ox}" y1="${y(100)}" x2="${ox+pw}" y2="${y(100)}" stroke="${C.textDim}" stroke-width="1" stroke-dasharray="3 3" opacity="0.4"/>
+        ${linea}
+        <text x="${W/2}" y="${H-26}" fill="${C.text}" font-size="10.5" font-family="monospace" text-anchor="middle">Si esta línea no subiera a largo plazo, comprar cada caída sería tirar dinero.</text>
+        <text x="${W/2}" y="${H-10}" fill="${C.textDim}" font-size="9.5" font-family="monospace" text-anchor="middle">Toda estrategia descansa sobre una premisa. Esta es la suya, y conviene tenerla presente</text>
+    </svg>`;
+}
+
+function spxl_escalera() {
+    const W=680, H=310;
+    // Seis peldanos: cuanto mas cae, mas capital entra.
+    const fases = [
+        [1, 15.0, 20], [2, 23.5, 15], [3, 28.9, 20],
+        [4, 36.0, 20], [5, 42.4, 15], [6, 48.1, 10],
+    ];
+    const ox=80, ow=440, oy=70;
+    let filas = '';
+    fases.forEach((f, i) => {
+        const yy = oy + i*33;
+        const w  = (f[1]/50) * ow;
+        filas += `<text x="${ox-10}" y="${yy+4}" fill="${C.textDim}" font-size="10" font-family="monospace" text-anchor="end">fase ${f[0]}</text>
+            <rect x="${ox}" y="${yy-8}" width="${w}" height="16" fill="${C.red}" opacity="${0.30 + i*0.07}" rx="2"/>
+            <text x="${ox+w+8}" y="${yy+4}" fill="${C.red}" font-size="10" font-family="monospace">-${f[1]}%</text>
+            <text x="${ox+ow+70}" y="${yy+4}" fill="${C.accent}" font-size="10.5" font-family="monospace" text-anchor="end">${f[2]}% del capital</text>`;
+    });
+    return `<svg viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg">
+        <rect width="${W}" height="${H}" fill="${C.bg}" rx="6"/>
+        <text x="20" y="28" fill="${C.text}" font-size="13" font-family="monospace">Cuanto más cae, más entra</text>
+        <text x="20" y="47" fill="${C.textDim}" font-size="10.5" font-family="monospace">Caída acumulada desde el máximo · capital que se despliega en cada peldaño</text>
+        ${filas}
+        <text x="${W/2}" y="${H-32}" fill="${C.text}" font-size="10.5" font-family="monospace" text-anchor="middle">Las seis juntas suman el 100% del capital, y solo se llega ahí tras una caída del 48%.</text>
+        <text x="${W/2}" y="${H-14}" fill="${C.textDim}" font-size="9.5" font-family="monospace" text-anchor="middle">Casi nunca se activan todas: lo normal es quedarse en las primeras y salir</text>
+    </svg>`;
+}
+
+function spxl_precio_de_dormir() {
+    const W=680, H=300;
+    // El intercambio real, con los numeros del backtest de 17,7 anos.
+    const barras = [
+        ['Rentabilidad anual', 10.97, 28.88, '%'],
+        ['Peor caída sufrida', 47.77, null, '%'],
+    ];
+    const ox=250, w=330;
+    const maxv = 30;
+    let filas = '';
+    [['Estrategia', 10.97, C.accent], ['Comprar y mantener', 28.88, C.textDim]].forEach((b, i) => {
+        const yy = 100 + i*34;
+        const bw = (b[1]/maxv)*w;
+        filas += `<text x="${ox-12}" y="${yy+4}" fill="${C.textDim}" font-size="10.5" font-family="monospace" text-anchor="end">${b[0]}</text>
+            <rect x="${ox}" y="${yy-9}" width="${bw}" height="18" fill="${b[2]}" opacity="0.8" rx="2"/>
+            <text x="${ox+bw+8}" y="${yy+4}" fill="${b[2]}" font-size="11" font-family="monospace">${b[1]}% anual</text>`;
+    });
+    return `<svg viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg">
+        <rect width="${W}" height="${H}" fill="${C.bg}" rx="6"/>
+        <text x="20" y="28" fill="${C.text}" font-size="13" font-family="monospace">Lo que se gana y lo que se paga</text>
+        <text x="20" y="48" fill="${C.textDim}" font-size="10.5" font-family="monospace">17,7 años reales, 57 operaciones</text>
+        <text x="20" y="76" fill="${C.textDim}" font-size="10" font-family="monospace">RENTABILIDAD</text>
+        ${filas}
+        <text x="20" y="196" fill="${C.textDim}" font-size="10" font-family="monospace">A CAMBIO</text>
+        <text x="${ox-12}" y="216" fill="${C.textDim}" font-size="10.5" font-family="monospace" text-anchor="end">Está en efectivo</text>
+        <text x="${ox}" y="216" fill="${C.accent}" font-size="10.5" font-family="monospace">la mayor parte del tiempo, esperando una caída</text>
+        <text x="${ox-12}" y="236" fill="${C.textDim}" font-size="10.5" font-family="monospace" text-anchor="end">Compra</text>
+        <text x="${ox}" y="236" fill="${C.accent}" font-size="10.5" font-family="monospace">cuando el resto vende</text>
+        <text x="${W/2}" y="${H-32}" fill="${C.text}" font-size="10.5" font-family="monospace" text-anchor="middle">Comprar y mantener gana MUCHO más — en un tramo que fue casi todo subida.</text>
+        <text x="${W/2}" y="${H-14}" fill="${C.orange}" font-size="9.5" font-family="monospace" text-anchor="middle">La pregunta no es cuál rinde más, sino cuál puedes sostener sin vender en el peor momento</text>
+    </svg>`;
+}
+
 export const CHARTS = {
     // Módulo 0
     rsu_philosophy, rsu_community, rsu_for_who,
@@ -12017,4 +12106,6 @@ export const CHARTS = {
     // Módulo 29
     rsrw_fuerza_no_es_subida, rsrw_percentil_reparto, rsrw_foto_vs_pelicula,
     rsrw_rotacion_suma_cero, rsrw_amplitud_ancho_estrecho,
+    // Módulo 30
+    spxl_premisa, spxl_escalera, spxl_precio_de_dormir,
 };
