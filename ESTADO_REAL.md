@@ -29,11 +29,13 @@ parecería completo y sería engañoso.
 
 ## Cobertura de esta versión — leer antes de usarlo
 
-- **411 hallazgos**: 379 extraídos de los 16 documentos de auditoría, más 32
+- **412 hallazgos**: 379 extraídos de los 16 documentos de auditoría, más 33
   encontrados después con el sistema ya en producción (RSU Algoritmo #14–#30, Cartera #B19–#B22
   y #28, Newsfeed/briefing #27–#31, Infraestructura #19 —la versión móvil—,
   CANSLIM #25 —umbrales descalibrados— y #29/#30, estos dos **encontrados por el
-  usuario validando la herramienta con casos reales**, no por una auditoría).
+  usuario validando la herramienta con casos reales**, no por una auditoría, y
+  Market #34 —el calendario de resultados por ticker devolvía vacío para todos,
+  en silencio—, que apareció al ir a construir otra cosa).
 - **73 son críticos (🔴)**: 50 cerrados · 9 abiertos ·
   3 ya no aplican ·
   11 pendientes de verificar.
@@ -180,6 +182,24 @@ hallazgos ya cerrados.
 
 ## Cartera  (47 hallazgos — ❌3 · ✅33 · ❓7 · ⬜4)
 
+**Mejora pedida el 04/08 (no es un hallazgo de auditoría): aviso de
+resultados próximos.** Icono 📊 junto al ticker de cada posición abierta que
+presenta resultados en los **7 días corridos** siguientes, más un resumen
+sobre la tabla. Siete días corridos y no la semana natural porque un viernes
+la semana natural no avisaría de unos resultados del lunes, que es cuando más
+importa. Rojo si es hoy o mañana, ámbar del tercer día en adelante.
+**Decisión que evitó construirlo mal**: parecía natural filtrar
+`get_earnings_calendar()`, y habría sido un error — `_get_fmp_earnings()` y
+`_get_finnhub_earnings()` cortan con `data[:80]` cada una, así que ese
+calendario es una porción arbitraria del mercado y un valor de la cartera
+podría faltar; un icono ausente se lee como «no hay resultados», así que la
+consulta se hace **ticker a ticker**. Caché diaria propia porque
+`get_cartera()` solo cachea 60 s. Medido sobre la cartera real: 14 de 46
+valores dentro de la ventana, 6 de ellos al día siguiente; 2,2 s la primera
+consulta del día, 0,00 s el resto. La ausencia de icono no garantiza que no
+haya resultados —significa que el calendario no tiene fecha— y los ETFs nunca
+lo llevan, que es correcto.
+
 | | # | Sev | Hallazgo | Estado / evidencia |
 |-|---|-----|----------|--------------------|
 | ✅ | A1 | 🔴 | El «cierre anterior» puede ser el de hace DOS días (frontera de sesión no validada) | verificado 31/07: resuelto ya el 25/07. `_get_daily_bars` descarta filas con Close=NaN antes de elegir última/anterior, y si la fila MÁS reciente es NaN con el mercado cerrado usa `fast_info.last_price` como relleno para no saltarse una sesión entera. Ese era justo el caso del desfase de dos días |
@@ -290,7 +310,7 @@ estaba duplicada — ver su fila.
 | ❓ | 22 | 🟢 | Efectividad del insider | No construido |
 | ✅ | 23 | 🟢 | Cruce Insider × Options Flow | Ya resuelto: `get_confluence_tickers()`, badge ⚡ (sesión 16) |
 
-## Market  (33 hallazgos — ✅3 · ❓30)
+## Market  (34 hallazgos — ✅4 · ❓30)
 
 | | # | Sev | Hallazgo | Estado / evidencia |
 |-|---|-----|----------|--------------------|
@@ -327,6 +347,7 @@ estaba duplicada — ver su fila.
 | ❓ | 31 | 🟢 | Put/Call ratio (CBOE): | *sin comprobar* |
 | ❓ | 32 | 🟢 | Ratio VIX/VIX3M explícito | *sin comprobar* |
 | ❓ | 33 | 🟢 | Alertas de umbral | *sin comprobar* |
+| ✅ | 34 | 🟠 | `_get_yf_earnings()` devolvía `{}` para TODOS los tickers, en silencio | HECHO 04/08. **Hallazgo nuevo, no estaba en ninguna auditoría** — apareció al ir a construir el aviso de resultados de Cartera. `tk.calendar` devuelve hoy un DICCIONARIO, no un DataFrame: la función llamaba a `cal.empty` y `cal.columns`, saltaba `AttributeError` y el `except Exception: return {}` se lo tragaba. Ni un solo ticker devolvía dato, y `get_earnings_ticker()` (el endpoint por ticker de Market) llevaba tiempo apoyándose solo en Finnhub sin que se notara. Las claves del diccionario tampoco eran las que buscaba: la estimación está en `Earnings Average`, no en `EPS Estimate`. Arreglado aceptando las dos formas por si alguna versión vuelve al DataFrame, y el `except` ahora loguea en vez de callar. Verificado: AAPL 2026-10-29, NVDA 2026-08-26, MSFT 2026-10-28 con estimaciones reales; SPY devuelve vacío, que es correcto — un ETF no presenta resultados |
 
 ## Modulos 2026-07-19  (10 hallazgos — ❓10)
 

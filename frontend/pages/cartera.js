@@ -220,6 +220,56 @@ function avisoIncoherencias(lista) {
 //  · La barra era `peso * 3` con tope 100, así que todo lo que pesara 33% o
 //    más se veía idéntico. Ahora se escala contra la mayor posición de la
 //    tabla, que es lo que permite compararlas de un vistazo.
+// Aviso de resultados próximos junto al ticker. Presentar resultados es el
+// evento que más puede mover una posición de un día para otro, y hasta ahora
+// había que acordarse a mano de cuál de las ~46 posiciones presenta esta
+// semana.
+//
+// Ámbar de tres días en adelante, rojo si es hoy o mañana — la urgencia es lo
+// único que distingue una decisión que puedes pensar de una que ya no.
+//
+// Ausencia de icono NO garantiza que no haya resultados: significa que el
+// calendario no tiene fecha para ese valor. Los ETFs no presentan y por eso
+// nunca lo llevan.
+function earningsBadge(r) {
+    const e = r.earnings;
+    if (!e || e.dias == null) return '';
+    const urgente = e.dias <= 1;
+    const color   = urgente ? '#f23645' : '#ffb800';
+    const cuando  = e.dias === 0 ? 'HOY' : e.dias === 1 ? 'mañana' : 'en ' + e.dias + ' días';
+    return `<span title="Presenta resultados ${cuando} (${e.fecha})"
+        style="margin-left:5px;color:${color};font-size:10px;cursor:help;">📊${e.dias <= 1 ? '' : e.dias}</span>`;
+}
+
+// Resumen sobre la tabla. Sin esto habría que recorrer las ~46 filas para
+// encontrar los iconos, que es justo el trabajo que el icono debía ahorrar.
+// Se calcula siempre sobre TODAS las abiertas, no sobre las filtradas: el
+// aviso es de la cartera entera, no de lo que se esté mirando ahora.
+function avisoEarnings(todas) {
+    // Por VALOR, no por fila: la tabla es de operaciones y un mismo ticker
+    // puede tener varios lotes abiertos (LEU y MELI los tienen). Contar filas
+    // diría «16 posiciones» cuando son 14 empresas, y las listaría repetidas.
+    const vistos = new Set();
+    const con = [];
+    for (const r of (todas || [])) {
+        if (!r.earnings || r.earnings.dias == null || vistos.has(r.ticker)) continue;
+        vistos.add(r.ticker);
+        con.push(r);
+    }
+    if (!con.length) return '';
+    con.sort((a, b) => a.earnings.dias - b.earnings.dias);
+    const inminentes = con.filter(r => r.earnings.dias <= 1);
+    const color = inminentes.length ? '#f23645' : '#ffb800';
+    const lista = con.slice(0, 8).map(r =>
+        `<span style="color:var(--color-text);">${r.ticker}</span>`
+        + `<span style="color:var(--color-muted);">${r.earnings.dias === 0 ? ' hoy' : r.earnings.dias === 1 ? ' mañana' : ' +' + r.earnings.dias + 'd'}</span>`
+    ).join('<span style="color:var(--color-muted);">, </span>');
+    return `<div style="background:${color}14;border-left:3px solid ${color};padding:7px 12px;margin-bottom:.5rem;font-size:11px;">
+        <span style="color:${color};">📊 ${con.length} ${con.length === 1 ? 'valor de la cartera presenta' : 'valores de la cartera presentan'} resultados en los próximos 7 días</span>
+        <span style="color:var(--color-muted);"> · </span>${lista}${con.length > 8 ? `<span style="color:var(--color-muted);"> y ${con.length - 8} más</span>` : ''}
+    </div>`;
+}
+
 function pesoCelda(r, maxPeso) {
     if (r.sin_dimensionar) {
         return `<div style="color:#ffb800;font-size:10px;" title="Posición abierta sin capital asignado: la simulación por niveles ya tiene comprometido todo el capital disponible, y la hoja no trae Cantidad ni Inversión para esta fila.">sin asignar</div>`;
@@ -734,7 +784,9 @@ function renderActiveSection() {
         rows = rows.filter(r => r.ticker.toLowerCase().includes(f) || (r.comment||'').toLowerCase().includes(f) || (r.sector||'').toLowerCase().includes(f) || (r.tier||'').toLowerCase().includes(f));
     }
     rows = sortRows(rows, _sortActive);
-    wrap.innerHTML = tableControls('active', _filterActive, rows.length, (_carteraData.abiertas||[]).length) + activeTable(rows);
+    wrap.innerHTML = avisoEarnings(_carteraData.abiertas || [])
+        + tableControls('active', _filterActive, rows.length, (_carteraData.abiertas||[]).length)
+        + activeTable(rows);
     rows.forEach((r, i) => drawSparklineFor(`spark-active-${i}-${r.ticker}`, r.ticker));
 }
 
@@ -834,8 +886,8 @@ function activeTable(rows) {
                 <span class="row-live-dot" data-live-dot="${r.ticker}" data-live-dot-id="${r.id}" title="Sin datos live"></span>
             </td>
             <td style="padding:8px 10px;color:var(--color-muted);font-size:11px;white-space:nowrap;">${r.fecha_display || r.fecha}</td>
-            <td style="padding:8px 10px;">
-                <span class="ticker-link" onclick="window.__navigate('/research?ticker=${r.ticker}')" title="Ver análisis en Research">${r.ticker}</span>
+            <td style="padding:8px 10px;white-space:nowrap;">
+                <span class="ticker-link" onclick="window.__navigate('/research?ticker=${r.ticker}')" title="Ver análisis en Research">${r.ticker}</span>${earningsBadge(r)}
             </td>
             <td style="padding:8px 10px;">${tierBadge}</td>
             <td style="padding:8px 10px;color:var(--color-muted);font-size:11px;max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${r.sector || 'Sin clasificar'}</td>

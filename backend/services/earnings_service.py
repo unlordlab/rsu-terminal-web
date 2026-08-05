@@ -99,25 +99,54 @@ def _get_finnhub_earnings(from_date: str, to_date: str) -> list:
 # ── FUENTE 3: yfinance individual ─────────────────────────────────────────────
 
 def _get_yf_earnings(ticker: str) -> dict:
+    """Próxima fecha de resultados de un ticker, según yfinance.
+
+    ESTABA ROTA Y FALLABA EN SILENCIO (arreglado el 04/08/2026). `tk.calendar`
+    devuelve hoy un DICCIONARIO, no un DataFrame — el código llamaba a
+    `cal.empty` y a `cal.columns`, que un dict no tiene, así que saltaba
+    AttributeError y el `except Exception: return {}` se lo tragaba. Resultado:
+    devolvía `{}` para TODOS los tickers, y `get_earnings_ticker()` llevaba
+    tiempo apoyándose solo en Finnhub sin que se notara.
+
+    Las claves del diccionario tampoco son las que buscaba el código viejo:
+    la estimación de beneficio está en `Earnings Average`, no en
+    `EPS Estimate`. Se aceptan las dos formas por si alguna versión de
+    yfinance vuelve al DataFrame.
+
+    Un ETF o un fondo devuelve `{}` legítimamente: no presenta resultados.
+    """
     try:
-        tk  = yf.Ticker(ticker)
-        cal = tk.calendar
-        if cal is None or cal.empty:
+        cal = yf.Ticker(ticker).calendar
+        if not cal:
             return {}
-        date_col = cal.columns[0] if hasattr(cal, 'columns') else None
-        if date_col is None:
+
+        if isinstance(cal, dict):
+            fechas = cal.get('Earnings Date') or []
+            if not isinstance(fechas, (list, tuple)):
+                fechas = [fechas]
+            fecha = str(fechas[0])[:10] if fechas else ''
+            eps   = cal.get('Earnings Average', cal.get('EPS Estimate'))
+            rev   = cal.get('Revenue Average', cal.get('Revenue Estimate'))
+        else:
+            # Forma antigua (DataFrame): se conserva por si vuelve.
+            if getattr(cal, 'empty', False) or not hasattr(cal, 'columns'):
+                return {}
+            col   = cal.columns[0]
+            fecha = str(col)[:10]
+            eps   = cal.loc['EPS Estimate', col] if 'EPS Estimate' in cal.index else None
+            rev   = cal.loc['Revenue Estimate', col] if 'Revenue Estimate' in cal.index else None
+
+        if not fecha:
             return {}
-        eps_est = cal.loc['EPS Estimate', date_col] if 'EPS Estimate' in cal.index else None
-        rev_est = cal.loc['Revenue Estimate', date_col] if 'Revenue Estimate' in cal.index else None
-        date_val = str(date_col)[:10] if date_col else ''
         return {
             "ticker":  ticker,
-            "date":    date_val,
-            "eps_est": float(eps_est) if eps_est else None,
-            "rev_est": float(rev_est) if rev_est else None,
+            "date":    fecha,
+            "eps_est": float(eps) if eps is not None else None,
+            "rev_est": float(rev) if rev is not None else None,
             "source":  "yfinance",
         }
-    except Exception:
+    except Exception as e:
+        print(f"[Earnings] yfinance no dio calendario de {ticker}: {type(e).__name__}: {e}")
         return {}
 
 def _get_surprise(ticker: str) -> list:
@@ -314,6 +343,60 @@ def get_earnings_calendar() -> dict:
     }
     cache.set(cache_key, resultado, 86400)  # 24h
     return resultado
+
+def earnings_proximos(tickers: list, dias: int = 7) -> dict:
+    """{ticker: {fecha, dias}} de los valores que presentan resultados dentro
+    de los próximos `dias`. Los que no presentan —o de los que no hay dato—
+    simplemente no aparecen.
+
+    POR QUÉ SE CONSULTA TICKER A TICKER Y NO SE FILTRA EL CALENDARIO GENERAL
+    `get_earnings_calendar()` parece el sitio natural del que sacar esto, y
+    sería un error: `_get_fmp_earnings()` y `_get_finnhub_earnings()` cortan
+    con `data[:80]` cada una, así que el calendario es una porción arbitraria
+    del mercado en catorce días. En temporada de resultados presentan miles de
+    empresas: un valor de la cartera podría no estar en esa porción y la
+    pantalla enseñaría «sin resultados» cuando los tiene en tres días. Un
+    icono que falta se lee como «no hay», así que la fuente tiene que ser
+    completa para los tickers que se preguntan, no una muestra.
+
+    Caché diaria: una fecha de resultados no cambia a lo largo del día, y
+    `get_cartera()` solo cachea 60 segundos — sin caché propia aquí, esto
+    dispararía una consulta por ticker cada minuto.
+    """
+    if not tickers:
+        return {}
+    from services.cache import cache
+    hoy = datetime.now(EASTERN).date()
+    clave = f"earnings:proximos:{hoy.isoformat()}:{','.join(sorted(set(tickers)))}"
+    cacheado = cache.get(clave)
+    if cacheado is not None:
+        mapa = cacheado
+    else:
+        from services.yf_pool import yf_executor
+        unicos = sorted(set(t for t in tickers if t))
+        mapa = {}
+        for res in yf_executor.map(_get_yf_earnings, unicos):
+            if res and res.get("date"):
+                mapa[res["ticker"]] = res["date"]
+        # Se cachea aunque salga vacío: un mapa vacío es un resultado
+        # legítimo (cartera de ETFs, o fuera de temporada) y reintentarlo en
+        # cada carga costaría una consulta por ticker cada minuto.
+        cache.set(clave, mapa, 86400)
+
+    salida = {}
+    for ticker, fecha_str in mapa.items():
+        try:
+            fecha = datetime.strptime(fecha_str, "%Y-%m-%d").date()
+        except Exception:
+            continue
+        restantes = (fecha - hoy).days
+        # Se incluye hoy mismo (0) pero no el pasado: yfinance puede devolver
+        # una fecha ya vencida si aún no ha publicado la siguiente, y pintarla
+        # como «próxima» sería falso.
+        if 0 <= restantes <= dias:
+            salida[ticker] = {"fecha": fecha_str, "dias": restantes}
+    return salida
+
 
 def get_earnings_ticker(ticker: str) -> dict:
     now      = datetime.now()

@@ -34,6 +34,13 @@ _DAILY_BARS_TTL = 6 * 3600
 _cartera_cache: dict = {}
 _CARTERA_TTL = 60
 
+# Ventana del aviso de resultados en las posiciones abiertas. Siete días
+# CORRIDOS, no la semana natural: en la semana natural un viernes no avisaría
+# de unos resultados del lunes siguiente, que es justo cuando más importa
+# saberlo. Medido el 04/08/2026 sobre la cartera real: 14 de 46 posiciones
+# caen dentro de la ventana, 6 de ellas al día siguiente.
+EARNINGS_DIAS = 7
+
 
 def _is_market_open() -> bool:
     """Mismo patrón que spxl_service.py::_is_market_open() -- sin llamada
@@ -910,10 +917,21 @@ def get_cartera():
         # Enriquecer abiertas con precios live + sector
         live_prices = {}
         sectors = {}
+        earnings = {}
         if not abiertas.empty:
             tickers_open = abiertas[col_ticker].unique().tolist()
             live_prices = fetch_live_prices(tickers_open)
             sectors = fetch_sectors(tickers_open)
+            # Resultados en los próximos 7 días. Tiene caché diaria propia
+            # (ver earnings_service.earnings_proximos) porque get_cartera()
+            # solo cachea 60 s: sin ella esto consultaría un ticker por
+            # segundo. Falla a diccionario vacío — si la fuente no responde,
+            # la tabla se pinta igual, solo sin el aviso.
+            try:
+                from services.earnings_service import earnings_proximos
+                earnings = earnings_proximos(tickers_open, EARNINGS_DIAS)
+            except Exception as e:
+                print(f"[Cartera] No se pudieron consultar los earnings próximos: {type(e).__name__}: {e}")
 
         def calc_pnl(compra, actual):
             if compra and compra > 0 and actual and actual > 0:
@@ -1029,6 +1047,10 @@ def get_cartera():
                     "tier":     tier,
                     "sin_dimensionar": sin_dimensionar,
                     "dias":     dias,
+                    # {fecha, dias} si presenta resultados dentro de la
+                    # ventana; None si no, o si no hay dato. Solo para
+                    # posiciones abiertas: en una cerrada da igual.
+                    "earnings": earnings.get(ticker) if is_open else None,
                 })
             return rows
 
