@@ -637,9 +637,6 @@ function avisoFechas(d) {
 }
 
 function asignacionPanel(a) {
-    const hayDeficit = a.deficit > 0;
-    const colorDef   = hayDeficit ? '#ffb800' : 'var(--color-accent)';
-
     const filas = a.por_nivel.map(nv => {
         const pct   = nv.deseado > 0 ? Math.min(nv.asignado / nv.deseado * 100, 100) : 100;
         const falta = Math.round((nv.deseado - nv.asignado) * 100) / 100;
@@ -657,14 +654,12 @@ function asignacionPanel(a) {
         </div>`;
     }).join('');
 
-    const veredicto = hayDeficit
-        ? `Tus reglas de nivel piden <b style="color:${colorDef};">$${usd(a.deseado_total)}</b> `
-          + `(${a.pct_del_capital}% del capital base) para dar tamaño completo a todo lo abierto, `
-          + `y el modelo tiene <b>$${usd(a.equity_modelo)}</b>. `
-          + `Faltan <b style="color:${colorDef};">$${usd(a.deficit)}</b>: por eso hay posiciones sin dimensionar. `
-          + `Se corrige cerrando posiciones, bajando los pesos por nivel o subiendo el capital base — no es un fallo de datos.`
-        : `Todo lo abierto cabe dentro de las reglas de nivel: piden $${usd(a.deseado_total)} `
-          + `(${a.pct_del_capital}% del capital base) y el modelo tiene $${usd(a.equity_modelo)}.`;
+    // El párrafo explicativo que había aquí se retiró el 04/08/2026 a petición
+    // del usuario. Decía que faltaban $X «por eso hay posiciones sin
+    // dimensionar», y esa causa era falsa: el capital estaba disponible pero el
+    // modelo no lo reasignaba (ver la segunda pasada de simulate_tier_capital).
+    // Arreglada la reasignación, la tabla de arriba ya dice por sí sola qué
+    // nivel está completo y cuánto le falta a cada uno.
 
     return `<div style="background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius);padding:1rem;margin-bottom:1.5rem;">
         <div style="color:var(--color-muted);font-size:11px;letter-spacing:.08em;margin-bottom:10px;">ASIGNACIÓN OBJETIVO VS REAL <span class="tt-trigger" data-tooltip="cartera-asignacion" title="¿Qué es esto?">?</span></div>
@@ -672,7 +667,6 @@ function asignacionPanel(a) {
             <div>NIVEL</div><div>POSICIONES</div><div>ASIGNADO / OBJETIVO</div><div style="text-align:right;">CAPITAL</div><div style="text-align:right;">ESTADO</div>
         </div>
         ${filas}
-        <div style="margin-top:10px;font-size:11px;color:var(--color-muted);line-height:1.5;">${veredicto}</div>
         ${a.sin_nivel ? `<div style="margin-top:6px;font-size:11px;color:#ffb800;">${a.sin_nivel} posición(es) abierta(s) sin nivel asignado en la hoja — no entran en este reparto.</div>` : ''}
     </div>`;
 }
@@ -1087,8 +1081,6 @@ function historySection(history) {
     // era del +23%. Ahora se usa el retorno ponderado por tiempo, que descuenta
     // las aportaciones antes de medir. Ver #B14/#B15 y get_portfolio_history().
     const twr = last.retorno != null ? last.retorno - 100 : null;
-    const sobreAportado = last.invertido > 0
-        ? (last.valor - last.invertido) / last.invertido * 100 : null;
     const col = (v) => v >= 0 ? 'var(--color-accent)' : '#f23645';
 
     const cifra = twr != null
@@ -1098,10 +1090,23 @@ function historySection(history) {
            </div>`
         : '';
 
-    const pie = sobreAportado != null
+    // La segunda línea NO es «capital aportado» y llamarlo así era falso: es la
+    // suma del tamaño de todas las operaciones abiertas alguna vez, así que
+    // cuenta el mismo dinero tantas veces como se reinvierte. Con los datos
+    // reales daba $237.073,89 sobre un capital base de $100.000 — el capital
+    // reciclado contado más de dos veces. De ahí salía un «+26,89%» que
+    // contradecía al modelo de niveles, que decía +59,41% sobre el mismo
+    // patrimonio.
+    //
+    // Se elimina ese porcentaje: la rentabilidad correcta ya la da el titular
+    // (ponderada por tiempo, que descuenta las aportaciones). Aquí queda solo
+    // la cifra, con el nombre que de verdad le corresponde.
+    const pie = last.invertido > 0
         ? `<div style="color:var(--color-muted);font-size:10px;margin-top:8px;line-height:1.5;">
-               Patrimonio $${usd(last.valor)} sobre $${usd(last.invertido)} aportados
-               (<span style="color:${col(sobreAportado)};">${sobreAportado >= 0 ? '+' : ''}${fix(sobreAportado)}%</span>).
+               Patrimonio $${usd(last.valor)}. La línea de abajo es el <b>capital desplegado acumulado</b>
+               ($${usd(last.invertido)}): la suma de lo que ha ocupado cada operación abierta alguna vez, así que
+               el dinero que se reinvierte tras una venta cuenta otra vez. No es dinero nuevo aportado, y por eso
+               no sirve como denominador de una rentabilidad — esa la da la cifra de arriba.
                Incluye <b>posiciones cerradas</b>: al vender, su importe sigue contando como caja, así que la
                curva no mejora sola por quitar de en medio las que salieron mal.
                Las tarjetas de arriba, en cambio, son solo de las posiciones abiertas.
@@ -1110,7 +1115,7 @@ function historySection(history) {
 
     return `<div style="background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius);padding:1rem 1.25rem;margin-bottom:1rem;">
         <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:8px;">
-            <div style="color:var(--color-muted);font-size:10px;letter-spacing:.08em;">PATRIMONIO Y CAPITAL APORTADO · ÚLTIMOS ${history.length} DÍAS CON DATOS <span class="tt-trigger" data-tooltip="cartera-evolucion" title="¿Qué es esto?">?</span></div>
+            <div style="color:var(--color-muted);font-size:10px;letter-spacing:.08em;">PATRIMONIO Y CAPITAL DESPLEGADO · ÚLTIMOS ${history.length} DÍAS CON DATOS <span class="tt-trigger" data-tooltip="cartera-evolucion" title="¿Qué es esto?">?</span></div>
             ${cifra}
         </div>
         <canvas id="cartera-history-chart" width="900" height="220" style="width:100%;height:220px;display:block;"></canvas>

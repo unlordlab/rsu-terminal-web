@@ -645,12 +645,63 @@ def simulate_tier_capital(df, col_fecha, col_estado, col_compra, col_actual, col
             equity += pnl_dollar
             open_committed -= actual_inv  # libera el capital comprometido al cerrar
 
+    # ── SEGUNDA PASADA: repartir el capital que se fue liberando ─────────────
+    #
+    # La pasada de arriba dimensiona cada posición con el capital que había EL
+    # DÍA que se abrió, y no vuelve a mirarla nunca. Cuando más tarde se cierra
+    # otra posición, ese capital vuelve a estar libre pero ya no se ofrece a
+    # nadie: las que se abrieron en un momento apretado se quedan pequeñas —o a
+    # cero— para siempre.
+    #
+    # Medido sobre la cartera real el 04/08/2026: seis posiciones a cero y
+    # cuatro por debajo de su peso (tres de ellas HIGH), mientras la pantalla
+    # declaraba $22.676,55 de capital disponible. Dimensionar las seis costaba
+    # $22.000. Es decir, la pantalla decía a la vez que sobraba dinero y que no
+    # había con qué dimensionar.
+    #
+    # SOLO SE TOCAN LAS ABIERTAS. Reasignar una cerrada cambiaría el P&L
+    # realizado que ya generó al venderse, y eso es reescribir la historia: el
+    # capital de esa operación se comprometió y se liberó en su día, con el
+    # tamaño que tuvo entonces.
+    #
+    # ORDEN: primero por peso de nivel (CORE antes que HIGH antes que LOTTERY)
+    # y, dentro del mismo nivel, la más antigua primero. Cuando el capital no
+    # llega para todas hace falta un criterio, y este es explicable: se
+    # completa antes lo de mayor convicción.
+    abiertas_idx = [
+        idx for idx, row in filas.items()
+        if "CERRADA" not in str(row[col_estado]).upper()
+        and "CLOSED" not in str(row[col_estado]).upper()
+        and norm_tier(row.get(col_tier))
+    ]
+    abiertas_idx.sort(key=lambda i: (-TIER_WEIGHTS[norm_tier(filas[i].get(col_tier))],
+                                     filas[i][col_fecha]))
+
+    reasignado = 0.0
+    for idx in abiertas_idx:
+        disponible = round(equity - open_committed, 2)
+        if disponible <= 0:
+            break
+        tier    = norm_tier(filas[idx].get(col_tier))
+        deseado = capital_total * TIER_WEIGHTS[tier] / 100
+        actual  = inv_by_idx.get(idx) or 0.0
+        falta   = round(deseado - actual, 2)
+        if falta <= 0:
+            continue
+        anadir = round(min(falta, disponible), 2)
+        if anadir <= 0:
+            continue
+        inv_by_idx[idx] = round(actual + anadir, 2)
+        open_committed += anadir
+        reasignado     += anadir
+
     return {
         "inv_by_idx": inv_by_idx,
         "equity_final":     round(equity, 2),
         "open_committed":   round(open_committed, 2),
         "pnl_realizado":    round(equity - capital_total, 2),
         "capital_disponible": round(max(0.0, equity - open_committed), 2),
+        "reasignado":       round(reasignado, 2),
     }
 
 
