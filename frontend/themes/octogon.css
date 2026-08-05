@@ -15,28 +15,35 @@
    ───────────────────────────────────────────────────────────────────────── */
 
 [data-theme="octogon"] {
-  /* Gris de fondo lo bastante claro para que la tinta negra tenga contraste
-     de sobra, y superficies un escalón más claras para que las cajas se
-     despeguen del fondo sin necesitar sombra (el clip-path las anularía). */
-  --color-bg:        #9197a0;
-  --color-surface:   #aeb4bc;
-  --color-surface2:  #c1c7ce;
-  --color-border:    rgba(10, 13, 18, 0.34);
+  /* El gris se eligió midiendo, y hubo que rehacerlo. Primer intento: un
+     gris medio, para que el verde chillón se leyera sobre él. Salió peor —
+     un gris medio está a la misma distancia de todos los colores saturados,
+     así que el rojo de los P&L negativos caía a 1,12:1, prácticamente
+     invisible, y eso es el dato más importante de la pantalla.
+     La salida fue darse cuenta de que el verde ya NO necesita leerse sobre
+     el gris: vive dentro de los bloques negros de los títulos, donde tiene
+     14,9:1. Liberado de esa exigencia, el gris puede ser claro, que es lo
+     que necesitan la tinta negra (10,2:1) y las cifras de resultado. */
+  --color-bg:        #a2a8b0;
+  --color-surface:   #b4bac1;
+  --color-surface2:  #c3c8ce;
+  --color-border:    rgba(8, 10, 14, 0.40);
 
-  --color-text:      #0b0e13;
-  --color-muted:     #454c56;
+  --color-text:      #07090c;
+  --color-muted:     #22262c;
 
-  /* Naranja quemado: es el color de la señalización industrial, que es de
-     donde viene el octógono. El tono se eligió MIDIENDO el contraste sobre
-     la superficie gris, no a ojo — el primer candidato (#c2410c) se quedaba
-     en 2,48:1, por debajo del 4,5:1 que necesita un texto pequeño para
-     leerse. Este da 4,80:1. Si se aclara para ganar viveza, se pierde
-     legibilidad: es un intercambio, no una mejora gratis. */
-  --color-accent:    #7a2503;
-  --color-secondary: #15486b;
-  --color-danger:    #991b1b;
-  --color-warning:   #8a5a0b;
-  --color-success:   #15803d;
+  /* Verde chillón. Donde de verdad brilla es sobre los bloques negros de
+     los títulos; sobre el gris cumple como color de acento de interfaz,
+     que es su papel. */
+  --color-accent:    #2bff5f;
+  --color-secondary: #00e5d0;
+  --color-danger:    #ff2f45;
+  --color-warning:   #ffb800;
+  --color-success:   #2bff5f;
+
+  /* Negro de los bloques de título. No es el mismo que la tinta: este es
+     un fondo y necesita ser plano y opaco. */
+  --oct-ink:         #06080b;
 
   --font-mono:  'Space Mono', monospace;
   --font-ui:    'Inter', sans-serif;
@@ -118,6 +125,136 @@
     0% 100%,
     0% var(--oct-cut-sm)
   );
+}
+
+/* ── TÍTULOS COMO BLOQUE ──────────────────────────────────────────────────
+   Los títulos de la terminal comparten forma: color de acento más
+   `letter-spacing`. Son 131 repartidos por las páginas, así que se
+   seleccionan por esa combinación en vez de tocarlos uno a uno.
+
+   Pasan de ser texto de color a ser un BLOQUE: rectángulo negro, tinta
+   verde, versalitas. Es lo que hace que la interfaz se lea como piezas
+   macizas en vez de texto flotando — y de paso resuelve el contraste: el
+   verde chillón sobre negro da 14:1, que es donde este color rinde.
+
+   `display:inline-block` es lo que ajusta el bloque al texto en vez de
+   dejarlo ocupar la fila entera. */
+[data-theme="octogon"] [style*="color:var(--color-accent)"][style*="letter-spacing"],
+[data-theme="octogon"] [style*="color: var(--color-accent)"][style*="letter-spacing"] {
+  display: inline-block;
+  background: var(--oct-ink);
+  color: var(--color-accent) !important;
+  padding: 3px 11px 4px;
+  text-transform: uppercase;
+  text-shadow: none !important;
+  clip-path: polygon(
+    var(--oct-cut-sm) 0%, calc(100% - var(--oct-cut-sm)) 0%,
+    100% var(--oct-cut-sm), 100% calc(100% - var(--oct-cut-sm)),
+    calc(100% - var(--oct-cut-sm)) 100%, var(--oct-cut-sm) 100%,
+    0% calc(100% - var(--oct-cut-sm)), 0% var(--oct-cut-sm)
+  );
+}
+
+/* La entrada activa del sidebar recibe el mismo trato: el bloque negro es
+   lo que marca dónde estás, no un simple cambio de color. */
+[data-theme="octogon"] .nav-item.active {
+  background: var(--oct-ink);
+  color: var(--color-accent);
+  border-left-color: var(--color-accent);
+}
+
+/* ── BRUTALISMO ───────────────────────────────────────────────────────────
+   Perfil más grueso y un bloque macizo desplazado detrás de cada caja. Que
+   la sombra sea DURA —sin difuminar— es lo que la separa de una sombra
+   normal: no simula profundidad, declara que hay dos planos. */
+[data-theme="octogon"] [style*="border-radius:var(--radius)"],
+[data-theme="octogon"] [style*="border-radius: var(--radius)"],
+[data-theme="octogon"] [style*="border-radius:var(--radius-lg)"],
+[data-theme="octogon"] [style*="border-radius: var(--radius-lg)"] {
+  filter:
+    drop-shadow( 1.5px 0 0 var(--color-border))
+    drop-shadow(-1.5px 0 0 var(--color-border))
+    drop-shadow( 0  1.5px 0 var(--color-border))
+    drop-shadow( 0 -1.5px 0 var(--color-border))
+    drop-shadow(3px 3px 0 rgba(6, 8, 11, 0.34));
+}
+
+/* ── GLITCH ───────────────────────────────────────────────────────────────
+   Sutil a propósito: separación de canales de 1px, unas centésimas de
+   segundo, y solo cada nueve. Un glitch continuo cansa a los diez minutos, y
+   esto es una herramienta de trabajo, no una intro.
+
+   Solo lo llevan los títulos GRANDES (18 y 24px, los de página). Con los 131
+   animándose a la vez el navegador recompondría media pantalla cada pocos
+   segundos sin ganar nada a cambio. */
+@keyframes oct-glitch {
+  0%, 96.5%, 100% { transform: none; text-shadow: none; }
+  97.0% { transform: translate(-1px, 0);
+          text-shadow: 1px 0 var(--color-secondary), -1px 0 var(--color-danger); }
+  97.6% { transform: translate(1px, 0);
+          text-shadow: -1px 0 var(--color-secondary), 1px 0 var(--color-danger); }
+  98.2% { transform: none; text-shadow: none; }
+}
+
+[data-theme="octogon"] [style*="font-size:18px"][style*="letter-spacing"],
+[data-theme="octogon"] [style*="font-size:24px"][style*="letter-spacing"] {
+  animation: oct-glitch 9s steps(1, end) infinite;
+}
+
+/* Al pasar por encima, el glitch aparece a demanda en cualquier título: la
+   parte que se siente viva sin robar atención mientras se lee. */
+[data-theme="octogon"] [style*="color:var(--color-accent)"][style*="letter-spacing"]:hover {
+  text-shadow: 1.5px 0 var(--color-danger), -1.5px 0 var(--color-secondary) !important;
+}
+
+/* Quien pide menos movimiento no recibe ninguno. */
+@media (prefers-reduced-motion: reduce) {
+  [data-theme="octogon"] [style*="font-size:18px"][style*="letter-spacing"],
+  [data-theme="octogon"] [style*="font-size:24px"][style*="letter-spacing"] {
+    animation: none;
+  }
+  [data-theme="octogon"] [style*="color:var(--color-accent)"][style*="letter-spacing"]:hover {
+    text-shadow: none !important;
+  }
+}
+
+/* ── LAS CIFRAS DE COLOR ──────────────────────────────────────────────────
+   La terminal lleva 478 colores CLAVADOS en el código (frente a 552 que sí
+   usan variable): verde neón para lo positivo, rojo para lo negativo, ámbar
+   para avisos. Están pensados para fondo negro y sobre gris desaparecen —
+   el rojo llegaba a 1,1:1.
+
+   Se reasignan AQUÍ, dentro del tema, en vez de tocar el código compartido:
+   así ningún otro tema se entera. La versión oscura de cada color mantiene
+   el significado (verde sube, rojo baja) y se lee sobre gris.
+
+   El selector es preciso a propósito: `[style^=]` y `[style*=";color:"]`
+   cogen el color de TEXTO y dejan fuera `background-color:`, que contiene
+   la misma subcadena y habría hecho ilegible cualquier chip de color. */
+[data-theme="octogon"] [style^="color:#f23645"],
+[data-theme="octogon"] [style*=";color:#f23645"],
+[data-theme="octogon"] [style*="; color:#f23645"] { color: #8a0a15 !important; }
+
+[data-theme="octogon"] [style^="color:#00ffad"],
+[data-theme="octogon"] [style*=";color:#00ffad"],
+[data-theme="octogon"] [style*="; color:#00ffad"] { color: #08562f !important; }
+
+[data-theme="octogon"] [style^="color:#ffb800"],
+[data-theme="octogon"] [style*=";color:#ffb800"],
+[data-theme="octogon"] [style*="; color:#ffb800"] { color: #634400 !important; }
+
+[data-theme="octogon"] [style^="color:#00d9ff"],
+[data-theme="octogon"] [style*=";color:#00d9ff"],
+[data-theme="octogon"] [style*="; color:#00d9ff"] { color: #08485a !important; }
+
+/* El acento tiene dos papeles y necesita dos tonos. Como ESTRUCTURA —los
+   bloques de título, el logo, la entrada activa— es el verde chillón sobre
+   negro. Como CIFRA suelta sobre gris, el chillón se queda en 1,5:1, así
+   que ahí va la versión oscura. Se distinguen por el `letter-spacing`, que
+   solo llevan los títulos. */
+[data-theme="octogon"] [style*="color:var(--color-accent)"]:not([style*="letter-spacing"]),
+[data-theme="octogon"] [style*="color: var(--color-accent)"]:not([style*="letter-spacing"]) {
+  color: #08562f !important;
 }
 
 /* ── Tipografía ───────────────────────────────────────────────────────────
