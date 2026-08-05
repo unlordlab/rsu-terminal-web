@@ -1,4 +1,4 @@
-import { cycleTheme, getCurrentTheme } from '/core/theme.js';
+import { cycleTheme, getCurrentTheme, nombreTema } from '/core/theme.js';
 import { initWebSocket, onMarketUpdate } from '/core/websocket.js';
 import { clearToken, getTier } from '/core/api.js';
 import { showPricingModal } from '/components/pricing_modal.js';
@@ -147,7 +147,7 @@ function updateClock(container) {
 
 function updateThemeLabel(container) {
     const btn = container.querySelector('#theme-toggle');
-    if (btn) btn.textContent = getCurrentTheme().toUpperCase();
+    if (btn) btn.textContent = nombreTema(getCurrentTheme());
 }
 
 function setWsIndicator(container, connected) {

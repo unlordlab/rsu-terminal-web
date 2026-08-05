@@ -1,0 +1,139 @@
+/* ─────────────────────────────────────────────────────────────────────────
+   OCTÖGON — gris industrial, tinta negra, geometría de ocho lados.
+
+   Es el primer tema del proyecto que además de colores cambia la FORMA. Los
+   demás son solo variables; este añade estructura, y por eso vive aquí y no
+   en base.css: todo lo estructural va dentro de [data-theme="octogon"] para
+   que ningún otro tema lo herede.
+
+   Cómo se consigue la forma sin tocar el JS: las tarjetas de la terminal se
+   pintan con estilo en línea desde las páginas —hay más de 300 sitios con
+   `border-radius:var(--radius)`— así que en vez de editarlos uno a uno se
+   seleccionan por ese mismo atributo y se les aplica un `clip-path`. El
+   corte de esquina es una variable (`--oct-cut`) para poder ajustarlo desde
+   un único sitio.
+   ───────────────────────────────────────────────────────────────────────── */
+
+[data-theme="octogon"] {
+  /* Gris de fondo lo bastante claro para que la tinta negra tenga contraste
+     de sobra, y superficies un escalón más claras para que las cajas se
+     despeguen del fondo sin necesitar sombra (el clip-path las anularía). */
+  --color-bg:        #9197a0;
+  --color-surface:   #aeb4bc;
+  --color-surface2:  #c1c7ce;
+  --color-border:    rgba(10, 13, 18, 0.34);
+
+  --color-text:      #0b0e13;
+  --color-muted:     #454c56;
+
+  /* Naranja quemado: es el color de la señalización industrial, que es de
+     donde viene el octógono. El tono se eligió MIDIENDO el contraste sobre
+     la superficie gris, no a ojo — el primer candidato (#c2410c) se quedaba
+     en 2,48:1, por debajo del 4,5:1 que necesita un texto pequeño para
+     leerse. Este da 4,80:1. Si se aclara para ganar viveza, se pierde
+     legibilidad: es un intercambio, no una mejora gratis. */
+  --color-accent:    #7a2503;
+  --color-secondary: #15486b;
+  --color-danger:    #991b1b;
+  --color-warning:   #8a5a0b;
+  --color-success:   #15803d;
+
+  --font-mono:  'Space Mono', monospace;
+  --font-ui:    'Inter', sans-serif;
+  --font-size:  13.5px;
+
+  /* Sin esquinas redondeadas: las sustituye el recorte octagonal. */
+  --radius:     0px;
+  --radius-lg:  0px;
+
+  --scanlines:   none;
+  --glow-accent: none;
+  --glow-text:   none;
+
+  /* Tamaño del bisel. Bajarlo acerca la caja al rectángulo; subirlo
+     acentúa el octógono. Por encima de ~16px empieza a comerse el texto de
+     las cajas pequeñas. */
+  --oct-cut:      11px;
+  --oct-cut-sm:   6px;
+}
+
+/* ── La forma ─────────────────────────────────────────────────────────────
+   Ocho lados: cuatro rectos y cuatro biseles. Se aplica a todo lo que la
+   terminal pinta como caja. Se cubren las dos escrituras posibles del
+   estilo en línea (con y sin espacio tras los dos puntos) porque las
+   páginas usan las dos. */
+[data-theme="octogon"] [style*="border-radius:var(--radius)"],
+[data-theme="octogon"] [style*="border-radius: var(--radius)"],
+[data-theme="octogon"] [style*="border-radius:var(--radius-lg)"],
+[data-theme="octogon"] [style*="border-radius: var(--radius-lg)"] {
+  clip-path: polygon(
+    var(--oct-cut) 0%,
+    calc(100% - var(--oct-cut)) 0%,
+    100% var(--oct-cut),
+    100% calc(100% - var(--oct-cut)),
+    calc(100% - var(--oct-cut)) 100%,
+    var(--oct-cut) 100%,
+    0% calc(100% - var(--oct-cut)),
+    0% var(--oct-cut)
+  );
+  /* El borde normal se cortaría por la mitad en los biseles y dejaría las
+     diagonales abiertas. Se sustituye por un contorno que SÍ sigue la
+     silueta recortada: cuatro sombras de 1px en cruz, que es la única
+     forma de dibujar un perfil sobre un clip-path. */
+  border-color: transparent !important;
+  filter:
+    drop-shadow( 1px 0 0 var(--color-border))
+    drop-shadow(-1px 0 0 var(--color-border))
+    drop-shadow( 0  1px 0 var(--color-border))
+    drop-shadow( 0 -1px 0 var(--color-border));
+}
+
+/* El acento se usa en dos papeles opuestos: como TINTA sobre gris, donde
+   tiene que ser oscuro para leerse, y como FONDO de botón, donde el código
+   pone encima texto negro. Con un naranja oscuro, negro sobre naranja da
+   1,6:1 y el botón se vuelve ilegible. Se le pone tinta clara encima. */
+[data-theme="octogon"] [style*="background:var(--color-accent)"],
+[data-theme="octogon"] [style*="background: var(--color-accent)"],
+[data-theme="octogon"] [style*="background:var(--color-secondary)"],
+[data-theme="octogon"] [style*="background: var(--color-secondary)"] {
+  color: #f2efec !important;
+}
+
+/* Controles pequeños: con el bisel grande, un input de 30px de alto se
+   queda sin esquinas y el texto se sale. */
+[data-theme="octogon"] input[style*="border-radius"],
+[data-theme="octogon"] button[style*="border-radius"],
+[data-theme="octogon"] select[style*="border-radius"] {
+  --oct-cut: var(--oct-cut-sm);
+}
+
+/* El botón de tema del topbar y la barra lateral llevan su propia forma
+   para que el conjunto se lea como una sola pieza. */
+[data-theme="octogon"] .nav-item {
+  clip-path: polygon(
+    var(--oct-cut-sm) 0%,
+    100% 0%,
+    100% calc(100% - var(--oct-cut-sm)),
+    calc(100% - var(--oct-cut-sm)) 100%,
+    0% 100%,
+    0% var(--oct-cut-sm)
+  );
+}
+
+/* ── Tipografía ───────────────────────────────────────────────────────────
+   Space Mono es geométrica y de trazo recto: acompaña al octógono mejor que
+   la mono por defecto, que es de estética CRT. */
+[data-theme="octogon"] body {
+  letter-spacing: 0.01em;
+}
+
+[data-theme="octogon"] ::-webkit-scrollbar-thumb {
+  background: rgba(10, 13, 18, 0.45);
+  border-radius: 0;
+}
+
+/* Los enlaces de ticker se subrayan con el naranja en vez de con el color
+   heredado, que sobre gris quedaba lavado. */
+[data-theme="octogon"] .ticker-link:hover {
+  text-decoration-color: var(--color-accent);
+}

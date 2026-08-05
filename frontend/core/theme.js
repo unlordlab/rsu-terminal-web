@@ -1,5 +1,14 @@
-const THEMES = ["crt", "dark-pro", "light", "bubblebath", "polygon-window", "xtal", "isopropophlex"];
+const THEMES = ["crt", "dark-pro", "light", "bubblebath", "polygon-window", "xtal", "isopropophlex", "octogon"];
 const STORAGE_KEY = "rsu_theme";
+
+// El identificador va sin diéresis (vale como atributo, como nombre de
+// fichero y como clave de localStorage sin sorpresas de codificación); el
+// nombre que se enseña sí la lleva.
+const NOMBRES = { "octogon": "OCTÖGON" };
+
+export function nombreTema(id) {
+    return NOMBRES[id] || (id || "").toUpperCase();
+}
 
 export function initTheme() {
     const saved = localStorage.getItem(STORAGE_KEY) || "dark-pro";
