@@ -125,6 +125,16 @@ FEAR_GREED_COMPONENTS = [
 ]
 
 def get_fear_greed():
+    # Caché de 15 min. No la tenía: cada carga de la página Mercado golpeaba
+    # la API de CNN, y con ~100 usuarios eso son cientos de peticiones diarias
+    # a un endpoint que no es público ni documentado — el camino más corto a
+    # que nos bloqueen. El índice se recalcula unas pocas veces al día, así
+    # que 15 min no pierde nada. Ver auditoría Market, hallazgo #10.
+    from services.cache import cache
+    cached = cache.get("market:fear_greed")
+    if cached:
+        return cached
+
     import requests
     try:
         r = requests.get(
@@ -159,7 +169,7 @@ def get_fear_greed():
                         "rating": str(node.get("rating", "")).replace("_", " ").title(),
                     })
 
-            return {
+            resultado = {
                 "score": score, "rating": rating,
                 "prev": prev, "week_ago": week,
                 "month_ago": int(month) if month is not None else None,
@@ -167,6 +177,12 @@ def get_fear_greed():
                 "components": components,
                 "timestamp": get_timestamp(), "ok": True,
             }
+            # Solo se cachea el dato bueno de CNN. La estimación por VIX de más
+            # abajo NO se cachea: es un apaño para que la pantalla no quede
+            # vacía, y guardarlo 15 min alargaría el apaño mucho más allá del
+            # fallo puntual que lo provocó.
+            cache.set("market:fear_greed", resultado, 900)
+            return resultado
     except Exception:
         pass
     try:
@@ -1395,7 +1411,19 @@ def get_fed_macro() -> dict:
         'indicators': indicators,
         'timestamp':  get_timestamp(),
     }
-    cache.set('market:fed_macro', result, 1800)
+    # Solo se guarda si hay algo que guardar.
+    #
+    # Las tres sub-descargas devuelven {} cuando fallan, así que un tropiezo
+    # puntual de FRED producía un resultado `ok: True` completamente vacío...
+    # que se cacheaba 30 minutos igual. Media hora de pantalla en blanco por
+    # un fallo de red de dos segundos, y sin forma de forzar el reintento.
+    # Ahora, si no vino nada, se devuelve el vacío pero NO se cachea: la
+    # siguiente petición vuelve a intentarlo. Mismo criterio que ya se aplica
+    # a los `ok: False` del resto del módulo. Ver auditoría Market, #11.
+    if balance or yields or indicators:
+        cache.set('market:fed_macro', result, 1800)
+    else:
+        print("[FedMacro] Las tres fuentes vinieron vacías — no se cachea, se reintenta en la próxima petición")
     return result
 
 # ── LIQUIDEZ (NET LIQUIDITY + M2 + OVERLAY SPX) ───────────────────────────────

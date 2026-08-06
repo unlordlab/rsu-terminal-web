@@ -1157,6 +1157,26 @@ async function loadSpreads(el) {
     }
 }
 
+// Espera a que el canvas EXISTA en el DOM y a que Chart.js esté cargado, y
+// entonces dibuja. Sustituye al patrón de `setTimeout(..., 300)` seguido de
+// `if (!ctx || !window.Chart) return;`, que era una apuesta: si en esos 300 ms
+// la librería no había terminado de bajar —conexión lenta, caché fría, primera
+// visita— el gráfico no se dibujaba NUNCA y no había reintento. Al recargar
+// funcionaba, porque entonces Chart.js ya estaba en caché, así que el fallo
+// solo aparecía en la primera carga y era casi imposible de reproducir a mano.
+// Ver auditoría Market, hallazgo #12.
+function _dibujarCuandoListo(chartId, dibujar, intentos = 20) {
+    _loadChartJsThen(() => {
+        const ctx = document.getElementById(chartId);
+        if (ctx && window.Chart) { dibujar(ctx); return; }
+        if (intentos <= 0) {
+            console.warn('[Market] no se pudo dibujar el gráfico ' + chartId + ' (canvas o Chart.js no disponibles)');
+            return;
+        }
+        setTimeout(() => _dibujarCuandoListo(chartId, dibujar, intentos - 1), 150);
+    });
+}
+
 function _loadChartJsThen(cb) {
     if (window.Chart) { cb(); return; }
     const script  = document.createElement('script');
@@ -1653,9 +1673,7 @@ async function loadFedMacro(el) {
                 + '<div style="color:var(--color-muted);font-size:10px;margin-bottom:4px;">Balance Fed últimas 24 semanas (Trillones $)</div>'
                 + '<div style="height:60px;"><canvas id="' + chartId + '" height="60"></canvas></div>'
                 + '</div>';
-            setTimeout(() => {
-                const ctx = document.getElementById(chartId);
-                if (!ctx || !window.Chart) return;
+            _dibujarCuandoListo(chartId, (ctx) => {
                 _marketChartIds.push(chartId);
                 new Chart(ctx, {
                     type: 'line',
@@ -1672,7 +1690,7 @@ async function loadFedMacro(el) {
                         }
                     }
                 });
-            }, 300);
+            });
         }
 
         // ── CURVA DE TIPOS ────────────────────────────────────────────────────
