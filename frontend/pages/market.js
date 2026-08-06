@@ -158,7 +158,18 @@ function updateIndicesWS(indices) {
 function updatePricesWS(prices) {
     if (!prices || !prices.length) return;
     prices.forEach(p => {
-        const el = document.querySelector('[data-ws-ticker="' + p.name + '"]');
+        // Se busca primero por el símbolo real (CL=F, BTC-USD) y solo después
+        // por la clave (OIL, BTC). Antes solo se probaba la clave: coincidía
+        // para acciones —donde clave y símbolo son lo mismo— y no coincidía
+        // nunca para materias primas ni cripto, así que esas filas se
+        // quedaban congeladas en el valor de la carga inicial.
+        //
+        // Cripto además lleva el sufijo del par: el WebSocket manda "BTC-USD"
+        // y la fila también, pero por si alguna fuente manda solo "BTC" se
+        // prueba igualmente esa forma antes de rendirse.
+        const el = (p.ticker && document.querySelector('[data-ws-ticker="' + p.ticker + '"]'))
+            || document.querySelector('[data-ws-ticker="' + p.name + '"]')
+            || document.querySelector('[data-ws-ticker="' + p.name + '-USD"]');
         if (!el) return;
         const up      = p.chg >= 0;
         const color   = up ? 'var(--color-accent)' : '#f23645';
@@ -166,7 +177,7 @@ function updatePricesWS(prices) {
         const priceEl = el.querySelector('[data-ws-price]');
         const chgEl   = el.querySelector('[data-ws-chg]');
         if (priceEl) {
-            priceEl.textContent = p.price.toLocaleString('en-US');
+            priceEl.textContent = (priceEl.dataset.wsPrefix || '') + p.price.toLocaleString('en-US');
             priceEl.classList.remove('ws-blink-up','ws-blink-down');
             void priceEl.offsetWidth;
             priceEl.classList.add(up ? 'ws-blink-up' : 'ws-blink-down');
@@ -1868,6 +1879,14 @@ function loadCalendar(el) {
 
 // ── HELPERS ───────────────────────────────────────────────────────────────────
 
+// Saca el simbolo de moneda del precio ya formateado ("$1.234,5" -> "$").
+// Se lee de lo que ya se iba a pintar en vez de pasarlo por parametro, para
+// no tener que tocar los cuatro sitios que llaman a wsRow.
+function _prefijoDe(precioFormateado) {
+    const m = String(precioFormateado || '').match(/^[^\d\-—]+/);
+    return m ? m[0] : '';
+}
+
 function wsRow(ticker, name, price, change, color) {
     return '<div data-ws-ticker="' + ticker + '" style="display:flex;justify-content:space-between;align-items:center;padding:10px 14px;border-bottom:1px solid var(--color-border);">'
         + '<div>'
@@ -1875,7 +1894,11 @@ function wsRow(ticker, name, price, change, color) {
         + '<div style="color:var(--color-muted);font-size:11px;">' + name + '</div>'
         + '</div>'
         + '<div style="text-align:right;">'
-        + '<div data-ws-price style="color:var(--color-text);font-size:14px;">' + price + '</div>'
+        // El prefijo se guarda en el propio elemento. Al llegar un tick del
+        // WebSocket se reescribe solo el número, y sin esto el "$" (o el "€",
+        // o lo que fuera) desaparecía en la primera actualización: "$68.420"
+        // pasaba a "68.420" y ya no volvía hasta recargar.
+        + '<div data-ws-price data-ws-prefix="' + _prefijoDe(price) + '" style="color:var(--color-text);font-size:14px;">' + price + '</div>'
         + '<div data-ws-chg  style="color:' + color + ';font-size:11px;">' + change + '</div>'
         + '</div>'
         + '</div>';

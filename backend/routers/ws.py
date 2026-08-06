@@ -11,10 +11,16 @@ import pytz
 
 router = APIRouter()
 
+# La CLAVE tiene que coincidir con el identificador que la pantalla pone en
+# `data-ws-ticker`, porque es por ahí por donde se emparejan la fila y el tick.
+# "GOLD" y "DXY" coincidían por casualidad; "OIL" no —la fila de petróleo se
+# llama "WTI"— así que ese precio nunca se actualizaba en vivo. Bitcoin tiene
+# su propio caso: la fila usa el par completo "BTC-USD", y eso se resuelve en
+# el frontend probando también esa forma. Ver auditoría Market, hallazgo #8.
 PRICE_TICKERS = {
     "BTC":  "BTC-USD",
     "GOLD": "GC=F",
-    "OIL":  "CL=F",
+    "WTI":  "CL=F",
     "DXY":  "DX-Y.NYB",
     "AAPL": "AAPL",
     "MSFT": "MSFT",
@@ -103,7 +109,17 @@ def _get_quick_prices() -> list:
             prev = float(hist['Close'].iloc[-2])
             last = float(hist['Close'].iloc[-1])
             chg  = (last - prev) / prev * 100
-            result.append({"name": name, "price": round(last, 2), "chg": round(chg, 2)})
+            # Se manda TAMBIÉN el símbolo real, no solo la clave.
+            #
+            # La pantalla identifica cada fila por el símbolo de yfinance
+            # (`data-ws-ticker="CL=F"`, `"BTC-USD"`), mientras que aquí solo
+            # viajaba la clave del diccionario ("OIL", "BTC"). Para acciones
+            # coincidían por casualidad —la clave ES el símbolo— y por eso
+            # funcionaban; para materias primas y cripto no casaban nunca, así
+            # que esas filas jamás recibían precio en vivo. Ver auditoría
+            # Market, hallazgo #8.
+            result.append({"name": name, "ticker": ticker,
+                           "price": round(last, 2), "chg": round(chg, 2)})
         except Exception:
             continue
     return result
