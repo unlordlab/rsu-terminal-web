@@ -2331,21 +2331,32 @@ Las tarjetas de cabecera miran solo las posiciones abiertas ahora mismo. Esta cu
         short: "¿Caben las posiciones abiertas dentro de tus propias reglas de tamaño?",
         long: `▸ DE DÓNDE SALE EL CAPITAL BASE
 
-Es un ajuste del servidor (CAPITAL_TOTAL), no una medición de tu cuenta. Si nunca se ha tocado vale 100.000 por defecto, y entonces los tamaños que ves aquí están calculados sobre una cifra que no es tu capital real. Conviene fijarlo al valor de verdad antes de sacar conclusiones de esta tabla.
+Es un ajuste del servidor, no una medición de tu cuenta. Si nunca se ha tocado vale 100.000 por defecto, y entonces los tamaños que ves aquí están calculados sobre una cifra que no es tu capital real. Conviene fijarlo al valor de verdad antes de sacar conclusiones de esta tabla.
+
+Va SIEMPRE EN DÓLARES, igual que el resto de la pantalla. Las posiciones cotizan en dólares y aquí no se convierte ninguna divisa, así que poner la cifra en euros mezclaría dos monedas y todos los números de esta tabla quedarían descuadrados.
 
 ▸ CÓMO SE REPARTE
 
 Cada nivel fija un tamaño como porcentaje del capital base: CORE 5%, HIGH 3%, LOTTERY 1%. Esta tabla multiplica ese porcentaje por el número de posiciones abiertas de cada nivel y lo compara con el capital que hay de verdad.
 
-La cuenta es tozuda: 13 posiciones CORE al 5% ya son el 65% del capital. Si además hay 36 HIGH al 3%, eso son 108% más. Sumado pasa del 100% mucho antes de lo que parece.
+La cuenta es tozuda: doce posiciones CORE al 5% ya son el 60% del capital. Si además hay treinta y cuatro HIGH al 3%, eso son 102% más. Sumado pasa del 100% mucho antes de lo que parece.
 
 Cuando el total pedido supera al capital disponible, las últimas posiciones en abrirse se quedan sin tamaño asignado y aparecen como «sin asignar» en la tabla. No es un error de datos: es que el número de posiciones y las reglas de tamaño no caben juntos.
 
-Hay tres formas de cuadrarlo, y conviene elegir a conciencia:
+▸ SUBIR EL CAPITAL BASE NO LO ARREGLA
+
+Es la salida que parece obvia y es la única que no funciona.
+
+El capital base no es un depósito que se llena: es la cifra sobre la que se calcula el tamaño de cada posición. Si lo subes, sube a la vez lo que cada posición pide. Los dos lados de la balanza crecen igual, así que el desfase se queda exactamente donde estaba.
+
+Con un ejemplo: si tus posiciones abiertas piden en total el 150% del capital base, ese 150% es una proporción, no una cantidad de dinero. Seguirá siendo el 150% pongas la base que pongas. Doblar la base dobla también lo que falta, y las posiciones que se quedaban sin tamaño siguen quedándose sin él.
+
+Lo que sí lo cuadra:
 
 ▸ Cerrar posiciones hasta que quepan. Es lo que las propias reglas están pidiendo — un nivel CORE del 5% implica una cartera concentrada, no de cincuenta nombres.
-▸ Bajar los pesos por nivel. Coherente, pero redefine qué significa CORE.
-▸ Subir el capital base. Válido solo si ese número refleja capital real; si no, es maquillaje.`
+▸ Bajar los pesos por nivel. Coherente, pero cambia lo que significa CORE.
+
+Fija el capital base al dinero con el que empezaste de verdad, en dólares. La razón para acertar con esa cifra no es que quepan más posiciones: es que los números de esta pantalla se correspondan con tu cuenta.`
     },
 
     "cartera-cadencia": {

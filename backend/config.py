@@ -43,6 +43,19 @@ class Settings(BaseSettings):
     # Production domain — set via .env: CORS_ORIGINS=["https://tudominio.com"]
     # Capital total de referencia para el sizing por niveles Core/High/Lottery
     # (columna "Nivel" en la hoja de Cartera). Ej: CAPITAL_TOTAL=50000
+    #
+    # EN DÓLARES, SIEMPRE. No hay ninguna conversión de divisa en el proyecto y
+    # las posiciones son tickers estadounidenses, así que sus valores vienen en
+    # USD. Poner aquí una cifra en euros mezcla dos monedas: total_inv,
+    # capital_disponible, pnl_realizado_acum y la tabla de asignación objetivo
+    # quedarían comparando magnitudes que no son de la misma unidad.
+    #
+    # Y es una BASE DE CÁLCULO, no un colchón: los tamaños se fijan como
+    # porcentaje de esta cifra, así que subirla no hace que quepan más
+    # posiciones -- sube a la vez lo que cada una pide, y la proporción que
+    # falta se queda igual. Si el conjunto de posiciones abiertas pide más del
+    # 100%, eso se arregla con el número de posiciones o con TIER_WEIGHTS
+    # (cartera_service.py), nunca con este valor.
     capital_total: float = 100000
     # API Keys
     fred_api_key: str = ""
