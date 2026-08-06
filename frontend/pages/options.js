@@ -78,8 +78,30 @@ async function loadDashboard(container) {
 }
 
 function renderDashboard(data) {
+    const cob = data.cobertura;
+    // Cuántos valores respondieron de los que se pidieron. Un escaneo corto
+    // produce pocas señales, y sin este dato eso se lee como un día tranquilo
+    // en vez de como un día sin datos, que es lo contrario.
+    const coberturaTxt = cob && cob.cobertura_pct != null
+        ? ` · <span style="color:${cob.incompleto ? '#ffb800' : 'var(--color-muted)'};">${esc(cob.respondidos)}/${esc(cob.pedidos)} valores leídos (${esc(cob.cobertura_pct)}%)</span>`
+        : '';
     const fechaDatos = data.scan_date
-        ? `<div style="color:var(--color-muted);font-size:11px;margin-bottom:10px;">📊 Datos del escaneo: <span style="color:var(--color-text);font-weight:600;">${esc(_fmtFecha(data.scan_date))}</span></div>`
+        ? `<div style="color:var(--color-muted);font-size:11px;margin-bottom:10px;">📊 Datos del escaneo: <span style="color:var(--color-text);font-weight:600;">${esc(_fmtFecha(data.scan_date))}</span>${coberturaTxt}</div>`
+        : '';
+
+    // Dos motivos distintos por los que un escaneo no sirve, y se explican por
+    // separado porque no significan lo mismo: uno es no haber podido leer los
+    // valores, el otro es haberlos leído y que vinieran vacíos.
+    let motivo = '';
+    if (cob && cob.cobertura_baja) {
+        motivo = `Solo se pudieron leer <strong>${esc(cob.respondidos)} de ${esc(cob.pedidos)}</strong> valores (${esc(cob.cobertura_pct)}%), así que faltan señales que sí pudieron existir.`;
+    } else if (cob && cob.datos_vacios) {
+        motivo = `Se leyeron ${esc(cob.respondidos)} valores, pero <strong>${esc(cob.oi_cero_pct)}% llegaron sin posiciones abiertas registradas</strong>. El proveedor de datos devolvió las cadenas vacías, así que la actividad de ese día no se pudo medir.`;
+    }
+    const avisoCobertura = motivo
+        ? `<div style="background:rgba(255,184,0,0.10);border:1px solid #ffb800;border-radius:var(--radius);padding:10px 14px;margin-bottom:1rem;font-size:12px;color:var(--color-text);">
+            ⚠️ <strong>Escaneo incompleto.</strong> ${motivo} Lo de abajo describe la parte que sí se pudo mirar, no el mercado entero — y el sesgo del día está calculado sobre esa muestra parcial.
+        </div>`
         : '';
 
     const biasColor = data.dia_bias_label === 'ALCISTA' ? 'var(--color-accent)' : (data.dia_bias_label === 'BAJISTA' ? '#f23645' : 'var(--color-muted)');
@@ -119,7 +141,7 @@ function renderDashboard(data) {
         ? '<div style="color:var(--color-muted);font-size:11px;margin-top:10px;">Los cambios de Open Interest necesitan al menos 2 días de histórico guardado — aparecerán a partir de mañana.</div>'
         : '';
 
-    return fechaDatos + biasBanner + topBoxes + flowTables + oiTables + nota;
+    return fechaDatos + avisoCobertura + biasBanner + topBoxes + flowTables + oiTables + nota;
 }
 
 function flowTable(title, rows, color) {

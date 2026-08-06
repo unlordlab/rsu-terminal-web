@@ -232,6 +232,23 @@ def init_db():
     conn.execute('CREATE INDEX IF NOT EXISTS idx_ticker ON options_flow(ticker)')
     conn.execute('CREATE INDEX IF NOT EXISTS idx_date   ON options_flow(scan_date)')
     conn.execute('CREATE INDEX IF NOT EXISTS idx_signal ON options_flow(signal)')
+    # Cobertura de cada escaneo. Sin esto, un escaneo que se deje la mitad de
+    # los tickers por el camino -- caída de red, límite del proveedor, un fallo
+    # suyo -- produce pocas entradas y llega a la pantalla como un día
+    # tranquilo, que es lo contrario de lo que pasó. Guardar cuántos se pidieron
+    # y cuántos respondieron es lo que permite distinguir "no hubo actividad"
+    # de "no hubo datos". Ver auditoría Options Flow #7.
+    conn.execute('''
+        CREATE TABLE IF NOT EXISTS scan_log (
+            scan_date   TEXT PRIMARY KEY,
+            scan_ts     TEXT NOT NULL,
+            pedidos     INTEGER NOT NULL,
+            respondidos INTEGER NOT NULL,
+            con_flujo   INTEGER NOT NULL,
+            entradas    INTEGER,
+            oi_cero     INTEGER
+        )
+    ''')
     conn.commit()
     conn.close()
 
@@ -412,9 +429,14 @@ def get_options_flow_simple() -> dict:
     else:
         dia_bias_pct, dia_bias_label = None, "SIN DATOS"
 
+    # Cobertura del escaneo que produjo estos datos. Va junto al sesgo del día
+    # a propósito: si el escaneo se dejó medio universo, ese sesgo está
+    # calculado sobre media muestra y el usuario tiene que poder saberlo antes
+    # de leerlo. None en los días anteriores a que existiera el registro.
     return {
         "ok":                 True,
         "scan_date":          ultima_fecha,
+        "cobertura":          get_scan_log(ultima_fecha),
         "dia_bias_pct":       dia_bias_pct,
         "dia_bias_label":     dia_bias_label,
         "calls_bought":       [_entrada_simple(e, "Buy Call",  cartera_tickers, repetidos) for e in grupos["Buy Call"]][:25],
@@ -1149,6 +1171,12 @@ def _process_chain(ticker: str, min_premium: float = 100_000, min_score: int = 4
 
         calls_bought, puts_bought, calls_sold, puts_sold = [], [], [], []
         total_call_vol, total_put_vol = 0, 0
+        # Mayor open interest visto en toda la cadena, ANTES de cualquier
+        # filtro. Sirve para distinguir un modo de fallo que si no es invisible:
+        # el proveedor devuelve la cadena entera con openInterest = 0, todo cae
+        # por el mínimo de OI y el ticker parece tranquilo cuando en realidad
+        # llegó vacío. Ocurrió de verdad el 06/08/2026.
+        oi_max = 0.0
         bull_prem_total, bear_prem_total = 0, 0
         entries_by_exp: dict = {}   # para sweep detection
 
@@ -1193,6 +1221,7 @@ def _process_chain(ticker: str, min_premium: float = 100_000, min_score: int = 4
                     bid     = _safe(row.get('bid', 0))
                     ask     = _safe(row.get('ask', 0))
 
+                    if oi > oi_max: oi_max = oi
                     if vol < MIN_VOLUME or oi < MIN_OI or price_o < 0.10: continue
 
                     premium = vol * price_o * 100
@@ -1304,6 +1333,7 @@ def _process_chain(ticker: str, min_premium: float = 100_000, min_score: int = 4
             "total_call_prem": bull_prem_total + sum(e['premium'] for e in calls_sold),
             "total_put_prem":  bear_prem_total + sum(e['premium'] for e in puts_sold),
             "total_prem":      total_prem,
+            "oi_max":          oi_max,
             "calls_bought":    sorted(calls_bought, key=lambda x: -x['score'])[:15],
             "puts_bought":     sorted(puts_bought,  key=lambda x: -x['score'])[:10],
             "calls_sold":      sorted(calls_sold,   key=lambda x: -x['score'])[:10],
@@ -1344,10 +1374,24 @@ def get_options_flow(min_premium: float = 100_000, min_score: int = 4, tickers: 
                            min_score): t
         for t in target
     }
+    # Tres cuentas distintas, y la diferencia entre ellas es justo la
+    # información que faltaba: cuántos se pidieron, a cuántos se les pudo leer
+    # la cadena, y cuántos de esos traían algo. `respondidos` bajo significa
+    # problema de datos; `con_flujo` bajo con `respondidos` alto significa,
+    # ahora sí, un día tranquilo de verdad.
+    respondidos = 0
+    oi_cero     = 0
     for f in futures:
         r = f.result()
-        if r.get('ok') and r['total_prem'] > 0:
-            results.append(r)
+        if r.get('ok'):
+            respondidos += 1
+            # Cadena leída pero con TODO el open interest a cero: el dato llegó
+            # vacío, no es que no hubiera actividad. Sin contarlo, un día así se
+            # confunde con uno tranquilo aunque la cobertura sea del 99%.
+            if not r.get('oi_max'):
+                oi_cero += 1
+            if r['total_prem'] > 0:
+                results.append(r)
 
     all_calls_bought, all_puts_bought = [], []
     all_calls_sold,   all_puts_sold   = [], []
@@ -1391,6 +1435,8 @@ def get_options_flow(min_premium: float = 100_000, min_score: int = 4, tickers: 
         "matched":      len(results),
         "scan_ts":      scan_ts,
         "scan_date":    scan_date,
+        "respondidos":  respondidos,
+        "oi_cero":      oi_cero,
         "calls_bought": sorted(all_calls_bought, key=lambda x: (-x['score'], -x['premium']))[:50],
         "puts_bought":  sorted(all_puts_bought,  key=lambda x: (-x['score'], -x['premium']))[:30],
         "calls_sold":   sorted(all_calls_sold,   key=lambda x: (-x['score'], -x['premium']))[:30],
@@ -1450,7 +1496,76 @@ def save_current_scan(flow_data: dict) -> dict:
         flow_data.get('puts_sold',    [])
     )
     inserted = save_flow_to_db(all_items, flow_data['scan_ts'], flow_data.get('scan_date'))
+    guardar_scan_log(
+        scan_date   = flow_data.get('scan_date') or flow_data['scan_ts'][:10],
+        scan_ts     = flow_data['scan_ts'],
+        pedidos     = flow_data.get('scanned', 0),
+        respondidos = flow_data.get('respondidos', 0),
+        con_flujo   = flow_data.get('matched', 0),
+        entradas    = inserted,
+        oi_cero     = flow_data.get('oi_cero'),
+    )
     return {"ok": True, "inserted": inserted, "total": len(all_items)}
+
+
+COBERTURA_MINIMA = 0.80   # por debajo de esto, el escaneo se marca incompleto
+
+
+def guardar_scan_log(scan_date: str, scan_ts: str, pedidos: int,
+                     respondidos: int, con_flujo: int, entradas: int,
+                     oi_cero: int = None) -> None:
+    """Deja constancia de la cobertura del escaneo. Se sobrescribe si se
+    repite el mismo día (REPLACE): un segundo escaneo manual del mismo día
+    describe mejor la realidad que el primero."""
+    try:
+        init_db()
+        conn = sqlite3.connect(DB_PATH)
+        conn.execute(
+            'INSERT OR REPLACE INTO scan_log '
+            '(scan_date, scan_ts, pedidos, respondidos, con_flujo, entradas, oi_cero) '
+            'VALUES (?,?,?,?,?,?,?)',
+            (scan_date, scan_ts, pedidos, respondidos, con_flujo, entradas, oi_cero)
+        )
+        conn.commit()
+        conn.close()
+        pct = (respondidos / pedidos * 100) if pedidos else 0
+        aviso = "  <-- INCOMPLETO" if pedidos and respondidos / pedidos < COBERTURA_MINIMA else ""
+        print(f"[OptionsFlow] Cobertura {respondidos}/{pedidos} ({pct:.0f}%), "
+              f"{con_flujo} con flujo, {entradas} entradas nuevas{aviso}")
+    except Exception as e:
+        print(f"[OptionsFlow] No se pudo guardar el registro del escaneo: {type(e).__name__}: {e}")
+
+
+def get_scan_log(scan_date: str = None) -> dict | None:
+    """Cobertura del escaneo de una fecha (por defecto, el más reciente).
+    None si no hay registro -- los escaneos anteriores a este cambio no lo
+    tienen, y esa ausencia se dice tal cual en vez de inventar un 100%."""
+    try:
+        init_db()
+        conn = sqlite3.connect(DB_PATH)
+        conn.row_factory = sqlite3.Row
+        if scan_date:
+            row = conn.execute('SELECT * FROM scan_log WHERE scan_date=?', (scan_date,)).fetchone()
+        else:
+            row = conn.execute('SELECT * FROM scan_log ORDER BY scan_date DESC LIMIT 1').fetchone()
+        conn.close()
+        if not row:
+            return None
+        d = dict(row)
+        d["cobertura_pct"] = round(d["respondidos"] / d["pedidos"] * 100, 1) if d["pedidos"] else None
+        # Dos formas distintas de que un escaneo no sirva, y hay que detectar
+        # las dos. La primera es no poder leer los valores. La segunda es
+        # leerlos y que vengan vacíos: cadenas con TODO el open interest a
+        # cero, que caen por el mínimo de OI y dejan el día en blanco con una
+        # cobertura aparentemente perfecta.
+        d["cobertura_baja"] = bool(d["pedidos"] and d["respondidos"] / d["pedidos"] < COBERTURA_MINIMA)
+        d["oi_cero_pct"] = (round(d["oi_cero"] / d["respondidos"] * 100, 1)
+                            if d.get("oi_cero") is not None and d["respondidos"] else None)
+        d["datos_vacios"] = bool(d["oi_cero_pct"] is not None and d["oi_cero_pct"] > 50)
+        d["incompleto"] = d["cobertura_baja"] or d["datos_vacios"]
+        return d
+    except Exception:
+        return None
 
 def get_options_ticker(ticker: str) -> dict:
     try:
