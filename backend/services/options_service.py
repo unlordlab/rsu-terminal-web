@@ -26,6 +26,13 @@ DB_PATH      = os.path.join(os.path.dirname(__file__), '..', 'options_flow.db')
 # Ver auditoría Options Flow #17.
 RETENTION_DAYS = 1095
 
+# Umbral de prima para los tickers que están en la Cartera del usuario. El
+# general son $100.000, pensado para filtrar ruido en un universo de ~570
+# valores; en una acción de pocos dólares esa cifra no se alcanza casi nunca,
+# así que sobre las posiciones propias el módulo se quedaba mudo. Ver
+# auditoría Options Flow #8.
+MIN_PREMIUM_CARTERA = 25_000
+
 _SESION_CACHE: dict = {"fecha": None, "ts": 0.0}
 
 
@@ -121,6 +128,34 @@ WATCHLIST = [
 # tardando demasiado o fallando por rate-limit de Yahoo, este es el primer
 # sitio a revisar.
 WATCHLIST = list(dict.fromkeys(WATCHLIST))
+
+
+def universo_scan() -> list:
+    """WATCHLIST más los tickers de la Cartera que no estuvieran ya dentro.
+
+    El bloque curado de arriba se escribió a mano y la Cartera ha ido cambiando
+    desde entonces: medido el 06/08/2026, **9 de las 46 posiciones abiertas no
+    estaban en el universo** (AMKR, ATI, FUTU, KOID, NXT, PL, POWL, SPCX,
+    UROY). No es que no pasaran el filtro de prima: es que nunca se miraban,
+    así que sobre una quinta parte de la cartera el módulo no podía decir nada
+    ni aunque hubiera actividad enorme. Ver auditoría Options Flow #8.
+
+    Se resuelve en tiempo de escaneo, no al importar: la Cartera cambia cuando
+    el usuario abre o cierra una posición, y una lista congelada al arrancar el
+    proceso volvería a quedarse vieja. Si la Cartera no está disponible,
+    `get_cartera_tickers()` devuelve un conjunto vacío y el escaneo sigue con el
+    universo de siempre — nunca falla por esto."""
+    try:
+        from services.cartera_service import get_cartera_tickers
+        de_cartera = sorted(get_cartera_tickers())
+    except Exception as e:
+        print(f"[OptionsFlow] No se pudo leer Cartera para el universo: {type(e).__name__}: {e}")
+        de_cartera = []
+    universo = list(dict.fromkeys(WATCHLIST + de_cartera))
+    nuevos = [t for t in de_cartera if t not in WATCHLIST]
+    if nuevos:
+        print(f"[OptionsFlow] {len(nuevos)} tickers de Cartera añadidos al universo: {nuevos}")
+    return universo
 
 # Mapa sector → tickers (para heatmap)
 SECTOR_MAP = {
@@ -1279,15 +1314,36 @@ def _process_chain(ticker: str, min_premium: float = 100_000, min_score: int = 4
         return {"ticker": ticker, "ok": False, "error": str(e)}
 
 def get_options_flow(min_premium: float = 100_000, min_score: int = 4, tickers: list = None) -> dict:
-    target  = tickers or WATCHLIST
+    target  = tickers or universo_scan()
     results = []
     # scan_ts = cuándo corrió el proceso. scan_date = qué sesión describen los
     # datos. No son lo mismo y antes la segunda se derivaba de la primera.
     scan_ts   = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
     scan_date = _fecha_sesion()
 
+    # Umbral rebajado para lo que el usuario TIENE en cartera. Entrar en el
+    # universo no basta: el corte de prima actúa ANTES de puntuar, así que una
+    # posición de $3 por acción se descarta aunque su actividad en opciones sea
+    # extraordinaria PARA ELLA. Con el umbral general nunca aparecería, y sobre
+    # las posiciones propias es justo donde más interesa que el módulo hable.
+    #
+    # No descuadra el sesgo del día porque ese cálculo va PONDERADO POR PRIMA:
+    # junto a entradas de decenas de millones, unas cuantas de $25-100K no
+    # mueven la aguja. Y las filas quedan marcadas con `en_cartera`, así que
+    # siempre se puede distinguir de dónde salió cada una.
+    try:
+        from services.cartera_service import get_cartera_tickers
+        de_cartera = get_cartera_tickers()
+    except Exception:
+        de_cartera = set()
+
     from services.yf_pool import yf_executor
-    futures = {yf_executor.submit(_process_chain, t, min_premium, min_score): t for t in target}
+    futures = {
+        yf_executor.submit(_process_chain, t,
+                           MIN_PREMIUM_CARTERA if t in de_cartera else min_premium,
+                           min_score): t
+        for t in target
+    }
     for f in futures:
         r = f.result()
         if r.get('ok') and r['total_prem'] > 0:
