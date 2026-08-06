@@ -1,6 +1,6 @@
 import { tt } from '/components/tooltip.js';
 import { onMarketUpdate } from '/core/websocket.js';
-import { fmtFecha } from '/core/ui.js';
+import { fmtFecha, esc } from '/core/ui.js';
 
 // IDs de canvas de los gráficos Chart.js creados por esta página cuyo
 // destroy() no está ya cubierto por una variable propia (_spreadsChart,
@@ -612,21 +612,32 @@ async function loadVix(el) {
 
         const labels      = data.data.map(d => d.label);
         const values      = data.data.map(d => d.value);
+        // Sin spread no se inventa una estructura: si falta el VIX spot o el de
+        // 3 meses, no se puede decir si hay contango o backwardation.
+        const haySpread   = data.contango != null && data.structure;
         const isContango  = data.structure === 'contango';
-        const lineColor   = isContango ? '#00ffad' : '#f23645';
-        const structLabel = isContango ? 'Contango' : 'Backwardation';
-        const structColor = isContango ? '#00ffad' : '#f23645';
-        const structDesc  = isContango
-            ? 'Típico en mercados tranquilos · Favorable para dip buying'
-            : 'Señal de estrés · Posible suelo de mercado';
+        const lineColor   = !haySpread ? 'var(--color-muted)' : (isContango ? '#00ffad' : '#f23645');
+        const structLabel = !haySpread ? 'Sin datos' : (isContango ? 'Contango' : 'Backwardation');
+        const structColor = !haySpread ? 'var(--color-muted)' : (isContango ? '#00ffad' : '#f23645');
+        const structDesc  = !haySpread
+            ? 'Falta el VIX spot o el de 3 meses, así que no se puede determinar la estructura'
+            : (isContango
+                ? 'Típico en mercados tranquilos · Favorable para dip buying'
+                : 'Señal de estrés · Posible suelo de mercado');
 
         const header = '<div style="display:flex;align-items:center;gap:1.5rem;padding:10px 16px;border-bottom:1px solid var(--color-border);font-size:12px;flex-wrap:wrap;">'
             + '<span style="color:var(--color-muted);">VIX SPOT</span>'
-            + '<span style="color:var(--color-text);font-size:20px;font-weight:500;">' + data.spot + '</span>'
+            // Si ^VIX no respondió llega null: se dice, en vez de pintar bajo
+            // esta etiqueta el primer plazo que hubiera sobrevivido.
+            + '<span style="color:' + (data.spot != null ? 'var(--color-text)' : 'var(--color-muted)') + ';font-size:20px;font-weight:500;">' + (data.spot != null ? data.spot : '—') + '</span>'
             + '<span style="color:var(--color-muted);margin-left:0.5rem;">ESTRUCTURA</span>'
             + '<span style="color:' + structColor + ';font-weight:500;">' + structLabel.toUpperCase() + '</span>'
-            + '<span style="color:var(--color-muted);margin-left:0.5rem;">SPREAD</span>'
-            + '<span style="color:' + (data.contango > 0 ? '#f23645' : '#00ffad') + ';font-weight:500;">' + (data.contango > 0 ? '+' : '') + data.contango + '</span>'
+            // El spread comparte color con la estructura. Antes tenían criterios
+            // opuestos y se contradecían en la misma línea: "CONTANGO" en verde
+            // junto a su propio spread en rojo, siendo el mismo hecho.
+            + '<span style="color:var(--color-muted);margin-left:0.5rem;" title="' + (data.spread_par ? esc(data.spread_par) : 'Diferencia entre el VIX a 3 meses y el VIX spot') + '">SPREAD</span>'
+            + '<span style="color:' + structColor + ';font-weight:500;">' + (haySpread ? (data.contango > 0 ? '+' : '') + data.contango : '—') + '</span>'
+            + (data.spread_par ? '<span style="color:var(--color-muted);font-size:10px;">' + esc(data.spread_par) + '</span>' : '')
             + '</div>';
 
         const chartId = 'vix-chart-' + Date.now();

@@ -543,18 +543,44 @@ def get_vix_term_structure():
         return {"data": [], "timestamp": get_timestamp(), "ok": False, "error": "Sin datos VIX"}
     _yf_log("vix", True, None)
 
-    spot      = valid[0]["value"]
-    last      = valid[-1]["value"]
-    contango  = round(last - spot, 2)
-    structure = "contango" if contango > 0 else "backwardation"
+    # El spot es el ^VIX, o no hay spot.
+    #
+    # Antes se cogía `valid[0]`, o sea el primer punto que hubiera sobrevivido.
+    # Si ^VIX no respondía, la pantalla pintaba el VIX a 3 MESES bajo la
+    # etiqueta "VIX SPOT" sin que nada lo delatara. Verificado simulando esa
+    # caída: salía 22,0 como spot cuando 22,0 era el trimestral.
+    por_etiqueta = {r["label"]: r["value"] for r in valid}
+    spot   = por_etiqueta.get("Spot")
+    vix3m  = por_etiqueta.get("3 meses")
+
+    # El spread es SIEMPRE 3 meses menos spot, el par estándar del sector.
+    #
+    # Antes era `último válido - primer válido`, lo que traía dos problemas.
+    # Uno, que con la curva completa medía 1 AÑO menos spot: un número mucho
+    # mayor que el que publica cualquier otra fuente y no comparable con nada.
+    # Y dos, más grave: el par cambiaba solo según qué tickers respondieran
+    # —1 año menos spot, 6 meses menos spot, 1 año menos 3 meses— siempre bajo
+    # la misma etiqueta. La misma cifra medía cosas distintas según el día.
+    #
+    # Si falta cualquiera de las dos patas no se sustituye por otra: se dice
+    # que no hay spread. La curva completa sigue yendo en `data` para el
+    # gráfico, que no depende de esto. Ver auditoría Market, hallazgo #9.
+    if spot is not None and vix3m is not None:
+        contango  = round(vix3m - spot, 2)
+        structure = "contango" if contango > 0 else "backwardation"
+    else:
+        contango, structure = None, None
 
     result = {
-        "data":      valid,
-        "spot":      spot,
-        "contango":  contango,
-        "structure": structure,
-        "timestamp": get_timestamp(),
-        "ok":        True,
+        "data":       valid,
+        "spot":       spot,
+        "contango":   contango,
+        "structure":  structure,
+        # Qué se está restando, para que la pantalla pueda decirlo y no haya
+        # que deducirlo del contexto.
+        "spread_par": "3 meses − Spot" if contango is not None else None,
+        "timestamp":  get_timestamp(),
+        "ok":         True,
     }
     cache.set("market:vix", result, TTL["vix"])
     return result
