@@ -45,9 +45,76 @@ implicaciones de licencia, no solo técnica.
 """
 import asyncio
 import json
+import threading
 import time
 
+import requests
+
 from config import settings
+
+# ── Cotización puntual por REST, complemento del WebSocket ────────────────────
+#
+# El WebSocket solo empuja cuando ocurre un TRADE. Un valor poco negociado, o
+# uno que el plan gratuito no difunde, puede pasarse la sesión entera sin
+# generar ni un tick — y entonces se queda sin porcentaje del día aunque el
+# dato exista perfectamente.
+#
+# El endpoint /quote lo resuelve de una sola llamada: devuelve el precio
+# actual (c), el CIERRE ANTERIOR (pc) y la variación ya calculada (dp). Es la
+# única fuente del proyecto que da el cierre de referencia junto al precio, así
+# que no depende de que las barras diarias de yfinance estén al día.
+#
+# Medido sobre las 46 posiciones abiertas reales: /quote las cubre TODAS,
+# incluidos los ETFs (GLD, GDXJ, IBIT, KOID, BOTZ, NLR, UFO, MAGS), mientras
+# que ese mismo día yfinance no tenía barra de la sesión en curso para ninguna.
+
+QUOTE_URL = "https://finnhub.io/api/v1/quote"
+
+# El plan gratuito admite 60 llamadas por minuto. Se deja margen a propósito:
+# pasarse devuelve 429 y tumbaría también el resto de usos de la clave.
+_MAX_LLAMADAS_MIN = 50
+_ventana: list = []
+_ventana_lock = threading.Lock()
+
+
+def _hay_cupo() -> bool:
+    """Ventana deslizante de 60 s, compartida entre hilos -- fetch_live_prices()
+    consulta los tickers en paralelo, así que sin candado el conteo se queda
+    corto justo cuando más importa."""
+    ahora = time.time()
+    with _ventana_lock:
+        _ventana[:] = [t for t in _ventana if ahora - t < 60]
+        if len(_ventana) >= _MAX_LLAMADAS_MIN:
+            return False
+        _ventana.append(ahora)
+        return True
+
+
+def quote(ticker: str) -> dict | None:
+    """{price, prev, chg} de un ticker, o None si no hay dato fiable.
+
+    Devuelve None sin ruido cuando el flag está apagado, cuando no queda cupo
+    de llamadas o cuando Finnhub responde sin precio -- el llamador sigue con
+    su siguiente fuente. Nunca fabrica un 0%."""
+    if not settings.finnhub_realtime or not settings.finnhub_api_key:
+        return None
+    if not _hay_cupo():
+        return None
+    try:
+        r = requests.get(QUOTE_URL,
+                         params={"symbol": ticker, "token": settings.finnhub_api_key},
+                         timeout=6)
+        if r.status_code != 200:
+            return None
+        j = r.json()
+        precio, cierre_previo = j.get("c"), j.get("pc")
+        if not precio or not cierre_previo or precio <= 0 or cierre_previo <= 0:
+            return None
+        return {"price": round(float(precio), 2),
+                "prev":  round(float(cierre_previo), 2),
+                "chg":   round((float(precio) - float(cierre_previo)) / float(cierre_previo) * 100, 2)}
+    except Exception:
+        return None
 
 # Tope de símbolos del plan gratuito. Si algún día se pasa a un plan superior,
 # esto sube; mientras tanto, pasarse en silencio sería peor que recortar.

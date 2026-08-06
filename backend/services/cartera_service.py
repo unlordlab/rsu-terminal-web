@@ -233,6 +233,24 @@ def _fetch_price_single(ticker: str) -> dict | None:
                 # daba el movimiento de DOS sesiones etiquetado como "hoy".
                 prev = last_bar
                 if not price or abs(price - last_bar) < 0.005:
+                    # Antes de rendirse: Finnhub /quote trae precio Y cierre
+                    # anterior en una sola llamada, así que puede resolver el
+                    # día entero sin depender de que yfinance haya publicado la
+                    # barra. Es el caso normal cuando el WebSocket no ha
+                    # recibido ningún trade de ese valor todavía. Si el flag
+                    # está apagado o no hay cupo, devuelve None y seguimos.
+                    try:
+                        from services.finnhub_stream_service import quote as _fh_quote
+                        q = _fh_quote(ticker)
+                    except Exception:
+                        q = None
+                    if q:
+                        entry = {"ticker": ticker, "price": q["price"],
+                                 "prev": q["prev"], "chg": q["chg"],
+                                 "chg_fecha": str(hoy_ny), "sin_datos_hoy": False,
+                                 "fuente": "finnhub-quote", "updated": now}
+                        _price_cache[ticker] = entry
+                        return entry
                     # Sin cotización de hoy por ningún lado: el "precio en vivo"
                     # es el cierre de ayer repetido.
                     #
