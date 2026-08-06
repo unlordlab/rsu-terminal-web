@@ -1523,7 +1523,7 @@ async function loadLiquidity(el) {
             + '<div style="background:var(--color-bg,#0a0a0a);border:1px solid var(--color-border);border-radius:var(--radius);padding:0.75rem;text-align:center;">'
             + '<div style="color:var(--color-muted);font-size:10px;margin-bottom:4px;">CORRELACIÓN NET LIQ. ↔ SPX ' + tt('liquidity-correlation') + '</div>'
             + '<div style="color:' + corrColor + ';font-size:20px;font-weight:500;">' + corrStr + '</div>'
-            + '<div style="color:var(--color-muted);font-size:10px;margin-top:4px;">Últimos ~2 años, semanal</div>'
+            + '<div style="color:var(--color-muted);font-size:10px;margin-top:4px;">Sobre variaciones semanales · ~2 años</div>'
             + '</div>'
 
             + '</div>';

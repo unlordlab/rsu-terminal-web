@@ -188,8 +188,16 @@ A diferencia del balance de la Fed, M2 incluye también el efecto de la activida
 
     "liquidity-correlation": {
         title: "Correlación Net Liquidity ↔ SPX",
-        short: "Coeficiente de correlación entre la Liquidez Neta y el S&P 500 en los últimos ~2 años (semanal).",
+        short: "Cuánto se han movido en la misma dirección la Liquidez Neta y el S&P 500 de una semana a la siguiente, en los últimos ~2 años.",
         long: `Este coeficiente mide, de forma puramente estadística, cuánto se han movido en la misma dirección la Liquidez Neta y el S&P 500 a lo largo del periodo mostrado, usando datos semanales.
+
+▸ QUÉ SE COMPARA EXACTAMENTE
+
+Se comparan las VARIACIONES de una semana a la siguiente, no los niveles. La diferencia no es un tecnicismo: es lo que separa un número con significado de uno que engaña.
+
+Si se comparan los niveles, dos series que suben con los años salen muy correlacionadas aunque no tengan ninguna relación entre sí — el número acaba midiendo que las dos crecen con el tiempo, no que se muevan juntas. Es fácil de comprobar: una serie inventada al azar que solo suba poco a poco puede sacar una correlación altísima con la bolsa.
+
+Comparando variaciones, la pregunta pasa a ser la que de verdad interesa: cuando la liquidez sube esta semana, ¿sube también la bolsa? Eso ya no se puede fingir con una tendencia.
 
 CÓMO LEER EL NÚMERO (rango de -1 a +1):
 ▸ Cercano a +1 → fuerte correlación positiva. Cuando la liquidez sube, el SPX tiende a subir también, y viceversa.

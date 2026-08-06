@@ -114,6 +114,61 @@ def get_indices():
 
 # ── FEAR & GREED ──────────────────────────────────────────────────────────────
 
+_FRED_CACHE: dict = {}
+_FRED_TTL = 1800   # 30 min
+
+
+def fred_csv(series_id: str, timeout: int = 12, log_prefix: str = "FRED") -> list:
+    """Una serie de FRED como lista de (fecha, valor), cacheada 30 min.
+
+    Estaba definida DOS veces, anidada dentro de `get_fed_macro()` y de
+    `get_liquidity()`, con el mismo cuerpo salvo que una tenía diagnósticos y
+    la otra no. Se conserva la versión con diagnósticos, que es la buena.
+
+    Y la caché no es un adorno: `WALCL`, `WTREGEN` y `RRPONTSYD` las pedían
+    LAS DOS funciones por separado, así que cada carga de la página Mercado
+    descargaba las mismas tres series dos veces — seis peticiones a FRED donde
+    bastan tres. Con la caché compartida, la segunda función encuentra hechas
+    las de la primera. Los datos son semanales o diarios; 30 minutos no pierde
+    nada. Ver auditoría Market, hallazgo #18.
+    """
+    import time as _t
+    guardado = _FRED_CACHE.get(series_id)
+    if guardado and (_t.time() - guardado["t"]) < _FRED_TTL:
+        return guardado["v"]
+    try:
+        r = requests.get(
+            f'https://fred.stlouisfed.org/graph/fredgraph.csv?id={series_id}',
+            timeout=timeout,
+            headers={'User-Agent': 'RSU Terminal contact@rsu-terminal.com'}
+        )
+        if r.status_code != 200:
+            print(f"[{log_prefix}] FRED {series_id}: status HTTP {r.status_code} (esperado 200)")
+            return []
+        out = []
+        for line in r.text.strip().split(chr(10))[1:]:
+            parts = line.split(',')
+            if len(parts) == 2 and parts[1] not in ('', '.'):
+                try:
+                    out.append((parts[0], float(parts[1])))
+                except ValueError:
+                    pass
+        if not out:
+            print(f"[{log_prefix}] FRED {series_id}: respuesta 200 OK pero 0 filas parseables (¿cambió el formato del CSV?)")
+        else:
+            # Solo se cachea lo que trae datos: una respuesta vacía por un
+            # tropiezo puntual no debe congelarse media hora, mismo criterio
+            # que el fix de get_fed_macro (#11).
+            _FRED_CACHE[series_id] = {"v": out, "t": _t.time()}
+        return out
+    except requests.exceptions.Timeout:
+        print(f"[{log_prefix}] FRED {series_id}: TIMEOUT tras {timeout}s — problema de red/conectividad hacia fred.stlouisfed.org")
+        return []
+    except Exception as e:
+        print(f"[{log_prefix}] FRED {series_id}: error inesperado ({type(e).__name__}: {e})")
+        return []
+
+
 FEAR_GREED_COMPONENTS = [
     {"key": "market_momentum_sp500", "label": "Momentum del Mercado",        "desc": "S&P 500 vs media de 125 sesiones"},
     {"key": "stock_price_strength",  "label": "Fortaleza del Precio",        "desc": "Nuevos máximos vs mínimos (52 sem.)"},
@@ -1273,32 +1328,13 @@ def get_fed_macro() -> dict:
     import requests
     from concurrent.futures import ThreadPoolExecutor
 
-    def _fred_csv(series_id):
-        try:
-            r = requests.get(
-                f'https://fred.stlouisfed.org/graph/fredgraph.csv?id={series_id}',
-                timeout=10,
-                headers={'User-Agent': 'RSU Terminal contact@rsu-terminal.com'}
-            )
-            if r.status_code != 200: return []
-            lines = r.text.strip().split(chr(10))[1:]
-            out = []
-            for line in lines:
-                parts = line.split(',')
-                if len(parts) == 2 and parts[1] not in ('', '.'):
-                    try:
-                        out.append((parts[0], float(parts[1])))
-                    except ValueError:
-                        pass
-            return out
-        except Exception:
-            return []
+    # _fred_csv vive ahora a nivel de modulo y con cache compartida (#18).
 
     def _fetch_balance():
         try:
-            walcl = _fred_csv('WALCL')
-            tga   = _fred_csv('WTREGEN')
-            rrp   = _fred_csv('RRPONTSYD')
+            walcl = fred_csv('WALCL')
+            tga   = fred_csv('WTREGEN')
+            rrp   = fred_csv('RRPONTSYD')
             if not walcl: return {}
             total    = walcl[-1][1]
             prev     = walcl[-2][1] if len(walcl) > 1 else total
@@ -1352,7 +1388,7 @@ def get_fed_macro() -> dict:
             # histórico fijo), un número inventado con la misma forma que
             # uno real.
 
-            dgs3m = _fred_csv('DGS3MO')
+            dgs3m = fred_csv('DGS3MO')
             if dgs3m and dgs3m[-1][1] > 0:
                 yields['Y3M'] = round(dgs3m[-1][1], 3)
 
@@ -1366,7 +1402,7 @@ def get_fed_macro() -> dict:
             y30 = yields.get('Y30Y')
             sp10_2  = round(y10 - y2, 3) if y10 and y2 else None
             sp10_3m = round(y10 - y3m, 3) if y10 and y3m else None
-            dgs10 = _fred_csv('DGS10')
+            dgs10 = fred_csv('DGS10')
             history = [{'date': d, 'value': v} for d, v in dgs10[-90:]] if dgs10 else []
             return {
                 'Y3M': y3m, 'Y2Y': y2, 'Y5Y': y5, 'Y10Y': y10, 'Y30Y': y30,
@@ -1387,7 +1423,7 @@ def get_fed_macro() -> dict:
             }
             out = {}
             for key, sid in series.items():
-                data = _fred_csv(sid)
+                data = fred_csv(sid)
                 if len(data) >= 13:
                     cur    = data[-1][1]
                     prev   = data[-2][1]
@@ -1450,40 +1486,13 @@ def get_liquidity() -> dict:
     import requests
     from concurrent.futures import ThreadPoolExecutor
 
-    def _fred_csv(series_id, timeout=12):
-        try:
-            r = requests.get(
-                f'https://fred.stlouisfed.org/graph/fredgraph.csv?id={series_id}',
-                timeout=timeout,
-                headers={'User-Agent': 'RSU Terminal contact@rsu-terminal.com'}
-            )
-            if r.status_code != 200:
-                print(f"[Liquidity] FRED {series_id}: status HTTP {r.status_code} (esperado 200)")
-                return []
-            lines = r.text.strip().split(chr(10))[1:]
-            out = []
-            for line in lines:
-                parts = line.split(',')
-                if len(parts) == 2 and parts[1] not in ('', '.'):
-                    try:
-                        out.append((parts[0], float(parts[1])))
-                    except ValueError:
-                        pass
-            if not out:
-                print(f"[Liquidity] FRED {series_id}: respuesta 200 OK pero 0 filas parseables (¿cambió el formato del CSV?)")
-            return out
-        except requests.exceptions.Timeout:
-            print(f"[Liquidity] FRED {series_id}: TIMEOUT tras {timeout}s — problema de red/conectividad hacia fred.stlouisfed.org")
-            return []
-        except Exception as e:
-            print(f"[Liquidity] FRED {series_id}: error inesperado ({type(e).__name__}: {e})")
-            return []
+    # _fred_csv vive ahora a nivel de modulo y con cache compartida (#18).
 
     def _fetch_net_liquidity():
         try:
-            walcl = _fred_csv('WALCL')
-            tga   = _fred_csv('WTREGEN')
-            rrp   = _fred_csv('RRPONTSYD')
+            walcl = fred_csv('WALCL')
+            tga   = fred_csv('WTREGEN')
+            rrp   = fred_csv('RRPONTSYD')
             print(f"[Liquidity] WALCL: {len(walcl)} puntos · WTREGEN: {len(tga)} puntos · RRPONTSYD: {len(rrp)} puntos")
             if not walcl:
                 print("[Liquidity] WALCL vacío — FRED no respondió o devolvió 0 filas parseables para esta serie. Net Liquidity quedará en N/D.")
@@ -1534,7 +1543,7 @@ def get_liquidity() -> dict:
 
     def _fetch_m2():
         try:
-            m2 = _fred_csv('WM2NS')
+            m2 = fred_csv('WM2NS')
             if not m2: return {}
             # WM2NS viene en miles de millones ($B); convertir a Trillones para consistencia visual
             history = [{'date': d, 'value': round(v / 1000, 3)} for d, v in m2[-104:]]
@@ -1604,12 +1613,29 @@ def get_liquidity() -> dict:
                     xs.append(h['value'])
                     ys.append(spx_v)
 
-            n = len(xs)
+            # Se correlacionan las VARIACIONES, no los niveles.
+            #
+            # Sobre niveles, dos series que suben con el tiempo salen
+            # correlacionadas aunque no tengan nada que ver: el número mide la
+            # tendencia común, no la relación. Es el caso de manual de
+            # correlación espuria, y aquí estaba pasando de verdad.
+            #
+            # Medido sobre los datos reales: niveles daba -0,597, que se lee
+            # como "relación inversa apreciable". Sobre variaciones sale
+            # -0,094, o sea prácticamente nada. Y la prueba que lo cierra: una
+            # serie INVENTADA que solo comparte con Net Liquidity el subir con
+            # el tiempo correlaciona +0,911 con el SPX sobre niveles — más que
+            # la serie real. Si el ruido gana, el número no mide nada.
+            #
+            # Ver auditoría Market, hallazgo #22.
+            dxs = [xs[i] - xs[i - 1] for i in range(1, len(xs))]
+            dys = [ys[i] - ys[i - 1] for i in range(1, len(ys))]
+            n = len(dxs)
             if n >= 10:
-                mean_x, mean_y = sum(xs) / n, sum(ys) / n
-                cov = sum((xs[i] - mean_x) * (ys[i] - mean_y) for i in range(n))
-                std_x = (sum((x - mean_x) ** 2 for x in xs)) ** 0.5
-                std_y = (sum((y - mean_y) ** 2 for y in ys)) ** 0.5
+                mean_x, mean_y = sum(dxs) / n, sum(dys) / n
+                cov = sum((dxs[i] - mean_x) * (dys[i] - mean_y) for i in range(n))
+                std_x = (sum((x - mean_x) ** 2 for x in dxs)) ** 0.5
+                std_y = (sum((y - mean_y) ** 2 for y in dys)) ** 0.5
                 if std_x > 0 and std_y > 0:
                     correlation = round(cov / (std_x * std_y), 3)
     except Exception:
