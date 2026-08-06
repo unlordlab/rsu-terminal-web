@@ -45,6 +45,13 @@ MIN_PREMIUM_CARTERA = 25_000
 #
 # Se guarda aparte y con su propio criterio: solo hace falta OI, no prima ni
 # volumen. Dos topes para que la tabla no crezca sin control:
+# Ventana, en días, para considerar que un vencimiento está pegado a la fecha
+# de resultados -- a un lado o al otro. Más allá de una semana, el vencimiento
+# deja de ser una apuesta al evento y pasa a ser una posición ordinaria que
+# resulta que lo incluye (una LEAP también cubre los resultados, y no significa
+# nada). Ver auditoría #10.
+DIAS_EARNINGS = 7
+
 MIN_OI_SNAPSHOT = 100            # por debajo, un cambio porcentual es ruido
 MAX_OI_SNAPSHOT_POR_TICKER = 50  # los de mayor OI; acota las filas por escaneo
 # Retención corta y a propósito distinta de la del flujo: el ranking solo
@@ -251,6 +258,10 @@ def init_db():
         ("bid",         "REAL"),
         ("ask",         "REAL"),
         ("price_opt",   "REAL"),
+        # "cubre" (el vencimiento es posterior a los resultados, así que la
+        # opción sigue viva durante el anuncio) o "antes" (vence justo antes,
+        # así que NO recoge el movimiento). Ver auditoría #10.
+        ("earnings_rel", "TEXT"),
     ]:
         try:
             conn.execute(f"ALTER TABLE options_flow ADD COLUMN {col} {typedef}")
@@ -315,8 +326,8 @@ def save_flow_to_db(flow_items: list, scan_ts: str, scan_date: str = None):
             INSERT INTO options_flow
             (scan_date,scan_ts,ticker,strike,exp,type,action,premium,premium_fmt,
              volume,oi,vol_oi_ratio,score,signal,price,strike_pct,iv,underlying_price,
-             is_block,is_sweep,near_earnings,bid,ask,price_opt)
-            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+             is_block,is_sweep,near_earnings,bid,ask,price_opt,earnings_rel)
+            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
         ''', (
             scan_date, scan_ts,
             item['ticker'], item['strike'], item['exp'],
@@ -330,6 +341,7 @@ def save_flow_to_db(flow_items: list, scan_ts: str, scan_date: str = None):
             int(item.get('is_sweep', False)),
             int(item.get('near_earnings', False)),
             item.get('bid'), item.get('ask'), item.get('price_opt'),
+            item.get('earnings_rel'),
         ))
         inserted += 1
     conn.commit()
@@ -393,6 +405,7 @@ def _entrada_simple(item: dict, order_type: str, cartera_tickers: set = None, re
         "premium":       item["premium"],
         "premium_fmt":   item["premium_fmt"],
         "near_earnings": bool(item.get("near_earnings")),
+        "earnings_rel":  item.get("earnings_rel"),
         "en_cartera":    item["ticker"] in cartera_tickers if cartera_tickers is not None else False,
         "es_repetida":   clave in repetidos if repetidos is not None else False,
     }
@@ -438,6 +451,7 @@ def get_options_flow_simple() -> dict:
             "exp": r["exp"], "oi": r["oi"],
             "premium": r["premium"], "premium_fmt": r["premium_fmt"],
             "near_earnings": r["near_earnings"],
+            "earnings_rel":  r["earnings_rel"] if "earnings_rel" in r.keys() else None,
         })
         premio_por_ticker[r["ticker"]] = premio_por_ticker.get(r["ticker"], 0) + r["premium"]
         if ot in ("Buy Call", "Sell Put"):
@@ -570,7 +584,7 @@ def get_ticker_flow_simple(ticker: str, period: str = "1w") -> dict:
     conn = sqlite3.connect(DB_PATH)
     conn.row_factory = sqlite3.Row
     rows = conn.execute('''
-        SELECT scan_date, type, action, strike, exp, oi, premium, premium_fmt, near_earnings
+        SELECT scan_date, type, action, strike, exp, oi, premium, premium_fmt, near_earnings, earnings_rel
         FROM options_flow
         WHERE ticker=? AND scan_date>=?
         ORDER BY scan_date DESC, premium DESC
@@ -603,6 +617,7 @@ def get_ticker_flow_simple(ticker: str, period: str = "1w") -> dict:
             "exp":           r["exp"],
             "oi":            r["oi"],
             "near_earnings": bool(r["near_earnings"]),
+            "earnings_rel":  r["earnings_rel"] if "earnings_rel" in r.keys() else None,
             "es_repetida":   clave in repetidos,
             "premium_fmt": r["premium_fmt"],
         })
@@ -1270,12 +1285,38 @@ def _process_chain(ticker: str, min_premium: float = 100_000, min_score: int = 4
             if chain is None:
                 continue
 
-            # Earnings proximity
+            # Proximidad a resultados. Antes solo se marcaban los vencimientos
+            # POSTERIORES al anuncio, pero la etiqueta de la pantalla decía
+            # «vencimiento cerca de la fecha de earnings», que sugiere cercanía
+            # en cualquier dirección. Ver auditoría #10.
+            #
+            # Y no son lo mismo, son casi lo contrario:
+            #   CUBRE  -> el vencimiento cae DESPUÉS del anuncio, así que la
+            #             opción sigue viva durante el evento. Es la apuesta a
+            #             resultados clásica: IV inflada antes, desplome después.
+            #   ANTES  -> el vencimiento cae ANTES del anuncio, así que la
+            #             opción NO recoge el movimiento. Suele ser subida
+            #             previa o evitar deliberadamente el evento.
+            #
+            # Se marcan las dos y se distingue cuál es, en vez de mezclarlas
+            # bajo un único booleano que no dice de qué caso habla.
+            #
+            # LÍMITE CONOCIDO: más arriba se descartan los vencimientos a menos
+            # de 7 días, así que si los resultados caen dentro de esa semana el
+            # caso "antes" no puede detectarse -- esos vencimientos ni siquiera
+            # entran en el bucle. Ampliar la ventana de vencimientos es una
+            # decisión aparte (metería 0DTE en todo el módulo), así que se deja
+            # dicho en vez de resuelto a medias.
             near_earnings = False
+            earnings_rel  = None
             if next_earnings:
                 try:
-                    ed = datetime.strptime(next_earnings, '%Y-%m-%d').date()
-                    near_earnings = (exp_date >= ed) and ((exp_date - ed).days <= 7)
+                    ed   = datetime.strptime(next_earnings, '%Y-%m-%d').date()
+                    dias = (exp_date - ed).days
+                    if 0 <= dias <= DIAS_EARNINGS:
+                        near_earnings, earnings_rel = True, "cubre"
+                    elif -DIAS_EARNINGS <= dias < 0:
+                        near_earnings, earnings_rel = True, "antes"
                 except Exception:
                     pass
 
@@ -1349,6 +1390,7 @@ def _process_chain(ticker: str, min_premium: float = 100_000, min_score: int = 4
                                                   else "bearish",
                         "is_block":     is_block,
                         "near_earnings": near_earnings,
+                        "earnings_rel":  earnings_rel,
                         "is_sweep":     False,   # se rellena después
                     }
 

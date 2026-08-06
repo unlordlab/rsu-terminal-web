@@ -77,6 +77,19 @@ async function loadDashboard(container) {
     }
 }
 
+// Marca de resultados. Se distinguen los dos casos porque significan casi lo
+// contrario: si el vencimiento cae DESPUES del anuncio, la opcion sigue viva
+// durante el evento (IV inflada antes, desplome despues); si cae ANTES, la
+// opcion no recoge el movimiento en absoluto. Antes los dos compartian el
+// mismo icono y el mismo texto, y ademas el segundo caso ni se detectaba.
+function _marcaEarnings(r) {
+    if (!r || !r.near_earnings) return '';
+    if (r.earnings_rel === 'antes') {
+        return ' <span title="Vence justo ANTES de la publicación de resultados: la opción no llega al anuncio, así que no recoge ese movimiento">🕐</span>';
+    }
+    return ' <span title="Vence justo DESPUÉS de la publicación de resultados: la opción sigue viva durante el anuncio">📅</span>';
+}
+
 function renderDashboard(data) {
     const cob = data.cobertura;
     // Cuántos valores respondieron de los que se pidieron. Un escaneo corto
@@ -166,7 +179,7 @@ function flowTable(title, rows, color) {
         <div style="max-height:340px;overflow-y:auto;">
             ${rows.length ? rows.map(r => `
             <div style="display:grid;grid-template-columns:70px 1fr 90px 70px;gap:8px;padding:7px 14px;border-bottom:1px solid var(--color-border);font-size:11px;align-items:center;">
-                <span onclick="window.__optionsSearchTicker('${esc(r.ticker)}')" style="cursor:pointer;color:${color};font-weight:600;">${esc(r.ticker)}${r.near_earnings ? ' <span title="Vencimiento cerca de la fecha de earnings">📅</span>' : ''}${badges(r)}${r.es_repetida ? ' <span title="Mismo contrato repetido en días anteriores">🔁</span>' : ''}</span>
+                <span onclick="window.__optionsSearchTicker('${esc(r.ticker)}')" style="cursor:pointer;color:${color};font-weight:600;">${esc(r.ticker)}${_marcaEarnings(r)}${badges(r)}${r.es_repetida ? ' <span title="Mismo contrato repetido en días anteriores">🔁</span>' : ''}</span>
                 <span style="color:var(--color-text);">$${esc(r.strike)} <span style="color:var(--color-muted);">(${esc(r.strike_pct)})</span></span>
                 <span style="color:var(--color-muted);">${esc(_fmtFecha(r.exp))}</span>
                 <span style="color:var(--color-text);text-align:right;">${esc(r.premium_fmt)}</span>
@@ -409,7 +422,7 @@ function renderTicker(data) {
                 <span style="color:var(--color-muted);">${esc(_fmtFecha(e.fecha))}</span>
                 <span style="background:${badgeColor}22;border:1px solid ${badgeColor}88;color:${badgeColor};border-radius:3px;padding:2px 7px;font-size:10px;text-align:center;">${esc(e.order_type)}${e.es_repetida ? ' <span title="Mismo contrato repetido en días anteriores">🔁</span>' : ''}</span>
                 <span style="color:var(--color-text);">$${esc(e.strike)}</span>
-                <span style="color:var(--color-muted);">${esc(_fmtFecha(e.exp))}${e.near_earnings ? ' <span title="Vencimiento cerca de la fecha de earnings">📅</span>' : ''}</span>
+                <span style="color:var(--color-muted);">${esc(_fmtFecha(e.exp))}${_marcaEarnings(e)}</span>
                 <span style="color:var(--color-text);">${esc(e.oi)}</span>
                 <span style="color:var(--color-text);text-align:right;">${esc(e.premium_fmt)}</span>
             </div>`;
