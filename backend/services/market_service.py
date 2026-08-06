@@ -2090,6 +2090,11 @@ _STABLECOIN_SYMBOLS = {
     "pyusd", "usdd", "frax", "gusd", "usdp", "eurt", "eurc",
 }
 
+# Capitalización mínima para entrar en el ranking de fuerza relativa cripto.
+# Mil millones de dólares deja fuera las micro-caps sin descartar monedas
+# grandes por el hecho de cotizar por debajo de un dólar.
+MIN_MARKET_CAP_CRYPTO = 1_000_000_000
+
 def get_crypto_relative_strength(top_n: int = 5):
     """Top N criptomonedas por fuerza relativa (variación % a 30 días) sobre el
     universo REAL del mercado cripto — top 250 por capitalización vía CoinGecko
@@ -2128,9 +2133,21 @@ def get_crypto_relative_strength(top_n: int = 5):
             price   = c.get("current_price")
             if pct_30d is None or price is None:
                 continue
-            # Filtro de precio: excluye memecoins/micro-caps de céntimo (ej. SHIB,
-            # PEPE) que suelen dominar los rankings de % sin ser posiciones serias.
-            if price <= 1.0:
+            # Se filtra por TAMAÑO DE MERCADO, no por precio unitario.
+            #
+            # Antes el corte era `price <= 1.0`, con la intención de dejar fuera
+            # las memecoins de céntimo. Pero el precio por unidad no dice nada
+            # del tamaño de una moneda ni de su volatilidad: una variación
+            # porcentual es independiente de si la unidad vale 0,20 $ o 200 $.
+            # Medido sobre las 40 primeras por capitalización, ese corte se
+            # llevaba por delante a TRX (31.000 M$), DOGE (10.700 M$), ADA
+            # (7.700 M$), XLM (5.500 M$), HBAR y SUI — monedas grandes de
+            # verdad, excluidas solo por tener muchas unidades en circulación.
+            #
+            # La capitalización sí mide lo que se quería medir. Las stablecoins
+            # se filtran aparte, por lista, unas líneas más arriba.
+            market_cap = c.get("market_cap") or 0
+            if market_cap < MIN_MARKET_CAP_CRYPTO:
                 continue
             candidates.append({
                 "ticker":          symbol.upper(),
@@ -2191,9 +2208,13 @@ def get_crypto_fear_greed():
     except Exception:
         pass
 
+    # Sin dato real no se devuelve un 50 "Neutral": tiene exactamente la misma
+    # forma que una lectura buena y solo el campo `ok` lo delata. La pantalla ya
+    # lo comprueba y pinta N/D, pero cualquier otro consumidor que se fije solo
+    # en `value` heredaría un número inventado. Se devuelve None.
     return {
-        "ok": False, "value": 50, "classification": "Neutral",
-        "yesterday": 50, "change": 0, "source": "N/D", "timestamp": get_timestamp(),
+        "ok": False, "value": None, "classification": None,
+        "yesterday": None, "change": None, "source": "N/D", "timestamp": get_timestamp(),
     }
 
 # ── COMPOSICIÓN SECTORIAL (breadth por sector, reutilizando el universo RS/RW) ─
