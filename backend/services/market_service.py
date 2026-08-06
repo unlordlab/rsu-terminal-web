@@ -708,7 +708,20 @@ def _get_reddit_token() -> str | None:
     except Exception:
         return None
 
-REDDIT_SUBS = ['wallstreetbets', 'stocks', 'investing', 'options', 'StockMarket']
+REDDIT_SUBS = ['wallstreetbets', 'stocks', 'investing', 'options', 'StockMarket',
+               # r/buzztickr publica recuentos de menciones y "market pulse"
+               # con los tickers en el propio título ("Market Pulse Aug 06
+               # $SPY $SNDK"), así que aporta símbolos limpios y muy densos.
+               #
+               # AVISO SOBRE LO QUE MIDE: sus posts son RESÚMENES de menciones
+               # de Reddit, no conversación original. Un ticker que ya está
+               # sonando en los otros subreddits vuelve a contarse aquí a
+               # través del resumen, así que refuerza lo que ya destaca en vez
+               # de aportar una señal independiente. Pesa poco —es un
+               # subreddit pequeño, 1 de cada 100 títulos en la petición
+               # combinada— pero conviene saber que no es una sexta opinión,
+               # es un eco de las otras cinco.
+               'buzztickr']
 
 
 def _fetch_reddit_titles_via_rss():
