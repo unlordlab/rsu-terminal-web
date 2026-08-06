@@ -331,10 +331,19 @@ async function loadEarnings(el) {
                 + '</div>';
         }).join('');
 
+        // El historial del ticker va ARRIBA, justo debajo del buscador, no al
+        // final. Antes se insertaba después de una lista de 280 px dentro de un
+        // widget de 420: al buscar o clicar una fila, el resultado aparecía
+        // fuera de la vista y había que bajar con el scroll de la página para
+        // encontrarlo. Ahora sale donde está mirando el usuario.
+        const pista = '<div style="padding:5px 12px;border-bottom:1px solid var(--color-border);font-size:10px;color:var(--color-muted);">'
+            + 'Busca un ticker o haz clic en cualquier fila para ver su historial de resultados'
+            + '</div>';
         const content = searchBar
+            + pista
+            + '<div id="earnings-detail"></div>'
             + header
-            + '<div style="overflow-y:auto;max-height:280px;" id="earnings-list">' + rows + '</div>'
-            + '<div id="earnings-detail" style="border-top:1px solid var(--color-border);"></div>';
+            + '<div style="overflow-y:auto;max-height:280px;" id="earnings-list">' + rows + '</div>';
 
         el.innerHTML = widgetShell('EARNINGS CALENDAR', 'Próximos 14 días · FMP + Finnhub', content, data.timestamp);
 
@@ -368,9 +377,22 @@ async function loadEarnings(el) {
     }
 }
 
+// Deja sitio al historial encogiendo la lista, y la devuelve a su tamaño al
+// cerrarlo. Sin esto el widget se desbordaría al abrir el detalle, que es la
+// otra mitad de por qué antes quedaba fuera de la vista.
+function _ajustarListaEarnings(container, abierto) {
+    const lista = container.querySelector('#earnings-list');
+    if (lista) lista.style.maxHeight = abierto ? '120px' : '280px';
+}
+
 async function loadEarningsSurprise(ticker, container) {
     const detail = container.querySelector('#earnings-detail');
     if (!detail) return;
+    detail.style.borderBottom = '1px solid var(--color-border)';
+    _ajustarListaEarnings(container, true);
+    // El widget puede estar por debajo del borde de la pantalla; sin esto el
+    // historial se cargaría bien pero el usuario no vería que ha pasado nada.
+    if (detail.scrollIntoView) detail.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
     detail.innerHTML = '<div style="padding:1rem;color:var(--color-muted);font-size:12px;">Cargando historial de ' + ticker + '...</div>';
 
     try {
@@ -389,6 +411,9 @@ async function loadEarningsSurprise(ticker, container) {
             + '<div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">'
             + '<span style="color:var(--color-accent);font-size:14px;font-weight:500;">' + ticker + '</span>'
             + nextDate + epsEst
+            // Cerrar devuelve la lista a su tamaño: sin salida visible, el
+            // historial se queda ocupando sitio y hay que recargar la página.
+            + '<button id="earnings-detail-close" title="Cerrar el historial" style="margin-left:auto;background:transparent;border:1px solid var(--color-border);border-radius:var(--radius);color:var(--color-muted);cursor:pointer;font-family:var(--font-mono);font-size:11px;line-height:1;padding:3px 7px;">✕</button>'
             + '</div>';
 
         if (history.length) {
@@ -414,6 +439,12 @@ async function loadEarningsSurprise(ticker, container) {
 
         html += '</div>';
         detail.innerHTML = html;
+        const cerrar = detail.querySelector('#earnings-detail-close');
+        if (cerrar) cerrar.addEventListener('click', () => {
+            detail.innerHTML = '';
+            detail.style.borderBottom = '';
+            _ajustarListaEarnings(container, false);
+        });
 
     } catch(e) {
         detail.innerHTML = widgetError(e.message);

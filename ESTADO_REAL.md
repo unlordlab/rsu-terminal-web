@@ -29,7 +29,7 @@ parecería completo y sería engañoso.
 
 ## Cobertura de esta versión — leer antes de usarlo
 
-- **419 hallazgos**: 379 extraídos de los 16 documentos de auditoría, más 40
+- **420 hallazgos**: 379 extraídos de los 16 documentos de auditoría, más 41
   encontrados después con el sistema ya en producción (RSU Algoritmo #14–#30, Cartera #B19–#B22
   y #28, Newsfeed/briefing #27–#31, Infraestructura #19 —la versión móvil—,
   CANSLIM #25 —umbrales descalibrados— y #29/#30, estos dos **encontrados por el
@@ -315,7 +315,7 @@ estaba duplicada — ver su fila.
 | ❓ | 22 | 🟢 | Efectividad del insider | No construido |
 | ✅ | 23 | 🟢 | Cruce Insider × Options Flow | Ya resuelto: `get_confluence_tickers()`, badge ⚡ (sesión 16) |
 
-## Market  (34 hallazgos — ❌0 · ✅9 · ❓25 · ⬜0)
+## Market  (35 hallazgos — ❌0 · ✅11 · ❓24 · ⬜0)
 
 | | # | Sev | Hallazgo | Estado / evidencia |
 |-|---|-----|----------|--------------------|
@@ -334,7 +334,7 @@ estaba duplicada — ver su fila.
 | ❓ | 13 | 🟠 | `loadVix()` inyecta Chart.js SIEMPRE | *sin comprobar* |
 | ✅ | 14 | 🟠 | Fuga de memoria: los charts no se destruyen al navegar | RESUELTO, verificado 06/08 **en el navegador, no leyendo el código**. `market.js` exporta `cleanup()` y el router lo llama justo antes de destruir el contenedor de una página. De los 7 gráficos, 5 se registran por id de canvas (`_marketChartIds`) y se destruyen vía `Chart.getChart(id)`; los otros 2 tienen variable propia (`_spreadsChart`, `_shillerChart`) y se destruyen aparte. **La primera prueba que hice no valía**: comprobaba que el canvas desapareciera del DOM, y eso pasa igual aunque la instancia siga viva — que es justo la fuga. Repetida guardando las INSTANCIAS antes de navegar: capturadas 4, y tras dos navegaciones (hacen falta dos, porque el router mantiene una página cacheada) las 4 tienen `canvas` y `ctx` a `null`, o sea destruidas de verdad |
 | ✅ | 15 | 🟠 | Listener de Escape huérfano en el modal del briefing | RESUELTO, verificado 06/08 contando los listeners de verdad. Al investigarlo apareció que `openBriefingModal()` —la función que el hallazgo señalaba— es solo un **respaldo**: el camino real usa `window.Tooltip.openModal`, que registra su listener de Escape **una sola vez al cargar el módulo** y luego solo alterna una clase CSS sobre un overlay permanente, así que no acumula nada por diseño. Medido instrumentando `document.addEventListener`/`removeEventListener`: cuatro ciclos de abrir y cerrar dejan el contador neto de `keydown` en **cero**. Y el respaldo también está bien: tiene un único `close()` que quita el listener, enganchado a los tres cierres (botón, clic fuera y Escape), así que ya no depende de que se cierre con la tecla |
-| ❓ | 16 | 🟠 | Earnings: precios solo en las primeras 50 filas de 100 + timestamps inconsistentes + sin caché en el detalle | *sin comprobar* |
+| ✅ | 16 | 🟠 | Earnings: precios solo en las primeras 50 filas de 100 + timestamps inconsistentes + sin caché en el detalle | RESUELTO, comprobado 06/08 con datos reales — **las tres partes ya estaban hechas** y el propio código cita este hallazgo. Los precios se enriquecen sobre `items[:100]`, no sobre los primeros 50; hay caché diaria de 24 h con la fecha en la clave (que además protege la cuota de 250 peticiones/día de FMP); y las fechas se calculan contra `now.date()` en horario de Nueva York, con `get_timestamp()` unificado. **Medido**: de 85 filas devueltas hoy, 84 traen precio, y repartidas por igual en los cuatro tramos (25/25, 25/25, 25/25, 9/10) — el síntoma era justo que el tramo 51-100 salía siempre sin precio. La única sin precio es un ticker que yfinance no sabe cotizar, no un corte por posición |
 | ❓ | 17 | 🟠 | Fear & Greed fallback (estimado por VIX) fabrica historial | *sin comprobar* |
 | ❓ | 18 | 🟡 | `_fred_csv` triplicado + WALCL/WTREGEN/RRPONTSYD descargados dos veces | *sin comprobar* |
 | ❓ | 19 | 🟡 | Índices / Forex / Commodities siguen yendo ticker a ticker | *sin comprobar* |
@@ -353,6 +353,7 @@ estaba duplicada — ver su fila.
 | ❓ | 32 | 🟢 | Ratio VIX/VIX3M explícito | *sin comprobar* |
 | ❓ | 33 | 🟢 | Alertas de umbral | *sin comprobar* |
 | ✅ | 34 | 🟠 | `_get_yf_earnings()` devolvía `{}` para TODOS los tickers, en silencio | HECHO 04/08. **Hallazgo nuevo, no estaba en ninguna auditoría** — apareció al ir a construir el aviso de resultados de Cartera. `tk.calendar` devuelve hoy un DICCIONARIO, no un DataFrame: la función llamaba a `cal.empty` y `cal.columns`, saltaba `AttributeError` y el `except Exception: return {}` se lo tragaba. Ni un solo ticker devolvía dato, y `get_earnings_ticker()` (el endpoint por ticker de Market) llevaba tiempo apoyándose solo en Finnhub sin que se notara. Las claves del diccionario tampoco eran las que buscaba: la estimación está en `Earnings Average`, no en `EPS Estimate`. Arreglado aceptando las dos formas por si alguna versión vuelve al DataFrame, y el `except` ahora loguea en vez de callar. Verificado: AAPL 2026-10-29, NVDA 2026-08-26, MSFT 2026-10-28 con estimaciones reales; SPY devuelve vacío, que es correcto — un ETF no presenta resultados |
+| ✅ | 35 | 🟡 | El historial de resultados de un ticker aparecía fuera de la vista | HECHO 06/08, **pedido por el usuario**: «cuando quieres consultar el histórico de earnings de un activo se despliega al final del scroll». Reproducido: el bloque de detalle se insertaba DESPUÉS de una lista de 280 px dentro de un widget de 420, así que al buscar un ticker o clicar una fila el resultado nacía fuera de la pantalla y había que bajar con el scroll de la página para encontrarlo. Ahora va justo debajo del buscador, encima de la lista; la lista se encoge a 120 px mientras el detalle está abierto para que el widget no se desborde, y vuelve a 280 px al cerrarlo con la ✕ nueva. Añadida una línea que dice que se puede clicar cualquier fila, porque las filas ya eran clicables pero nada lo indicaba. Verificado en el navegador por los dos caminos (clic en fila y buscador): el detalle queda por encima de la lista y dentro del widget, sin errores de consola |
 
 ## Modulos 2026-07-19  (10 hallazgos — ❓10)
 
