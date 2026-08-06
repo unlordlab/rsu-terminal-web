@@ -786,21 +786,40 @@ def get_reddit_pulse():
     token = _get_reddit_token()
     if token:
         session.headers.update({"Authorization": f"Bearer {token}"})
-        for sub in ['wallstreetbets', 'stocks', 'investing', 'options', 'StockMarket']:
+        # Se recorren los CINCO subreddits, no uno.
+        #
+        # Antes había un `break` tras el primero que respondiera: la lista de
+        # cinco daba la impresión de cubrirlos todos, pero en la práctica solo
+        # se leía r/wallstreetbets y los otros cuatro no se pedían nunca. Como
+        # este camino solo se activa con credenciales de Reddit aprobadas —que
+        # hoy no hay— el fallo estaba dormido, y esa es justo la parte
+        # incómoda: el día que las credenciales existan, el módulo habría
+        # pasado de cinco subreddits (los que lee el RSS) a uno, en silencio y
+        # como efecto secundario de "mejorar" la autenticación.
+        #
+        # La lista tampoco se repite aquí: se usa REDDIT_SUBS, la misma que
+        # arma la URL del RSS. Eran dos copias del mismo dato esperando a
+        # divergir. Ver auditoría Market, hallazgo #7.
+        subs_ok = 0
+        for sub in REDDIT_SUBS:
             try:
                 r = session.get(f'https://oauth.reddit.com/r/{sub}/hot?limit=30&t=day', timeout=10)
                 if r.status_code != 200:
                     continue
-                sources.append('Reddit')
-                reddit_ok = True
+                subs_ok += 1
                 for post in r.json().get('data', {}).get('children', []):
                     p    = post.get('data', {})
                     text = f"{p.get('title','')} {p.get('selftext','')}".upper()
                     for ticker, count in _extract_tickers(text):
                         ticker_mentions[ticker] = ticker_mentions.get(ticker, 0) + count
-                break
             except Exception:
                 continue
+        if subs_ok:
+            # Una sola vez, aunque respondan los cinco: `sources` es la lista
+            # de FUENTES que se muestra al usuario, no un contador de peticiones.
+            sources.append('Reddit')
+            reddit_ok = True
+            print(f"[Reddit] {subs_ok}/{len(REDDIT_SUBS)} subreddits leídos vía OAuth")
 
     try:
         r = session.get('https://api.stocktwits.com/api/2/trending/symbols.json', timeout=8)
