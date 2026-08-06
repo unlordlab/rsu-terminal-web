@@ -315,7 +315,7 @@ estaba duplicada — ver su fila.
 | ❓ | 22 | 🟢 | Efectividad del insider | No construido |
 | ✅ | 23 | 🟢 | Cruce Insider × Options Flow | Ya resuelto: `get_confluence_tickers()`, badge ⚡ (sesión 16) |
 
-## Market  (34 hallazgos — ❌0 · ✅7 · ❓27 · ⬜0)
+## Market  (34 hallazgos — ❌0 · ✅9 · ❓25 · ⬜0)
 
 | | # | Sev | Hallazgo | Estado / evidencia |
 |-|---|-----|----------|--------------------|
@@ -332,8 +332,8 @@ estaba duplicada — ver su fila.
 | ❓ | 11 | 🟠 | `get_fed_macro()` cachea 30 min aunque todo venga vacío | *sin comprobar* |
 | ❓ | 12 | 🟠 | Race condition: la sparkline del Balance Fed puede no renderizarse en la primera carga | *sin comprobar* |
 | ❓ | 13 | 🟠 | `loadVix()` inyecta Chart.js SIEMPRE | *sin comprobar* |
-| ❓ | 14 | 🟠 | Fuga de memoria: los charts no se destruyen al navegar | *sin comprobar* |
-| ❓ | 15 | 🟠 | Listener de Escape huérfano en el modal del briefing | *sin comprobar* |
+| ✅ | 14 | 🟠 | Fuga de memoria: los charts no se destruyen al navegar | RESUELTO, verificado 06/08 **en el navegador, no leyendo el código**. `market.js` exporta `cleanup()` y el router lo llama justo antes de destruir el contenedor de una página. De los 7 gráficos, 5 se registran por id de canvas (`_marketChartIds`) y se destruyen vía `Chart.getChart(id)`; los otros 2 tienen variable propia (`_spreadsChart`, `_shillerChart`) y se destruyen aparte. **La primera prueba que hice no valía**: comprobaba que el canvas desapareciera del DOM, y eso pasa igual aunque la instancia siga viva — que es justo la fuga. Repetida guardando las INSTANCIAS antes de navegar: capturadas 4, y tras dos navegaciones (hacen falta dos, porque el router mantiene una página cacheada) las 4 tienen `canvas` y `ctx` a `null`, o sea destruidas de verdad |
+| ✅ | 15 | 🟠 | Listener de Escape huérfano en el modal del briefing | RESUELTO, verificado 06/08 contando los listeners de verdad. Al investigarlo apareció que `openBriefingModal()` —la función que el hallazgo señalaba— es solo un **respaldo**: el camino real usa `window.Tooltip.openModal`, que registra su listener de Escape **una sola vez al cargar el módulo** y luego solo alterna una clase CSS sobre un overlay permanente, así que no acumula nada por diseño. Medido instrumentando `document.addEventListener`/`removeEventListener`: cuatro ciclos de abrir y cerrar dejan el contador neto de `keydown` en **cero**. Y el respaldo también está bien: tiene un único `close()` que quita el listener, enganchado a los tres cierres (botón, clic fuera y Escape), así que ya no depende de que se cierre con la tecla |
 | ❓ | 16 | 🟠 | Earnings: precios solo en las primeras 50 filas de 100 + timestamps inconsistentes + sin caché en el detalle | *sin comprobar* |
 | ❓ | 17 | 🟠 | Fear & Greed fallback (estimado por VIX) fabrica historial | *sin comprobar* |
 | ❓ | 18 | 🟡 | `_fred_csv` triplicado + WALCL/WTREGEN/RRPONTSYD descargados dos veces | *sin comprobar* |
