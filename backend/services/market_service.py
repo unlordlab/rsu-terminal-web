@@ -195,9 +195,17 @@ def get_fear_greed():
         elif score >= 45: rating = "Neutral"
         elif score >= 25: rating = "Fear"
         else:             rating = "Extreme Fear"
+        # El histórico va a None, no repetido.
+        #
+        # Antes se rellenaban `prev` y `week_ago` con el score de HOY, así que
+        # la pantalla mostraba "AYER 42 · HACE 1 SEM 42" — un histórico plano
+        # que parecía medido y no lo era: esta rama solo conoce el VIX de este
+        # momento, no tiene ni idea de qué marcaba el índice ayer. El sufijo
+        # "(est.)" avisaba del score, pero no de que las otras tres cifras
+        # fueran el mismo número copiado. Ver auditoría Market, hallazgo #17.
         return {
             "score": score, "rating": rating + " (est.)",
-            "prev": score, "week_ago": score, "month_ago": None, "year_ago": None,
+            "prev": None, "week_ago": None, "month_ago": None, "year_ago": None,
             "components": [], "timestamp": get_timestamp(), "ok": True,
         }
     except Exception as e:
