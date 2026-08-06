@@ -58,16 +58,21 @@ def _is_market_open() -> bool:
         return 13*60+30 <= t < 20*60
 
 
-def _get_daily_bars(tk_obj, ticker: str) -> tuple[float, float]:
-    """Devuelve (ultimo_cierre, cierre_anterior) de las barras diarias,
-    cacheado 6h -- una sola llamada a yfinance sirve para las dos cosas,
-    y con el mercado cerrado son los dos números que de verdad importan
-    (nada de mezclar con fast_info, que puede quedarse en un snapshot
-    ligeramente distinto al cierre oficial)."""
+def _get_daily_bars(tk_obj, ticker: str) -> tuple[float, float, object]:
+    """Devuelve (ultimo_cierre, cierre_anterior, fecha_del_ultimo_cierre) de
+    las barras diarias, cacheado 6h -- una sola llamada a yfinance sirve para
+    las tres cosas, y con el mercado cerrado son los números que de verdad
+    importan (nada de mezclar con fast_info, que puede quedarse en un snapshot
+    ligeramente distinto al cierre oficial).
+
+    La FECHA es imprescindible, no un extra: sin ella el llamador no puede
+    saber si la última barra es de hoy o de una sesión anterior, y emparejar un
+    precio de hoy con el penúltimo cierre da un movimiento de DOS sesiones
+    presentado como si fuera el del día."""
     now = time.time()
     cached = _daily_bars_cache.get(ticker)
     if cached and (now - cached["updated"]) < _DAILY_BARS_TTL:
-        return cached["last"], cached["prev"]
+        return cached["last"], cached["prev"], cached.get("fecha")
     try:
         # auto_adjust=False a propósito (auditoría de Cartera, #A2). Con el
         # valor por defecto (True) yfinance reescala las barras antiguas para
@@ -117,19 +122,23 @@ def _get_daily_bars(tk_obj, ticker: str) -> tuple[float, float]:
                 fallback = 0.0
             if fallback and math.isfinite(fallback):
                 last, prev = fallback, float(closes.iloc[-1])
-                _daily_bars_cache[ticker] = {"last": last, "prev": prev, "updated": now}
-                return last, prev
+                fecha = raw_closes.index[-1].date()
+                _daily_bars_cache[ticker] = {"last": last, "prev": prev,
+                                             "fecha": fecha, "updated": now}
+                return last, prev, fecha
 
         if len(closes) >= 2:
             last, prev = float(closes.iloc[-1]), float(closes.iloc[-2])
         elif len(closes) == 1:
             last = prev = float(closes.iloc[-1])
         else:
-            return 0.0, 0.0
-        _daily_bars_cache[ticker] = {"last": last, "prev": prev, "updated": now}
-        return last, prev
+            return 0.0, 0.0, None
+        fecha = closes.index[-1].date()
+        _daily_bars_cache[ticker] = {"last": last, "prev": prev,
+                                     "fecha": fecha, "updated": now}
+        return last, prev, fecha
     except Exception:
-        return 0.0, 0.0
+        return 0.0, 0.0, None
 
 def norm_col(s):
     return unicodedata.normalize("NFKD", s).encode("ascii", "ignore").decode().lower().strip()
@@ -207,9 +216,50 @@ def _fetch_price_single(ticker: str) -> dict | None:
                     price = 0.0
             except Exception:
                 pass
-            last_bar, prev = _get_daily_bars(tk_obj, ticker)
-            if not price:
-                price = last_bar
+            last_bar, prev_bar, fecha_ultima = _get_daily_bars(tk_obj, ticker)
+            hoy_ny = datetime.now(ZoneInfo("America/New_York")).date()
+
+            if fecha_ultima == hoy_ny:
+                # La barra de hoy ya está publicada: el cierre de referencia es
+                # el de la sesión anterior, como siempre.
+                prev = prev_bar
+                if not price:
+                    price = last_bar
+            else:
+                # No hay barra de hoy todavía (pasa a diario al principio de la
+                # sesión, y de forma permanente si el proveedor está degradado).
+                # El cierre de referencia es entonces el ÚLTIMO conocido, no el
+                # penúltimo: emparejar un precio de hoy con el penúltimo cierre
+                # daba el movimiento de DOS sesiones etiquetado como "hoy".
+                prev = last_bar
+                if not price or abs(price - last_bar) < 0.005:
+                    # Sin cotización de hoy por ningún lado: el "precio en vivo"
+                    # es el cierre de ayer repetido.
+                    #
+                    # La comparación va con tolerancia de medio centavo, NO con
+                    # `==`: fast_info y la barra diaria devuelven el mismo precio
+                    # con distinta precisión de coma flotante (109,4799... frente
+                    # a 109,48), así que una igualdad exacta no detecta casi
+                    # ningún caso -- salía un "-0,00%" en vez del aviso.
+                    #
+                    # Es una heurística, no una certeza: una acción puede cotizar
+                    # de verdad a medio centavo de su cierre anterior. Se prefiere
+                    # decir "no lo sé" y perder algún 0,00% legítimo antes que
+                    # presentar el movimiento de ayer como si fuera el de hoy.
+                    #
+                    # `prev` SÍ se devuelve, y es importante: es el cierre de
+                    # referencia correcto y Finnhub lo necesita. Ese servicio
+                    # solo manda el precio en vivo, no el cierre anterior, así
+                    # que recalcula el porcentaje contra este `prev` -- si
+                    # llegara a None, descartaría todos sus ticks. Lo que va a
+                    # None es el porcentaje, que es lo que no sabemos.
+                    entry = {"ticker": ticker, "price": round(last_bar, 2),
+                             "prev": round(last_bar, 2), "chg": None,
+                             "chg_fecha": None, "sin_datos_hoy": True,
+                             "ultimo_cierre": str(fecha_ultima or ""),
+                             "updated": now}
+                    _price_cache[ticker] = entry
+                    return entry
         else:
             # Mercado cerrado: usar el cierre real de las barras diarias
             # para AMBOS valores (precio y anterior) — nada de mezclar con
@@ -219,7 +269,13 @@ def _fetch_price_single(ticker: str) -> dict | None:
             # de los +6.11% reales de cierre) — ver conversación 18/07/2026.
             # De propina: cero llamadas extra a fast_info con el mercado
             # cerrado, solo la de barras diarias (ya cacheada 6h).
-            price, prev = _get_daily_bars(tk_obj, ticker)
+            #
+            # Aquí NO se devuelve "sin datos": con el mercado cerrado, la
+            # última sesión completa es exactamente lo que hay que enseñar
+            # (un sábado interesa el cierre del viernes). Lo que se añade es
+            # la fecha, para que la pantalla pueda decir de qué sesión habla
+            # en vez de dar por hecho que es la de hoy.
+            price, prev, fecha_ultima = _get_daily_bars(tk_obj, ticker)
 
         if not price or not math.isfinite(price):
             return None
@@ -233,7 +289,12 @@ def _fetch_price_single(ticker: str) -> dict | None:
             return None
         entry = {"ticker": ticker, "price": round(price, 2),
                  "prev": round(prev, 2) if math.isfinite(prev) else 0.0,
-                 "chg": round(chg, 2), "updated": now}
+                 "chg": round(chg, 2),
+                 # De qué sesión es ese porcentaje. La pantalla lo compara con
+                 # el día de hoy para no llamar "Hoy %" a lo que no lo es.
+                 "chg_fecha": str(fecha_ultima or ""),
+                 "sin_datos_hoy": False,
+                 "updated": now}
         _price_cache[ticker] = entry
         return entry
     except Exception:
@@ -1091,6 +1152,10 @@ def get_cartera():
                     "peso":     peso,
                     "chg_hoy":    live.get("chg"),
                     "prev_close": live.get("prev"),
+                    # De qué sesión es ese "HOY %". Si no hay dato de hoy llega
+                    # a None y la tabla pinta "—" en vez de un número de ayer.
+                    "chg_fecha":     live.get("chg_fecha"),
+                    "sin_datos_hoy": live.get("sin_datos_hoy", False),
                     "estado":   row[col_estado],
                     "comment":  comment,
                     "sector":   sec.get("sector", "Sin clasificar"),
@@ -1143,7 +1208,11 @@ def get_cartera():
             # P&L del día agregado -- solo sobre posiciones con cierre de ayer
             # disponible (si el precio en vivo falló para un ticker, se
             # excluye de ambos lados en vez de fabricar un dato).
-            rows_con_chg = [r for r in abiertas_rows if r.get("prev_close") and r["shares"]]
+            # `sin_datos_hoy` excluye las posiciones cuyo precio sigue siendo el
+            # cierre anterior: incluirlas sumaría un movimiento de cero que no
+            # es una medición, es la ausencia de una.
+            rows_con_chg = [r for r in abiertas_rows
+                            if r.get("prev_close") and r["shares"] and not r.get("sin_datos_hoy")]
             if rows_con_chg:
                 val_hoy_chg  = sum(r["shares"] * r["actual"] for r in rows_con_chg)
                 val_ayer_chg = sum(r["shares"] * r["prev_close"] for r in rows_con_chg)

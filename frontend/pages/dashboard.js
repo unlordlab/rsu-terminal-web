@@ -195,11 +195,16 @@ async function loadWatchlistSummary(el) {
         }
 
         const rows = wl.data.slice(0, 4).map(w => {
-            const up    = (w.chg || 0) >= 0;
-            const color = w.ok ? (up ? 'var(--color-accent)' : '#f23645') : 'var(--color-muted)';
+            // `w.chg` puede ser null cuando todavía no hay cotización de hoy.
+            // Con `w.chg || 0` eso se pintaba como un "▲ 0.00%" inventado, que
+            // es justo lo contrario de lo que hay que enseñar: sin dato, "—".
+            const sinChg = w.chg == null;
+            const up     = !sinChg && w.chg >= 0;
+            const color  = (w.ok && !sinChg) ? (up ? 'var(--color-accent)' : '#f23645') : 'var(--color-muted)';
             return '<div style="display:flex;justify-content:space-between;padding:5px 0;font-size:12px;border-bottom:1px solid var(--color-border);">'
                 + '<span class="ticker-link" style="color:var(--color-accent);cursor:pointer;" onclick="window.__navigate(\'/research?ticker=' + w.ticker + '\')">' + w.ticker + '</span>'
-                + '<span style="color:' + color + ';">' + (w.ok ? (up ? '▲' : '▼') + ' ' + Math.abs(w.chg || 0).toFixed(2) + '%' : '—') + '</span>'
+                + '<span style="color:' + color + ';"' + (sinChg ? ' title="Todavía no hay cotización de hoy para este valor."' : '') + '>'
+                + ((w.ok && !sinChg) ? (up ? '▲' : '▼') + ' ' + Math.abs(w.chg).toFixed(2) + '%' : '—') + '</span>'
                 + '</div>';
         }).join('');
 

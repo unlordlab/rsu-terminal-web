@@ -357,7 +357,10 @@ function applyLivePrices(prices, abiertas) {
     prices.forEach(p => { priceMap[p.ticker] = p.price; });
     let valHoy = 0, valAyer = 0;
     abiertas.forEach(pos => {
-        if (!pos.prev_close || !pos.shares) return;
+        // sin_datos_hoy: el precio sigue siendo el cierre anterior, así que
+        // esta posición aportaría un cero que no es una medición sino la falta
+        // de una. Se deja fuera del agregado en vez de diluirlo.
+        if (!pos.prev_close || !pos.shares || pos.sin_datos_hoy) return;
         const live = priceMap[pos.ticker] ?? pos.actual;
         if (!live) return;
         valHoy  += pos.shares * live;
@@ -864,6 +867,14 @@ function activeTable(rows) {
         const rowClass = r.pnl >= 0 ? 'cartera-tr row-profit' : 'cartera-tr row-loss';
         const chgColor = r.chg_hoy == null ? 'var(--color-muted)' : r.chg_hoy >= 0 ? 'var(--color-accent)' : '#f23645';
         const chgTxt   = r.chg_hoy == null ? '—' : (r.chg_hoy >= 0 ? '+' : '') + fix(r.chg_hoy) + '%';
+        // Sin cotización de hoy se pinta "—", pero el guion a secas no explica
+        // nada: al pasar el ratón se dice de cuándo es el último precio, para
+        // que no parezca un fallo de la tabla.
+        const chgTitle = r.chg_hoy == null
+            ? (r.chg_fecha || r.sin_datos_hoy
+                ? `Todavía no hay cotización de hoy para ${r.ticker}. El precio que ves es el último cierre disponible.`
+                : `Sin datos de variación para ${r.ticker}.`)
+            : '';
         const comment  = r.comment || '—';
         const sparkId  = `spark-active-${i}-${r.ticker}`;
         // La celda de peso lleva su propia función: hay dos casos que no son
@@ -887,7 +898,7 @@ function activeTable(rows) {
             <td style="padding:8px 10px;color:var(--color-muted);font-size:11px;max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${r.sector || 'Sin clasificar'}</td>
             <td style="padding:8px 10px;color:var(--color-text);font-size:12px;">$${usd(r.compra)}</td>
             <td style="padding:8px 10px;color:var(--color-text);font-size:12px;" data-live-price="${r.ticker}">$${usd(r.actual)}</td>
-            <td style="padding:8px 10px;font-size:11px;color:${chgColor};" data-live-chg="${r.ticker}">${chgTxt}</td>
+            <td style="padding:8px 10px;font-size:11px;color:${chgColor};"${chgTitle ? ` title="${esc(chgTitle)}"` : ''} data-live-chg="${r.ticker}">${chgTxt}</td>
             <td style="padding:8px 10px;font-size:12px;font-weight:500;" data-live-pnl-id="${r.id}">
                 <span style="color:${pnlColor};">${r.pnl >= 0 ? '+' : ''}${fix(r.pnl)}%</span>
             </td>
