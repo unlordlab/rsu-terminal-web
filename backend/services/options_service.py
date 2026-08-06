@@ -33,6 +33,25 @@ RETENTION_DAYS = 1095
 # auditoría Options Flow #8.
 MIN_PREMIUM_CARTERA = 25_000
 
+# ── Foto diaria de Open Interest, independiente del filtro de flujo ───────────
+#
+# El ranking de "Large OI Increase/Decrease" se calculaba cruzando la tabla de
+# flujo consigo misma, y ahí solo hay contratos que superaron el filtro de
+# volumen, prima y score. Medido sobre datos reales: de 158 contratos guardados
+# un día, solo 33 estaban también el día anterior — el 21%. Es decir, el
+# indicador solo podía ver contratos que resultaron "inusuales" LOS DOS DÍAS,
+# que es justo lo contrario de lo que debe cazar: un contrato cuyo OI se dispara
+# sin que su prima llame la atención era invisible. Ver auditoría #15.
+#
+# Se guarda aparte y con su propio criterio: solo hace falta OI, no prima ni
+# volumen. Dos topes para que la tabla no crezca sin control:
+MIN_OI_SNAPSHOT = 100            # por debajo, un cambio porcentual es ruido
+MAX_OI_SNAPSHOT_POR_TICKER = 50  # los de mayor OI; acota las filas por escaneo
+# Retención corta y a propósito distinta de la del flujo: el ranking solo
+# compara las dos últimas sesiones, así que no hace falta guardar años. Con el
+# tope de arriba son ~29.000 filas por sesión en el peor caso.
+RETENTION_OI_DAYS = 45
+
 _SESION_CACHE: dict = {"fecha": None, "ts": 0.0}
 
 
@@ -78,8 +97,16 @@ def purgar_antiguos(days: int = RETENTION_DAYS) -> int:
         conn  = sqlite3.connect(DB_PATH)
         cur   = conn.execute('DELETE FROM options_flow WHERE scan_date < ?', (corte,))
         borradas = cur.rowcount or 0
+        # La foto de OI tiene su propia retención, mucho más corta: solo se usa
+        # para comparar las dos últimas sesiones y son muchas más filas por día.
+        corte_oi = (datetime.now() - timedelta(days=RETENTION_OI_DAYS)).strftime('%Y-%m-%d')
+        cur_oi = conn.execute('DELETE FROM oi_snapshot WHERE scan_date < ?', (corte_oi,))
+        borradas_oi = cur_oi.rowcount or 0
         conn.commit()
         conn.close()
+        if borradas_oi:
+            print(f"[OptionsFlow] Purgadas {borradas_oi} filas de la foto de OI "
+                  f"con más de {RETENTION_OI_DAYS} días")
         return borradas
     except Exception as e:
         print(f"[OptionsFlow] Purga fallida: {type(e).__name__}: {e}")
@@ -238,6 +265,18 @@ def init_db():
     # tranquilo, que es lo contrario de lo que pasó. Guardar cuántos se pidieron
     # y cuántos respondieron es lo que permite distinguir "no hubo actividad"
     # de "no hubo datos". Ver auditoría Options Flow #7.
+    conn.execute('''
+        CREATE TABLE IF NOT EXISTS oi_snapshot (
+            scan_date TEXT NOT NULL,
+            ticker    TEXT NOT NULL,
+            strike    REAL NOT NULL,
+            exp       TEXT NOT NULL,
+            type      TEXT NOT NULL,
+            oi        INTEGER NOT NULL,
+            PRIMARY KEY (scan_date, ticker, strike, exp, type)
+        )
+    ''')
+    conn.execute('CREATE INDEX IF NOT EXISTS idx_oisnap_date ON oi_snapshot(scan_date)')
     conn.execute('''
         CREATE TABLE IF NOT EXISTS scan_log (
             scan_date   TEXT PRIMARY KEY,
@@ -445,6 +484,10 @@ def get_options_flow_simple() -> dict:
         "calls_sold":         [_entrada_simple(e, "Sell Call", cartera_tickers, repetidos) for e in grupos["Sell Call"]][:20],
         "large_oi_increase":  oi_changes["increase"],
         "large_oi_decrease":  oi_changes["decrease"],
+        # Aviso cuando la comparación de OI todavía va por el camino antiguo
+        # (sesgado) porque aún no hay dos sesiones con foto completa.
+        "oi_nota":            oi_changes.get("nota"),
+        "oi_comparados":      oi_changes.get("contratos_comparados"),
         "top_premium":        [{"ticker": t, "premium_fmt": _fmt_premium(p)} for t, p in top_premium],
         "top_bullish":        [{"ticker": t} for t, _ in top_bullish],
         "top_bearish":        [{"ticker": t} for t, _ in top_bearish],
@@ -460,23 +503,37 @@ def get_oi_changes(limit: int = 15) -> dict:
     conn = sqlite3.connect(DB_PATH)
     conn.row_factory = sqlite3.Row
 
+    # Fuente: la foto de OI, no la tabla de flujo. La tabla de flujo solo tiene
+    # contratos que superaron el filtro de volumen/prima/score, así que cruzarla
+    # consigo misma solo encontraba los que fueron "inusuales" LOS DOS DÍAS
+    # -- medido, el 21% de un día ya filtrado. Ver auditoría #15.
+    tabla = 'oi_snapshot'
     fechas = conn.execute(
-        'SELECT DISTINCT scan_date FROM options_flow ORDER BY scan_date DESC LIMIT 2'
+        'SELECT DISTINCT scan_date FROM oi_snapshot ORDER BY scan_date DESC LIMIT 2'
     ).fetchall()
+    if len(fechas) < 2:
+        # Respaldo para el periodo de transición: la foto empieza a acumularse
+        # desde el primer escaneo tras este cambio, así que hasta que haya dos
+        # sesiones se sigue usando la tabla de flujo -- con su sesgo, pero es
+        # mejor que una pantalla vacía. Se avisa en la respuesta.
+        tabla = 'options_flow'
+        fechas = conn.execute(
+            'SELECT DISTINCT scan_date FROM options_flow ORDER BY scan_date DESC LIMIT 2'
+        ).fetchall()
     if len(fechas) < 2:
         conn.close()
         return {"increase": [], "decrease": [], "nota": "Hace falta al menos 2 días de histórico guardado para comparar OI"}
 
     fecha_hoy, fecha_prev = fechas[0][0], fechas[1][0]
 
-    rows = conn.execute('''
+    rows = conn.execute(f'''
         SELECT h.ticker, h.strike, h.exp, h.type, h.oi as oi_hoy, p.oi as oi_prev
-        FROM options_flow h
-        JOIN options_flow p
+        FROM {tabla} h
+        JOIN {tabla} p
           ON h.ticker=p.ticker AND h.strike=p.strike AND h.exp=p.exp AND h.type=p.type
-        WHERE h.scan_date=? AND p.scan_date=? AND p.oi > 0
+        WHERE h.scan_date=? AND p.scan_date=? AND p.oi >= ?
         GROUP BY h.ticker, h.strike, h.exp, h.type
-    ''', (fecha_hoy, fecha_prev)).fetchall()
+    ''', (fecha_hoy, fecha_prev, MIN_OI_SNAPSHOT)).fetchall()
     conn.close()
 
     cambios = []
@@ -487,11 +544,18 @@ def get_oi_changes(limit: int = 15) -> dict:
         cambios.append({
             "ticker": r["ticker"], "strike": r["strike"], "exp": r["exp"],
             "type": r["type"], "daily_pct": round(pct, 1),
+            "oi_prev": r["oi_prev"], "oi_hoy": r["oi_hoy"],
         })
 
     incrementos = sorted([c for c in cambios if c["daily_pct"] > 0], key=lambda x: -x["daily_pct"])[:limit]
     descensos   = sorted([c for c in cambios if c["daily_pct"] < 0], key=lambda x: x["daily_pct"])[:limit]
-    return {"increase": incrementos, "decrease": descensos}
+    salida = {"increase": incrementos, "decrease": descensos,
+              "contratos_comparados": len(rows), "fuente": tabla}
+    if tabla == 'options_flow':
+        salida["nota"] = ("Comparación limitada: todavía no hay dos sesiones con foto completa de "
+                          "Open Interest, así que solo se comparan contratos que además destacaron "
+                          "por prima. Se corrige solo tras el segundo escaneo.")
+    return salida
 
 def get_ticker_flow_simple(ticker: str, period: str = "1w") -> dict:
     """Historial plano de un ticker — la tabla que pide Marc al buscar/clicar
@@ -1177,6 +1241,10 @@ def _process_chain(ticker: str, min_premium: float = 100_000, min_score: int = 4
         # por el mínimo de OI y el ticker parece tranquilo cuando en realidad
         # llegó vacío. Ocurrió de verdad el 06/08/2026.
         oi_max = 0.0
+        # Foto de OI de TODA la cadena, recogida antes del filtro de flujo (ver
+        # MIN_OI_SNAPSHOT). Es lo que alimenta el ranking de cambios de OI, que
+        # antes solo veía los contratos que además destacaban por prima.
+        oi_snap: list = []
         bull_prem_total, bear_prem_total = 0, 0
         entries_by_exp: dict = {}   # para sweep detection
 
@@ -1222,6 +1290,8 @@ def _process_chain(ticker: str, min_premium: float = 100_000, min_score: int = 4
                     ask     = _safe(row.get('ask', 0))
 
                     if oi > oi_max: oi_max = oi
+                    if oi >= MIN_OI_SNAPSHOT and strike > 0:
+                        oi_snap.append((strike, exp, opt_type, int(oi)))
                     if vol < MIN_VOLUME or oi < MIN_OI or price_o < 0.10: continue
 
                     premium = vol * price_o * 100
@@ -1334,6 +1404,9 @@ def _process_chain(ticker: str, min_premium: float = 100_000, min_score: int = 4
             "total_put_prem":  bear_prem_total + sum(e['premium'] for e in puts_sold),
             "total_prem":      total_prem,
             "oi_max":          oi_max,
+            # Solo los de mayor OI: acota las filas por escaneo sin perder los
+            # contratos que de verdad mueven la aguja.
+            "oi_snapshot":     sorted(oi_snap, key=lambda x: -x[3])[:MAX_OI_SNAPSHOT_POR_TICKER],
             "calls_bought":    sorted(calls_bought, key=lambda x: -x['score'])[:15],
             "puts_bought":     sorted(puts_bought,  key=lambda x: -x['score'])[:10],
             "calls_sold":      sorted(calls_sold,   key=lambda x: -x['score'])[:10],
@@ -1381,6 +1454,7 @@ def get_options_flow(min_premium: float = 100_000, min_score: int = 4, tickers: 
     # ahora sí, un día tranquilo de verdad.
     respondidos = 0
     oi_cero     = 0
+    oi_filas: list = []
     for f in futures:
         r = f.result()
         if r.get('ok'):
@@ -1390,6 +1464,13 @@ def get_options_flow(min_premium: float = 100_000, min_score: int = 4, tickers: 
             # confunde con uno tranquilo aunque la cobertura sea del 99%.
             if not r.get('oi_max'):
                 oi_cero += 1
+            # La foto de OI se recoge de TODOS los que respondan, no solo de los
+            # que tengan flujo destacable. Recogerla solo de `results` sería
+            # repetir el sesgo que este cambio viene a corregir: un contrato con
+            # OI disparado en un ticker por lo demás tranquilo es exactamente el
+            # caso que el ranking debe encontrar.
+            for strike, exp, tipo, oi in r.get('oi_snapshot', []):
+                oi_filas.append((r['ticker'], strike, exp, tipo, oi))
             if r['total_prem'] > 0:
                 results.append(r)
 
@@ -1437,6 +1518,7 @@ def get_options_flow(min_premium: float = 100_000, min_score: int = 4, tickers: 
         "scan_date":    scan_date,
         "respondidos":  respondidos,
         "oi_cero":      oi_cero,
+        "oi_filas":     oi_filas,
         "calls_bought": sorted(all_calls_bought, key=lambda x: (-x['score'], -x['premium']))[:50],
         "puts_bought":  sorted(all_puts_bought,  key=lambda x: (-x['score'], -x['premium']))[:30],
         "calls_sold":   sorted(all_calls_sold,   key=lambda x: (-x['score'], -x['premium']))[:30],
@@ -1496,6 +1578,8 @@ def save_current_scan(flow_data: dict) -> dict:
         flow_data.get('puts_sold',    [])
     )
     inserted = save_flow_to_db(all_items, flow_data['scan_ts'], flow_data.get('scan_date'))
+    guardar_oi_snapshot(flow_data.get('scan_date') or flow_data['scan_ts'][:10],
+                        flow_data.get('oi_filas', []))
     guardar_scan_log(
         scan_date   = flow_data.get('scan_date') or flow_data['scan_ts'][:10],
         scan_ts     = flow_data['scan_ts'],
@@ -1506,6 +1590,28 @@ def save_current_scan(flow_data: dict) -> dict:
         oi_cero     = flow_data.get('oi_cero'),
     )
     return {"ok": True, "inserted": inserted, "total": len(all_items)}
+
+
+def guardar_oi_snapshot(scan_date: str, filas: list) -> int:
+    """Guarda la foto de Open Interest de la sesión. `filas` son tuplas
+    (ticker, strike, exp, type, oi). Idempotente por la clave primaria."""
+    if not filas:
+        return 0
+    try:
+        init_db()
+        conn = sqlite3.connect(DB_PATH)
+        conn.executemany(
+            'INSERT OR REPLACE INTO oi_snapshot (scan_date, ticker, strike, exp, type, oi) '
+            'VALUES (?,?,?,?,?,?)',
+            [(scan_date, t, s, e, tp, oi) for (t, s, e, tp, oi) in filas]
+        )
+        conn.commit()
+        conn.close()
+        print(f"[OptionsFlow] Foto de OI guardada: {len(filas)} contratos de la sesión {scan_date}")
+        return len(filas)
+    except Exception as e:
+        print(f"[OptionsFlow] No se pudo guardar la foto de OI: {type(e).__name__}: {e}")
+        return 0
 
 
 COBERTURA_MINIMA = 0.80   # por debajo de esto, el escaneo se marca incompleto

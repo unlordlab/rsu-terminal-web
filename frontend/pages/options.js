@@ -137,9 +137,18 @@ function renderDashboard(data) {
         ${oiTable('LARGE OI DECREASE', data.large_oi_decrease, '#f23645', '▼')}
     </div>`;
 
-    const nota = data.large_oi_increase && data.large_oi_increase.length === 0 && data.large_oi_decrease.length === 0
+    const sinOi = data.large_oi_increase && data.large_oi_increase.length === 0 && data.large_oi_decrease.length === 0;
+    // `oi_nota` llega cuando la comparación todavía va por el camino antiguo,
+    // que solo ve contratos que además destacaron por prima. Decirlo importa:
+    // sin el aviso, una lista corta se lee como "hubo pocos cambios" cuando en
+    // realidad es "solo se pudo mirar una parte".
+    const nota = sinOi
         ? '<div style="color:var(--color-muted);font-size:11px;margin-top:10px;">Los cambios de Open Interest necesitan al menos 2 días de histórico guardado — aparecerán a partir de mañana.</div>'
-        : '';
+        : (data.oi_nota
+            ? `<div style="color:#ffb800;font-size:11px;margin-top:10px;">⚠️ ${esc(data.oi_nota)}</div>`
+            : (data.oi_comparados
+                ? `<div style="color:var(--color-muted);font-size:11px;margin-top:10px;">Comparados ${esc(data.oi_comparados)} contratos entre las dos últimas sesiones.</div>`
+                : ''));
 
     return fechaDatos + avisoCobertura + biasBanner + topBoxes + flowTables + oiTables + nota;
 }
