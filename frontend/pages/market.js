@@ -1799,10 +1799,29 @@ async function loadFedMacro(el) {
             const ref   = yoy != null ? yoy : chg;
             const color = ref === 0 ? 'var(--color-muted)' : (ref > 0 ? '#f23645' : '#00ffad'); // para macro: subida = malo generalmente
             const arrow = ref === 0 ? '=' : (ref > 0 ? '▲' : '▼');
+
+            // Qué número va grande. En el IPC y el PCE el dato es un ÍNDICE:
+            // "332,57" no le dice nada a nadie, lo que se quiere saber es que
+            // los precios han subido un 3,73% en un año. Así que en esos dos la
+            // cifra principal pasa a ser la variación anual y el nivel del
+            // índice queda debajo, en pequeño, como referencia.
+            // En el paro no se invierte nada: ahí el número ya es la tasa
+            // (4,10%), que es justo lo que se quiere leer de un vistazo.
+            const esIndice = unit === 'Index' && yoy != null;
+            const nivelStr = val.toFixed(2) + ' ' + unit;
+            const yoyStr   = (yoy != null ? Math.abs(yoy).toFixed(2) + ' ' + yoyU + ' YoY' : Math.abs(chg).toFixed(3));
+
+            const principal = esIndice
+                ? '<div style="color:' + color + ';font-size:18px;font-weight:500;">' + arrow + ' ' + Math.abs(yoy).toFixed(2) + '<span style="font-size:10px;"> ' + yoyU + ' YoY</span></div>'
+                : '<div style="color:var(--color-text);font-size:18px;font-weight:500;">' + val.toFixed(2) + '<span style="color:var(--color-muted);font-size:10px;"> ' + unit + '</span></div>';
+            const secundario = esIndice
+                ? '<div style="color:var(--color-muted);font-size:10px;margin-top:2px;">' + nivelStr + '</div>'
+                : '<div style="color:' + color + ';font-size:10px;margin-top:2px;">' + arrow + ' ' + yoyStr + '</div>';
+
             return '<div style="background:var(--color-bg,#0a0a0a);border:1px solid var(--color-border);border-radius:var(--radius);padding:0.75rem;text-align:center;">'
                 + '<div style="color:var(--color-muted);font-size:10px;margin-bottom:4px;">' + label + (tooltip_key ? ' ' + tt(tooltip_key) : '') + '</div>'
-                + '<div style="color:var(--color-text);font-size:18px;font-weight:500;">' + val.toFixed(2) + '<span style="color:var(--color-muted);font-size:10px;"> ' + unit + '</span></div>'
-                + (yoy != null ? '<div style="color:' + color + ';font-size:10px;margin-top:2px;">' + arrow + ' ' + Math.abs(yoy).toFixed(2) + ' ' + yoyU + ' YoY</div>' : '<div style="color:' + color + ';font-size:10px;margin-top:2px;">' + arrow + ' ' + Math.abs(chg).toFixed(3) + '</div>')
+                + principal
+                + secundario
                 + '<div style="color:var(--color-muted);font-size:9px;margin-top:2px;">' + date + '</div>'
                 + '</div>';
         }
