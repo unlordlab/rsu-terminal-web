@@ -306,6 +306,31 @@ async function loadCommodities(el) {
     }
 }
 
+// El buscador de earnings y su cableado, aparte, porque hacen falta en DOS
+// caminos: cuando hay calendario y cuando no. Antes solo se construian dentro
+// del camino con datos, asi que un dia sin resultados proximos dejaba el
+// widget reducido a un mensaje de error -- y de paso se llevaba por delante la
+// unica forma de consultar el historial de CUALQUIER ticker, que no depende
+// del calendario para nada. Justo cuando la tabla no tiene nada que ofrecer es
+// cuando mas falta hace poder buscar. Ver auditoria Market, hallazgo #25.
+function _barraBusquedaEarnings() {
+    return '<div style="padding:8px 12px;border-bottom:1px solid var(--color-border);display:flex;gap:8px;">'
+        + '<input id="earnings-search" type="text" placeholder="Buscar ticker (AAPL, NVDA...)" style="flex:1;background:var(--color-bg,#0a0a0a);border:1px solid var(--color-border);border-radius:var(--radius);padding:5px 10px;color:var(--color-text);font-family:var(--font-mono);font-size:11px;outline:none;text-transform:uppercase;">'
+        + '<button id="earnings-search-btn" style="background:var(--color-secondary);color:#000;border:none;border-radius:var(--radius);padding:5px 12px;font-family:var(--font-mono);font-size:11px;cursor:pointer;">VER</button>'
+        + '</div>';
+}
+
+function _cablearBusquedaEarnings(el) {
+    const btn   = el.querySelector('#earnings-search-btn');
+    const input = el.querySelector('#earnings-search');
+    const lanzar = () => {
+        const t = (input.value || '').trim().toUpperCase();
+        if (t) loadEarningsSurprise(t, el);
+    };
+    if (btn)   btn.addEventListener('click', lanzar);
+    if (input) input.addEventListener('keydown', e => { if (e.key === 'Enter') lanzar(); });
+}
+
 async function loadEarnings(el) {
     if (!el) return;
     el.innerHTML = widgetShell('EARNINGS CALENDAR', 'Próximos 14 días · FMP + Finnhub', loading());
@@ -314,10 +339,7 @@ async function loadEarnings(el) {
         const data = await res.json();
         if (!data.ok || !data.data || !data.data.length) throw new Error('Sin earnings próximos');
 
-        const searchBar = '<div style="padding:8px 12px;border-bottom:1px solid var(--color-border);display:flex;gap:8px;">'
-            + '<input id="earnings-search" type="text" placeholder="Buscar ticker (AAPL, NVDA...)" style="flex:1;background:var(--color-bg,#0a0a0a);border:1px solid var(--color-border);border-radius:var(--radius);padding:5px 10px;color:var(--color-text);font-family:var(--font-mono);font-size:11px;outline:none;">'
-            + '<button id="earnings-search-btn" style="background:var(--color-secondary);color:#000;border:none;border-radius:var(--radius);padding:5px 12px;font-family:var(--font-mono);font-size:11px;cursor:pointer;">BUSCAR</button>'
-            + '</div>';
+        const searchBar = _barraBusquedaEarnings();
 
         const header = '<div style="display:grid;grid-template-columns:55px 90px 70px 80px 80px;gap:8px;padding:6px 12px;border-bottom:1px solid var(--color-border);font-size:10px;color:var(--color-muted);letter-spacing:0.05em;">'
             + '<div>FECHA</div><div>HORA</div><div>TICKER</div><div>PRECIO</div><div>EPS EST</div>'
@@ -365,26 +387,17 @@ async function loadEarnings(el) {
             row.addEventListener('click', () => loadEarningsSurprise(row.getAttribute('data-ticker'), el));
         });
 
-        // Búsqueda manual
-        const searchBtn = el.querySelector('#earnings-search-btn');
-        const searchInput = el.querySelector('#earnings-search');
-        if (searchBtn) {
-            searchBtn.addEventListener('click', () => {
-                const t = searchInput.value.trim().toUpperCase();
-                if (t) loadEarningsSurprise(t, el);
-            });
-        }
-        if (searchInput) {
-            searchInput.addEventListener('keydown', e => {
-                if (e.key === 'Enter') {
-                    const t = searchInput.value.trim().toUpperCase();
-                    if (t) loadEarningsSurprise(t, el);
-                }
-            });
-        }
+        _cablearBusquedaEarnings(el);
 
     } catch(e) {
-        el.innerHTML = widgetShell('EARNINGS CALENDAR', 'Próximos 14 días', widgetError(e.message));
+        // Sin calendario NO se pierde el buscador: el historial de un ticker se
+        // pide a otro endpoint y no depende de que haya resultados proximos.
+        const aviso = '<div style="padding:12px;font-size:11px;color:var(--color-muted);">'
+            + esc(e.message) + '. Puedes consultar igualmente el historial de resultados de cualquier ticker.'
+            + '</div>';
+        el.innerHTML = widgetShell('EARNINGS CALENDAR', 'Próximos 14 días',
+            _barraBusquedaEarnings() + '<div id="earnings-detail"></div>' + aviso);
+        _cablearBusquedaEarnings(el);
     }
 }
 
