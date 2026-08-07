@@ -1415,25 +1415,46 @@ def get_fed_macro() -> dict:
 
     def _fetch_indicators():
         try:
+            # Cada serie con su tipo, porque la variación interanual no se
+            # calcula igual en un ÍNDICE que en una TASA.
+            #
+            # En un índice de precios (IPC, PCE) el número no significa nada por
+            # sí solo y lo que interesa es cuánto ha subido en porcentaje. En una
+            # tasa que YA está en porcentaje (paro, tipos de la Fed) lo que
+            # interesa es cuántos puntos ha cambiado: los tipos pasaron de 4,33%
+            # a 3,63% y la fórmula relativa daba -16,17%, que rotulado "% YoY"
+            # se lee como un desplome cuando en realidad son 70 puntos básicos.
+            # Ver auditoría Market, hallazgo #24.
             series = {
-                'fed_funds':    'FEDFUNDS',
-                'cpi_yoy':      'CPIAUCSL',
-                'unemployment': 'UNRATE',
-                'core_pce':     'PCEPI',
+                'fed_funds':    ('FEDFUNDS', 'tasa'),
+                'cpi_yoy':      ('CPIAUCSL', 'indice'),
+                'unemployment': ('UNRATE',   'tasa'),
+                # PCEPILFE, no PCEPI: la tarjeta se llama "PCE CORE" y el core
+                # es el que excluye alimentos y energía, que es además el que
+                # mira la Fed. Con PCEPI se estaba enseñando el PCE general bajo
+                # una etiqueta que promete otra cosa -- medido el 07/08/2026,
+                # 3,67% frente al 3,29% real del subyacente.
+                'core_pce':     ('PCEPILFE', 'indice'),
             }
             out = {}
-            for key, sid in series.items():
+            for key, (sid, tipo) in series.items():
                 data = fred_csv(sid)
                 if len(data) >= 13:
                     cur    = data[-1][1]
                     prev   = data[-2][1]
                     prev_y = data[-13][1]
-                    yoy    = round((cur - prev_y) / prev_y * 100, 2) if prev_y else None
-                    out[key] = {'value': cur, 'chg': round(cur - prev, 3), 'yoy': yoy, 'date': data[-1][0]}
+                    if tipo == 'tasa':
+                        yoy, unidad = round(cur - prev_y, 2), 'pp'
+                    else:
+                        yoy = round((cur - prev_y) / prev_y * 100, 2) if prev_y else None
+                        unidad = '%'
+                    out[key] = {'value': cur, 'chg': round(cur - prev, 3),
+                                'yoy': yoy, 'yoy_unidad': unidad, 'date': data[-1][0]}
                 elif len(data) >= 2:
                     cur  = data[-1][1]
                     prev = data[-2][1]
-                    out[key] = {'value': cur, 'chg': round(cur - prev, 3), 'yoy': None, 'date': data[-1][0]}
+                    out[key] = {'value': cur, 'chg': round(cur - prev, 3),
+                                'yoy': None, 'yoy_unidad': None, 'date': data[-1][0]}
             return out
         except Exception:
             return {}

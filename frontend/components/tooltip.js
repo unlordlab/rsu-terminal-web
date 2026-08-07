@@ -291,6 +291,9 @@ Junto a la estabilidad de precios (inflación), el pleno empleo es el segundo ob
 CÓMO SE INTERPRETA EN ESTE WIDGET:
 Una subida de la tasa de desempleo generalmente se considera una señal de debilitamiento económico — por eso, igual que con el IPC, una subida (▲) se marca como menos favorable en el color del indicador.
 
+QUÉ SIGNIFICA "pp":
+La variación anual de esta tarjeta viene en puntos porcentuales (pp), no en porcentaje. Si el paro pasa del 4,1% al 4,5%, la tarjeta muestra 0,40 pp: cuatro décimas más de paro. Decir "un 9,76% más de paro" sería técnicamente cierto pero engañoso, porque suena a un salto mucho mayor del que realmente ha ocurrido.
+
 DATO A TENER EN CUENTA:
 El desempleo es un indicador retrasado (lagging) — tiende a confirmar fases económicas que ya están en marcha, más que anticiparlas. Otros indicadores de este panel, como la curva de tipos, tienden a adelantarse más en el ciclo.`
     },

@@ -1784,14 +1784,25 @@ async function loadFedMacro(el) {
             const val   = obj.value;
             const chg   = obj.chg;
             const yoy   = obj.yoy;
+            // "%" para índices (IPC, PCE) y "pp" para tasas (paro, tipos): en
+            // una tasa que ya está en porcentaje, la variación son PUNTOS, y
+            // rotularla "%" hace leer un cambio de 0,7 puntos como un -16%.
+            const yoyU  = obj.yoy_unidad || '%';
             const date  = (obj.date || '').substring(0, 7);
-            const up    = chg >= 0;
-            const color = up ? '#f23645' : '#00ffad'; // para macro: subida = malo generalmente
-            const arrow = up ? '▲' : '▼';
+            // La flecha y el color describen el NÚMERO que hay justo al lado: si
+            // se enseña la variación anual, salen de ella; si no hay anual y se
+            // enseña la del último mes, salen de esa. Antes salían siempre de la
+            // mensual aunque el número impreso fuera el anual, y las dos podían
+            // ir en sentidos opuestos: el IPC llegó a mostrar una flecha verde
+            // hacia abajo junto a un "3,73 % YoY" de inflación, que se lee como
+            // que los precios están bajando cuando llevan un año subiendo.
+            const ref   = yoy != null ? yoy : chg;
+            const color = ref === 0 ? 'var(--color-muted)' : (ref > 0 ? '#f23645' : '#00ffad'); // para macro: subida = malo generalmente
+            const arrow = ref === 0 ? '=' : (ref > 0 ? '▲' : '▼');
             return '<div style="background:var(--color-bg,#0a0a0a);border:1px solid var(--color-border);border-radius:var(--radius);padding:0.75rem;text-align:center;">'
                 + '<div style="color:var(--color-muted);font-size:10px;margin-bottom:4px;">' + label + (tooltip_key ? ' ' + tt(tooltip_key) : '') + '</div>'
                 + '<div style="color:var(--color-text);font-size:18px;font-weight:500;">' + val.toFixed(2) + '<span style="color:var(--color-muted);font-size:10px;"> ' + unit + '</span></div>'
-                + (yoy != null ? '<div style="color:' + color + ';font-size:10px;margin-top:2px;">' + arrow + ' ' + Math.abs(yoy).toFixed(2) + '% YoY</div>' : '<div style="color:' + color + ';font-size:10px;margin-top:2px;">' + arrow + ' ' + Math.abs(chg).toFixed(3) + '</div>')
+                + (yoy != null ? '<div style="color:' + color + ';font-size:10px;margin-top:2px;">' + arrow + ' ' + Math.abs(yoy).toFixed(2) + ' ' + yoyU + ' YoY</div>' : '<div style="color:' + color + ';font-size:10px;margin-top:2px;">' + arrow + ' ' + Math.abs(chg).toFixed(3) + '</div>')
                 + '<div style="color:var(--color-muted);font-size:9px;margin-top:2px;">' + date + '</div>'
                 + '</div>';
         }
