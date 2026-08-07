@@ -70,8 +70,25 @@ def _get_daily_bars(tk_obj, ticker: str) -> tuple[float, float, object]:
     precio de hoy con el penúltimo cierre da un movimiento de DOS sesiones
     presentado como si fuera el del día."""
     now = time.time()
+    hoy_ny = datetime.now(ZoneInfo("America/New_York")).date()
     cached = _daily_bars_cache.get(ticker)
-    if cached and (now - cached["updated"]) < _DAILY_BARS_TTL:
+    # Además del TTL, la caché CADUCA AL CAMBIAR EL DÍA en Nueva York.
+    #
+    # Seis horas son suficientes dentro de una sesión, pero pueden cruzar la
+    # medianoche: entonces la entrada guardada describe una sesión que ya no es
+    # la última, y su "cierre anterior" pasa a ser el de dos sesiones atrás.
+    # Pasó de verdad el 07/08/2026 — con el proveedor degradado el día 6, las
+    # entradas cacheadas ese día llegaban solo hasta el 5, y al día siguiente
+    # SPCX mostraba +15,60% cuando su movimiento real era +8,91%, y RKLB
+    # +7,60% frente a +6,40%. Los demás tickers, cuya caché sí había expirado,
+    # salían correctos: por eso fallaban unos sí y otros no, que es lo que hacía
+    # el síntoma tan confuso.
+    #
+    # Guardar el día del fetch y exigir que sea el de hoy corta ese caso de
+    # raíz, sin depender de acertar con la duración del TTL.
+    if (cached
+            and (now - cached["updated"]) < _DAILY_BARS_TTL
+            and cached.get("dia_fetch") == hoy_ny):
         return cached["last"], cached["prev"], cached.get("fecha")
     try:
         # auto_adjust=False a propósito (auditoría de Cartera, #A2). Con el
@@ -124,7 +141,7 @@ def _get_daily_bars(tk_obj, ticker: str) -> tuple[float, float, object]:
                 last, prev = fallback, float(closes.iloc[-1])
                 fecha = raw_closes.index[-1].date()
                 _daily_bars_cache[ticker] = {"last": last, "prev": prev,
-                                             "fecha": fecha, "updated": now}
+                                             "fecha": fecha, "updated": now, "dia_fetch": hoy_ny}
                 return last, prev, fecha
 
         if len(closes) >= 2:
@@ -135,7 +152,7 @@ def _get_daily_bars(tk_obj, ticker: str) -> tuple[float, float, object]:
             return 0.0, 0.0, None
         fecha = closes.index[-1].date()
         _daily_bars_cache[ticker] = {"last": last, "prev": prev,
-                                     "fecha": fecha, "updated": now}
+                                     "fecha": fecha, "updated": now, "dia_fetch": hoy_ny}
         return last, prev, fecha
     except Exception:
         return 0.0, 0.0, None
