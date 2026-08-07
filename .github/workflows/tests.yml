@@ -8,6 +8,13 @@ on:
   workflow_dispatch:  # permite disparar manualmente desde la pestaña Actions --
                        # útil si alguna vez el trigger de push no llega a activarse
 
+# Una tanda de commits seguidos encolaba un run por cada uno, todos
+# instalando dependencias a la vez y compitiendo. Solo interesa el resultado
+# del último: los anteriores se cancelan en cuanto llega otro push.
+concurrency:
+  group: tests-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   test:
     runs-on: ubuntu-latest
@@ -21,6 +28,13 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
+          # Reutiliza las ruedas ya descargadas entre ejecuciones: la
+          # instalación pasaba de varios minutos a segundos, y con ella la
+          # mayor parte del tiempo del job.
+          cache: 'pip'
+          cache-dependency-path: |
+            requirements.txt
+            requirements-dev.txt
 
       - name: Install dependencies
         run: |
@@ -28,6 +42,10 @@ jobs:
           pip install -r requirements-dev.txt
 
       - name: Run test suite
+        # La suite tarda ~8 segundos. Con 5 minutos hay margen de sobra para
+        # un runner lento, y si algo se cuelga se corta ahí en vez de agotar
+        # los 10 minutos del job entero y dejar un fallo sin explicación.
+        timeout-minutes: 5
         run: |
           cd backend
           python -m pytest tests/ -v
