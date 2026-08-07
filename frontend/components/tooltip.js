@@ -404,6 +404,21 @@ CÓMO LEERLO:
 Picos repentinos de Buzz en un ticker que normalmente no aparece en el ranking suelen coincidir con alguna noticia, catalizador, o movimiento de precio reciente que ha captado la atención retail — vale la pena investigar qué lo está causando antes de actuar.`
     },
 
+    "amplitud-rsp-spy": {
+        title: "Amplitud — RSP vs SPY",
+        short: "Si la subida la sostiene la acción media o solo un puñado de gigantes.",
+        long: `Compara dos formas de medir el mismo índice, el S&P 500. El SPY pondera por tamaño: si Apple o Nvidia suben, el índice sube, aunque el resto se quede quieto. El RSP da el mismo peso a las 500 empresas, así que refleja lo que hace la compañía media.
+
+QUÉ DICE LA DIFERENCIA:
+Restar uno del otro dice quién está tirando del mercado. Si el equiponderado va por delante, están subiendo muchas empresas a la vez. Si va por detrás, el índice sube por unos pocos valores enormes mientras la mayoría no acompaña.
+
+POR QUÉ IMPORTA:
+Una subida sostenida por muchas empresas suele ser más sólida que una que depende de cuatro nombres. Cuando el índice marca máximos pero el equiponderado se queda atrás, conviene mirar con más cuidado de qué depende esa subida.
+
+CÓMO SE LEE AQUÍ:
+La cifra está en puntos porcentuales y corresponde al mismo periodo que tengas seleccionado arriba. Por debajo de un punto de diferencia se considera que van a la par: son diferencias pequeñas que no dicen gran cosa.`
+    },
+
     "reddit-vol-relativo": {
         title: "VOL — Volumen relativo",
         short: "Cuántas veces se está negociando más (o menos) de lo normal en ese valor hoy.",

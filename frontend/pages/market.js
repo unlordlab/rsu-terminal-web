@@ -480,24 +480,50 @@ async function loadSectors(el, period) {
     try {
         const res  = await fetch('/api/v1/market/sectors?period=' + period, { headers: authHeader() });
         const data = await res.json();
-        const max  = Math.max(...data.data.map(s => Math.abs(s.pct)));
+        // Los sectores sin dato ya no llegan como 0 (se pintaban como una barra
+        // plana, igual que un sector que de verdad no se ha movido): llegan
+        // como null y quedan fuera de la escala y del máximo.
+        const conDato = data.data.filter(s => s.pct != null);
+        const max  = conDato.length ? Math.max(...conDato.map(s => Math.abs(s.pct))) : 0;
 
+        const PERIODOS = [['1d','1D'], ['1w','1S'], ['1m','1M'], ['3m','3M'], ['ytd','YTD']];
         const periodSelector = '<div style="display:flex;gap:4px;padding:8px 14px;border-bottom:1px solid var(--color-border);">'
-            + ['1d','1w','1m'].map(p =>
+            + PERIODOS.map(([p, etiqueta]) =>
                 '<button class="sector-period" data-period="' + p + '" style="'
                 + 'background:' + (p === period ? 'var(--color-accent)' : 'transparent') + ';'
                 + 'color:' + (p === period ? '#000' : 'var(--color-muted)') + ';'
                 + 'border:1px solid ' + (p === period ? 'var(--color-accent)' : 'var(--color-border)') + ';'
-                + 'border-radius:3px;padding:3px 10px;font-family:var(--font-mono);font-size:11px;cursor:pointer;">'
-                + p.toUpperCase() + '</button>'
+                + 'border-radius:3px;padding:3px 9px;font-family:var(--font-mono);font-size:11px;cursor:pointer;">'
+                + etiqueta + '</button>'
             ).join('')
             + '</div>';
 
+        // Amplitud: el S&P equiponderado frente al de siempre. Dice si la
+        // subida la sostiene la acción media o solo cuatro gigantes.
+        const a = data.amplitud;
+        const ampColor = !a ? 'var(--color-muted)'
+                       : a.lectura === 'amplia' ? 'var(--color-accent)'
+                       : a.lectura === 'estrecha' ? '#ffb800' : 'var(--color-muted)';
+        const ampTexto = !a ? 'Sin datos de RSP/SPY en este periodo'
+                       : a.lectura === 'amplia'   ? 'Subida amplia: la acción media va por delante de los gigantes'
+                       : a.lectura === 'estrecha' ? 'Subida estrecha: tiran unos pocos gigantes, el resto no acompaña'
+                       :                            'Equiponderado y ponderado van a la par';
+        const amplitudRow = '<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;padding:8px 14px;border-bottom:1px solid var(--color-border);background:var(--color-bg,#0a0a0a);">'
+            + '<div style="font-size:10px;color:var(--color-muted);">AMPLITUD · RSP vs SPY ' + tt('amplitud-rsp-spy') + '</div>'
+            + (a ? '<div style="font-size:11px;color:' + ampColor + ';font-weight:500;white-space:nowrap;">'
+                   + (a.spread >= 0 ? '+' : '') + a.spread.toFixed(2) + ' pp</div>'
+                 : '<div style="font-size:11px;color:var(--color-muted);">-</div>')
+            + '</div>'
+            + '<div style="padding:0 14px 8px;font-size:10px;color:' + ampColor + ';background:var(--color-bg,#0a0a0a);border-bottom:1px solid var(--color-border);">'
+            + ampTexto + (a ? ' <span style="color:var(--color-muted);">(RSP ' + (a.rsp >= 0 ? '+' : '') + a.rsp.toFixed(2) + '% · SPY ' + (a.spy >= 0 ? '+' : '') + a.spy.toFixed(2) + '%)</span>' : '')
+            + '</div>';
+
         const bars = data.data.map(s => {
-            const up     = s.pct >= 0;
-            const color  = up ? 'var(--color-accent)' : '#f23645';
-            const w      = max > 0 ? Math.abs(s.pct) / max * 100 : 0;
-            const pctStr = (s.pct > 0 ? '+' : '') + s.pct + '%';
+            const sinDato = s.pct == null;
+            const up      = !sinDato && s.pct >= 0;
+            const color   = sinDato ? 'var(--color-muted)' : (up ? 'var(--color-accent)' : '#f23645');
+            const w       = (sinDato || max <= 0) ? 0 : Math.abs(s.pct) / max * 100;
+            const pctStr  = sinDato ? '-' : (s.pct > 0 ? '+' : '') + s.pct + '%';
             return '<div style="display:flex;align-items:center;gap:10px;padding:7px 14px;border-bottom:1px solid var(--color-border);">'
                 + '<div style="width:110px;font-size:11px;color:var(--color-text);flex-shrink:0;">' + s.name + '</div>'
                 + '<div style="flex:1;background:var(--color-surface2);border-radius:2px;height:5px;overflow:hidden;">'
@@ -513,6 +539,7 @@ async function loadSectors(el, period) {
             + '<div style="color:var(--color-muted);font-size:11px;">S&P 500 ETFs</div>'
             + '</div>'
             + periodSelector
+            + amplitudRow
             + '<div style="flex:1;overflow-y:auto;">' + bars + '</div>'
             + '<div style="padding:6px 14px;font-size:10px;color:var(--color-muted);border-top:1px solid var(--color-border);flex-shrink:0;">Actualizado: ' + data.timestamp + '</div>'
             + '</div>';

@@ -477,6 +477,46 @@ SECTOR_ETFS = [
     {"ticker": "XLC",  "name": "Comunicaciones"},
 ]
 
+# Sesiones que hay que retroceder para cada periodo. "ytd" no cabe aquí: no
+# es un número fijo de sesiones, sino "desde el último cierre del año pasado".
+_SESIONES_PERIODO = {"1d": 1, "1w": 5, "1m": 21, "3m": 63}
+
+# Amplitud: RSP es el S&P 500 equiponderado y SPY el de siempre, ponderado por
+# capitalización. Que RSP vaya por delante significa que la subida la está
+# sosteniendo la acción media; que vaya por detrás, que tiran cuatro gigantes
+# y el resto no acompaña. Es la lectura de amplitud más directa que se puede
+# poner al lado de los sectores. Ver hallazgo #28 de la auditoría de Market.
+AMPLITUD_ETFS = [
+    {"ticker": "RSP", "name": "S&P 500 equiponderado"},
+    {"ticker": "SPY", "name": "S&P 500 ponderado"},
+]
+
+
+def _pct_periodo(close, period):
+    """% de cambio de una serie de cierres en el periodo pedido. None si no
+    hay histórico suficiente -- no se estira el cálculo hasta el dato más
+    antiguo disponible, que daría un número con otro significado."""
+    close = close.dropna()
+    if len(close) < 2:
+        return None
+    if period == "ytd":
+        # El año se toma de la propia serie, no del reloj: así el corte es el
+        # último cierre real del año anterior aunque se consulte de madrugada
+        # o el calendario del servidor vaya por otra zona horaria.
+        anio = close.index[-1].year
+        previos = close[close.index.year < anio]
+        if previos.empty:
+            return None
+        prev = float(previos.iloc[-1])
+    else:
+        n = _SESIONES_PERIODO.get(period, 1)
+        if len(close) < n + 1:
+            return None
+        prev = float(close.iloc[-(n + 1)])
+    last = float(close.iloc[-1])
+    return round((last - prev) / prev * 100, 2) if prev else None
+
+
 def _extract_sector_pct(item, df, period):
     """Extrae el % de cambio de un sector a partir del DataFrame combinado
     de yf.download() (una sola llamada para los 11 sectores, en vez de 11
@@ -486,48 +526,55 @@ def _extract_sector_pct(item, df, period):
     try:
         if ticker not in df.columns.get_level_values(0):
             raise ValueError("Sin datos en el batch")
-        close = df[ticker]["Close"].dropna()
-        if period == "1w":
-            if len(close) < 6: raise ValueError("Sin datos")
-            prev, last = float(close.iloc[-6]), float(close.iloc[-1])
-        elif period == "1m":
-            if len(close) < 22: raise ValueError("Sin datos")
-            prev, last = float(close.iloc[-22]), float(close.iloc[-1])
-        else:
-            if len(close) < 2: raise ValueError("Sin datos")
-            prev, last = float(close.iloc[-2]), float(close.iloc[-1])
-        pct = ((last - prev) / prev) * 100
-        return {"ticker": ticker, "name": item["name"], "pct": round(pct, 2), "ok": True}
+        pct = _pct_periodo(df[ticker]["Close"], period)
+        if pct is None:
+            raise ValueError("Histórico insuficiente para el periodo")
+        return {"ticker": ticker, "name": item["name"], "pct": pct, "ok": True}
     except Exception as e:
-        return {"ticker": ticker, "name": item["name"], "pct": 0, "ok": False, "error": str(e)}
+        # pct None, no 0: un sector sin dato se pintaba antes como una barra
+        # plana en 0,00%, indistinguible de un sector que de verdad no se ha
+        # movido. Ahora el frontend muestra un guion.
+        return {"ticker": ticker, "name": item["name"], "pct": None, "ok": False, "error": str(e)}
+
 
 def _fetch_sector(item, period="1d"):
+    """Camino de respaldo, ticker a ticker, si la descarga en lote falla.
+    Usa el mismo `_pct_periodo` que el lote -- antes cada función tenía su
+    propia copia de los índices (-2, -6, -22), que es justo como acaban
+    divergiendo dos cálculos que deberían dar lo mismo."""
     try:
-        t = yf.Ticker(item["ticker"])
-        if period == "1d":
-            hist = t.history(period="5d", interval="1d").dropna()
-            if len(hist) < 2: raise ValueError("Sin datos")
-            prev = float(hist["Close"].iloc[-2])
-            last = float(hist["Close"].iloc[-1])
-        elif period == "1w":
-            hist = t.history(period="1mo", interval="1d").dropna()
-            if len(hist) < 6: raise ValueError("Sin datos")
-            prev = float(hist["Close"].iloc[-6])
-            last = float(hist["Close"].iloc[-1])
-        elif period == "1m":
-            hist = t.history(period="3mo", interval="1d").dropna()
-            if len(hist) < 22: raise ValueError("Sin datos")
-            prev = float(hist["Close"].iloc[-22])
-            last = float(hist["Close"].iloc[-1])
-        else:
-            hist = t.history(period="5d", interval="1d").dropna()
-            if len(hist) < 2: raise ValueError("Sin datos")
-            prev = float(hist["Close"].iloc[-2])
-            last = float(hist["Close"].iloc[-1])
-        pct = ((last - prev) / prev) * 100
-        return {"ticker": item["ticker"], "name": item["name"], "pct": round(pct, 2), "ok": True}
+        hist = yf.Ticker(item["ticker"]).history(period="1y", interval="1d").dropna()
+        pct = _pct_periodo(hist["Close"], period)
+        if pct is None:
+            raise ValueError("Histórico insuficiente para el periodo")
+        return {"ticker": item["ticker"], "name": item["name"], "pct": pct, "ok": True}
     except Exception as e:
-        return {"ticker": item["ticker"], "name": item["name"], "pct": 0, "ok": False, "error": str(e)}
+        return {"ticker": item["ticker"], "name": item["name"], "pct": None, "ok": False, "error": str(e)}
+
+def _amplitud_rsp_spy(rows):
+    """Diferencia entre el S&P equiponderado (RSP) y el de siempre (SPY) en el
+    mismo periodo. None si falta cualquiera de los dos -- sin las dos patas no
+    hay diferencia que contar.
+
+    El umbral de 1 punto porcentual no pretende ser una regla de mercado: es
+    solo el margen por debajo del cual la diferencia se considera ruido y se
+    describe como "en línea", en vez de convertir cualquier decimal en una
+    señal de amplitud.
+    """
+    por_tk = {r["ticker"]: r for r in rows}
+    rsp = por_tk.get("RSP", {}).get("pct")
+    spy = por_tk.get("SPY", {}).get("pct")
+    if rsp is None or spy is None:
+        return None
+    spread = round(rsp - spy, 2)
+    if spread > 1:
+        lectura = "amplia"      # la acción media va por delante: sube el mercado entero
+    elif spread < -1:
+        lectura = "estrecha"    # tiran unos pocos gigantes y el resto no acompaña
+    else:
+        lectura = "en linea"
+    return {"rsp": rsp, "spy": spy, "spread": spread, "lectura": lectura}
+
 
 def get_sectors(period: str = "1d"):
     from services.cache import cache, TTL
@@ -535,27 +582,38 @@ def get_sectors(period: str = "1d"):
     if cached: return cached
 
     def _download_and_extract():
-        tickers = [item["ticker"] for item in SECTOR_ETFS]
-        # Una sola llamada para los 11 sectores en vez de 11 objetos Ticker()
-        # separados — threads=False porque ya la lanzamos dentro del pool
-        # compartido (yf_executor), no queremos que yf.download abra su
+        tickers = [item["ticker"] for item in SECTOR_ETFS + AMPLITUD_ETFS]
+        # Una sola llamada para los 11 sectores (más RSP y SPY, que van en el
+        # mismo lote y no cuestan una petición aparte) en vez de un objeto
+        # Ticker() por símbolo — threads=False porque ya la lanzamos dentro del
+        # pool compartido (yf_executor), no queremos que yf.download abra su
         # propia concurrencia interna por encima de nuestro límite global.
-        df = yf.download(tickers=tickers, period="3mo", interval="1d",
+        # Un año de histórico, no tres meses: hace falta para los periodos 3M
+        # y YTD. Es la misma petición, solo que trae más filas.
+        df = yf.download(tickers=tickers, period="1y", interval="1d",
                           group_by="ticker", threads=False, progress=False)
-        return [_extract_sector_pct(item, df, period) for item in SECTOR_ETFS]
+        return ([_extract_sector_pct(item, df, period) for item in SECTOR_ETFS],
+                [_extract_sector_pct(item, df, period) for item in AMPLITUD_ETFS])
 
     try:
-        results = yf_executor.submit(_download_and_extract).result()
+        results, amplitud_rows = yf_executor.submit(_download_and_extract).result()
     except Exception as e:
         print(f"[Sectores] Batch download falló ({type(e).__name__}: {e}) — usando fallback ticker a ticker")
-        futures = {yf_executor.submit(_fetch_sector, item, period): item for item in SECTOR_ETFS}
-        results = [future.result() for future in futures]
+        futures = {yf_executor.submit(_fetch_sector, item, period): item
+                   for item in SECTOR_ETFS + AMPLITUD_ETFS}
+        todos = [future.result() for future in futures]
+        amplitud_tk   = {i["ticker"] for i in AMPLITUD_ETFS}
+        results       = [r for r in todos if r["ticker"] not in amplitud_tk]
+        amplitud_rows = [r for r in todos if r["ticker"] in amplitud_tk]
 
-    results.sort(key=lambda x: x["pct"], reverse=True)
+    # Los sectores sin dato (pct None) van al final, no se cuelan arriba ni
+    # abajo del ranking como si fueran un 0%.
+    results.sort(key=lambda x: (x["pct"] is None, -(x["pct"] or 0)))
     ok_general = any(r["ok"] for r in results)
     from services.yf_health import log as _yf_log
     _yf_log("sectors", ok_general, None if ok_general else "; ".join(r.get("error", "") for r in results if not r["ok"])[:250])
-    result = {"data": results, "timestamp": get_timestamp(), "ok": ok_general}
+    result = {"data": results, "amplitud": _amplitud_rsp_spy(amplitud_rows),
+              "timestamp": get_timestamp(), "ok": ok_general}
     if ok_general:
         cache.set(f"market:sectors:{period}", result, TTL["sectors"])
     return result
