@@ -662,11 +662,14 @@ async function loadVix(el) {
 
         el.innerHTML = widgetShell('VIX TERM STRUCTURE ' + tt('vix-term-structure'), 'Curva de futuros · Volatilidad implícita', content, data.timestamp);
 
-        const script  = document.createElement('script');
-        script.src    = 'https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js';
-        script.onload = function() {
-            const ctx = document.getElementById(chartId);
-            if (!ctx) return;
+        // Se pasa por el cargador compartido en vez de inyectar el <script> a
+        // pelo. Este era el UNICO sitio que lo anadia sin comprobar antes si
+        // Chart.js ya estaba: los otros cuatro miraban `window.Chart` primero.
+        // Consecuencia: cada visita a Mercado colgaba otra etiqueta <script>
+        // del head y volvia a ejecutar la libreria entera, redefiniendo
+        // `window.Chart` con los graficos vivos apuntando a la definicion
+        // anterior. Ver auditoria Market, hallazgo #13.
+        _dibujarCuandoListo(chartId, function(ctx) {
             _marketChartIds.push(chartId);
             new Chart(ctx, {
                 type: 'line',
@@ -719,8 +722,7 @@ async function loadVix(el) {
                     }
                 }
             });
-        };
-        document.head.appendChild(script);
+        });
     } catch(e) {
         el.innerHTML = widgetShell('VIX TERM STRUCTURE', 'Curva de futuros · Volatilidad implícita', widgetError(e.message));
     }
