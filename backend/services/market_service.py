@@ -7,7 +7,8 @@ from concurrent.futures import ThreadPoolExecutor
 from services.yf_pool import yf_executor
 from config import settings
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "..", "shared"))
-from time_utils import get_timestamp  # noqa: E402
+from time_utils import get_timestamp, session_fraction_elapsed  # noqa: E402
+from yf_batch import download_batch  # noqa: E402
 from mcclellan import mcclellan_series  # noqa: E402
 from market_regime import spy_trend_snapshot  # noqa: E402
 
@@ -743,44 +744,64 @@ def _extract_tickers(text: str):
         found[t] = found.get(t, 0) + (2 if con_dolar else 1)
     return sorted(found.items(), key=lambda x: -x[1])[:30]
 
-def _enrich_ticker(ticker, mention_count, max_mentions, st_tickers):
+def _vol_ratio_desde_serie(vol_serie):
+    """Volumen de hoy frente a lo normal en ese ticker. None si no hay serie
+    suficiente -- se admite la ausencia, no se devuelve un 1.0 que se leería
+    como "volumen normal".
+
+    Dos correcciones sobre el cálculo anterior, las mismas que ya se hicieron
+    en las alertas de Watchlist (hallazgo #3 de su auditoría):
+
+    - El promedio excluye el día de hoy. Antes hoy entraba en su propio
+      promedio, lo que acerca artificialmente el cociente a 1 y disimula
+      justo los días anómalos que se quieren detectar.
+    - Con el mercado abierto, el volumen de hoy es parcial y se compara
+      contra promedios de días COMPLETOS, así que sale bajo por construcción:
+      a las 10:00 de Nueva York solo ha transcurrido un 8% de la sesión. Se
+      escala el promedio por la fracción de sesión ya transcurrida. Con el
+      mercado cerrado no se ajusta nada (hoy ya es un día completo).
+    """
+    if vol_serie is None or len(vol_serie) < 3:
+        return None
+    vol_today = float(vol_serie.iloc[-1])
+    vol_avg   = float(vol_serie.iloc[:-1].mean())
+    if vol_avg <= 0 or vol_today <= 0:
+        return None
+    frac = session_fraction_elapsed()
+    esperado = vol_avg * frac if frac is not None else vol_avg
+    return round(vol_today / esperado, 2) if esperado > 0 else None
+
+
+def _enrich_ticker(ticker, mention_count, max_mentions, st_tickers, vol_serie=None):
+    """El volumen ya viene descargado en lote por el llamador (una sola
+    petición para los 15 tickers) -- antes cada ticker hacía aquí su propio
+    history(10d), 15 peticiones por refresco de caché, y encima el resultado
+    ni se pintaba. Ver hallazgo #27 de la auditoría de Market."""
+    vol_ratio = _vol_ratio_desde_serie(vol_serie)
     try:
-        tk          = yf.Ticker(ticker)
-        info        = tk.fast_info
+        info        = yf.Ticker(ticker).fast_info
         price       = getattr(info, 'last_price', None)
         prev        = getattr(info, 'previous_close', None)
         change      = ((price - prev) / prev * 100) if price and prev and prev > 0 else 0.0
-        hist        = tk.history(period='10d')
-        vol_today   = float(hist['Volume'].iloc[-1]) if len(hist) > 0 else 0
-        vol_avg     = float(hist['Volume'].mean())   if len(hist) > 0 else 1
-        vol_ratio   = vol_today / vol_avg if vol_avg > 0 else 1.0
         hype_raw    = mention_count / max_mentions
         hype_stars  = max(1, min(5, round(hype_raw * 5)))
-        smart_raw   = min(vol_ratio / 2, 1.0)
-        smart_stars = max(1, min(5, round(smart_raw * 5)))
         in_st        = ticker in st_tickers
         hype_suffix  = " Reddit Top" if hype_raw > 0.5 else (" StockTwits" if in_st else "")
-        smart_suffix = f" Vol ×{vol_ratio:.1f}" if vol_ratio > 1.5 else ""
-        if change > 2:      health_num, health_lbl = 85, "Fuerte"
-        elif change > 0:    health_num, health_lbl = 65, "Hold"
-        elif change > -2:   health_num, health_lbl = 45, "Hold"
-        else:               health_num, health_lbl = 30, "Débil"
         return {
             "ticker":      ticker,
             "price":       round(price, 2) if price else None,
             "change":      round(change, 2),
             "buzz":        round(hype_raw * 100),
-            "health":      f"{health_num} {health_lbl}",
+            "vol_ratio":   vol_ratio,
             "social_hype": "★" * hype_stars + "☆" * (5 - hype_stars) + hype_suffix,
-            "smart_money": "★" * smart_stars + "☆" * (5 - smart_stars) + smart_suffix,
             "mentions":    mention_count,
             "ok":          True,
         }
     except Exception:
         return {
             "ticker": ticker, "price": None, "change": 0.0,
-            "buzz": mention_count, "health": "50 Hold",
-            "social_hype": "★★★☆☆", "smart_money": "★★☆☆☆",
+            "buzz": mention_count, "vol_ratio": vol_ratio,
+            "social_hype": "★★★☆☆",
             "mentions": mention_count, "ok": False,
         }
 
@@ -979,8 +1000,21 @@ def get_reddit_pulse():
     top          = [t for t, _ in sorted(ticker_mentions.items(), key=lambda x: -x[1])[:15]]
     max_mentions = max(ticker_mentions.values())
 
+    # El volumen de los 15, en UNA sola descarga en lote (antes: un
+    # history(10d) por ticker dentro de _enrich_ticker, 15 peticiones cada 5
+    # minutos para un dato que además no se pintaba). Si el lote falla, cada
+    # ticker se queda sin volumen relativo y la columna muestra "-", en vez
+    # de caer a 15 descargas sueltas: el rate-limit de Yahoo es el riesgo
+    # operativo principal de este proyecto.
+    vol_d = {}
+    try:
+        _, vol_d = download_batch(top, period="10d", min_history=3, log_prefix="[Reddit] ")
+    except Exception as e:
+        print(f"[Reddit] Sin volumen relativo esta vuelta: {type(e).__name__}: {e}")
+
     results = []
-    futures_map = {yf_executor.submit(_enrich_ticker, t, ticker_mentions[t], max_mentions, st_tickers): t for t in top}
+    futures_map = {yf_executor.submit(_enrich_ticker, t, ticker_mentions[t], max_mentions,
+                                      st_tickers, vol_d.get(t)): t for t in top}
     for future in futures_map:
         results.append(future.result())
 

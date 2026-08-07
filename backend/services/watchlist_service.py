@@ -11,7 +11,8 @@ nada de este fichero.
 """
 import sqlite3
 import os
-from datetime import datetime, timezone, timedelta, time as dt_time
+import sys
+from datetime import datetime, timezone, timedelta
 from zoneinfo import ZoneInfo
 
 DB_PATH = os.path.join(os.path.dirname(__file__), '..', 'users.db')
@@ -266,29 +267,11 @@ def get_unseen_triggered_count(user_id: int) -> int:
 _rvol_cache: dict = {}
 _RVOL_CACHE_TTL = 300
 
-_NYSE_OPEN  = dt_time(9, 30)
-_NYSE_CLOSE = dt_time(16, 0)
-
-
-def _session_fraction_elapsed():
-    """Fracción (0-1) de la sesión NYSE transcurrida ahora mismo. None si
-    el mercado está cerrado (fuera de horario o fin de semana) -- ahí "hoy"
-    ya es un día completo, no hace falta ajustar nada. Simplificación:
-    asume acumulación lineal de volumen a lo largo de la sesión (en la
-    práctica es más alto cerca de apertura/cierre, forma de "U") -- corrige
-    la distorsión principal (comparar un día parcial contra un promedio de
-    días completos) sin modelar la curva intradía real, que sería una
-    mejora aparte. Ver hallazgo #3, auditoría Watchlist 21/07/2026."""
-    now_et = datetime.now(ZoneInfo("America/New_York"))
-    if now_et.weekday() >= 5:
-        return None
-    t = now_et.time()
-    if t < _NYSE_OPEN or t >= _NYSE_CLOSE:
-        return None
-    open_dt  = datetime.combine(now_et.date(), _NYSE_OPEN, tzinfo=now_et.tzinfo)
-    close_dt = datetime.combine(now_et.date(), _NYSE_CLOSE, tzinfo=now_et.tzinfo)
-    frac = (now_et - open_dt).total_seconds() / (close_dt - open_dt).total_seconds()
-    return max(0.02, min(1.0, frac))  # suelo pequeño: evita dividir por ~0 justo al abrir
+# La fracción de sesión transcurrida vive ahora en shared/time_utils.py: la
+# necesita también el volumen relativo de Reddit Pulse (Market #27), y una
+# sola copia evita que las dos puedan divergir.
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "..", "shared"))
+from time_utils import session_fraction_elapsed as _session_fraction_elapsed  # noqa: E402
 
 
 def _fetch_rvol_single(ticker: str):

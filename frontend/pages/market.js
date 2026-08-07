@@ -1408,8 +1408,13 @@ async function loadReddit(el) {
         const data = await res.json();
         if (!data.ok) throw new Error('Sin datos');
         const sources = data.sources.join(' + ');
-        const header  = '<div style="display:grid;grid-template-columns:30px 60px 80px 70px 1fr;gap:6px;padding:7px 12px;border-bottom:1px solid var(--color-border);font-size:10px;color:var(--color-muted);">'
-            + '<div>#</div><div>TICKER</div><div>PRECIO</div><div>BUZZ ' + tt('social-buzz') + '</div><div>SEÑAL ' + tt('social-signal') + '</div>'
+        // El volumen relativo se calculaba en el backend y no se pintaba en
+        // ningún sitio (hallazgo #27). Es justo lo que distingue "en Reddit
+        // hablan de esto" de "además se está negociando de verdad", así que
+        // pasa a tener columna propia en vez de tirarse.
+        const GRID = '30px 58px 78px 64px 56px 1fr';
+        const header  = '<div style="display:grid;grid-template-columns:' + GRID + ';gap:6px;padding:7px 12px;border-bottom:1px solid var(--color-border);font-size:10px;color:var(--color-muted);">'
+            + '<div>#</div><div>TICKER</div><div>PRECIO</div><div>BUZZ ' + tt('social-buzz') + '</div><div>VOL ' + tt('reddit-vol-relativo') + '</div><div>SEÑAL ' + tt('social-signal') + '</div>'
             + '</div>';
         const rows = data.data.map((item, i) => {
             const up       = item.change >= 0;
@@ -1417,11 +1422,18 @@ async function loadReddit(el) {
             const chgStr   = (up ? '+' : '') + item.change.toFixed(2) + '%';
             const priceStr = item.price ? '$' + item.price.toLocaleString('en-US') : '-';
             const rank     = i + 1;
-            return '<div style="display:grid;grid-template-columns:30px 60px 80px 70px 1fr;gap:6px;padding:8px 12px;border-bottom:1px solid var(--color-border);font-size:11px;align-items:center;">'
+            // Sin dato, un guion: nunca un "×1.0" que se leería como volumen normal.
+            const vr       = item.vol_ratio;
+            const volStr   = vr == null ? '-' : '×' + vr.toFixed(1);
+            const volColor = vr == null ? 'var(--color-muted)'
+                           : vr >= 2 ? 'var(--color-accent)'
+                           : vr >= 1.5 ? '#ffb800' : 'var(--color-muted)';
+            return '<div style="display:grid;grid-template-columns:' + GRID + ';gap:6px;padding:8px 12px;border-bottom:1px solid var(--color-border);font-size:11px;align-items:center;">'
                 + '<div style="color:' + (rank <= 3 ? 'var(--color-accent)' : 'var(--color-muted)') + ';font-weight:500;">' + rank + '</div>'
                 + '<div onclick="goToResearch(\'' + item.ticker + '\')" class="ticker-link" style="color:var(--color-accent);font-weight:500;">' + item.ticker + '</div>'
                 + '<div><div style="color:var(--color-text);">' + priceStr + '</div><div style="color:' + chgColor + ';font-size:10px;">' + chgStr + '</div></div>'
                 + '<div><div style="background:var(--color-surface2);border-radius:2px;height:4px;margin-bottom:2px;"><div style="height:100%;width:' + item.buzz + '%;background:var(--color-accent);border-radius:2px;"></div></div><div style="color:var(--color-muted);font-size:10px;">' + item.buzz + '</div></div>'
+                + '<div style="color:' + volColor + ';font-size:11px;font-weight:500;">' + volStr + '</div>'
                 + '<div style="color:var(--color-muted);font-size:10px;">' + item.social_hype + '</div>'
                 + '</div>';
         }).join('');

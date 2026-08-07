@@ -404,6 +404,21 @@ CÓMO LEERLO:
 Picos repentinos de Buzz en un ticker que normalmente no aparece en el ranking suelen coincidir con alguna noticia, catalizador, o movimiento de precio reciente que ha captado la atención retail — vale la pena investigar qué lo está causando antes de actuar.`
     },
 
+    "reddit-vol-relativo": {
+        title: "VOL — Volumen relativo",
+        short: "Cuántas veces se está negociando más (o menos) de lo normal en ese valor hoy.",
+        long: `Compara el volumen negociado hoy con lo habitual en ese mismo valor durante las últimas sesiones. Un ×2,5 significa que hoy se están moviendo dos veces y media las acciones que se mueven un día corriente.
+
+PARA QUÉ SIRVE JUNTO AL BUZZ:
+El Buzz dice cuánto se habla de un valor; esta columna dice si además se está comprando y vendiendo de verdad. Que se hable mucho y el volumen siga siendo normal suele ser solo ruido. Que se hable mucho Y el volumen se dispare es lo que merece que le eches un vistazo.
+
+CÓMO SE LEE:
+Por debajo de ×1,5 es un día corriente y se muestra en gris. A partir de ×1,5 se marca en ámbar, y desde ×2 en verde: ahí está pasando algo. Un guion significa que no hay dato de volumen para ese valor, no que sea normal.
+
+CON EL MERCADO ABIERTO:
+La sesión aún no ha terminado, así que el volumen del día está a medias. Para que la comparación sea justa, se tiene en cuenta qué parte de la sesión ha transcurrido — si no, por la mañana todo parecería tener poco volumen simplemente porque acaba de abrir.`
+    },
+
     "social-signal": {
         title: "Señal — Tono del Sentimiento Social",
         short: "Clasificación cualitativa del tono dominante (alcista, bajista, mixto) en la conversación sobre ese ticker.",
