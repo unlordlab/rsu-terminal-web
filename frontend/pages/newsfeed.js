@@ -1,3 +1,4 @@
+import { authHeader } from '/core/api.js';
 import { tt } from '/components/tooltip.js';
 import { errorMessage, esc, safeUrl } from '/core/ui.js';
 
@@ -141,9 +142,8 @@ async function loadNews(container) {
     if (feed) feed.innerHTML = '<div style="color:var(--color-muted);font-size:12px;padding:1rem;">Cargando...</div>';
 
     try {
-        const token = sessionStorage.getItem('rsu_token');
         const res   = await fetch('/api/v1/newsfeed/?limit=80', {
-            headers: token ? { 'Authorization': 'Bearer ' + token } : {}
+            headers: authHeader()
         });
         const data  = await res.json();
         if (!data.ok) throw new Error('Sin datos');
@@ -243,9 +243,8 @@ function newsCard(item) {
 async function loadTrump(el) {
     if (!el) return;
     try {
-        const token = sessionStorage.getItem('rsu_token');
         const res   = await fetch('/api/v1/newsfeed/trump?limit=15', {
-            headers: token ? { 'Authorization': 'Bearer ' + token } : {}
+            headers: authHeader()
         });
         const data  = await res.json();
 
@@ -290,9 +289,8 @@ function trumpCard(post) {
 
 async function loadPrices(el) {
     try {
-        const token = sessionStorage.getItem('rsu_token');
         const res   = await fetch('/api/v1/newsfeed/prices', {
-            headers: token ? { 'Authorization': 'Bearer ' + token } : {}
+            headers: authHeader()
         });
         const data  = await res.json();
         el.innerHTML = data.map(p => {

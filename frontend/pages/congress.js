@@ -1,3 +1,4 @@
+import { authHeader } from '/core/api.js';
 import { tt } from '/components/tooltip.js';
 import { errorMessage, esc, fmtFecha } from '/core/ui.js';
 
@@ -54,8 +55,7 @@ async function loadAll(container) {
         loadTicker(urlTicker.toUpperCase(), tickerEl);
     }
 
-    const token = sessionStorage.getItem('rsu_token');
-    const headers = token ? { 'Authorization': 'Bearer ' + token } : {};
+    const headers = authHeader();
 
     try {
         const [feedRes, clusterRes] = await Promise.all([
@@ -81,9 +81,8 @@ async function loadAll(container) {
 async function loadTicker(ticker, el) {
     el.innerHTML = shell('CONGRESS TRADING · ' + ticker, loading());
     try {
-        const token = sessionStorage.getItem('rsu_token');
         const res   = await fetch('/api/v1/congress/ticker/' + ticker, {
-            headers: token ? { 'Authorization': 'Bearer ' + token } : {}
+            headers: authHeader()
         });
         const data  = await res.json();
         if (!data.ok) throw new Error(data.error || 'Sin datos');

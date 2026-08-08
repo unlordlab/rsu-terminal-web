@@ -1,3 +1,4 @@
+import { authHeader } from '/core/api.js';
 import { tt } from '/components/tooltip.js';
 import { isRateLimitMessage, errorMessage, esc, fmtFecha } from '/core/ui.js';
 
@@ -67,8 +68,7 @@ async function cargarSeccion(container, id, titulo, url, render) {
     if (!el) return;
     el.innerHTML = loadingCard(titulo);
     try {
-        const token = sessionStorage.getItem('rsu_token');
-        const res   = await fetch(url, { headers: token ? { 'Authorization': 'Bearer ' + token } : {} });
+        const res   = await fetch(url, { headers: authHeader() });
         const data  = await res.json();
         if (!data.ok) { el.innerHTML = sinHistorico(titulo, data.error || 'Sin datos todavía.'); return; }
         el.innerHTML = render(data);
@@ -244,8 +244,7 @@ async function loadGist(container) {
     if (sectorsEl)  sectorsEl.innerHTML  = '<div style="color:var(--color-muted);font-size:12px;padding:0.5rem;">Cargando sectores...</div>';
 
     try {
-        const token = sessionStorage.getItem('rsu_token');
-        const res   = await fetch('/api/v1/rsrw/gist', { headers: token ? { 'Authorization': 'Bearer ' + token } : {} });
+        const res   = await fetch('/api/v1/rsrw/gist', { headers: authHeader() });
         const data  = await res.json();
 
         if (!data.ok) {
@@ -278,9 +277,8 @@ async function loadCartera(container) {
     if (!el) return;
     el.innerHTML = loadingCard('ACTIVOS CARTERA RSU · FUERZA RELATIVA');
     try {
-        const token = sessionStorage.getItem('rsu_token');
         const res   = await fetch('/api/v1/rsrw/cartera', {
-            headers: token ? { 'Authorization': 'Bearer ' + token } : {}
+            headers: authHeader()
         });
         const data = await res.json();
         if (!data.ok) {
@@ -357,9 +355,8 @@ async function loadMovimientos(container) {
     if (!el) return;
     el.innerHTML = loadingCard('MOVIMIENTOS DEL PERCENTIL RS');
     try {
-        const token = sessionStorage.getItem('rsu_token');
         const res   = await fetch('/api/v1/rsrw/movimientos?ventana=10', {
-            headers: token ? { 'Authorization': 'Bearer ' + token } : {}
+            headers: authHeader()
         });
         const data = await res.json();
         if (!data.ok) {
@@ -593,8 +590,7 @@ function setupTicker(container) {
         result.innerHTML  = '<div style="color:var(--color-muted);font-size:12px;padding:0.5rem;">Calculando RS/RW para ' + esc(ticker) + '...</div>';
 
         try {
-            const token = sessionStorage.getItem('rsu_token');
-            const res   = await fetch('/api/v1/rsrw/ticker/' + ticker, { headers: token ? { 'Authorization': 'Bearer ' + token } : {} });
+            const res   = await fetch('/api/v1/rsrw/ticker/' + ticker, { headers: authHeader() });
             const data  = await res.json();
             if (!data.ok) throw new Error(data.error || 'Sin datos');
             result.innerHTML = renderTickerResult(data);

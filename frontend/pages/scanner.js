@@ -1,3 +1,4 @@
+import { authHeader } from '/core/api.js';
 import { isRateLimitMessage, errorMessage, esc } from '/core/ui.js';
 import { tt } from '/components/tooltip.js';
 
@@ -186,8 +187,7 @@ async function loadUniverseMeta(container) {
     const metaEl   = container.querySelector('#scanner-meta');
     const sectorEl = container.querySelector('#scanner-sector-value');
     try {
-        const token = sessionStorage.getItem('rsu_token');
-        const res   = await fetch('/api/v1/scanner/universe', { headers: token ? { 'Authorization': 'Bearer ' + token } : {} });
+        const res   = await fetch('/api/v1/scanner/universe', { headers: authHeader() });
         const data  = await res.json();
         if (!data.ok) {
             if (metaEl) metaEl.innerHTML = '<span style="color:#f23645;">' + esc(data.error || 'Error') + '</span>';
@@ -253,9 +253,8 @@ async function runFilter(container) {
     result.innerHTML = '<div style="color:var(--color-muted);font-size:12px;padding:0.5rem;">Aplicando criterios sobre el universo precomputado...</div>';
 
     try {
-        const token = sessionStorage.getItem('rsu_token');
         const qs    = buildQuery(container);
-        const res   = await fetch('/api/v1/scanner/filter?' + qs, { headers: token ? { 'Authorization': 'Bearer ' + token } : {} });
+        const res   = await fetch('/api/v1/scanner/filter?' + qs, { headers: authHeader() });
         const data  = await res.json();
         if (!data.ok) throw new Error(data.error || 'Error en el scan');
 

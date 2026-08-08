@@ -1,6 +1,6 @@
 import { cycleTheme, getCurrentTheme, nombreTema } from '/core/theme.js';
 import { initWebSocket, onMarketUpdate } from '/core/websocket.js';
-import { clearToken, getTier } from '/core/api.js';
+import { logout, getTier, isLoggedIn } from '/core/api.js';
 import { showPricingModal } from '/components/pricing_modal.js';
 
 const TIER_LABELS = { free: 'FREE', tier1: 'TIER 1', tiers: 'TIER S' };
@@ -108,8 +108,10 @@ export function renderTopbar(container, navigate) {
     accountBtn.addEventListener('click', () => { navigate('/account'); });
 
     // Logout
-    container.querySelector('#logout-btn').addEventListener('click', () => {
-        clearToken();
+    container.querySelector('#logout-btn').addEventListener('click', async () => {
+        // La cookie es httpOnly: borrarla es cosa del backend, por eso
+        // logout() llama a /auth/logout antes de limpiar lo local.
+        await logout();
         navigate('/login');
     });
 
@@ -130,8 +132,7 @@ export function renderTopbar(container, navigate) {
     updateThemeLabel(container);
 
     // Iniciar WebSocket
-    const token = sessionStorage.getItem('rsu_token');
-    if (token) initWebSocket(token);
+    if (isLoggedIn()) initWebSocket();
 }
 
 function updateClock(container) {

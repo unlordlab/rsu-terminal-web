@@ -1,3 +1,4 @@
+import { authHeader } from '/core/api.js';
 // Helpers de UI compartidos entre páginas — evita duplicar HTML de error
 // en cada módulo. Pensado para crecer con otros patrones comunes (loading,
 // empty state, etc.) si hace falta en el futuro.
@@ -98,13 +99,12 @@ export function safeUrl(url) {
  * (cambiar texto de un botón, mostrar un toast, etc.).
  */
 export async function addToWatchlist(ticker) {
-    const token = sessionStorage.getItem('rsu_token') || localStorage.getItem('rsu_token');
     try {
         const res = await fetch('/api/v1/watchlist', {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
-                ...(token ? { 'Authorization': 'Bearer ' + token } : {}),
+                ...authHeader(),
             },
             body: JSON.stringify({ ticker: (ticker || '').toUpperCase() }),
         });

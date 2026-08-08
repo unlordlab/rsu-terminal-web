@@ -1,3 +1,4 @@
+import { authHeader } from '/core/api.js';
 import { tt } from '/components/tooltip.js';
 import { errorMessage, esc, safeUrl, fmtFecha } from '/core/ui.js';
 
@@ -62,9 +63,8 @@ export async function render(container) {
         btn.style.opacity = '0.7';
         result.innerHTML  = '<div style="color:var(--color-muted);font-size:12px;padding:1rem;">Cargando datos de ' + esc(ticker) + '...</div>';
         try {
-            const token = sessionStorage.getItem('rsu_token');
             const res   = await fetch('/api/v1/research/' + ticker, {
-                headers: token ? { 'Authorization': 'Bearer ' + token } : {}
+                headers: authHeader()
             });
             const data  = await res.json();
             if (!data.ok) throw new Error(data.error || 'Sin datos');
@@ -109,9 +109,8 @@ async function loadScoreTracking(container) {
     const result = container.querySelector('#research-result');
     if (!result) return;
     try {
-        const token = sessionStorage.getItem('rsu_token');
         const res = await fetch('/api/v1/research/score-tracking/resumen', {
-            headers: token ? { 'Authorization': 'Bearer ' + token } : {}
+            headers: authHeader()
         });
         const data = await res.json();
         if (!data.ok) return;
@@ -435,9 +434,8 @@ async function loadScoreEvolucion(ticker) {
     try {
         // Mismo patrón que el resto del fichero: aquí no hay authHeader(),
         // la cabecera se construye a mano.
-        const token = sessionStorage.getItem('rsu_token');
         const res = await fetch('/api/v1/research/score-tracking/' + encodeURIComponent(ticker),
-                                { headers: token ? { 'Authorization': 'Bearer ' + token } : {} });
+                                { headers: authHeader() });
         h = await res.json();
     } catch (e) {
         // Silencioso de cara al usuario -- esto es contexto, no el dato

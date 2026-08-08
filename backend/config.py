@@ -34,6 +34,13 @@ class Settings(BaseSettings):
     # mientras no haya una pasarela de pago automatizada. Se envía en el
     # header X-Admin-Key. No confundir con el login normal de usuarios.
     admin_key: str = "changeme_admin_key"
+    # Flag Secure de la cookie de sesión (auth.py). En false la cookie viaja
+    # también por HTTP -- que es lo que hay hoy: el VPS sirve por IP pelada,
+    # sin dominio ni certificado. Ponerlo en true sin HTTPS dejaría a todo el
+    # mundo sin poder iniciar sesión, porque el navegador se negaría a
+    # guardar la cookie. En cuanto haya dominio + certificado, esto pasa a
+    # COOKIE_SECURE=true en el .env del VPS y no hace falta tocar código.
+    cookie_secure: bool = False
     cors_origins: List[str] = [
         "http://localhost:8000",
         "http://localhost:5500",

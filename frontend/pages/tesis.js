@@ -1,6 +1,5 @@
 import { errorMessage, fmtFecha } from '/core/ui.js';
-import { getToken } from '/core/api.js';
-
+import { authHeader } from '/core/api.js';
 let currentPage  = 1;
 let activeRating = 'Todos';
 let searchQuery  = '';
@@ -88,12 +87,11 @@ async function loadGallery(container) {
     if (grid) grid.innerHTML = '<div style="color:var(--color-muted);font-size:12px;padding:1rem;">Cargando...</div>';
 
     try {
-        const token = sessionStorage.getItem('rsu_token');
         let url = '/api/v1/tesis/?page=' + currentPage + '&per_page=9';
         if (searchQuery) url += '&search=' + encodeURIComponent(searchQuery);
         if (activeRating && activeRating !== 'Todos') url += '&rating=' + encodeURIComponent(activeRating);
 
-        const res  = await fetch(url, { headers: token ? { 'Authorization': 'Bearer ' + token } : {} });
+        const res  = await fetch(url, { headers: authHeader() });
         const data = await res.json();
         if (!data.ok) throw new Error(data.error || 'Sin datos');
 
@@ -235,7 +233,6 @@ function tesisCard(item) {
 }
 
 async function loadDetail(container, ticker, fecha) {
-    const token = sessionStorage.getItem('rsu_token');
     let url = '/api/v1/tesis/' + ticker;
     if (fecha) url += '?fecha=' + encodeURIComponent(fecha);
 
@@ -245,7 +242,7 @@ async function loadDetail(container, ticker, fecha) {
     mainEl.innerHTML = '<div style="color:var(--color-muted);font-size:12px;padding:1rem;">Cargando análisis...</div>';
 
     try {
-        const res  = await fetch(url, { headers: token ? { 'Authorization': 'Bearer ' + token } : {} });
+        const res  = await fetch(url, { headers: authHeader() });
         const data = await res.json();
         if (!data.ok) throw new Error(data.error || 'Sin datos');
 
@@ -263,7 +260,7 @@ async function loadDetail(container, ticker, fecha) {
             btn.disabled = true;
             try {
                 const res = await fetch('/api/v1/tesis/id/' + tesisId + '/pdf', {
-                    headers: { 'Authorization': 'Bearer ' + getToken() }
+                    headers: authHeader()
                 });
                 if (!res.ok) throw new Error('No se pudo generar el PDF');
                 const blob = await res.blob();

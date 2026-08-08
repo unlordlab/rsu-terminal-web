@@ -1,3 +1,4 @@
+import { authHeader } from '/core/api.js';
 // ─────────────────────────────────────────────────────────────────────────────
 // RSU TERMINAL — CARTERA
 // Posiciones activas con precios live, P&L recalculado, hipervínculos a Research,
@@ -112,9 +113,10 @@ function connectWS(abiertas) {
     if (_ws) { try { _ws.close(); } catch(_) {} }
     _wsClosedByCleanup = false;
 
-    const token = sessionStorage.getItem('rsu_token');
     const proto = location.protocol === 'https:' ? 'wss' : 'ws';
-    const url   = `${proto}://${location.host}/ws/cartera` + (token ? `?token=${token}` : '');
+    // Sin ?token=: la cookie de sesion viaja sola en el handshake por ser
+    // el mismo origen, y de paso el token deja de aparecer en la URL.
+    const url   = `${proto}://${location.host}/ws/cartera`;
 
     _ws = new WebSocket(url);
 
@@ -140,7 +142,7 @@ function connectWS(abiertas) {
         // 4401 = el backend ha rechazado el token (ausente/inválido/caducado).
         // Reintentar no serviría de nada: mandamos a login directamente.
         if (event.code === 4401) {
-            sessionStorage.removeItem('rsu_token');
+            import('/core/api.js').then(m => m.clearToken());
             if (window.__navigate) window.__navigate('/login');
             return;
         }
@@ -1262,10 +1264,6 @@ function renderDonut() {
 
 // ── UTILIDADES ────────────────────────────────────────────────────────────────
 
-function authHeader() {
-    const t = sessionStorage.getItem('rsu_token');
-    return t ? { 'Authorization': 'Bearer ' + t } : {};
-}
 
 // Exportar CSV
 //

@@ -9,6 +9,11 @@ let socket     = null;
 let handlers   = {};
 let reconnectT = null;
 
+// Sin argumento: la cookie de sesión (httpOnly) viaja sola en el handshake
+// del WebSocket por ser el mismo origen, así que ya no hay que pasarle el
+// token -- ni tenerlo a mano, ni exponerlo en la URL. El parámetro se acepta
+// todavía para las sesiones abiertas antes del cambio a cookie, que siguen
+// llevando su token en el navegador.
 export function initWebSocket(token) {
     if (socket && socket.readyState === WebSocket.OPEN) return;
 
@@ -40,16 +45,15 @@ export function initWebSocket(token) {
         // rechazadas: mejor limpiar la sesión y mandar a login, igual que
         // hace el interceptor de fetch para las peticiones HTTP con 401.
         if (event.code === 4401) {
-            console.log('[WS] Token inválido o caducado, redirigiendo a login');
-            sessionStorage.removeItem('rsu_token');
+            console.log('[WS] Sesión inválida o caducada, redirigiendo a login');
+            import('/core/api.js').then(m => m.clearToken());
             if (window.__navigate) window.__navigate('/login');
             return;
         }
 
         console.log('[WS] Desconectado — reconectando en 5s');
         reconnectT = setTimeout(() => {
-            const t = sessionStorage.getItem('rsu_token');
-            if (t) initWebSocket(t);
+            import('/core/api.js').then(m => { if (m.isLoggedIn()) initWebSocket(); });
         }, RECONNECT_DELAY);
     };
 

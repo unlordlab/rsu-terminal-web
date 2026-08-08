@@ -3,7 +3,7 @@ import { initTheme } from '/core/theme.js';
 import { renderSidebar, setActiveNavItem, NAV_ITEMS } from '/components/sidebar.js';
 import { renderTopbar } from '/components/topbar.js';
 import { initWebSocket } from '/core/websocket.js';
-import { api, setSession, getToken } from '/core/api.js';
+import { api, setSession, isLoggedIn, authHeader, clearToken } from '/core/api.js';
 import { initCommandPalette } from '/components/command_palette.js';
 import { showDisclaimerModal } from '/components/disclaimer_modal.js';
 import { showPricingModal } from '/components/pricing_modal.js';
@@ -41,10 +41,9 @@ const ROUTES = {
     '/mobile':     () => import('/pages/mobile.js'),
 };
 
-const TOKEN_KEY = 'rsu_token';
 
 function isAuthenticated() {
-    return !!getToken();
+    return isLoggedIn();
 }
 
 // Interceptor global de fetch: cubre dos casos transversales a toda la app,
@@ -63,8 +62,11 @@ window.fetch = async function(...args) {
     const url = typeof args[0] === 'string' ? args[0] : (args[0] && args[0].url) || '';
 
     if (response.status === 401 && url.includes('/api/v1/') && !url.includes('/auth/admin') && location.pathname !== '/login') {
-        localStorage.removeItem(TOKEN_KEY);
-        sessionStorage.removeItem(TOKEN_KEY);
+        // clearToken() y no un removeItem suelto: ademas del resto de token
+        // antiguo hay que quitar el marcador de sesion, o isLoggedIn()
+        // seguiria diciendo que hay sesion despues de que el backend la haya
+        // rechazado. La cookie la borra el backend con su propia respuesta.
+        clearToken();
         navigate('/login?expired=1');
         return response;
     }
@@ -87,8 +89,7 @@ window.fetch = async function(...args) {
         } catch (e) { /* respuesta no-JSON, tratar como fallo de auth */ }
 
         if (!esRestriccionDePlan) {
-            localStorage.removeItem(TOKEN_KEY);
-            sessionStorage.removeItem(TOKEN_KEY);
+            clearToken();
             navigate('/login?expired=1');
             return response;
         }
@@ -248,12 +249,11 @@ const ANALYTICS_EXCLUDED = new Set(['/login', '/register', '/admin']);
 
 function trackPageView(cleanPath) {
     if (ANALYTICS_EXCLUDED.has(cleanPath)) return;
-    const token = getToken();
     fetch('/api/v1/analytics/track', {
         method: 'POST',
         headers: {
             'Content-Type': 'application/json',
-            ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
+            ...authHeader(),
         },
         body: JSON.stringify({ section: cleanPath }),
     }).catch(() => { /* no pasa nada si falla */ });
@@ -289,9 +289,9 @@ export function navigate(path, options = {}) {
 
 initTheme();
 initInstallPrompt();
-const token = getToken();
-if (token) initWebSocket(token);
-if (token) initChatWidget();
+const sesionActiva = isLoggedIn();
+if (sesionActiva) initWebSocket();
+if (sesionActiva) initChatWidget();
 renderSidebar(document.getElementById('sidebar'), navigate);
 renderTopbar(document.getElementById('topbar'), navigate);
 initCommandPalette(NAV_ITEMS, navigate);
@@ -299,10 +299,10 @@ initCommandPalette(NAV_ITEMS, navigate);
 // El tier guardado en sessionStorage es el que tenía el usuario en el
 // último login/registro. Si el admin lo ha subido de tier desde entonces,
 // esto lo refresca sin obligar a re-loguear, y repinta sidebar/topbar.
-if (token) {
+if (sesionActiva) {
     api.get('/auth/me').then(me => {
         if (me?.tier) {
-            setSession(token, me.tier, me.email);
+            setSession(me.tier, me.email, !!localStorage.getItem('rsu_session'));
             renderSidebar(document.getElementById('sidebar'), navigate);
             renderTopbar(document.getElementById('topbar'), navigate);
             setActiveNavItem(location.pathname);

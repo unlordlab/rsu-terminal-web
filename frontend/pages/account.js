@@ -1,9 +1,6 @@
+import { authHeader } from '/core/api.js';
 import { errorMessage, esc, safeUrl } from '/core/ui.js';
 
-function authHeader() {
-    const token = sessionStorage.getItem('rsu_token') || localStorage.getItem('rsu_token');
-    return token ? { 'Authorization': 'Bearer ' + token, 'Content-Type': 'application/json' } : { 'Content-Type': 'application/json' };
-}
 
 let _pollTimer = null;
 

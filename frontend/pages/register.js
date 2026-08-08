@@ -177,8 +177,8 @@ export async function render(container) {
 
         try {
             const data = await api.post('/auth/register', { email, password });
-            if (data?.access_token) {
-                setSession(data.access_token, data.tier, data.email);
+            if (data?.ok) {
+                setSession(data.tier, data.email);
                 window.__navigate('/');
             }
         } catch (err) {

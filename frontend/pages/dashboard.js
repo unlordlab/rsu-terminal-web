@@ -1,4 +1,4 @@
-import { api } from '/core/api.js';
+import { api, authHeader } from '/core/api.js';
 import { errorMessage } from '/core/ui.js';
 
 export async function render(container) {
@@ -70,10 +70,6 @@ export async function render(container) {
     }
 }
 
-function authHeaderDash() {
-    const token = sessionStorage.getItem('rsu_token') || localStorage.getItem('rsu_token');
-    return token ? { 'Authorization': 'Bearer ' + token } : {};
-}
 
 // ── PULSO DE MERCADO ─────────────────────────────────────────────────────────
 
@@ -277,8 +273,7 @@ async function loadAlgoritmo(el) {
     el.innerHTML = '<div style="background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius);padding:1rem 1.25rem;color:var(--color-muted);font-size:12px;">Cargando algoritmo RSU...</div>';
 
     try {
-        const token = sessionStorage.getItem('rsu_token');
-        const res   = await fetch('/api/v1/algoritmo/', { headers: token ? { 'Authorization': 'Bearer ' + token } : {} });
+        const res   = await fetch('/api/v1/algoritmo/', { headers: authHeader() });
         const data  = await res.json();
         if (!data.ok) throw new Error(data.error || 'Sin datos');
 

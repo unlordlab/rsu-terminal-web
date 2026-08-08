@@ -1,3 +1,4 @@
+import { authHeader } from '/core/api.js';
 // ── CHAT DE AYUDA RSU ────────────────────────────────────────────────────────
 //
 // Burbuja flotante disponible en todas las páginas. Responde preguntas sobre
@@ -15,10 +16,6 @@ let cargando   = false;
 let mensajes   = [];
 let historialCargado = false;
 
-function authHeader() {
-    const token = sessionStorage.getItem('rsu_token');
-    return token ? { 'Authorization': 'Bearer ' + token } : {};
-}
 
 export function initChatWidget() {
     if (bubbleEl) return; // ya montado

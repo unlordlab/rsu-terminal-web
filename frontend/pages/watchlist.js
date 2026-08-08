@@ -1,10 +1,7 @@
+import { authHeader } from '/core/api.js';
 import { tt } from '/components/tooltip.js';
 import { errorMessage, esc, fmtFecha } from '/core/ui.js';
 
-function authHeader() {
-    const token = sessionStorage.getItem('rsu_token') || localStorage.getItem('rsu_token');
-    return token ? { 'Authorization': 'Bearer ' + token, 'Content-Type': 'application/json' } : { 'Content-Type': 'application/json' };
-}
 
 // Mismo estilo de "píldora" del ticker que ya usa Cartera — antes Watchlist
 // solo tenía la versión mínima de .ticker-link de base.css (sin fondo ni

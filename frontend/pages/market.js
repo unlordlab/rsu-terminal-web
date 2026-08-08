@@ -1,3 +1,4 @@
+import { authHeader } from '/core/api.js';
 import { tt } from '/components/tooltip.js';
 import { onMarketUpdate } from '/core/websocket.js';
 import { fmtFecha, esc } from '/core/ui.js';
@@ -581,9 +582,8 @@ async function loadEarningsSurprise(ticker, container) {
     detail.innerHTML = '<div style="padding:1rem;color:var(--color-muted);font-size:12px;">Cargando historial de ' + ticker + '...</div>';
 
     try {
-        const token = sessionStorage.getItem('rsu_token');
         const res   = await fetch('/api/v1/market/earnings/' + ticker, {
-            headers: token ? { 'Authorization': 'Bearer ' + token } : {}
+            headers: authHeader()
         });
         const data  = await res.json();
         if (!data.ok) throw new Error('Sin datos');
@@ -2186,10 +2186,6 @@ function widgetShell(title, subtitle, content, timestamp) {
         + '</div>';
 }
 
-function authHeader() {
-    const token = sessionStorage.getItem('rsu_token');
-    return token ? { 'Authorization': 'Bearer ' + token } : {};
-}
 
 function fgColor(score) {
     if (score >= 75) return '#00ffad';

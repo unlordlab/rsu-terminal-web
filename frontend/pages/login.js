@@ -181,8 +181,10 @@ export async function render(container) {
 
         try {
             const data = await api.post('/auth/login', { email, password, remember: rememberInput.checked });
-            if (data?.access_token) {
-                setSession(data.access_token, data.tier, data.email, rememberInput.checked);
+            // El token ya no viene en la respuesta: llega como cookie
+            // httpOnly que el navegador ha guardado antes de llegar aquí.
+            if (data?.ok) {
+                setSession(data.tier, data.email, rememberInput.checked);
                 window.__navigate('/');
             }
         } catch (err) {

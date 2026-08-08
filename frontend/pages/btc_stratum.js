@@ -1,3 +1,4 @@
+import { authHeader } from '/core/api.js';
 import { tt } from '/components/tooltip.js';
 import { errorMessage, fmtFecha } from '/core/ui.js';
 
@@ -33,9 +34,8 @@ function pageShell() {
 async function loadDashboard(el) {
     el.innerHTML = loading('Cargando datos BTC...');
     try {
-        const token = sessionStorage.getItem('rsu_token');
         const res   = await fetch('/api/v1/btc-stratum/dashboard', {
-            headers: token ? { 'Authorization': 'Bearer ' + token } : {}
+            headers: authHeader()
         });
         const data  = await res.json();
         if (!data.ok) throw new Error(data.error || 'Sin datos');
@@ -284,9 +284,8 @@ function methodologySection() {
 async function loadBacktest(el) {
     el.innerHTML = loading('Ejecutando backtest histórico...');
     try {
-        const token = sessionStorage.getItem('rsu_token');
         const res   = await fetch('/api/v1/btc-stratum/backtest', {
-            headers: token ? { 'Authorization': 'Bearer ' + token } : {}
+            headers: authHeader()
         });
         const data  = await res.json();
         if (!data.ok) throw new Error(data.error || 'Sin datos');

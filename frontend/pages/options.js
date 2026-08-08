@@ -1,3 +1,4 @@
+import { authHeader } from '/core/api.js';
 import { tt } from '/components/tooltip.js';
 import { errorMessage, esc, fmtFecha } from '/core/ui.js';
 
@@ -7,10 +8,6 @@ import { errorMessage, esc, fmtFecha } from '/core/ui.js';
 // 04/08/2026; el alias se mantiene para no tocar los 8 sitios que ya lo usaban.
 const _fmtFecha = fmtFecha;
 
-function authHeader() {
-    const token = sessionStorage.getItem('rsu_token');
-    return token ? { 'Authorization': 'Bearer ' + token } : {};
-}
 
 // Badges de cruce -- Fase 3 del roadmap: ⭐ si está en la Watchlist del
 // usuario, ⚡ si además hay señal de compra insider simultánea en el mismo

@@ -1,11 +1,44 @@
 from datetime import datetime, timedelta, timezone
 import secrets
 from jose import JWTError, jwt
-from fastapi import HTTPException, status, Depends, Header, Request
+from fastapi import HTTPException, status, Depends, Header, Request, Response
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from config import settings
 
-bearer = HTTPBearer()
+# ── Cookie de sesión ───────────────────────────────────────────────────────
+# El token de usuario vive en una cookie httpOnly, no en localStorage. La
+# diferencia que importa: httpOnly significa que JavaScript no puede leerla,
+# así que un XSS en cualquier página de la terminal ya no puede robar la
+# sesión de nadie. Guardarla en localStorage (o en sessionStorage, da igual
+# cuál) la deja expuesta a cualquier script que se cuele.
+#
+# Lo que esto NO arregla, dicho claro: sin HTTPS el token sigue viajando en
+# claro por la red, así que quien pueda leer el tráfico lo ve igual. La
+# cookie cierra la puerta del XSS; la del sniffing la cierra el certificado.
+# Ver settings.cookie_secure.
+#
+# SameSite=lax basta como defensa CSRF aquí: el frontend y la API son el
+# mismo origen, así que ninguna petición legítima de la terminal es
+# cross-site, y lax bloquea justamente las que vendrían de fuera.
+COOKIE_NAME = "rsu_session"
+
+bearer = HTTPBearer(auto_error=False)
+
+
+def set_session_cookie(response: Response, token: str, max_age: int | None) -> None:
+    """max_age=None deja una cookie de sesión: el navegador la borra al
+    cerrarse. Es lo que corresponde a un login sin "mantener sesión"."""
+    response.set_cookie(
+        key=COOKIE_NAME, value=token, max_age=max_age,
+        httponly=True, samesite="lax", secure=settings.cookie_secure, path="/",
+    )
+
+
+def clear_session_cookie(response: Response) -> None:
+    response.delete_cookie(
+        key=COOKIE_NAME, httponly=True, samesite="lax",
+        secure=settings.cookie_secure, path="/",
+    )
 
 def create_token(data: dict, expire_minutes: int | None = None) -> str:
     minutos = expire_minutes if expire_minutes is not None else settings.token_expire_minutes
@@ -33,9 +66,26 @@ def decode_token(token: str) -> dict | None:
         return None
 
 def verify_token(
-    credentials: HTTPAuthorizationCredentials = Depends(bearer)
+    request: Request,
+    credentials: HTTPAuthorizationCredentials = Depends(bearer),
 ) -> dict:
-    payload = decode_token(credentials.credentials)
+    # La cookie manda sobre la cabecera: tras el cambio a cookie httpOnly
+    # puede quedar un token viejo en el almacenamiento del navegador de
+    # alguien que ya usaba la terminal, y un login nuevo tiene que ganarle
+    # siempre a ese resto. La cabecera Bearer se mantiene como respaldo por
+    # dos motivos reales, no por simetría: los tokens de servicio
+    # (daily_briefing.py, el disparador del scan de Options Flow) no tienen
+    # navegador ni cookies, y las sesiones abiertas antes de este cambio
+    # siguen funcionando sin echar a nadie el día del despliegue.
+    token = request.cookies.get(COOKIE_NAME)
+    if not token and credentials:
+        token = credentials.credentials
+    if not token:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="No autenticado"
+        )
+    payload = decode_token(token)
     if payload is None:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,

@@ -1,3 +1,4 @@
+import { authHeader } from '/core/api.js';
 // ─────────────────────────────────────────────────────────────────────────────
 // TRACK RECORD — qué hicieron de verdad las señales de la terminal
 //
@@ -33,9 +34,8 @@ function cargando() {
 async function cargar(container) {
     const body = container.querySelector('#tr-body');
     try {
-        const token = sessionStorage.getItem('rsu_token') || localStorage.getItem('rsu_token');
         const res   = await fetch('/api/v1/track-record/', {
-            headers: token ? { 'Authorization': 'Bearer ' + token } : {}
+            headers: authHeader()
         });
         const data = await res.json();
         if (!data.ok) { body.innerHTML = errorMessage(data.error || 'Sin datos'); return; }

@@ -1,3 +1,4 @@
+import { authHeader } from '/core/api.js';
 const DISCORD_URL = 'https://discord.gg/ztSpwB9qe';
 const CONTACT_EMAIL = 'unl4b@proton.me';
 
@@ -28,10 +29,6 @@ const FAQ_ITEMS = [
     },
 ];
 
-function authHeader() {
-    const token = sessionStorage.getItem('rsu_token') || localStorage.getItem('rsu_token');
-    return token ? { 'Authorization': 'Bearer ' + token, 'Content-Type': 'application/json' } : { 'Content-Type': 'application/json' };
-}
 
 export async function render(container) {
     container.innerHTML = pageShell();

@@ -64,7 +64,14 @@ async def _authenticate(websocket: WebSocket, min_tier: str | None = None) -> bo
             await websocket.close(code=4403)
             return False
 
-    token = websocket.query_params.get("token")
+    # La cookie de sesión también viaja en el handshake de un WebSocket del
+    # mismo origen, así que es la vía principal desde el paso a cookie
+    # httpOnly -- y de paso el token deja de ir en la URL, donde acababa en
+    # los logs de acceso del servidor. El query param se mantiene como
+    # respaldo para las sesiones abiertas antes del cambio, que todavía
+    # llevan su token en el navegador.
+    from auth import COOKIE_NAME
+    token = websocket.cookies.get(COOKIE_NAME) or websocket.query_params.get("token")
     if not token:
         await websocket.close(code=4401)
         return False

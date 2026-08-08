@@ -1,3 +1,4 @@
+import { authHeader } from '/core/api.js';
 import { tt } from '/components/tooltip.js';
 import { errorMessage, esc, fmtFecha } from '/core/ui.js';
 
@@ -9,10 +10,9 @@ export async function render(container) {
         + '<div id="algo-content"><div style="color:var(--color-muted);font-size:12px;padding:1rem;">Cargando...</div></div>';
 
     const el    = container.querySelector('#algo-content');
-    const token = sessionStorage.getItem('rsu_token');
-
+    
     try {
-        const res  = await fetch('/api/v1/algoritmo/', { headers: token ? { 'Authorization': 'Bearer ' + token } : {} });
+        const res  = await fetch('/api/v1/algoritmo/', { headers: authHeader() });
         const data = await res.json();
         if (!data.ok) throw new Error(data.error || 'Sin datos');
 
@@ -268,9 +268,8 @@ export async function render(container) {
 
 async function loadHistorialReal(container) {
     const el    = container.querySelector('#historial-real-content');
-    const token = sessionStorage.getItem('rsu_token');
     try {
-        const res  = await fetch('/api/v1/algoritmo/historial-real', { headers: token ? { 'Authorization': 'Bearer ' + token } : {} });
+        const res  = await fetch('/api/v1/algoritmo/historial-real', { headers: authHeader() });
         const data = await res.json();
         if (!data.ok) throw new Error(data.error || 'Sin datos');
 
@@ -332,9 +331,8 @@ async function runBacktest(container) {
     content.innerHTML = '<div style="color:var(--color-muted);">Recalculando el algoritmo día a día sobre ' + years + ' años de histórico — esto puede tardar 10-30 segundos...</div>';
 
     try {
-        const token = sessionStorage.getItem('rsu_token');
         const res   = await fetch('/api/v1/algoritmo/backtest?years=' + years, {
-            headers: token ? { 'Authorization': 'Bearer ' + token } : {}
+            headers: authHeader()
         });
         // Si la caché del backtest está fría, el cálculo tarda minutos y el
         // proxy corta antes, devolviendo una página HTML de error. Hacer
@@ -583,9 +581,8 @@ async function loadCandidatos(container, enVerde) {
     const caja = container.querySelector('#algo-candidatos');
     if (!caja) return;
     try {
-        const token = sessionStorage.getItem('rsu_token');
         const res  = await fetch('/api/v1/algoritmo/candidatos', {
-            headers: token ? { 'Authorization': 'Bearer ' + token } : {}
+            headers: authHeader()
         });
         if (!res.ok) return;
         const data = await res.json();

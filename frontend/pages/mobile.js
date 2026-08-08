@@ -1,3 +1,4 @@
+import { authHeader } from '/core/api.js';
 // ── VISTA MÓVIL ──────────────────────────────────────────────────────────────
 //
 // Pensada para PWA instalada en el móvil (ver /manifest.json) — una sola
@@ -6,10 +7,6 @@
 // escritorio (/api/v1/algoritmo, /api/v1/market/breadth, /api/v1/market/indices,
 // /api/v1/cartera, /api/v1/watchlist) — cero backend nuevo.
 
-function authHeader() {
-    const token = sessionStorage.getItem('rsu_token');
-    return token ? { 'Authorization': 'Bearer ' + token } : {};
-}
 
 export async function render(container) {
     container.innerHTML = `

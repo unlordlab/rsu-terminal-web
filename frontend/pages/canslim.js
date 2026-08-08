@@ -1,3 +1,4 @@
+import { authHeader } from '/core/api.js';
 import { tt } from '/components/tooltip.js';
 import { errorMessage, esc } from '/core/ui.js';
 
@@ -43,9 +44,8 @@ async function loadMarket(container) {
     const el = container.querySelector('#canslim-market');
     el.innerHTML = '<div style="background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius);padding:1.25rem;"><div style="color:var(--color-muted);font-size:12px;">Cargando estado del mercado...</div></div>';
     try {
-        const token = sessionStorage.getItem('rsu_token');
         const res   = await fetch('/api/v1/canslim/market', {
-            headers: token ? { 'Authorization': 'Bearer ' + token } : {}
+            headers: authHeader()
         });
         const data  = await res.json();
         if (!data.ok) throw new Error(data.error || 'Error');
@@ -170,9 +170,8 @@ function setupAnalyzer(container) {
         btn.style.opacity = '0.7';
         result.innerHTML  = '<div style="padding:1rem;color:var(--color-muted);font-size:12px;">Analizando ' + esc(ticker) + '...</div>';
         try {
-            const token = sessionStorage.getItem('rsu_token');
             const res   = await fetch('/api/v1/canslim/analyze/' + ticker, {
-                headers: token ? { 'Authorization': 'Bearer ' + token } : {}
+                headers: authHeader()
             });
             const data  = await res.json();
             if (!data.ok) throw new Error(data.error || 'Error de análisis');
@@ -214,9 +213,8 @@ async function loadScan(container) {
     const result = container.querySelector('#canslim-scan-result');
     result.innerHTML = '<div style="padding:1rem;color:var(--color-muted);font-size:12px;">Cargando scan nocturno...</div>';
     try {
-        const token = sessionStorage.getItem('rsu_token');
         const res   = await fetch('/api/v1/canslim/gist', {
-            headers: token ? { 'Authorization': 'Bearer ' + token } : {}
+            headers: authHeader()
         });
         const data  = await res.json();
         if (!data.ok) throw new Error(data.error || 'Scan nocturno no disponible todavía');
@@ -716,7 +714,3 @@ function gradeColor(grade) {
     return '#f23645';
 }
 
-function authHeader() {
-    const token = sessionStorage.getItem('rsu_token');
-    return token ? { 'Authorization': 'Bearer ' + token } : {};
-}

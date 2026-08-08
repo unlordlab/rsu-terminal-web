@@ -1,8 +1,12 @@
-from fastapi import APIRouter, HTTPException, Depends
+from fastapi import APIRouter, HTTPException, Depends, Response
 from pydantic import BaseModel, field_validator
-from auth import create_token, verify_token, verify_admin_key
+from auth import (
+    create_token, verify_token, verify_admin_key,
+    set_session_cookie, clear_session_cookie,
+)
 from middleware.rate_limit import login_rate_limit
 from services import users_service
+from config import settings
 
 router = APIRouter(prefix="/api/v1/auth", tags=["auth"])
 
@@ -69,17 +73,24 @@ class ResetPasswordRequest(BaseModel):
         return v
 
 
+# El token ya NO se devuelve en el cuerpo de la respuesta: va en una cookie
+# httpOnly que el navegador guarda y reenvía solo, y que JavaScript no puede
+# leer (ver auth.py). Devolverlo además en el JSON dejaría al frontend la
+# tentación de guardarlo en localStorage otra vez, que es justo el problema
+# que esto cierra. /admin/mint-token sí lo sigue devolviendo, porque los
+# tokens de servicio no tienen navegador donde guardar una cookie.
 @router.post("/register", dependencies=[Depends(login_rate_limit)])
-async def register(req: RegisterRequest):
+async def register(req: RegisterRequest, response: Response):
     user = users_service.create_user(req.email, req.password)
     if user is None:
         raise HTTPException(status_code=409, detail="Ya existe una cuenta con este email")
     token = create_token({"sub": user["email"], "tier": user["tier"], "tv": user["token_version"]})
-    return {"access_token": token, "token_type": "bearer", "tier": user["tier"], "email": user["email"]}
+    set_session_cookie(response, token, max_age=settings.token_expire_minutes * 60)
+    return {"ok": True, "tier": user["tier"], "email": user["email"]}
 
 
 @router.post("/login", dependencies=[Depends(login_rate_limit)])
-async def login(req: LoginRequest):
+async def login(req: LoginRequest, response: Response):
     user = users_service.authenticate(req.email, req.password)
     if user is None:
         raise HTTPException(status_code=401, detail="Email o contraseña incorrectos")
@@ -88,9 +99,29 @@ async def login(req: LoginRequest):
     # las 8h siempre — así que alguien cerraba el portátil por la noche y al
     # día siguiente el token ya llevaba horas caducado, aunque siguiera
     # "guardado". Ahora si se marca, el token dura 30 días de verdad.
+    #
+    # Y desde el paso a cookie, "mantener sesión" decide también cuánto vive
+    # la cookie: sin marcar es de sesión (max_age=None, el navegador la tira
+    # al cerrarse), marcada dura los mismos 30 días que el token que lleva
+    # dentro. Antes esa correspondencia no existía y era la causa del fallo:
+    # marcar la casilla guardaba el token en un sitio que media terminal no
+    # miraba, así que la sesión moría al abrir cualquier módulo.
     minutos = 60 * 24 * 30 if req.remember else None  # None = usa el default (8h)
     token = create_token({"sub": user["email"], "tier": user["tier"], "tv": user["token_version"]}, expire_minutes=minutos)
-    return {"access_token": token, "token_type": "bearer", "tier": user["tier"], "email": user["email"]}
+    set_session_cookie(response, token, max_age=(minutos * 60) if minutos else None)
+    return {"ok": True, "tier": user["tier"], "email": user["email"]}
+
+
+@router.post("/logout")
+async def logout(response: Response):
+    """Cierra la sesión de ESTE navegador borrando la cookie. Sin
+    verify_token a propósito: si el token ya caducó o se revocó, cerrar
+    sesión tiene que seguir funcionando -- si no, la cookie se quedaría
+    pegada hasta que expirase sola. Para cerrar sesión en todos los
+    dispositivos a la vez está /logout-all-sessions, que sí invalida los
+    tokens de verdad en la base de datos."""
+    clear_session_cookie(response)
+    return {"ok": True}
 
 
 @router.get("/me")
@@ -120,7 +151,7 @@ async def me(payload: dict = Depends(verify_token)):
 
 
 @router.post("/logout-all-sessions")
-async def logout_all_sessions(payload: dict = Depends(verify_token)):
+async def logout_all_sessions(response: Response, payload: dict = Depends(verify_token)):
     """Invalida todos los tokens emitidos hasta ahora para este usuario
     (todos los dispositivos, todas las pestañas) -- útil tras sospechar
     que un token se filtró, o simplemente para forzar un cierre de sesión
@@ -130,6 +161,10 @@ async def logout_all_sessions(payload: dict = Depends(verify_token)):
     if not email:
         raise HTTPException(status_code=400, detail="Token sin email asociado")
     users_service.revoke_sessions(email)
+    # La cookie de este navegador se borra además de revocar los tokens: sin
+    # esto seguiría enviándose en cada petición hasta caducar, provocando un
+    # 401 tras otro en vez de un cierre de sesión limpio.
+    clear_session_cookie(response)
     return {"ok": True, "detail": "Todas las sesiones han sido cerradas. Vuelve a iniciar sesión."}
 
 

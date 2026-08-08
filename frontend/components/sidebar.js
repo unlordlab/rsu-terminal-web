@@ -1,4 +1,4 @@
-import { hasTier } from '/core/api.js';
+import { hasTier, isLoggedIn, authHeader } from '/core/api.js';
 
 export const NAV_ITEMS = [
     { path: '/',          label: 'Dashboard',    icon: 'D' },
@@ -130,9 +130,8 @@ function startAlertBadgePolling() {
 }
 
 function refreshAlertBadge() {
-    const token = localStorage.getItem('rsu_token') || sessionStorage.getItem('rsu_token');
-    if (!token) return;
-    fetch('/api/v1/watchlist/alerts/unseen-count', { headers: { 'Authorization': 'Bearer ' + token } })
+    if (!isLoggedIn()) return;
+    fetch('/api/v1/watchlist/alerts/unseen-count', { headers: authHeader() })
         .then(function(res) { return res.ok ? res.json() : null; })
         .then(function(data) {
             const badge = document.getElementById('watchlist-alert-badge');

@@ -70,10 +70,9 @@ export function showDisclaimerModal(onAccepted, esActualizacion = false) {
         btn.textContent = 'Guardando...';
         errorEl.textContent = '';
         try {
-            const token = sessionStorage.getItem('rsu_token') || localStorage.getItem('rsu_token');
             const res = await fetch('/api/v1/auth/accept-disclaimer', {
                 method: 'POST',
-                headers: { 'Authorization': 'Bearer ' + token },
+                headers: authHeader(),
             });
             const data = await res.json();
             if (!data.ok) throw new Error('No se pudo guardar la aceptación');

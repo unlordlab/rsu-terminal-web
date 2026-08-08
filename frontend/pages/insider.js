@@ -1,3 +1,4 @@
+import { authHeader } from '/core/api.js';
 import { tt } from '/components/tooltip.js';
 import { errorMessage, esc, fmtFecha, fmtFechaHora } from '/core/ui.js';
 
@@ -56,8 +57,7 @@ async function loadAll(container) {
     }
 
     // Cargar feed y clusters en paralelo
-    const token = sessionStorage.getItem('rsu_token');
-    const headers = token ? { 'Authorization': 'Bearer ' + token } : {};
+    const headers = authHeader();
 
     try {
         const [feedRes, clusterRes] = await Promise.all([
@@ -90,9 +90,8 @@ async function loadTicker(ticker, el) {
     // también, o se doble-escaparía (p.ej. "&" -> "&amp;" -> "&amp;amp;").
     el.innerHTML = shell('INSIDER TRANSACTIONS · ' + ticker, loading());
     try {
-        const token = sessionStorage.getItem('rsu_token');
         const res   = await fetch('/api/v1/insider/ticker/' + ticker, {
-            headers: token ? { 'Authorization': 'Bearer ' + token } : {}
+            headers: authHeader()
         });
         const data  = await res.json();
         if (!data.ok) throw new Error(data.error || 'Sin datos');

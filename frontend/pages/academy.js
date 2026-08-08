@@ -1,3 +1,4 @@
+import { authHeader } from '/core/api.js';
 // ─────────────────────────────────────────────────────────────────────────────
 // RSU ACADEMY — Página principal + Renderer de lecciones
 // ─────────────────────────────────────────────────────────────────────────────
@@ -36,12 +37,6 @@ async function cargarQuizzes() {
     return _QUIZZES;
 }
 
-function authHeader() {
-    const token = sessionStorage.getItem('rsu_token') || localStorage.getItem('rsu_token');
-    return token
-        ? { 'Authorization': 'Bearer ' + token, 'Content-Type': 'application/json' }
-        : { 'Content-Type': 'application/json' };
-}
 
 // ── DATOS DE MÓDULOS ─────────────────────────────────────────────────────────
 

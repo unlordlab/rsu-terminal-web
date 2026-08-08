@@ -1,3 +1,4 @@
+import { authHeader } from '/core/api.js';
 import { tt } from '/components/tooltip.js';
 import { errorMessage, fmtFecha } from '/core/ui.js';
 export async function render(container) {
@@ -29,10 +30,9 @@ export async function render(container) {
 
 async function loadLive(container) {
     const el    = container.querySelector('#spxl-live');
-    const token = sessionStorage.getItem('rsu_token');
-
+    
     try {
-        const res  = await fetch('/api/v1/spxl/live', { headers: token ? { 'Authorization': 'Bearer ' + token } : {} });
+        const res  = await fetch('/api/v1/spxl/live', { headers: authHeader() });
         const data = await res.json();
         if (!data.ok) throw new Error(data.error);
 
@@ -123,15 +123,14 @@ function renderPhases(container, data) {
 async function loadBacktest(container, capital) {
     const el    = container.querySelector('#spxl-backtest');
     const btn   = container.querySelector('#bt-run');
-    const token = sessionStorage.getItem('rsu_token');
-
+    
     btn.textContent  = 'EJECUTANDO...';
     btn.style.opacity = '0.7';
     el.innerHTML = '<div style="color:var(--color-muted);font-size:12px;padding:1rem;">Ejecutando backtest desde 2008... esto puede tardar ~15 segundos.</div>';
 
     try {
         const res  = await fetch('/api/v1/spxl/backtest?capital=' + capital, {
-            headers: token ? { 'Authorization': 'Bearer ' + token } : {}
+            headers: authHeader()
         });
         const data = await res.json();
         if (!data.ok) throw new Error(data.error);
