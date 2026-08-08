@@ -71,6 +71,36 @@ a:hover {
   background: var(--color-border);
   border-radius: 2px;
 }
+/* Rejillas que se recolocan solas al estrechar la ventana.
+ *
+ * El problema que resuelven: las filas estaban clavadas en un número fijo de
+ * columnas (repeat(3,1fr), 1fr 1fr...), así que en una pantalla mediana no se
+ * reordenaban, se APLASTABAN. Y el aplastamiento no se ve venir, porque la
+ * página no llega a scrollear en horizontal: las columnas se estrechan por
+ * debajo de lo que necesita su contenido y el texto se recorta en silencio.
+ * Medido a 768px de ancho: 90 rejillas rotas en Market y 108 en Options Flow.
+ *
+ * Dos tamaños, no uno, porque el contenido no pide lo mismo. Medido sobre las
+ * tablas reales de cada página: la más ancha de Market necesita 407px y la de
+ * Options Flow 303px -- de ahí el umbral de 420 para las filas que llevan un
+ * widget con tabla dentro. Una fila de tarjetas de dato, en cambio, se lee de
+ * sobra en 190px, y obligarla a 420 la dejaría en una sola columna
+ * desperdiciando media pantalla.
+ *
+ * El min() es para que en móvil la propia rejilla no se convierta en el
+ * desbordamiento: por debajo del umbral, la columna pasa a valer el 100%.
+ *
+ * Ver Market #26 y Options Flow #22 de las auditorías.
+ */
+.rsu-grid-panels {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(min(420px, 100%), 1fr));
+}
+.rsu-grid-cards {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(min(190px, 100%), 1fr));
+}
+
 .ticker-link {
     cursor: pointer;
     transition: opacity 0.15s;

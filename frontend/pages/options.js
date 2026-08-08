@@ -138,14 +138,14 @@ function renderDashboard(data) {
         ${tickerListBox('TOP BEARISH', data.top_bearish)}
     </div>`;
 
-    const flowTables = `<div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:1.5rem;">
+    const flowTables = `<div class="rsu-grid-panels" style="gap:14px;margin-bottom:1.5rem;">
         ${flowTable(`CALLS BOUGHT ${tt('options-categories')}`, data.calls_bought, 'var(--color-accent)')}
         ${flowTable('PUTS SOLD', data.puts_sold, 'var(--color-accent)')}
         ${flowTable('PUTS BOUGHT', data.puts_bought, '#f23645')}
         ${flowTable('CALLS SOLD', data.calls_sold, '#f23645')}
     </div>`;
 
-    const oiTables = `<div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;">
+    const oiTables = `<div class="rsu-grid-panels" style="gap:14px;">
         ${oiTable(`LARGE OI INCREASE ${tt('options-large-oi')}`, data.large_oi_increase, 'var(--color-accent)', '▲')}
         ${oiTable('LARGE OI DECREASE', data.large_oi_decrease, '#f23645', '▼')}
     </div>`;

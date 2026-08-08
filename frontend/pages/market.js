@@ -44,18 +44,33 @@ export async function render(container) {
         // de contenido (listas cortas de precios) así que quedan a longitud
         // parecida sin necesidad de forzar altura. Fear & Greed se baja a la
         // fila siguiente, junto a Earnings, con su mismo tratamiento "grande".
-        + '<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:1rem;margin-bottom:1rem;align-items:start;">'
-        + '<div id="widget-briefing" style="grid-column:1/-1;display:flex;flex-direction:column;"></div>'
+        // Tres filas en vez de una rejilla con huecos colocados a mano. Antes
+        // era una sola rejilla de 3 columnas donde el briefing ocupaba
+        // `grid-column:1/-1` y earnings `grid-column:2/4`, más un div vacío de
+        // altura 0 para forzar el salto de fila. Esa colocación explícita da
+        // por hecho que SIEMPRE hay 3 columnas: en cuanto la rejilla se
+        // reordena por falta de ancho, un hijo que pide "de la columna 2 a la
+        // 4" obliga a inventar columnas que no caben, y la fila desborda.
+        // Separadas en filas propias, cada una se reordena sola sin que nadie
+        // tenga que decirle dónde va. Ver Market #26.
+        + '<div id="widget-briefing" style="display:flex;flex-direction:column;margin-bottom:1rem;"></div>'
+        // Listas de precios cortas: caben de sobra en poco ancho, así que
+        // pueden seguir siendo tres en pantalla grande y bajar a dos o una
+        // según haga falta.
+        + '<div class="rsu-grid-cards" style="gap:1rem;margin-bottom:1rem;align-items:start;">'
         + '<div id="widget-indices"     style="display:flex;flex-direction:column;"></div>'
         + '<div id="widget-commodities" style="display:flex;flex-direction:column;"></div>'
         + '<div id="widget-forex"       style="display:flex;flex-direction:column;"></div>'
+        + '</div>'
+        // Earnings lleva dentro la tabla más ancha de la página (necesita
+        // 407px), así que esta fila usa el umbral grande.
+        + '<div class="rsu-grid-panels" style="gap:1rem;margin-bottom:1rem;align-items:start;">'
         + '<div id="widget-feargreed"   style="display:flex;flex-direction:column;height:420px;"></div>'
-        + '<div id="widget-earnings"    style="grid-column:2/4;display:flex;flex-direction:column;height:420px;"></div>'
-        + '<div style="grid-column:1/-1;height:0;"></div>'
+        + '<div id="widget-earnings"    style="display:flex;flex-direction:column;height:420px;"></div>'
         + '</div>'
 
         // Fila 2 — 2 columnas
-        + '<div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem;margin-bottom:1rem;">'
+        + '<div class="rsu-grid-panels" style="gap:1rem;margin-bottom:1rem;">'
         + '<div id="widget-vix"     style="display:flex;flex-direction:column;"></div>'
         + '<div id="widget-sectors" style="display:flex;flex-direction:column;"></div>'
         + '</div>'
@@ -71,13 +86,13 @@ export async function render(container) {
         + '</div>'
 
         // Fila 2c — VIX Niveles + Cripto
-        + '<div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem;margin-bottom:1rem;">'
+        + '<div class="rsu-grid-panels" style="gap:1rem;margin-bottom:1rem;">'
         + '<div id="widget-vix-levels" style="display:flex;flex-direction:column;height:400px;"></div>'
         + '<div id="widget-crypto"     style="display:flex;flex-direction:column;height:400px;"></div>'
         + '</div>'
 
         // Fila 3 — 2 columnas altura fija con scroll
-        + '<div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem;margin-bottom:1rem;">'
+        + '<div class="rsu-grid-panels" style="gap:1rem;margin-bottom:1rem;">'
         + '<div id="widget-spreads" style="display:flex;flex-direction:column;max-height:480px;"></div>'
         + '<div id="widget-reddit"  style="display:flex;flex-direction:column;max-height:480px;"></div>'
         + '</div>'
@@ -442,7 +457,7 @@ async function loadEarningsSurprise(ticker, container) {
 
         if (history.length) {
             html += '<div style="font-size:10px;color:var(--color-muted);margin-bottom:6px;letter-spacing:0.05em;">HISTORIAL EPS · ÚLTIMOS 4 TRIMESTRES</div>'
-                + '<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:6px;">'
+                + '<div class="rsu-grid-cards" style="gap:6px;">'
                 + history.slice(0, 4).map(h => {
                     const beat    = h.actual >= h.estimate;
                     const color   = beat ? 'var(--color-accent)' : '#f23645';
@@ -572,7 +587,7 @@ async function loadSectorComposition(el) {
             + (sub ? '<div style="color:var(--color-muted);font-size:10px;margin-top:2px;">' + sub + '</div>' : '')
             + '</div>';
 
-        const stats = '<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:0.75rem;margin-bottom:1rem;">'
+        const stats = '<div class="rsu-grid-cards" style="gap:0.75rem;margin-bottom:1rem;">'
             + statCard('SECTOR MÁS FUERTE', data.strongest ? data.strongest.sector : '—', data.strongest ? 'Avg score ' + data.strongest.avg_score : '', 'var(--color-accent)')
             + statCard('SECTOR MÁS DÉBIL', data.weakest ? data.weakest.sector : '—', data.weakest ? 'Avg score ' + data.weakest.avg_score : '', '#f23645')
             + statCard('SECTORES MONITORIZADOS', data.sectors_tracked, (data.sectors_empty ? data.sectors_empty + ' sin datos suficientes' : 'Todas con datos'), 'var(--color-secondary)')
@@ -628,7 +643,7 @@ async function loadSectorComposition(el) {
                 + '</div>';
         }
 
-        const trendRow = '<div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem;margin-top:1rem;">'
+        const trendRow = '<div class="rsu-grid-cards" style="gap:1rem;margin-top:1rem;">'
             + trendBox('TOP 5 SECTORES ACELERANDO', data.accelerating, 'var(--color-accent)')
             + trendBox('TOP 5 SECTORES DESACELERANDO', data.decelerating, '#f23645')
             + '</div>';
@@ -915,7 +930,7 @@ async function loadBreadth(el) {
             + '<div style="display:flex;justify-content:space-between;font-size:8px;color:var(--color-muted);margin-top:2px;"><span>0</span><span>30</span><span>50</span><span>70</span><span>100</span></div>'
             + '</div>'
 
-            + '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:14px;">'
+            + '<div class="rsu-grid-cards" style="gap:8px;margin-bottom:14px;">'
             + '<div style="background:var(--color-bg);border:1px solid var(--color-border);border-radius:6px;padding:8px;text-align:center;">'
             + '<div style="color:var(--color-muted);font-size:10px;">Tendencia</div>'
             + '<div style="color:' + trendColor + ';font-size:12px;font-weight:600;">' + data.trend + '</div>'
@@ -1592,7 +1607,7 @@ async function loadLiquidity(el) {
         const corrColor  = corr == null ? 'var(--color-muted)' : (corr >= 0.5 ? 'var(--color-accent)' : (corr <= -0.2 ? '#f23645' : '#ffb800'));
         const corrStr    = corr != null ? corr.toFixed(2) : 'N/D';
 
-        const cardsSection = '<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:1rem;padding:1rem;border-bottom:1px solid var(--color-border);">'
+        const cardsSection = '<div class="rsu-grid-cards" style="gap:1rem;padding:1rem;border-bottom:1px solid var(--color-border);">'
 
             + '<div style="background:var(--color-bg,#0a0a0a);border:1px solid var(--color-border);border-radius:var(--radius);padding:0.75rem;text-align:center;">'
             + '<div style="color:var(--color-muted);font-size:10px;margin-bottom:4px;">NET LIQUIDITY ' + tt('fed-net-liquidity') + '</div>'
@@ -1718,7 +1733,7 @@ async function loadFedMacro(el) {
         const wChgStr   = b.w_change != null ? (b.w_change > 0 ? '+' : '') + b.w_change + 'B' : 'N/D';
         const mChgStr   = b.m_change != null ? (b.m_change > 0 ? '+' : '') + b.m_change + 'B' : 'N/D';
 
-        const balSection = '<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:1rem;padding:1rem;border-bottom:1px solid var(--color-border);">'
+        const balSection = '<div class="rsu-grid-cards" style="gap:1rem;padding:1rem;border-bottom:1px solid var(--color-border);">'
 
             // Status
             + '<div style="background:var(--color-bg,#0a0a0a);border:1px solid ' + balColor + '44;border-radius:var(--radius);padding:0.75rem;text-align:center;">'
@@ -1808,7 +1823,7 @@ async function loadFedMacro(el) {
                 + '</div>';
         }).join('');
 
-        const yieldsSection = '<div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem;padding:1rem;border-bottom:1px solid var(--color-border);">'
+        const yieldsSection = '<div class="rsu-grid-panels" style="gap:1rem;padding:1rem;border-bottom:1px solid var(--color-border);">'
 
             // Curva visual
             + '<div>'
@@ -1901,7 +1916,7 @@ async function loadFedMacro(el) {
 
         const indicatorsSection = '<div style="padding:1rem;">'
             + '<div style="color:var(--color-muted);font-size:10px;letter-spacing:0.05em;margin-bottom:0.75rem;">INDICADORES MACROECONÓMICOS · FRED</div>'
-            + '<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:0.75rem;">'
+            + '<div class="rsu-grid-cards" style="gap:0.75rem;">'
             + fedFundsCard(fedFunds)
             + indCard('IPC YoY', cpi, 'Index', 'cpi-yoy')
             + indCard('DESEMPLEO', unemployment, '%', 'unemployment-rate')
