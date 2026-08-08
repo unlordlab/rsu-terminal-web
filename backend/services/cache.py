@@ -2,7 +2,9 @@ import time
 import json
 import sqlite3
 import os
+import functools
 import threading
+from contextlib import contextmanager
 from typing import Any, Optional
 
 DB_PATH = os.path.join(os.path.dirname(__file__), '..', 'cache.db')
@@ -31,6 +33,11 @@ class TTLCache:
     def __init__(self):
         self._store: dict = {}
         self._lock  = threading.Lock()
+        # Un candado por clave, para que solo uno recalcule cada dato a la vez
+        # (ver recomputing()). _key_waiters lleva la cuenta de interesados para
+        # poder retirar el candado cuando no queda ninguno.
+        self._key_locks: dict = {}
+        self._key_waiters: dict = {}
         self._init_db()
 
     def _conn(self):
@@ -105,6 +112,97 @@ class TTLCache:
             # Si falla la escritura compartida, seguimos teniendo L1 — no es
             # crítico, solo se pierde el compartir con otros workers.
             print(f"[Cache] No se pudo escribir '{key}' en la caché compartida: {e}")
+
+    @contextmanager
+    def recomputing(self, key: str, timeout: float = 25.0):
+        """Solo un hilo recalcula esta clave a la vez; los demás esperan a que
+        termine y se sirven del resultado que acaba de guardar.
+
+        El problema que resuelve: `_lock` protege el diccionario, no el
+        recálculo. Como el cálculo caro vive en el llamador y no aquí, cuando
+        caduca una clave popular cada petición que llega mientras se recalcula
+        dispara su propia descarga. Medido con 5 peticiones simultáneas a los
+        sectores con la caché vacía: 5 descargas reales en vez de 1. Con ~100
+        usuarios y el rate-limit de Yahoo como riesgo principal, eso multiplica
+        peticiones justo en el peor momento. Ver hallazgo #21 de Market.
+
+        Se ofrece como envoltorio y no como un `get_or_set(clave, funcion)`
+        a propósito: en este proyecto casi todos los llamadores deciden por su
+        cuenta QUÉ y CUÁNDO cachear -- varios no cachean los fallos, y otros
+        solo guardan si el resultado trae datos. Un `get_or_set` obligaría a
+        reescribir esa lógica en cada sitio; así cada uno conserva la suya y
+        solo se le añade el turno.
+
+        El `timeout` no es adorno: si quien está recalculando se atasca, es
+        preferible que los demás dupliquen el trabajo a que se queden colgados.
+        Al agotarse, se sigue adelante sin el turno.
+
+        Uso:
+            cached = cache.get(clave)
+            if cached: return cached
+            with cache.recomputing(clave):
+                cached = cache.get(clave)      # puede haberlo dejado otro
+                if cached: return cached
+                ...calcular...
+                cache.set(clave, resultado, ttl)
+        """
+        with self._lock:
+            lock = self._key_locks.get(key)
+            if lock is None:
+                lock = threading.Lock()
+                self._key_locks[key] = lock
+            self._key_waiters[key] = self._key_waiters.get(key, 0) + 1
+
+        adquirido = lock.acquire(timeout=timeout)
+        if not adquirido:
+            print(f"[Cache] '{key}' lleva más de {timeout:g}s recalculándose; "
+                  f"se sigue sin esperar turno")
+        try:
+            yield adquirido
+        finally:
+            if adquirido:
+                lock.release()
+            with self._lock:
+                n = self._key_waiters.get(key, 1) - 1
+                # El diccionario de candados se limpia cuando no queda nadie
+                # interesado en la clave; si no, crecería sin límite (una
+                # entrada por ticker consultado, para siempre).
+                if n <= 0:
+                    self._key_waiters.pop(key, None)
+                    self._key_locks.pop(key, None)
+                else:
+                    self._key_waiters[key] = n
+
+    def single_flight(self, clave):
+        """Decorador: evita que varias peticiones recalculen lo mismo a la vez.
+
+        Se prefiere a envolver el cuerpo de cada función con `recomputing()`
+        porque eso obligaría a reindentar bloques largos, que es donde se rompen
+        las cosas sin que se note. Así el cambio es una línea encima de la
+        función y su cuerpo no se toca: la función conserva su propio
+        `cache.get`/`cache.set` y, con él, su criterio sobre qué merece
+        guardarse (varias no cachean los fallos a propósito).
+
+        `clave` puede ser un texto fijo o una función de los mismos argumentos,
+        para las que cachean por parámetro (`market:sectors:1d`, `1w`...).
+        """
+        def decorador(fn):
+            @functools.wraps(fn)
+            def envoltorio(*args, **kwargs):
+                key = clave(*args, **kwargs) if callable(clave) else clave
+                cached = self.get(key)
+                if cached is not None:
+                    return cached
+                with self.recomputing(key):
+                    # Segunda mirada: mientras se esperaba turno, puede que
+                    # otro ya lo haya dejado hecho. Sin esto, el que espera
+                    # recalcularía igualmente y no se habría ganado nada.
+                    cached = self.get(key)
+                    if cached is not None:
+                        return cached
+                    return fn(*args, **kwargs)
+            return envoltorio
+        return decorador
 
     def delete(self, key: str):
         with self._lock:

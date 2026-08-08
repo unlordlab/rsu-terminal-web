@@ -5,6 +5,7 @@ import requests
 import sys, os
 from concurrent.futures import ThreadPoolExecutor
 from services.yf_pool import yf_executor
+from services.cache import cache
 from config import settings
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "..", "shared"))
 from time_utils import get_timestamp, session_fraction_elapsed  # noqa: E402
@@ -86,6 +87,7 @@ def _fetch_ticker(item):
             return fallback
         return {"ticker": item["short"], "name": item["name"], "price": None, "change": None, "pct": None, "ok": False, "error": str(e)}
 
+@cache.single_flight("market:indices")
 def get_indices():
     from services.cache import cache, TTL
     cached = cache.get("market:indices")
@@ -181,6 +183,7 @@ FEAR_GREED_COMPONENTS = [
     {"key": "safe_haven_demand",     "label": "Demanda de Refugio",          "desc": "Rendimiento acciones vs bonos (20 días)"},
 ]
 
+@cache.single_flight("market:fear_greed")
 def get_fear_greed():
     # Caché de 15 min. No la tenía: cada carga de la página Mercado golpeaba
     # la API de CNN, y con ~100 usuarios eso son cientos de peticiones diarias
@@ -346,6 +349,7 @@ def _fetch_fx(item):
         return fallback
     return {"ticker": item["short"], "name": item["name"], "ok": False, "error": "Sin datos"}
 
+@cache.single_flight("market:forex")
 def get_forex():
     from services.cache import cache, TTL
     cached = cache.get("market:forex")
@@ -443,6 +447,7 @@ def _fetch_commodity(item):
             return fallback
         return {"ticker": item["short"], "name": item["name"], "ok": False, "error": str(e)}
 
+@cache.single_flight("market:commodities")
 def get_commodities():
     from services.cache import cache, TTL
     cached = cache.get("market:commodities")
@@ -577,6 +582,7 @@ def _amplitud_rsp_spy(rows):
     return {"rsp": rsp, "spy": spy, "spread": spread, "lectura": lectura}
 
 
+@cache.single_flight(lambda period="1d": f"market:sectors:{period}")
 def get_sectors(period: str = "1d"):
     from services.cache import cache, TTL
     cached = cache.get(f"market:sectors:{period}")
@@ -639,6 +645,7 @@ def _fetch_vix_point(item):
     except Exception:
         return {"label": item["label"], "value": None, "ok": False}
 
+@cache.single_flight("market:vix")
 def get_vix_term_structure():
     from services.cache import cache, TTL
     cached = cache.get("market:vix")
@@ -976,6 +983,7 @@ def _fetch_reddit_titles_via_rss():
         print(f"[RedditRSS] Falló: {type(e).__name__}: {e}")
         return []
 
+@cache.single_flight("market:reddit")
 def get_reddit_pulse():
     from services.cache import cache, TTL
     cached = cache.get("market:reddit")
@@ -1109,6 +1117,7 @@ def _reddit_fallback():
 
 BRIEFING_GIST_ID = "715ee0c4e571517c11fa65c5c2376c34"
 
+@cache.single_flight("market:briefing")
 def get_nightly_briefing():
     from services.cache import cache, TTL
     cached = cache.get("market:briefing")
@@ -1228,6 +1237,7 @@ def _fetch_fred_series(series_id, api_key, limit=5):
 # en Wikipedia/CIBC/arXiv sobre el CAPE ratio.
 CAPE_THRESHOLDS = {"bajo": 15, "normal": 25, "elevado": 30}
 
+@cache.single_flight("market:shiller_cape")
 def get_shiller_cape() -> dict:
     from services.cache import cache
     cached = cache.get("market:shiller_cape")
@@ -1387,6 +1397,7 @@ def get_shiller_cape() -> dict:
         return {"ok": False, "error": str(e)}
 
 
+@cache.single_flight("market:spreads")
 def get_credit_spreads():
     from services.cache import cache, TTL
     cached = cache.get("market:spreads")
@@ -1424,6 +1435,7 @@ def get_credit_spreads():
     cache.set("market:spreads", result, TTL["spreads"])
     return result
 
+@cache.single_flight('market:fed_macro')
 def get_fed_macro() -> dict:
     from services.cache import cache
     cached = cache.get('market:fed_macro')
@@ -1597,6 +1609,7 @@ def get_fed_macro() -> dict:
 
 # ── LIQUIDEZ (NET LIQUIDITY + M2 + OVERLAY SPX) ───────────────────────────────
 
+@cache.single_flight('market:liquidity')
 def get_liquidity() -> dict:
     """
     Sigue la liquidez del sistema mediante dos métricas complementarias:
@@ -1840,6 +1853,7 @@ def _check_sectors_above_sma50_batch(tickers: list) -> list:
         return [_check_sector_above_sma50(sym) for sym in tickers]
 
 
+@cache.single_flight("market:breadth")
 def get_market_breadth():
     """
     Amplitud de Mercado (unificado): SMA50/200, Golden/Death Cross, RSI(14) del
@@ -2115,6 +2129,7 @@ def get_market_breadth():
         }
 
 
+@cache.single_flight("market:ad_line")
 def get_advance_decline():
     """
     Línea Advance/Decline del NYSE (^ADV / ^DEC vía Yahoo Finance).
@@ -2202,6 +2217,7 @@ def get_advance_decline():
 
 # ── VIX NIVELES (gauge + histórico diario) ────────────────────────────────────
 
+@cache.single_flight("market:vix_levels")
 def get_vix_levels():
     """
     VIX spot con gráfico diario de 6 meses y gauge de 5 zonas:
@@ -2304,6 +2320,7 @@ def _extract_crypto_pct(item, df):
         return {"ticker": item["symbol"], "name": item["name"], "ok": False}
 
 
+@cache.single_flight("market:crypto")
 def get_crypto_prices():
     from services.cache import cache, TTL
     cached = cache.get("market:crypto")
@@ -2422,6 +2439,7 @@ def get_crypto_relative_strength(top_n: int = 5):
     return result
 
 
+@cache.single_flight("market:crypto_fg")
 def get_crypto_fear_greed():
     """Crypto Fear & Greed Index vía alternative.me (independiente del Fear & Greed de acciones)."""
     from services.cache import cache, TTL
