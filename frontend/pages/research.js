@@ -78,6 +78,7 @@ export async function render(container) {
             renderInsiderVolumeChart(data);
             renderCryptoChart(data);
             renderRsuFlowChart(data);
+            loadScoreEvolucion(data.ticker);
         } catch(e) {
             result.innerHTML = errorMessage(e.message);
         } finally {
@@ -418,6 +419,63 @@ function rsuScoreSection(score, scoreColor) {
                 + '</div>';
         }).join('')
         + '</div>'
+        // Hueco para la evolución: se rellena aparte, tras su propia petición,
+        // para que un problema del histórico no retrase ni rompa el score.
+        + '<div id="rsu-score-evolucion"></div>'
+        + '</div>';
+}
+
+// Evolución del RSU Score del ticker. El score se guarda desde que alguien
+// consulta la ficha, así que empieza vacío para cada valor nuevo y se llena a
+// razón de un punto por día consultado.
+async function loadScoreEvolucion(ticker) {
+    const el = document.getElementById('rsu-score-evolucion');
+    if (!el) return;
+    let h;
+    try {
+        // Mismo patrón que el resto del fichero: aquí no hay authHeader(),
+        // la cabecera se construye a mano.
+        const token = sessionStorage.getItem('rsu_token');
+        const res = await fetch('/api/v1/research/score-tracking/' + encodeURIComponent(ticker),
+                                { headers: token ? { 'Authorization': 'Bearer ' + token } : {} });
+        h = await res.json();
+    } catch (e) {
+        // Silencioso de cara al usuario -- esto es contexto, no el dato
+        // principal -- pero al log sí: la primera versión llamaba a una
+        // función que no existe en este fichero y el catch se tragó el
+        // ReferenceError, dejando el hueco vacío sin ninguna pista.
+        console.warn('[Research] No se pudo cargar la evolución del score:', e);
+        return;
+    }
+    if (!h) return;
+
+    if (!h.ok) {
+        const n = h.dias || 0;
+        el.innerHTML = '<div style="margin-top:0.75rem;padding-top:0.75rem;border-top:1px solid var(--color-border);'
+            + 'color:var(--color-muted);font-size:9px;">'
+            + 'Evolución del score: ' + n + ' de ' + (h.minimo || 5) + ' días registrados. '
+            + 'Se guarda un punto cada día que consultas este valor.'
+            + '</div>';
+        return;
+    }
+
+    // Escala fija 0-100: el score vive en ese rango y dejar que la línea se
+    // reescale sola haría parecer enorme un movimiento de tres puntos.
+    const pts = h.serie.map((p, i) =>
+        (i / (h.serie.length - 1) * 100).toFixed(2) + ',' + (30 - p.score / 100 * 28).toFixed(2)
+    ).join(' ');
+    const col = h.cambio > 0 ? 'var(--color-accent)' : h.cambio < 0 ? '#f23645' : 'var(--color-muted)';
+    const signo = h.cambio > 0 ? '+' : '';
+
+    el.innerHTML = '<div style="margin-top:0.75rem;padding-top:0.75rem;border-top:1px solid var(--color-border);">'
+        + '<div style="display:flex;justify-content:space-between;font-size:9px;color:var(--color-muted);margin-bottom:2px;">'
+        + '<span>EVOLUCIÓN DEL SCORE · ' + h.n + ' días registrados</span>'
+        + '<span style="color:' + col + ';">' + signo + h.cambio + ' desde el registro anterior'
+        + ' <span style="color:var(--color-muted);">· entre ' + h.min + ' y ' + h.max + '</span></span>'
+        + '</div>'
+        + '<svg viewBox="0 0 100 32" preserveAspectRatio="none" style="width:100%;height:30px;display:block;">'
+        + '<polyline points="' + pts + '" fill="none" stroke="' + col + '" stroke-width="0.9" vector-effect="non-scaling-stroke"/>'
+        + '</svg>'
         + '</div>';
 }
 

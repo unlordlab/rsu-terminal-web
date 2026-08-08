@@ -179,4 +179,52 @@ def obtener_historial(limit: int = 100) -> list:
     return [dict(r) for r in rows]
 
 
+def historial_ticker(ticker: str, dias: int = 180, minimo: int = 5) -> dict:
+    """Evolucion del RSU Score de UN ticker, para pintarla en su ficha.
+
+    Convierte un numero instantaneo en una tendencia: un 63 no dice lo mismo
+    si viene de 45 que si viene de 78.
+
+    `minimo` por la misma razon que en el historico de sentimiento: con dos o
+    tres puntos, una linea aparenta una tendencia que no existe. Por debajo se
+    devuelve cuantos dias van, para que la ficha pueda decirlo en vez de
+    dibujar algo que no sostiene nada.
+
+    OJO CON COMO SE LLENA ESTO: el score se registra cuando alguien consulta
+    el ticker y la cache esta vacia -- una vez al dia como mucho, y solo de
+    los tickers que de verdad se miran. Un ticker que nadie consulta nunca
+    tendra historial, y eso es correcto: no hay ningun proceso recorriendo
+    todo el universo, ni tiene por que haberlo.
+    """
+    conn = _conn()
+    try:
+        filas = conn.execute(
+            "SELECT fecha, score, label, precio_entrada, "
+            "resultado_5d, resultado_20d, resultado_60d "
+            "FROM score_tracked WHERE ticker = ? ORDER BY fecha DESC LIMIT ?",
+            (ticker.upper(), dias)
+        ).fetchall()
+    except Exception:
+        return {"ok": False, "dias": 0}
+    finally:
+        conn.close()
+
+    filas = [dict(f) for f in reversed(filas)]     # cronologico, para pintar
+    if len(filas) < minimo:
+        return {"ok": False, "dias": len(filas), "minimo": minimo}
+
+    scores = [f["score"] for f in filas]
+    actual, previo = scores[-1], scores[-2]
+    return {
+        "ok": True,
+        "serie": [{"fecha": f["fecha"], "score": f["score"], "label": f["label"]} for f in filas],
+        "actual": actual,
+        "cambio": actual - previo,               # respecto al ultimo registro, no a ayer
+        "min": min(scores), "max": max(scores), "n": len(scores),
+        # Retornos ya cumplidos, si el job diario los ha rellenado. Suelen
+        # faltar en los registros recientes: 20 sesiones no han pasado aun.
+        "con_resultado": sum(1 for f in filas if f["resultado_20d"] is not None),
+    }
+
+
 init_db()

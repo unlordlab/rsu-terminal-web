@@ -19,6 +19,16 @@ async def score_tracking_resumen(user=Depends(verify_token)):
     from services.rsu_score_tracking_service import obtener_resumen_por_bucket, obtener_historial
     return {"ok": True, "resumen": obtener_resumen_por_bucket(), "historial": obtener_historial(100)}
 
+
+# Va DESPUES de /score-tracking/resumen: FastAPI casa por orden de registro,
+# asi que la ruta literal gana y "resumen" no se interpreta como un ticker.
+@router.get("/score-tracking/{ticker}")
+async def score_tracking_ticker(ticker: str, user=Depends(verify_token)):
+    if not _TICKER_RE.match(ticker.upper()):
+        return {"ok": False, "error": "Ticker inválido"}
+    from services.rsu_score_tracking_service import historial_ticker
+    return historial_ticker(ticker)
+
 @router.get("/{ticker}")
 async def research(ticker: str, user=Depends(verify_token)):
     if not _TICKER_RE.match(ticker.upper()):
