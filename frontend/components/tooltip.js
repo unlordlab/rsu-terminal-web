@@ -404,6 +404,17 @@ CÓMO LEERLO:
 Picos repentinos de Buzz en un ticker que normalmente no aparece en el ranking suelen coincidir con alguna noticia, catalizador, o movimiento de precio reciente que ha captado la atención retail — vale la pena investigar qué lo está causando antes de actuar.`
     },
 
+    "sentimiento-historico": {
+        title: "Histórico propio de sentimiento",
+        short: "El registro que la terminal guarda cada día para poder decir si el valor de hoy es alto o bajo.",
+        long: `Ni CNN ni CBOE publican gratis el histórico de sus indicadores: dan el valor de hoy y poco más. Un 38 de Fear & Greed o un 0,76 de put/call, sueltos, no dicen si eso es mucho o poco.
+
+Por eso la terminal guarda cada sesión su propia copia de los dos, al cierre. Con el tiempo se acumula una referencia con la que comparar: la línea muestra por dónde se ha movido, y el texto de al lado dice qué porcentaje de los días recientes quedan por debajo del valor de hoy.
+
+EMPIEZA VACÍO:
+El registro arranca el día que se activa; no hay forma de recuperar el pasado, así que no se inventa. Hasta que haya suficientes sesiones guardadas verás cuántas llevas en vez de un gráfico, porque una línea de cuatro puntos aparenta una tendencia que no existe.`
+    },
+
     "put-call-ratio": {
         title: "Ratio Put/Call",
         short: "Cuantas opciones de venta se negocian por cada opcion de compra.",

@@ -61,6 +61,20 @@ def init_db():
             credit_spread     REAL
         )
     ''')
+    # Columnas añadidas después de que la tabla ya existiera en producción, así
+    # que van como ALTER TABLE idempotente -- mismo patrón que users_service.
+    #
+    # Por qué hacen falta: el Fear & Greed y el ratio put/call solo dan el valor
+    # de HOY. Un 0,76 de put/call o un 38 de Fear & Greed no dicen nada sin
+    # saber si eso es alto o bajo para el mercado actual, y ninguna de las dos
+    # fuentes ofrece histórico gratis (CNN da 4 puntos sueltos y CBOE solo el
+    # día). Guardándolos aquí, junto al resto de la foto diaria, el contexto se
+    # construye solo. Ver hallazgos #30 y #31 de la auditoría de Market.
+    for columna in ("fear_greed REAL", "put_call REAL"):
+        try:
+            conn.execute(f"ALTER TABLE snapshot_mercado ADD COLUMN {columna}")
+        except sqlite3.OperationalError:
+            pass   # ya existía
     conn.execute('''
         CREATE TABLE IF NOT EXISTS snapshot_cartera (
             fecha               TEXT PRIMARY KEY,
@@ -124,14 +138,43 @@ def _maybe_write_mercado(conn, fecha, breadth_row):
         print(f"[Snapshots] snapshot_mercado de {fecha} incompleto, se reintenta: {type(e).__name__}: {e}")
         return
 
+    # Fear & Greed y put/call van en su propio try: son las dos piezas mas
+    # fragiles de la fila (una depende de CNN y la otra de raspar la pagina de
+    # CBOE). Si fallan, la fila se guarda igual con el resto -- perder la foto
+    # entera del dia por no tener uno de estos dos seria un mal negocio, y
+    # ademas el hueco queda como NULL, que es la verdad.
+    #
+    # Cuando se captura: la fecha sale del scan nocturno, asi que una fecha
+    # nueva no aparece hasta que ese scan publica, ya cerrado el mercado. O
+    # sea, se guarda el valor de CIERRE y no uno de media sesion -- que es lo
+    # que hace comparables unos dias con otros. Si algun dia la fecha pasara a
+    # venir de otro sitio, habria que revisar esto.
+    fg = pc = None
+    try:
+        from services.market_service import get_fear_greed
+        d = get_fear_greed()
+        if d.get("ok"):
+            fg = d.get("score")
+    except Exception as e:
+        print(f"[Snapshots] sin Fear & Greed para {fecha}: {type(e).__name__}")
+    try:
+        from services.putcall_service import get_put_call_ratio
+        d = get_put_call_ratio()
+        if d.get("ok"):
+            pc = d.get("total")
+    except Exception as e:
+        print(f"[Snapshots] sin put/call para {fecha}: {type(e).__name__}")
+
     conn.execute(
         "INSERT OR IGNORE INTO snapshot_mercado "
         "(fecha, advances, declines, pct_above_sma50, new_highs, new_lows, "
-        "algoritmo_score, algoritmo_estado, vix, vix_vix3m, credit_spread) "
-        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        "algoritmo_score, algoritmo_estado, vix, vix_vix3m, credit_spread, "
+        "fear_greed, put_call) "
+        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
         (fecha, breadth_row.get("advances"), breadth_row.get("declines"),
          breadth_row.get("pct_above_sma50"), breadth_row.get("new_highs"), breadth_row.get("new_lows"),
-         algo.get("score"), algo.get("estado"), vix, vix_ratio, algo.get("credit_spread_valor"))
+         algo.get("score"), algo.get("estado"), vix, vix_ratio, algo.get("credit_spread_valor"),
+         fg, pc)
     )
     conn.commit()
     print(f"[Snapshots] snapshot_mercado guardado para {fecha}")
@@ -260,6 +303,53 @@ def filas_rs_sector(fechas: list) -> dict:
         return out
     finally:
         conn.close()
+
+
+def historico_sentimiento(dias: int = 180, minimo: int = 15) -> dict:
+    """Serie diaria de Fear & Greed y ratio put/call, para ponerlas en contexto.
+
+    `minimo` no es un capricho: con cuatro puntos, una linea de tendencia
+    engana mas que informa -- se ve una "tendencia" que es ruido. Por debajo de
+    ese numero se devuelve `ok: False` con cuantos dias van, para que la
+    pantalla pueda decir la verdad ("aun no hay suficiente historico") en vez
+    de pintar un grafico que no sostiene nada.
+
+    El historico empieza el dia que esto se despliega: ni CNN ni CBOE regalan
+    el pasado, asi que no hay nada que rellenar hacia atras y no se intenta.
+    """
+    conn = _conn()
+    try:
+        filas = conn.execute(
+            "SELECT fecha, fear_greed, put_call FROM snapshot_mercado "
+            "WHERE fear_greed IS NOT NULL OR put_call IS NOT NULL "
+            "ORDER BY fecha DESC LIMIT ?", (dias,)
+        ).fetchall()
+    except sqlite3.OperationalError:
+        return {"ok": False, "dias": 0, "error": "El historico aun no esta creado"}
+    finally:
+        conn.close()
+
+    filas = list(reversed(filas))          # cronologico, para pintar
+    fg = [{"fecha": f["fecha"], "valor": f["fear_greed"]} for f in filas if f["fear_greed"] is not None]
+    pc = [{"fecha": f["fecha"], "valor": f["put_call"]} for f in filas if f["put_call"] is not None]
+
+    if len(fg) < minimo and len(pc) < minimo:
+        return {"ok": False, "dias": max(len(fg), len(pc)), "minimo": minimo}
+
+    def _resumen(serie):
+        if len(serie) < minimo:
+            return None
+        vals = [p["valor"] for p in serie]
+        actual = vals[-1]
+        # Percentil del valor de hoy dentro de lo guardado: es la lectura que
+        # de verdad da contexto ("esto es alto para lo normal ultimamente"),
+        # mas que la media.
+        pct = sum(1 for v in vals if v < actual) / len(vals) * 100
+        return {"serie": serie, "actual": actual, "percentil": round(pct),
+                "min": min(vals), "max": max(vals), "n": len(vals)}
+
+    return {"ok": True, "fear_greed": _resumen(fg), "put_call": _resumen(pc),
+            "dias": len(filas)}
 
 
 init_db()

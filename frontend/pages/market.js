@@ -327,17 +327,58 @@ function putCallStrip(pc) {
         + '</div>';
 }
 
+// Histórico propio de sentimiento. Ni CNN ni CBOE regalan el pasado, así que
+// la terminal se lo guarda cada sesión; eso significa que empieza vacío y se
+// llena con el tiempo. Mientras no haya suficiente, se dice — callar haría
+// pensar que está roto.
+function sentimientoHistorico(h) {
+    if (!h) return '';
+    if (!h.ok) {
+        const n = h.dias || 0;
+        return '<div style="width:100%;margin-top:0.75rem;color:var(--color-muted);font-size:9px;">'
+            + 'Histórico propio en construcción: ' + n + ' de ' + (h.minimo || 15)
+            + ' sesiones guardadas. A partir de ahí se podrá ver si el valor de hoy es alto o bajo.'
+            + '</div>';
+    }
+    const linea = (etiqueta, d, dec) => {
+        if (!d) return '';
+        // Minigráfico en SVG: son 15-180 puntos y una sola línea, así que no
+        // compensa arrastrar Chart.js hasta aquí.
+        const vals = d.serie.map(p => p.valor);
+        const min = Math.min(...vals), max = Math.max(...vals);
+        const rango = (max - min) || 1;
+        const pts = vals.map((v, i) =>
+            (i / (vals.length - 1) * 100).toFixed(2) + ',' + (26 - (v - min) / rango * 24).toFixed(2)
+        ).join(' ');
+        return '<div style="margin-top:8px;">'
+            + '<div style="display:flex;justify-content:space-between;font-size:9px;color:var(--color-muted);">'
+            + '<span>' + etiqueta + '</span>'
+            + '<span>hoy ' + d.actual.toFixed(dec) + ' · más alto que el ' + d.percentil + '% de los últimos ' + d.n + ' días</span>'
+            + '</div>'
+            + '<svg viewBox="0 0 100 28" preserveAspectRatio="none" style="width:100%;height:26px;display:block;">'
+            + '<polyline points="' + pts + '" fill="none" stroke="var(--color-accent)" stroke-width="0.8" vector-effect="non-scaling-stroke"/>'
+            + '</svg></div>';
+    };
+    return '<div style="width:100%;margin-top:1rem;padding-top:0.75rem;border-top:1px solid var(--color-border);">'
+        + '<div style="color:var(--color-muted);font-size:10px;letter-spacing:0.05em;">HISTÓRICO PROPIO ' + tt('sentimiento-historico') + '</div>'
+        + linea('Fear &amp; Greed', h.fear_greed, 0)
+        + linea('Ratio put/call', h.put_call, 2)
+        + '</div>';
+}
+
 async function loadFearGreed(el) {
     el.innerHTML = widgetShell('FEAR & GREED', 'CNN Index', loading());
     try {
-        // En paralelo: si el put/call falla o tarda, no debe impedir que se
-        // pinte el Fear & Greed, que es lo principal de este widget.
-        const [res, resPc] = await Promise.all([
+        // En paralelo: si el put/call o el histórico fallan o tardan, no deben
+        // impedir que se pinte el Fear & Greed, que es lo principal del widget.
+        const [res, resPc, resH] = await Promise.all([
             fetch('/api/v1/market/fear-greed', { headers: authHeader() }),
             fetch('/api/v1/market/put-call',   { headers: authHeader() }).catch(() => null),
+            fetch('/api/v1/market/sentimiento-historico', { headers: authHeader() }).catch(() => null),
         ]);
         const data = await res.json();
         const pc   = resPc ? await resPc.json().catch(() => null) : null;
+        const hist = resH  ? await resH.json().catch(() => null)  : null;
         if (!data.ok) throw new Error(data.error || 'Sin datos');
         const color   = fgColor(data.score);
         const periodRow = (label, val) =>
@@ -375,6 +416,7 @@ async function loadFearGreed(el) {
                 + '</div>'
             ) : '')
             + putCallStrip(pc)
+            + sentimientoHistorico(hist)
             + '</div>';
         el.innerHTML = widgetShell('FEAR & GREED ' + tt('fear-greed'), 'CNN Index', content, data.timestamp);
     } catch(e) {

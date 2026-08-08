@@ -51,6 +51,12 @@ async def earnings_ticker(ticker: str, user=Depends(verify_token)):
 async def fear_greed(user=Depends(verify_token)):
     return get_fear_greed()
 
+@router.get("/sentimiento-historico")
+async def sentimiento_historico(user=Depends(verify_token)):
+    from services.snapshots_service import historico_sentimiento
+    return historico_sentimiento()
+
+
 @router.get("/put-call")
 async def put_call(user=Depends(verify_token)):
     from services.putcall_service import get_put_call_ratio
