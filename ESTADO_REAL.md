@@ -481,7 +481,7 @@ alimenta el modal "Resumen de Mercado Diario", aunque sea un script aparte.
 | ❓ | 24 | 🟢 | Roadmap con registro de aciertos | *sin comprobar* |
 | ❓ | 25 | 🟢 | Página pública de landing | *sin comprobar* |
 
-## Research  (26 hallazgos — ❌1 · ✅17 · ❓8)
+## Research  (27 hallazgos — ❌1 · ✅18 · ❓8 · ⬜0)
 
 | | # | Sev | Hallazgo | Estado / evidencia |
 |-|---|-----|----------|--------------------|
@@ -511,6 +511,8 @@ alimenta el modal "Resumen de Mercado Diario", aunque sea un script aparte.
 | ❓ | 24 | 🟢 | Sección "Qué dice RSU" | *sin comprobar* |
 | ❓ | 25 | 🟢 | Histórico del RSU Score | *sin comprobar* |
 | ❓ | 26 | 🟢 | Alertas de cambio de fase | *sin comprobar* |
+| ✅ | 27 | 🔵 | **Peticion del usuario, no de la auditoria**: fuera las senales de rotacion y absorcion, y en su lugar un Indicador RSU de flujo de dinero debajo del grafico | HECHO 07/08. El usuario no les veia utilidad a las dos senales. No eran solo frontend: cada research llamaba a `get_turnover_comparison()` y `get_absorption_signal()`, asi que retirarlas ahorra **2 descargas de 180 dias por consulta en frio**. `turnover_service.py` se borra entero (Research era su unico consumidor); `shared/absorption.py` se queda porque el scan nocturno del Scanner lo usa. **El indicador nuevo se midio ANTES de construirlo**, para no acabar dejando puesto un oscilador bonito que no predice nada. Referencia: el L3 Banker Fund Flow, que pese al nombre **no usa volumen en ningun momento** -- su formula real es un estocastico de 27 sesiones doblemente suavizado contra otro de 34, con una constante 1,032 sin justificar (verificado en dos fuentes independientes del codigo publicado). Comparados los dos sobre 62 valores y 3 anos, mismos 33.967 dias-ticker: **la mecanica de cruces del original no ordena nada** -- sus senales de salida rendian MEJOR que las de entrada (3,15% vs 2,44% a 20 sesiones) -- y por niveles su patron no es monotono (solo destaca el quintil alto) con correlacion de rangos -0,006. La variante con volumen si ordena a 3 meses, de forma monotona por quintiles: 4,98 / 5,42 / 6,11 / 6,50 / 7,54%, correlacion +0,023. **Pero la magnitud es modesta**: 2,56 puntos entre quintil alto y bajo, y a 20 sesiones no predice nada. Por eso se construye como indicador de CONTEXTO, sin senales de compra/venta, y el tooltip lo dice en esos terminos. Caveats anotados: las ventanas de 60 dias se solapan mucho, asi que la significancia aparente esta inflada, y 3 anos mayormente alcistas no son un juicio completo. Sale del mismo historico de 2 anos que `_get_technical_levels()` ya descarga, asi que **no cuesta ninguna peticion extra**. Verificado en el navegador y con 7 valores reales, discriminando bien (TSLA 15,2 saliendo; AAPL 95,6 entrando; NVDA 64 neutro). 4 tests nuevos, comprobados quitando el volumen al calculo a proposito. **De paso**, tambien a peticion del usuario, Valoracion/Rentabilidad/Crecimiento suben por encima del grafico y esa fila pasa a usar la rejilla que se recoloca sola |
+
 
 ## Rsrw  (22 hallazgos — ❌0 · ✅20 · ❓2)
 
