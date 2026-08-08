@@ -17,6 +17,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "..", "shared")
 from weinstein_phases import _ema_slope, classify_phase_debounced, classify_phase_weekly  # noqa: E402
 from time_utils import get_timestamp  # noqa: E402
 from rsu_flow import calcular_flujo, zona as zona_flujo  # noqa: E402
+from l3_banker import calcular_l3  # noqa: E402
 from gist_ids import (  # noqa: E402
     SECTOR_MEDIANS_GIST_ID,
     SECTOR_MEDIANS_GIST_FILE,
@@ -1773,25 +1774,46 @@ def _get_technical_levels(ticker: str) -> dict:
         phase_label  = phase_info["phase_label"]
         early_reversal = (slope10_dir == "alcista" and slope20_dir == "alcista" and price > ema20)
 
-        # Indicador RSU de flujo de dinero. Sale de este MISMO `hist` de 2 años
-        # que ya está descargado aquí, así que no cuesta ninguna petición extra.
+        # Indicador RSU: velas + oscilador L3, para pintarlos en dos paneles
+        # que comparten eje. Sale de este MISMO `hist` de 2 años que ya está
+        # descargado aquí, así que no cuesta ninguna petición extra.
         try:
-            flujo_serie = calcular_flujo(hist)
-            vivos = flujo_serie.dropna()
-            if len(vivos) >= 20:
-                # Solo se enseña el último medio año; el resto del histórico
-                # existe para poder situar el dato, no para pintarlo.
-                recorte = vivos.tail(126)
-                flujo_actual = round(float(vivos.iloc[-1]), 1)
+            l3 = calcular_l3(hist)
+            flujo_serie = calcular_flujo(hist)          # el de volumen, aparte
+            listo = l3.dropna(subset=["fundtrend", "linea", "estado"])
+            if len(listo) >= 60:
+                # Un año de sesiones, para que cuadre con lo que enseña el
+                # gráfico de TradingView de arriba por defecto.
+                recorte = listo.tail(252)
+                barras = hist.loc[recorte.index]
+                flujo_vivo = flujo_serie.dropna()
+                flujo_actual = round(float(flujo_vivo.iloc[-1]), 1) if len(flujo_vivo) else None
                 rsu_flow = {
-                    "ok":     True,
-                    "valor":  flujo_actual,
-                    "zona":   zona_flujo(flujo_actual),
-                    "fechas": [d.strftime("%Y-%m-%d") for d in recorte.index],
-                    "serie":  [round(float(v), 1) for v in recorte],
+                    "ok": True,
+                    # Flujo con volumen: cifra de contexto al margen del L3,
+                    # que no usa volumen en ningún momento.
+                    "flujo_volumen": flujo_actual,
+                    "zona_volumen":  zona_flujo(flujo_actual),
+                    "estado_actual": recorte["estado"].iloc[-1],
+                    "velas": [
+                        {"time": d.strftime("%Y-%m-%d"),
+                         "open": round(float(o), 2), "high": round(float(h), 2),
+                         "low": round(float(l), 2), "close": round(float(c), 2)}
+                        for d, o, h, l, c in zip(barras.index, barras["Open"], barras["High"],
+                                                  barras["Low"], barras["Close"])
+                    ],
+                    "osc": [
+                        {"time": d.strftime("%Y-%m-%d"),
+                         "value": round(float(v), 2), "estado": e}
+                        for d, v, e in zip(recorte.index, recorte["fundtrend"], recorte["estado"])
+                    ],
+                    "linea": [
+                        {"time": d.strftime("%Y-%m-%d"), "value": round(float(v), 2)}
+                        for d, v in zip(recorte.index, recorte["linea"])
+                    ],
                 }
             else:
-                rsu_flow = {"ok": False, "error": "Histórico insuficiente para situar el flujo"}
+                rsu_flow = {"ok": False, "error": "Histórico insuficiente para el indicador"}
         except Exception as e:
             rsu_flow = {"ok": False, "error": str(e)}
 

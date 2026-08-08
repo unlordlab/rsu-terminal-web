@@ -2175,19 +2175,32 @@ Comparar rentabilidad dentro del mismo sector es más significativo que comparar
     },
 
     "rsu-flow": {
-        title: "Indicador RSU — Flujo de dinero",
-        short: "Si últimamente ha entrado o salido más dinero de lo normal en este valor.",
-        long: `Cada día, si el precio cierra en la parte alta de su rango se interpreta como presión compradora, y si cierra en la parte baja, como vendedora. Esa presión se pondera por el volumen —una sesión muy negociada pesa más que una tranquila— y se acumula a lo largo del último mes.
+        title: "Indicador RSU",
+        short: "Mide la fuerza compradora del valor y la pinta como barras de colores bajo el precio.",
+        long: `Compara dos lecturas del mismo valor: una rapida, que reacciona pronto a los cambios de fuerza, y otra mas lenta que hace de referencia. De esa comparacion salen los colores de las barras.
 
-CÓMO SE LEE:
-El resultado va de 0 a 100 y se compara con el propio valor durante el último año. Por encima de 80 está entrando más dinero de lo que es habitual en él; por debajo de 20, está saliendo. En medio, ritmo normal.
+QUE SIGNIFICA CADA COLOR:
+Verde, la lectura rapida va por encima de la lenta: hay fuerza compradora. Roja, va por debajo: domina la presion vendedora. Azul, la fuerza esta cayendo con rapidez aunque siga arriba. Gris, esta debil pero ya no empeora.
 
-Es una escala relativa a cada acción, no absoluta: un 80 aquí y un 80 en otra empresa no significan la misma cantidad de dinero, sino la misma rareza respecto a su propia historia.
+Y dos colores que aparecen pocas veces al ano, que son los que conviene mirar:
+Amarilla, la lectura rapida cruza al alza estando la zona baja. Violeta, la cruza a la baja estando arriba del todo.
 
-PARA QUÉ SIRVE Y PARA QUÉ NO:
-Da contexto sobre si el interés por el valor está creciendo o enfriándose, algo que el precio por sí solo no cuenta. No es una señal de compra ni de venta, y no conviene usarlo solo: mirando tres años de datos, los valores con el flujo más alto rindieron por delante de los de flujo más bajo a tres meses vista, pero por poco margen, y a tres semanas la diferencia desaparece.
+LAS DOS BANDAS:
+La linea amarilla marca la zona baja y la violeta la zona alta. Son las referencias con las que se lee el indicador: abajo se buscan senales de giro, arriba se valora si el recorrido se esta agotando.
 
-Tampoco ve órdenes reales ni sabe quién compra: deduce la presión a partir del precio y el volumen, que es información pública.`
+QUE NO ES:
+No es una orden de compra ni de venta, y por si solo no anticipa el precio: es una lectura de fuerza que cobra sentido junto a lo que hace el grafico de arriba. Tampoco usa el volumen — se calcula solo con el precio. Para el volumen esta la cifra de al lado.`
+    },
+
+    "rsu-flow-volumen": {
+        title: "Flujo con volumen",
+        short: "Si en las ultimas semanas ha entrado o salido mas dinero de lo normal en este valor.",
+        long: `Complementa a las barras de colores, que solo miran el precio. Aqui si pesa el volumen: cada dia se mira si el precio cierra en la parte alta o baja de su rango, se pondera por lo negociado ese dia y se acumula durante el ultimo mes.
+
+COMO SE LEE:
+Va de 0 a 100 comparando con el propio valor durante el ultimo ano. Por encima de 80 esta entrando mas dinero de lo habitual en el; por debajo de 20, esta saliendo. Es una escala relativa a cada accion: un 80 aqui y un 80 en otra empresa no son la misma cantidad de dinero, sino la misma rareza frente a su propia historia.
+
+Da contexto, no senales. Deduce la presion a partir del precio y el volumen, que es informacion publica; no ve ordenes reales ni sabe quien compra.`
     },
 
     "sector-growth": {

@@ -16,11 +16,12 @@ import { errorMessage, esc, safeUrl, fmtFecha } from '/core/ui.js';
 // DOM y la referencia que hubiéramos guardado apuntaría a un elemento
 // huérfano. Chart.getChart(id) resuelve siempre el gráfico realmente vivo.
 const _RESEARCH_CHART_IDS = [
-    'crypto-chart', 'sparkline-chart', 'rsu-flow-chart',
+    'crypto-chart', 'sparkline-chart',
     'earnings-chart', 'income-statement-chart', 'insider-volume-chart',
 ];
 
 function _destruirGraficos() {
+    _destruirRsuCharts();
     _RESEARCH_CHART_IDS.forEach(id => {
         const c = window.Chart && window.Chart.getChart && window.Chart.getChart(id);
         if (c) { try { c.destroy(); } catch (_) {} }
@@ -507,64 +508,143 @@ function chartSection(data) {
         + '</div>';
 }
 
+// Colores de los cinco estados del oscilador. Se dejan literales, como el
+// resto de gráficos de la terminal: la librería necesita colores reales, no
+// variables CSS.
+const _L3_COLOR = {
+    entrada:    '#ffd700',   // amarillo: el cruce al alza desde zona baja
+    salida:     '#c77dff',   // violeta: el cruce a la baja desde zona alta
+    alta:       '#00ffad',
+    baja:       '#f23645',
+    debil_alta: '#4a9eff',
+    debil_baja: '#9e9e9e',
+};
+const _L3_NOMBRE = {
+    entrada:    'entrada — cruce al alza desde la zona baja',
+    salida:     'salida — cruce a la baja desde la zona alta',
+    alta:       'por encima de su línea',
+    baja:       'por debajo de su línea',
+    debil_alta: 'perdiendo fuerza',
+    debil_baja: 'débil, sin caer más',
+};
+
 function rsuFlowSection(data) {
     const f = (data.technical_levels || {}).rsu_flow;
     if (!f || !f.ok) return '';
-    const col = f.zona === 'entrando' ? 'var(--color-accent)'
-              : f.zona === 'saliendo' ? '#f23645' : '#ffb800';
-    const texto = f.zona === 'entrando' ? 'Está entrando más dinero de lo habitual en este valor'
-                : f.zona === 'saliendo' ? 'Está saliendo más dinero de lo habitual en este valor'
-                :                          'El dinero entra y sale a un ritmo normal para este valor';
+    const col = _L3_COLOR[f.estado_actual] || 'var(--color-muted)';
+    const leyenda = ['entrada', 'salida', 'alta', 'baja', 'debil_alta', 'debil_baja']
+        .map(k => '<span style="display:inline-flex;align-items:center;gap:4px;margin-right:10px;">'
+            + '<span style="width:9px;height:9px;background:' + _L3_COLOR[k] + ';border-radius:1px;display:inline-block;"></span>'
+            + esc(_L3_NOMBRE[k]) + '</span>').join('');
+    const vol = f.flujo_volumen == null ? '' :
+        '<span style="color:var(--color-muted);font-size:11px;">Flujo con volumen ' + tt('rsu-flow-volumen')
+        + ' <span style="color:var(--color-text);">' + f.flujo_volumen.toFixed(0) + '/100</span></span>';
+
     return '<div style="background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius);padding:1.25rem;margin-bottom:1rem;">'
         + '<div style="display:flex;justify-content:space-between;align-items:baseline;gap:1rem;flex-wrap:wrap;margin-bottom:0.75rem;">'
-        + '<div style="color:var(--color-accent);font-size:12px;letter-spacing:0.08em;">INDICADOR RSU · FLUJO DE DINERO ' + tt('rsu-flow') + '</div>'
-        + '<div style="color:' + col + ';font-size:20px;font-weight:600;">' + f.valor.toFixed(0)
-        + '<span style="color:var(--color-muted);font-size:11px;font-weight:400;"> / 100</span></div>'
+        + '<div style="color:var(--color-accent);font-size:12px;letter-spacing:0.08em;">INDICADOR RSU ' + tt('rsu-flow') + '</div>'
+        + vol
         + '</div>'
-        + '<div style="color:' + col + ';font-size:12px;margin-bottom:0.75rem;">' + texto + '</div>'
-        + '<div style="position:relative;height:150px;"><canvas id="rsu-flow-chart"></canvas></div>'
-        + '<div style="color:var(--color-muted);font-size:10px;margin-top:0.5rem;">'
-        + 'Últimos 6 meses. Compara con lo normal en este mismo valor durante el último año, '
-        + 'así que 80 no significa lo mismo aquí que en otra acción: significa más entrada que en el 80% de sus días recientes.'
-        + '</div>'
+        // Dos paneles pegados: el precio arriba y el oscilador debajo,
+        // compartiendo eje de tiempo para poder leerlos a la misma altura.
+        + '<div id="rsu-panel-precio" style="height:210px;"></div>'
+        + '<div id="rsu-panel-osc" style="height:150px;"></div>'
+        + '<div style="color:' + col + ';font-size:11px;margin-top:0.5rem;">Hoy: ' + esc(_L3_NOMBRE[f.estado_actual] || '—') + '</div>'
+        + '<div style="color:var(--color-muted);font-size:10px;margin-top:0.5rem;line-height:1.7;">' + leyenda + '</div>'
         + '</div>';
+}
+
+let _rsuCharts = [];
+
+function _destruirRsuCharts() {
+    _rsuCharts.forEach(c => { try { c.remove(); } catch (_) {} });
+    _rsuCharts = [];
+}
+
+function loadLightweightCharts(cb) {
+    if (window.LightweightCharts) { cb(); return; }
+    const s = document.createElement('script');
+    // Servida por la propia terminal, no por un CDN: es la librería
+    // open-source de TradingView y no cambia, así que no hace falta
+    // depender de que un tercero esté disponible.
+    s.src = '/assets/lightweight-charts-4.2.3.js';
+    s.onload = cb;
+    document.head.appendChild(s);
 }
 
 function renderRsuFlowChart(data) {
     const f = (data.technical_levels || {}).rsu_flow;
     if (!f || !f.ok) return;
-    loadChartJs(() => {
-        const ctx = document.getElementById('rsu-flow-chart');
-        if (!ctx) return;
-        new Chart(ctx, {
-            type: 'line',
-            data: {
-                labels: f.fechas,
-                datasets: [{
-                    label: 'Flujo RSU', data: f.serie,
-                    borderColor: 'var(--color-accent)', borderWidth: 1.5,
-                    pointRadius: 0, tension: 0.25, fill: false,
-                }]
-            },
-            options: {
-                responsive: true, maintainAspectRatio: false,
-                interaction: { mode: 'index', intersect: false },
-                plugins: {
-                    legend: { display: false },
-                    tooltip: { callbacks: { label: c => c.parsed.y.toFixed(0) + ' / 100' } },
-                },
-                scales: {
-                    x: { ticks: { color: '#444', font: { size: 8 }, maxTicksLimit: 6 },
-                         grid: { color: 'rgba(255,255,255,0.03)' } },
-                    // Escala fija 0-100: es un percentil, no una magnitud que
-                    // deba reescalarse sola, y dejarla libre haría parecer
-                    // extremo cualquier movimiento pequeño.
-                    y: { min: 0, max: 100,
-                         ticks: { color: '#444', font: { size: 8 }, stepSize: 20 },
-                         grid: { color: 'rgba(255,255,255,0.03)' } },
-                },
-            }
+    loadLightweightCharts(() => {
+        const elP = document.getElementById('rsu-panel-precio');
+        const elO = document.getElementById('rsu-panel-osc');
+        if (!elP || !elO || !window.LightweightCharts) return;
+        _destruirRsuCharts();
+
+        const base = {
+            layout: { background: { color: 'transparent' }, textColor: '#666', fontSize: 9 },
+            grid: { vertLines: { color: 'rgba(255,255,255,0.03)' }, horzLines: { color: 'rgba(255,255,255,0.03)' } },
+            rightPriceScale: { borderColor: 'rgba(255,255,255,0.08)' },
+            timeScale: { borderColor: 'rgba(255,255,255,0.08)' },
+            crosshair: { mode: 0 },   // libre, para poder cruzar los dos paneles a ojo
+        };
+
+        const chartP = LightweightCharts.createChart(elP, {
+            ...base, height: elP.clientHeight, width: elP.clientWidth,
+            timeScale: { ...base.timeScale, visible: false },
         });
+        const chartO = LightweightCharts.createChart(elO, {
+            ...base, height: elO.clientHeight, width: elO.clientWidth,
+        });
+        _rsuCharts = [chartP, chartO];
+
+        chartP.addCandlestickSeries({
+            upColor: '#00ffad', downColor: '#f23645',
+            borderUpColor: '#00ffad', borderDownColor: '#f23645',
+            wickUpColor: '#00ffad', wickDownColor: '#f23645',
+        }).setData(f.velas);
+
+        const barras = chartO.addHistogramSeries({ priceLineVisible: false, base: 0 });
+        barras.setData(f.osc.map(p => ({
+            time: p.time, value: p.value, color: _L3_COLOR[p.estado] || '#666',
+        })));
+        chartO.addLineSeries({ color: 'rgba(255,255,255,0.45)', lineWidth: 1, priceLineVisible: false })
+              .setData(f.linea);
+
+        // Las dos bandas de referencia del original: la baja, donde se buscan
+        // los giros, y la alta, donde se valora salir.
+        barras.createPriceLine({ price: 25, color: '#ffd700', lineWidth: 1, lineStyle: 2, title: 'zona baja' });
+        barras.createPriceLine({ price: 80, color: '#c77dff', lineWidth: 1, lineStyle: 2, title: 'zona alta' });
+
+        // Sincronía en los dos sentidos. El rebote infinito se corta
+        // comparando: si el destino ya está donde se le pide, no se le toca,
+        // así que la cadena se agota sola en un salto.
+        //
+        // La alternativa evidente —un cerrojo -de "estoy sincronizando"— tiene
+        // un modo de fallo desagradable: si algo lanza mientras está cerrado,
+        // se queda cerrado para siempre y los dos paneles dejan de seguirse
+        // sin que nada lo indique. Comparar no puede quedarse "a medias".
+        const MISMO = 0.01;
+        const enlazar = (origen, destino) => {
+            origen.timeScale().subscribeVisibleLogicalRangeChange(r => {
+                if (!r) return;
+                const actual = destino.timeScale().getVisibleLogicalRange();
+                if (actual && Math.abs(actual.from - r.from) < MISMO
+                           && Math.abs(actual.to - r.to) < MISMO) return;
+                destino.timeScale().setVisibleLogicalRange(r);
+            });
+        };
+        enlazar(chartP, chartO);
+        enlazar(chartO, chartP);
+        chartP.timeScale().fitContent();
+        chartO.timeScale().fitContent();
+
+        const alRedimensionar = () => {
+            chartP.applyOptions({ width: elP.clientWidth });
+            chartO.applyOptions({ width: elO.clientWidth });
+        };
+        window.addEventListener('resize', alRedimensionar);
+        _rsuCharts.push({ remove: () => window.removeEventListener('resize', alRedimensionar) });
     });
 }
 
