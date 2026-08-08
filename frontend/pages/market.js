@@ -12,7 +12,75 @@ let _marketChartIds = [];
 // (navegación real fuera) -- antes, de 7 gráficos Chart.js solo 2 se
 // destruían al volver a renderizar dentro de la misma visita; los otros 5
 // (y esos 2, si nunca volvías a esta página) quedaban vivos para siempre.
+// ── REFRESCO AUTOMÁTICO ───────────────────────────────────────────────────────
+//
+// Antes no había ni un solo temporizador en esta página: lo único que se movía
+// solo eran los precios, por WebSocket. Todo lo demás se cargaba al entrar y se
+// quedaba congelado, así que con la pestaña abierta toda la sesión seguías
+// viendo el Fear & Greed, los sectores o la liquidez de la hora a la que
+// abriste, sin nada que lo indicara.
+//
+// Cada widget se refresca a su propio ritmo, el mismo que dura su dato en el
+// servidor: no tiene sentido volver a pedir el balance de la Fed cada 5 minutos
+// cuando se publica una vez por semana.
+//
+// Índices, divisas y materias primas NO llevan temporizador: ya los actualiza
+// el WebSocket cada 60 s y ponerles uno sería pedir dos veces lo mismo.
+let _timers = [];
+let _refrescoVisibilidad = null;
+
+function _programarRefrescos(container) {
+    // [segundos, función que repinta] — los segundos salen del TTL que usa el
+    // backend para ese dato.
+    const plan = [
+        [300,  () => loadFearGreed(container.querySelector('#widget-feargreed'))],
+        [300,  () => loadSectors(container.querySelector('#widget-sectors'), _sectorPeriodo)],
+        [300,  () => loadVix(container.querySelector('#widget-vix'))],
+        [300,  () => loadBreadth(container.querySelector('#widget-breadth'))],
+        [300,  () => loadVixLevels(container.querySelector('#widget-vix-levels'))],
+        [300,  () => loadCrypto(container.querySelector('#widget-crypto'))],
+        [300,  () => loadReddit(container.querySelector('#widget-reddit'))],
+        [600,  () => loadSectorComposition(container.querySelector('#widget-sector-composition'))],
+        [1800, () => loadLiquidity(container.querySelector('#widget-liquidity'))],
+        [1800, () => loadFedMacro(container.querySelector('#widget-fed-macro'))],
+        [1800, () => loadEarnings(container.querySelector('#widget-earnings'))],
+        [1800, () => loadCalendar(container.querySelector('#widget-calendar'))],
+        [3600, () => loadSpreads(container.querySelector('#widget-spreads'))],
+        [3600, () => loadShillerCape(container.querySelector('#widget-shiller-cape'))],
+        [3600, () => loadBriefing(container.querySelector('#widget-briefing'))],
+    ];
+
+    const pendientes = new Set();
+
+    plan.forEach(([segundos, recargar]) => {
+        const id = setInterval(() => {
+            // Con la pestaña de fondo no se refresca: sería trabajo del
+            // servidor que nadie está mirando. Se anota como pendiente y se
+            // hace en cuanto se vuelve.
+            if (document.visibilityState !== 'visible') { pendientes.add(recargar); return; }
+            recargar();
+        }, segundos * 1000);
+        _timers.push(id);
+    });
+
+    _refrescoVisibilidad = () => {
+        if (document.visibilityState !== 'visible') return;
+        pendientes.forEach(recargar => recargar());
+        pendientes.clear();
+    };
+    document.addEventListener('visibilitychange', _refrescoVisibilidad);
+}
+
 export function cleanup() {
+    // Sin esto, los temporizadores seguirían pidiendo datos y repintando un
+    // contenedor que ya no está en la página -- justo la fuga que se cerró en
+    // su día con Newsfeed y Cartera.
+    _timers.forEach(id => clearInterval(id));
+    _timers = [];
+    if (_refrescoVisibilidad) {
+        document.removeEventListener('visibilitychange', _refrescoVisibilidad);
+        _refrescoVisibilidad = null;
+    }
     _marketChartIds.forEach(id => {
         const c = window.Chart && window.Chart.getChart && window.Chart.getChart(id);
         if (c) { try { c.destroy(); } catch (_) {} }
@@ -135,6 +203,8 @@ export async function render(container) {
     loadFedMacro(container.querySelector('#widget-fed-macro'));
     loadShillerCape(container.querySelector('#widget-shiller-cape'));
     loadCalendar(container.querySelector('#widget-calendar'));
+
+    _programarRefrescos(container);
 
     onMarketUpdate('market-page', (data) => {
         updateIndicesWS(data.indices);
@@ -490,7 +560,12 @@ async function loadEarningsSurprise(ticker, container) {
     }
 }
 
+// El periodo que el usuario tiene elegido. El refresco automatico lo usa para
+// no devolverle la vista a 1D cada 5 minutos si el estaba mirando 3M o YTD.
+let _sectorPeriodo = '1d';
+
 async function loadSectors(el, period) {
+    _sectorPeriodo = period;
     el.innerHTML = widgetShell('SECTOR PERFORMANCE', 'S&P 500 ETFs', loading());
     try {
         const res  = await fetch('/api/v1/market/sectors?period=' + period, { headers: authHeader() });
