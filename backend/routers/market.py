@@ -51,6 +51,13 @@ async def earnings_ticker(ticker: str, user=Depends(verify_token)):
 async def fear_greed(user=Depends(verify_token)):
     return get_fear_greed()
 
+@router.get("/put-call")
+async def put_call(user=Depends(verify_token)):
+    from services.putcall_service import get_put_call_ratio
+    from services.cache import cache
+    cacheado = cache.get("market:putcall")
+    return cacheado if cacheado else get_put_call_ratio()
+
 @router.get("/forex")
 async def forex(user=Depends(verify_token)):
     return get_forex()

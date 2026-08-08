@@ -404,6 +404,23 @@ CÓMO LEERLO:
 Picos repentinos de Buzz en un ticker que normalmente no aparece en el ranking suelen coincidir con alguna noticia, catalizador, o movimiento de precio reciente que ha captado la atención retail — vale la pena investigar qué lo está causando antes de actuar.`
     },
 
+    "put-call-ratio": {
+        title: "Ratio Put/Call",
+        short: "Cuantas opciones de venta se negocian por cada opcion de compra.",
+        long: `Las opciones de venta (puts) suelen comprarse para protegerse de caidas o para apostar a la baja; las de compra (calls), para lo contrario. Dividir unas entre otras da una medida rapida de hacia donde se esta inclinando el dinero.
+
+COMO SE LEE:
+Por encima de 1 se estan negociando mas puts que calls, lo que indica inquietud. Por debajo de 0,7 se suele hablar de complacencia: casi nadie se esta cubriendo. Entre medias, reparto normal.
+
+Ojo con la interpretacion facil: mas miedo no significa que vaya a caer. Los valores altos aparecen a menudo cerca de suelos, cuando ya se ha vendido lo que se tenia que vender, y los muy bajos en momentos de euforia. Por eso se usa como termometro de sentimiento y no como direccion.
+
+LOS CUATRO DE DEBAJO:
+El numero grande es el total del mercado. Debajo se desglosa: acciones sueltas, indices, ETFs y las opciones sobre el propio VIX. El de indices suele ser mas alto de forma natural, porque ahi es donde los grandes cubren carteras enteras.
+
+DE DONDE SALE:
+De las estadisticas diarias que publica CBOE, el mayor mercado de opciones de Estados Unidos. Es dato de cierre de sesion, no en tiempo real. Los cortes de 1 y 0,7 son las referencias que se usan habitualmente en el sector, no umbrales calculados sobre datos propios.`
+    },
+
     "vix-vix3m-ratio": {
         title: "VIX / VIX3M — Forma de la curva del miedo",
         short: "Compara el miedo a 30 días con el miedo a 3 meses. Por encima de 1, la curva está invertida.",

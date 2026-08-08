@@ -300,11 +300,44 @@ async function loadIndices(el) {
     }
 }
 
+// Franja del ratio put/call, dentro del bloque de sentimiento. Si CBOE no
+// responde o cambia su pagina, se devuelve cadena vacia y la franja
+// simplemente no aparece -- nunca un numero inventado ni el de ayer haciendose
+// pasar por el de hoy.
+function putCallStrip(pc) {
+    if (!pc || !pc.ok) return '';
+    const col = pc.zona === 'miedo' ? '#f23645'
+              : pc.zona === 'complacencia' ? '#ffb800' : 'var(--color-accent)';
+    const texto = pc.zona === 'miedo' ? 'Se compran más puts que calls'
+                : pc.zona === 'complacencia' ? 'Predominan las calls'
+                : 'Reparto normal entre puts y calls';
+    const dato = (etiqueta, v) => v == null ? '' :
+        '<div style="text-align:center;"><div style="color:var(--color-muted);font-size:9px;">' + etiqueta + '</div>'
+        + '<div style="color:var(--color-text);font-size:11px;margin-top:1px;">' + v.toFixed(2) + '</div></div>';
+    return '<div style="width:100%;margin-top:1.25rem;padding-top:1rem;border-top:1px solid var(--color-border);">'
+        + '<div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:6px;">'
+        + '<span style="color:var(--color-muted);font-size:10px;letter-spacing:0.05em;">RATIO PUT/CALL · CBOE ' + tt('put-call-ratio') + '</span>'
+        + '<span style="color:' + col + ';font-size:15px;font-weight:600;">' + pc.total.toFixed(2) + '</span>'
+        + '</div>'
+        + '<div style="color:' + col + ';font-size:10px;margin-bottom:8px;">' + esc(texto) + '</div>'
+        + '<div style="display:flex;justify-content:space-between;gap:6px;">'
+        + dato('ACCIONES', pc.acciones) + dato('ÍNDICES', pc.indices)
+        + dato('ETFs', pc.etfs) + dato('VIX', pc.vix)
+        + '</div>'
+        + '</div>';
+}
+
 async function loadFearGreed(el) {
     el.innerHTML = widgetShell('FEAR & GREED', 'CNN Index', loading());
     try {
-        const res  = await fetch('/api/v1/market/fear-greed', { headers: authHeader() });
+        // En paralelo: si el put/call falla o tarda, no debe impedir que se
+        // pinte el Fear & Greed, que es lo principal de este widget.
+        const [res, resPc] = await Promise.all([
+            fetch('/api/v1/market/fear-greed', { headers: authHeader() }),
+            fetch('/api/v1/market/put-call',   { headers: authHeader() }).catch(() => null),
+        ]);
         const data = await res.json();
+        const pc   = resPc ? await resPc.json().catch(() => null) : null;
         if (!data.ok) throw new Error(data.error || 'Sin datos');
         const color   = fgColor(data.score);
         const periodRow = (label, val) =>
@@ -341,6 +374,7 @@ async function loadFearGreed(el) {
                 + compRows
                 + '</div>'
             ) : '')
+            + putCallStrip(pc)
             + '</div>';
         el.innerHTML = widgetShell('FEAR & GREED ' + tt('fear-greed'), 'CNN Index', content, data.timestamp);
     } catch(e) {
