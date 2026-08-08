@@ -9,6 +9,7 @@ from config import settings
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "..", "shared"))
 from time_utils import get_timestamp, session_fraction_elapsed  # noqa: E402
 from yf_batch import download_batch  # noqa: E402
+from vix_curve import vix_ratio, zona_curva, UMBRAL_BACKWARDATION, UMBRAL_TENSION  # noqa: E402
 from mcclellan import mcclellan_series  # noqa: E402
 from market_regime import spy_trend_snapshot  # noqa: E402
 
@@ -709,11 +710,22 @@ def get_vix_term_structure():
     else:
         contango, structure = None, None
 
+    # El mismo ratio VIX/VIX3M que puntúa el RSU Algoritmo, con sus mismos
+    # umbrales (shared/vix_curve.py). No cuesta ninguna descarga: las dos patas
+    # ya están arriba. La resta (contango) dice cuántos puntos separan las dos
+    # patas; el cociente dice lo mismo en proporción, que es la forma en que se
+    # compara entre épocas de VIX alto y bajo -- 2 puntos de diferencia no
+    # significan lo mismo con el VIX en 12 que con el VIX en 40. Ver hallazgo
+    # #32 de la auditoría de Market.
+    ratio = vix_ratio(spot, vix3m)
+
     result = {
         "data":       valid,
         "spot":       spot,
         "contango":   contango,
         "structure":  structure,
+        "ratio":      ratio,
+        "ratio_zona": zona_curva(ratio),
         # Qué se está restando, para que la pantalla pueda decirlo y no haya
         # que deducirlo del contexto.
         "spread_par": "3 meses − Spot" if contango is not None else None,

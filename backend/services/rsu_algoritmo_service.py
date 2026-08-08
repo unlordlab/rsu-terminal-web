@@ -8,6 +8,7 @@ from concurrent.futures import ThreadPoolExecutor
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "..", "shared"))
 from time_utils import get_timestamp  # noqa: E402
 from mcclellan import mcclellan_series  # noqa: E402
+from vix_curve import vix_ratio, UMBRAL_BACKWARDATION, UMBRAL_TENSION  # noqa: E402
 
 VENTANA = 10
 
@@ -542,11 +543,7 @@ def _vix_vix3m_ratio(df_vix, df_vix3m=None):
     try:
         if df_vix3m is None or df_vix3m.empty or df_vix.empty:
             return None
-        vix_spot = float(df_vix['Close'].iloc[-1])
-        vix_3m   = float(df_vix3m['Close'].iloc[-1])
-        if vix_3m <= 0:
-            return None
-        return round(vix_spot / vix_3m, 3)
+        return vix_ratio(df_vix['Close'].iloc[-1], df_vix3m['Close'].iloc[-1])
     except Exception:
         return None
 
@@ -640,10 +637,13 @@ def _calcular_score_punto(df_spy, df_vix, sector_data=None, df_vix3m=None, credi
         # superando al de medio plazo = señal de capitulación adicional, NO de
         # exclusión (ver tooltip — esto corrige una lectura inicial errónea).
         if vix3m_ratio is not None:
-            if vix3m_ratio > 1.0:
+            # Umbrales en shared/vix_curve.py: los mismos que enseña el widget
+            # del VIX en Market, para que puntuar y mostrar no puedan
+            # desalinearse (hallazgo #32 de la auditoría de Market).
+            if vix3m_ratio > UMBRAL_BACKWARDATION:
                 vix_score += 7
                 detalles.append(f"✓ El miedo de HOY supera al de dentro de 3 meses — pánico agudo, típico de suelos (VIX/VIX3M {vix3m_ratio}) (+7)")
-            elif vix3m_ratio > 0.95:
+            elif vix3m_ratio > UMBRAL_TENSION:
                 vix_score += 3
                 detalles.append(f"~ La curva del miedo está tensa (VIX/VIX3M {vix3m_ratio}) (+3)")
         if score > 50 and vix_actual < 20:

@@ -676,6 +676,19 @@ async function loadVix(el) {
                 ? 'Típico en mercados tranquilos · Favorable para dip buying'
                 : 'Señal de estrés · Posible suelo de mercado');
 
+        // Zona de la curva según el ratio VIX/VIX3M, con los mismos umbrales
+        // que usa el RSU Algoritmo para puntuar (1,0 y 0,95 en
+        // shared/vix_curve.py). Un ratio por encima de 1 no es "malo": el
+        // pánico agudo de corto plazo suele acompañar a suelos, por eso se
+        // marca en el mismo color que el resto de señales de oportunidad.
+        const ratioColor = data.ratio_zona === 'backwardation' ? '#f23645'
+                         : data.ratio_zona === 'tensa' ? '#ffb800'
+                         : data.ratio_zona === 'normal' ? '#00ffad'
+                         : 'var(--color-muted)';
+        const ratioEtiqueta = data.ratio_zona === 'backwardation' ? 'invertida'
+                            : data.ratio_zona === 'tensa' ? 'tensa'
+                            : data.ratio_zona === 'normal' ? 'normal' : '';
+
         const header = '<div style="display:flex;align-items:center;gap:1.5rem;padding:10px 16px;border-bottom:1px solid var(--color-border);font-size:12px;flex-wrap:wrap;">'
             + '<span style="color:var(--color-muted);">VIX SPOT</span>'
             // Si ^VIX no respondió llega null: se dice, en vez de pintar bajo
@@ -689,6 +702,14 @@ async function loadVix(el) {
             + '<span style="color:var(--color-muted);margin-left:0.5rem;" title="' + (data.spread_par ? esc(data.spread_par) : 'Diferencia entre el VIX a 3 meses y el VIX spot') + '">SPREAD</span>'
             + '<span style="color:' + structColor + ';font-weight:500;">' + (haySpread ? (data.contango > 0 ? '+' : '') + data.contango : '—') + '</span>'
             + (data.spread_par ? '<span style="color:var(--color-muted);font-size:10px;">' + esc(data.spread_par) + '</span>' : '')
+            // El mismo ratio VIX/VIX3M que puntúa el RSU Algoritmo, con sus
+            // mismos umbrales. La resta de arriba dice cuántos puntos separan
+            // las dos patas; el cociente lo dice en proporción, que es lo
+            // comparable entre épocas: 2 puntos no significan lo mismo con el
+            // VIX en 12 que con el VIX en 40.
+            + '<span style="color:var(--color-muted);margin-left:0.5rem;">VIX/VIX3M ' + tt('vix-vix3m-ratio') + '</span>'
+            + '<span style="color:' + ratioColor + ';font-weight:500;">' + (data.ratio != null ? data.ratio.toFixed(3) : '—') + '</span>'
+            + (data.ratio_zona ? '<span style="color:' + ratioColor + ';font-size:10px;">' + esc(ratioEtiqueta) + '</span>' : '')
             + '</div>';
 
         const chartId = 'vix-chart-' + Date.now();

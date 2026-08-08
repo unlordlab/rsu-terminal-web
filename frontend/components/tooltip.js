@@ -404,6 +404,24 @@ CÓMO LEERLO:
 Picos repentinos de Buzz en un ticker que normalmente no aparece en el ranking suelen coincidir con alguna noticia, catalizador, o movimiento de precio reciente que ha captado la atención retail — vale la pena investigar qué lo está causando antes de actuar.`
     },
 
+    "vix-vix3m-ratio": {
+        title: "VIX / VIX3M — Forma de la curva del miedo",
+        short: "Compara el miedo a 30 días con el miedo a 3 meses. Por encima de 1, la curva está invertida.",
+        long: `El VIX mide cuánta inquietud hay para los próximos 30 días; el VIX3M, para los próximos 3 meses. Dividir uno entre otro dice qué forma tiene la curva del miedo.
+
+LO NORMAL Y LO QUE NO:
+Lo habitual es que el plazo largo asuste más que el corto: cuanto más lejos se mira, más cosas pueden pasar. Eso da un cociente por debajo de 1. Cuando se pone por encima de 1, la curva se ha dado la vuelta: hoy da más miedo esta semana que los próximos tres meses.
+
+POR QUÉ UN VALOR ALTO NO ES MALA NOTICIA:
+Esa inversión aparece cuando el susto es agudo e inmediato — justo lo que suele verse cerca de los suelos, no de los techos. Históricamente ha acompañado a momentos de capitulación, no de euforia. Es lo contrario de lo que sugiere la lectura fácil de "VIX alto, mal asunto".
+
+CÓMO SE LEE AQUÍ:
+Por debajo de 0,95 la curva es normal. Entre 0,95 y 1 está tensa: se ha comprimido casi hasta darse la vuelta. Por encima de 1 está invertida. Son los mismos tres cortes que usa el RSU Algoritmo para puntuar este factor, así que lo que ves aquí y lo que puntúa allí es exactamente lo mismo.
+
+POR QUÉ ADEMÁS DE LA RESTA:
+Justo al lado tienes el spread, que es la diferencia en puntos. El cociente dice lo mismo en proporción, y eso permite comparar entre épocas: dos puntos de diferencia no significan lo mismo con el VIX en 12 que con el VIX en 40.`
+    },
+
     "amplitud-rsp-spy": {
         title: "Amplitud — RSP vs SPY",
         short: "Si la subida la sostiene la acción media o solo un puñado de gigantes.",
