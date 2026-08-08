@@ -2588,44 +2588,7 @@ Sirve para hacerte una idea de "cuánto suele dar" cada acierto de la estrategia
 Conviene leerlo junto al Win Rate: una estrategia con pocas operaciones pero cada una con una ganancia media alta puede ser tan buena (o mejor) que otra con muchas operaciones pequeñas — lo que importa al final es el resultado conjunto (Equity Final), estas dos métricas solo ayudan a entender de dónde viene ese resultado.`
     },
 
-    "research-turnover": {
-        title: "Señal de Rotación",
-        short: "Un indicador único que combina dos cosas: si hay volumen fuera de lo normal, y si el activo se está moviendo por su cuenta o junto al mercado.",
-        long: `La rotación (turnover) mide qué proporción de las acciones en circulación de una empresa cambian de dueño cada día. Un estudio académico de referencia (Lo & Wang, 2000, Review of Financial Studies) mostró que la rotación no es aleatoria — tiene estructura real, y las desviaciones de esa estructura son información, no ruido.
 
-CÓMO SE CONSTRUYE LA SEÑAL:
-Se combinan dos comprobaciones distintas:
-
-1. ¿Hay volumen fuera de lo normal HOY? Se compara el volumen de hoy contra la media y la variabilidad propia de este activo en los últimos 20 días (un cálculo estadístico llamado Z-score). Si hoy está muy por encima de lo habitual, se marca como actividad anómala.
-
-2. ¿Se ha desconectado del mercado RECIENTEMENTE? Se compara cómo de correlacionado ha estado este activo con el mercado general (SPY) en las últimas semanas, frente a cómo lo ha estado durante los últimos 6 meses. Si esa relación se ha debilitado bastante, es señal de que algo propio del activo está pesando más que el mercado en general.
-
-LOS 4 NIVELES:
-🔴 Volumen anómalo + desconectado del mercado — la combinación más interesante: sugiere algo específico de este activo (noticia propia, flujo institucional dirigido...), no un movimiento general del mercado.
-🟡 Volumen anómalo pero en línea con el mercado — probablemente parte de un movimiento amplio que afecta a muchos valores a la vez, no algo propio de este en concreto.
-🟡 Desconectado del mercado sin volumen destacable — señal más suave, vale la pena vigilar cómo evoluciona.
-⚪ Sin señales — nada fuera de lo normal ahora mismo.
-
-Debajo del indicador tienes también el detalle técnico (correlación exacta y el gráfico comparativo) por si quieres profundizar más allá del resumen.`
-    },
-
-    "research-absorption": {
-        title: "Señal de Absorción",
-        short: "Detecta si hay volumen alto que apenas mueve el precio — la huella característica de una orden grande ejecutándose con cuidado, sin delatar su propia posición.",
-        long: `Cuando alguien quiere comprar (o vender) una posición muy grande, hacerlo de golpe dispararía el precio en su contra — así que la trocean en piezas pequeñas y las van soltando poco a poco, a veces durante semanas.
-
-Esto deja una firma estadística reconocible: volumen por encima de lo normal, pero con un impacto en el precio menor de lo que le correspondería a ese volumen. Un pico de volumen que SÍ mueve el precio con fuerza es más compatible con actividad especulativa (mucha gente persiguiendo la misma dirección) que con una posición grande ejecutándose en silencio.
-
-CÓMO SE CALCULA:
-Se combinan dos mediciones, cada una comparada contra la media propia de los últimos 20 días de este mismo activo:
-
-1. Rotación — ¿hay más actividad de la habitual?
-2. Impacto en precio — se mide cuánto se mueve el precio por cada unidad de volumen negociado (un cálculo estándar en microestructura de mercado, conocido como ratio de Amihud). Si ese impacto está por debajo de lo normal pese a haber más volumen del habitual, es la señal.
-
-Un día cuenta como "de absorción" solo si las dos condiciones se cumplen a la vez. Se muestran cuántos de los últimos 10 días cumplen ese patrón — cuantos más días seguidos, más sostenida (y por tanto más creíble) es la señal.
-
-IMPORTANTE: esto es una estimación estadística, no una certeza. Te dice "este comportamiento tiene la firma característica de absorción", no "esto es un fondo concreto comprando". Es información adicional a valorar junto con el resto del análisis, no una señal de compra o venta por sí sola.`
-    },
 
     "scanner-absorcion": {
         title: "Días de Absorción",

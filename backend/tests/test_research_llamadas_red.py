@@ -10,9 +10,9 @@ la participación institucional y en el interés corto. Las tres corren en
 paralelo dentro del mismo request, así que ni siquiera se aprovechaban entre
 ellas.
 
-Lo mismo con el histórico de 180 días: get_turnover_comparison() y
-get_absorption_signal() se piden a la vez en cada research y cada una
-descargaba su propia copia del MISMO ticker.
+(Este fichero tenía además un test del histórico de 180 días que compartían
+las señales de rotación y absorción. Se retiró el 07/08/2026 junto con esas
+dos secciones de Research y con el servicio que las calculaba.)
 
 Estos tests fijan el número de llamadas, no el tiempo. El reloj de pared no
 sirve para esto: midiendo el mismo ticker en frío salían 9,3s en una pasada y
@@ -26,14 +26,12 @@ Uso:
 """
 import os
 import sys
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
-import pandas as pd
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 
 import services.research_service as rs  # noqa: E402
-import services.turnover_service as ts  # noqa: E402
 
 INFO_FALSO = {
     "heldPercentInstitutions": 0.72,
@@ -61,7 +59,6 @@ _ContadorInfo.llamadas = 0
 def _limpiar_cache(ticker="TEST"):
     from services.cache import cache
     cache.set(f"research:info:{ticker}", None, 1)
-    ts._PV_CACHE.clear()
 
 
 def test_info_se_pide_una_sola_vez_para_las_tres_funciones():
@@ -101,40 +98,6 @@ def test_el_fallo_de_info_tampoco_se_reintenta_tres_veces():
     assert _Explota.llamadas == 1, (
         f"Un fallo de .info debe cachearse igual que un acierto, se "
         f"reintentó {_Explota.llamadas} veces."
-    )
-
-
-def _hist_falso(dias=200):
-    idx = pd.date_range("2025-01-01", periods=dias, freq="D", tz="UTC")
-    return pd.DataFrame({
-        "Close":  [100.0 + i * 0.1 for i in range(dias)],
-        "Volume": [1_000_000 + i * 10 for i in range(dias)],
-    }, index=idx)
-
-
-def test_turnover_y_absorcion_comparten_una_sola_descarga():
-    """Las dos se piden en paralelo en cada research sobre el MISMO ticker."""
-    ts._PV_CACHE.clear()
-    descargas = {"n": 0}
-
-    class _TickerHist:
-        def __init__(self, *a, **k): pass
-        @property
-        def fast_info(self):
-            m = MagicMock()
-            m.shares_outstanding = 500_000_000
-            return m
-        def history(self, *a, **k):
-            descargas["n"] += 1
-            return _hist_falso()
-
-    with patch.object(ts.yf, "Ticker", _TickerHist):
-        ts.get_absorption_signal("TEST")
-        ts._get_daily_turnover("TEST")
-
-    assert descargas["n"] == 1, (
-        f"Absorción y rotación deben compartir la descarga de 180 días del "
-        f"mismo ticker, se hicieron {descargas['n']}."
     )
 
 

@@ -7,7 +7,6 @@ import sys
 from datetime import datetime
 from concurrent.futures import ThreadPoolExecutor
 from config import settings
-from services.turnover_service import get_turnover_comparison, get_absorption_signal
 
 # Fases Weinstein: módulo compartido con scripts/scanner_universe.py (Fase
 # 2.2 del Plan Maestro, 20/07/2026) -- antes estas 5 funciones estaban
@@ -2155,8 +2154,6 @@ def get_research(ticker: str) -> dict:
         f_inst    = ex.submit(_get_institutional_ownership, ticker)
         f_tech    = ex.submit(_get_technical_levels, ticker)
         f_income  = ex.submit(_get_income_statement, ticker)
-        f_turnover = ex.submit(get_turnover_comparison, ticker)
-        f_absorption = ex.submit(get_absorption_signal, ticker)
         yf_data   = f_yf.result()
         fh_data   = f_fh.result()
         av_data   = f_av.result()
@@ -2169,8 +2166,6 @@ def get_research(ticker: str) -> dict:
         instit    = f_inst.result()
         technical = f_tech.result()
         income_stmt = f_income.result()
-        turnover  = f_turnover.result()
-        absorption = f_absorption.result()
 
     if not yf_data.get('ok'):
         # Caché negativa: antes solo se cacheaba el éxito, así que un ticker
@@ -2208,8 +2203,6 @@ def get_research(ticker: str) -> dict:
         "country":            yf_data['country'],
         "website":            yf_data['website'],
         "description":        _translate_description(yf_data['description']),
-        "turnover":           turnover,
-        "absorption":         absorption,
         "price":              yf_data['price'],
         "chg_pct":            yf_data['chg_pct'],
         "mktcap_fmt":         yf_data['mktcap_fmt'],

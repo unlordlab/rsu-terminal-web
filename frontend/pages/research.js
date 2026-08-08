@@ -16,7 +16,7 @@ import { errorMessage, esc, safeUrl, fmtFecha } from '/core/ui.js';
 // DOM y la referencia que hubiéramos guardado apuntaría a un elemento
 // huérfano. Chart.getChart(id) resuelve siempre el gráfico realmente vivo.
 const _RESEARCH_CHART_IDS = [
-    'crypto-chart', 'sparkline-chart', 'turnover-chart',
+    'crypto-chart', 'sparkline-chart',
     'earnings-chart', 'income-statement-chart', 'insider-volume-chart',
 ];
 
@@ -73,7 +73,6 @@ export async function render(container) {
             result.innerHTML = renderResearch(data);
             renderSparkline(data);
             renderEarningsChart(data);
-            renderTurnoverChart(data);
             renderIncomeStatementChart(data);
             renderInsiderVolumeChart(data);
             renderCryptoChart(data);
@@ -322,8 +321,6 @@ function renderResearch(data) {
         + seasonalitySection(data)
         + insiderSection(data)
         + earningsSection(data)
-        + turnoverSection(data)
-        + absorptionSection(data)
         + suggestionsSection(data)
         + newsSection(data);
 }
@@ -697,29 +694,6 @@ function earningsSection(data) {
         + '</div>';
 }
 
-function turnoverSection(data) {
-    const t = data.turnover;
-    if (!t || !t.ok) return '';
-    const s = t.signal;
-    return '<div style="background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius);padding:1.25rem;margin-bottom:1rem;">'
-        + '<div style="color:var(--color-accent);font-size:12px;letter-spacing:0.08em;margin-bottom:0.75rem;">SEÑAL DE ROTACIÓN ' + tt('research-turnover') + '</div>'
-
-        // Indicador único, grande y simple -- lo primero que se ve
-        + '<div style="display:flex;align-items:center;gap:10px;padding:10px 14px;background:var(--color-surface2);border-radius:var(--radius);margin-bottom:0.75rem;">'
-        + '<span style="font-size:22px;">' + s.icon + '</span>'
-        + '<div><div style="color:' + s.color + ';font-size:14px;font-weight:600;">' + s.label + '</div>'
-        + '<div style="color:var(--color-muted);font-size:11px;margin-top:2px;">' + s.detail + '</div></div>'
-        + '</div>'
-
-        // Detalle tecnico, para quien quiera profundizar
-        + '<div style="display:flex;gap:1.5rem;margin-bottom:0.75rem;flex-wrap:wrap;">'
-        + '<div><span style="color:var(--color-muted);font-size:10px;">CORRELACIÓN VS. ' + t.benchmark + '</span><br><span style="color:var(--color-text);font-size:14px;">' + t.correlation.toFixed(2) + '</span></div>'
-        + (t.current_ratio != null ? '<div><span style="color:var(--color-muted);font-size:10px;">RATIO ACTUAL (MEDIA 20D)</span><br><span style="color:var(--color-text);font-size:14px;">' + t.current_ratio.toFixed(2) + 'x</span></div>' : '')
-        + '</div>'
-        + '<div style="position:relative;height:160px;"><canvas id="turnover-chart"></canvas></div>'
-        + '</div>';
-}
-
 function incomeStatementSection(data) {
     const inc = data.income_statement;
     if (!inc || !inc.length) return '';
@@ -1041,53 +1015,6 @@ function renderSparkline(data) {
                 responsive: true, maintainAspectRatio: false,
                 plugins: { legend: { display: false } },
                 scales: { x: { display: false }, y: { ticks: { color: '#555', font: { size: 9 } }, grid: { color: 'rgba(255,255,255,0.04)' }, min: Math.min(...data.sparkline) * 0.995, max: Math.max(...data.sparkline) * 1.005 } }
-            }
-        });
-    });
-}
-
-function absorptionSection(data) {
-    const a = data.absorption;
-    if (!a || !a.ok) return '';
-    const s = a.signal;
-    return '<div style="background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius);padding:1.25rem;margin-bottom:1rem;">'
-        + '<div style="color:var(--color-accent);font-size:12px;letter-spacing:0.08em;margin-bottom:0.75rem;">SEÑAL DE ABSORCIÓN ' + tt('research-absorption') + '</div>'
-        + '<div style="display:flex;align-items:center;gap:10px;padding:10px 14px;background:var(--color-surface2);border-radius:var(--radius);margin-bottom:0.75rem;">'
-        + '<span style="font-size:22px;">' + s.icon + '</span>'
-        + '<div><div style="color:' + s.color + ';font-size:14px;font-weight:600;">' + s.label + '</div>'
-        + '<div style="color:var(--color-muted);font-size:11px;margin-top:2px;">' + s.detail + '</div></div>'
-        + '</div>'
-        + '<div style="display:flex;gap:1.5rem;font-size:11px;color:var(--color-muted);">'
-        + '<div>Rotación (Z-score): <span style="color:var(--color-text);">' + a.turnover_z.toFixed(2) + '</span></div>'
-        + '<div>Impacto en precio (Z-score): <span style="color:var(--color-text);">' + a.amihud_z.toFixed(2) + '</span></div>'
-        + '<div>Días de absorción (últimos 10): <span style="color:var(--color-text);">' + a.dias_absorcion_10d + '</span></div>'
-        + '</div>'
-        + '</div>';
-}
-
-function renderTurnoverChart(data) {
-    const t = data.turnover;
-    if (!t || !t.ok || !t.chart) return;
-    loadChartJs(() => {
-        const ctx = document.getElementById('turnover-chart');
-        if (!ctx) return;
-        new Chart(ctx, {
-            type: 'line',
-            data: {
-                labels: t.chart.dates,
-                datasets: [
-                    { label: data.ticker, data: t.chart.ticker_turnover, borderColor: '#00ffad', backgroundColor: 'transparent', borderWidth: 1.5, pointRadius: 0, tension: 0.2 },
-                    { label: t.benchmark, data: t.chart.bench_turnover, borderColor: '#666', backgroundColor: 'transparent', borderWidth: 1, pointRadius: 0, tension: 0.2 },
-                ]
-            },
-            options: {
-                responsive: true, maintainAspectRatio: false,
-                interaction: { mode: 'index', intersect: false },
-                plugins: { legend: { display: true, position: 'top', labels: { color: '#666', font: { size: 9 }, boxWidth: 10 } } },
-                scales: {
-                    x: { ticks: { color: '#444', font: { size: 8 }, maxTicksLimit: 6 }, grid: { color: 'rgba(255,255,255,0.03)' } },
-                    y: { ticks: { color: '#444', font: { size: 8 } }, grid: { color: 'rgba(255,255,255,0.03)' } }
-                }
             }
         });
     });
