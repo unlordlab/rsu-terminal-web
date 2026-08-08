@@ -34,11 +34,19 @@ HOJA = pd.DataFrame({
 
 def _con_hoja(df):
     """Fuerza la lectura de la hoja: se vacian las dos cachés (la de la
-    cartera completa y la del propio set) para que no salga por un atajo."""
+    cartera completa y la del propio set) para que no salga por un atajo.
+
+    URL_CARTERA se fija a un valor de mentira a proposito. get_cartera_tickers()
+    comprueba que la URL exista ANTES de leer nada, asi que sin esto el
+    parcheo de read_csv no llega a usarse nunca y la funcion devuelve un
+    conjunto vacio por "URL_CARTERA no configurada" -- el test pasaba en
+    local (donde hay .env con la URL real) y fallaba en CI, que arranca sin
+    .env. Dos commits con el CI en rojo salieron de aqui."""
     from services.cache import cache
     C._cartera_cache.clear()
     cache.delete(C._TICKERS_CACHE_KEY)
-    with patch.object(C.pd, "read_csv", return_value=df), \
+    with patch.object(C.settings, "url_cartera", "https://example.invalid/hoja.csv"), \
+         patch.object(C.pd, "read_csv", return_value=df), \
          patch.object(cache, "set"), \
          patch.object(cache, "get", return_value=None):
         return C.get_cartera_tickers()
@@ -71,6 +79,10 @@ def test_un_fallo_al_leer_la_hoja_no_tumba_a_quien_llama():
     from services.cache import cache
     C._cartera_cache.clear()
     cache.delete(C._TICKERS_CACHE_KEY)
-    with patch.object(C.pd, "read_csv", side_effect=Exception("hoja caida")), \
+    # Con URL valida, para que el fallo que se prueba sea el de la lectura y
+    # no el de la URL ausente -- si no, este test pasaria sin llegar nunca a
+    # read_csv, que es justo lo que dice estar comprobando.
+    with patch.object(C.settings, "url_cartera", "https://example.invalid/hoja.csv"), \
+         patch.object(C.pd, "read_csv", side_effect=Exception("hoja caida")), \
          patch.object(cache, "get", return_value=None), patch.object(cache, "set"):
         assert C.get_cartera_tickers() == set()
