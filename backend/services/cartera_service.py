@@ -850,6 +850,11 @@ def comprobar_coherencia_fechas(df, col_fecha, col_cierre, col_estado, col_ticke
     return avisos
 
 
+# Clave propia para el set de tickers: se invalida sola por TTL y no depende
+# de que alguien pida la cartera completa.
+_TICKERS_CACHE_KEY = "cartera:tickers_abiertos"
+
+
 def get_cartera_tickers() -> set:
     """Tickers actualmente en posición abierta en Cartera -- para los
     badges de cruce 💼 en Scanner/RS-RW/Insider/Research/Options Flow
@@ -861,9 +866,62 @@ def get_cartera_tickers() -> set:
     puntual de Cartera. (Antes vivía como _obtener_tickers_cartera() solo
     dentro de options_service.py -- promovido aquí para que los demás
     módulos no dupliquen la misma lógica.)"""
+    from services.cache import cache
+
+    # Si la cartera completa ya está calculada y fresca, se aprovecha: es
+    # gratis y ademas es el dato más al día.
+    cacheado = _cartera_cache.get("data")
+    if cacheado and (time.time() - _cartera_cache.get("updated", 0)) < _CARTERA_TTL:
+        return {r["ticker"] for r in cacheado.get("abiertas", [])}
+
+    en_cache = cache.get(_TICKERS_CACHE_KEY)
+    if en_cache is not None:
+        return set(en_cache)
+
+    # Y si no, se lee SOLO la hoja. Antes esto llamaba a get_cartera(), que
+    # calcula la cartera entera -- incluidos los precios en vivo de todas las
+    # posiciones -- para acabar quedándose con una lista de símbolos que ya
+    # están en la hoja y no necesitan ni un precio.
+    #
+    # El coste no era teórico: medido, get_cartera_tickers() tardaba 11,9s en
+    # frío, y como Research la llama en línea para poner el icono 💼, era ella
+    # sola la que convertía un research de 2s en uno de 10-12s. Es el mayor
+    # coste aislado de esa página. Ver hallazgo #12 de la auditoría de Research.
     try:
-        data = get_cartera()
-        return {r["ticker"] for r in data.get("abiertas", [])}
+        url = settings.url_cartera
+        if not url:
+            raise ValueError("URL_CARTERA no configurada")
+        df = pd.read_csv(url).dropna(how="all")
+        df.columns = [c.strip() for c in df.columns]
+        col_map = {norm_col(c): c for c in df.columns}
+
+        def _col(*candidatos):
+            for c in candidatos:
+                if norm_col(c) in col_map:
+                    return col_map[norm_col(c)]
+            return None
+
+        col_ticker = _col("Ticker", "Symbol")
+        col_estado = _col("Estado")
+        if not col_ticker or not col_estado:
+            raise ValueError("La hoja no tiene columna de ticker o de estado")
+
+        # MISMO filtro que usa get_cartera() para separar abiertas: el estado
+        # tiene que decir ABIERTA/OPEN. Un filtro negativo ("que no sea
+        # cerrada") no vale y no es un detalle: deja pasar las filas a medias,
+        # las que se empiezan a teclear y quedan sin estado ni precio de
+        # compra. Comprobado con datos reales -- con el filtro negativo salian
+        # 45 tickers frente a los 44 de la cartera, y el de mas era una fila
+        # sin completar. El badge tiene que decir lo mismo que la pagina de
+        # Cartera o no sirve de nada.
+        df = df[df[col_estado].astype(str).str.contains("ABIERTA|OPEN", case=False, na=False)]
+        tickers = {str(t).strip().upper() for t in df[col_ticker].dropna() if str(t).strip()}
+
+        # TTL más largo que el de la cartera completa (60s): las posiciones
+        # abiertas cambian cuando el usuario toca la hoja, no cada minuto, y
+        # esto lo consultan cinco módulos distintos.
+        cache.set(_TICKERS_CACHE_KEY, sorted(tickers), 600)
+        return tickers
     except Exception as e:
         print(f"[Cartera] No se pudo leer Cartera para un cruce de tickers: {e}")
         return set()
