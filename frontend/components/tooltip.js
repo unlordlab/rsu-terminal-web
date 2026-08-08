@@ -2174,6 +2174,22 @@ Para ROE, ROA y los tres márgenes, más alto siempre es mejor. Para el D/E Rati
 Comparar rentabilidad dentro del mismo sector es más significativo que comparar entre sectores distintos — un margen neto del 8% puede ser excelente en retail y mediocre en software, por eso el contexto sectorial importa.`
     },
 
+    "rsu-flow": {
+        title: "Indicador RSU — Flujo de dinero",
+        short: "Si últimamente ha entrado o salido más dinero de lo normal en este valor.",
+        long: `Cada día, si el precio cierra en la parte alta de su rango se interpreta como presión compradora, y si cierra en la parte baja, como vendedora. Esa presión se pondera por el volumen —una sesión muy negociada pesa más que una tranquila— y se acumula a lo largo del último mes.
+
+CÓMO SE LEE:
+El resultado va de 0 a 100 y se compara con el propio valor durante el último año. Por encima de 80 está entrando más dinero de lo que es habitual en él; por debajo de 20, está saliendo. En medio, ritmo normal.
+
+Es una escala relativa a cada acción, no absoluta: un 80 aquí y un 80 en otra empresa no significan la misma cantidad de dinero, sino la misma rareza respecto a su propia historia.
+
+PARA QUÉ SIRVE Y PARA QUÉ NO:
+Da contexto sobre si el interés por el valor está creciendo o enfriándose, algo que el precio por sí solo no cuenta. No es una señal de compra ni de venta, y no conviene usarlo solo: mirando tres años de datos, los valores con el flujo más alto rindieron por delante de los de flujo más bajo a tres meses vista, pero por poco margen, y a tres semanas la diferencia desaparece.
+
+Tampoco ve órdenes reales ni sabe quién compra: deduce la presión a partir del precio y el volumen, que es información pública.`
+    },
+
     "sector-growth": {
         title: "Crecimiento vs Sector",
         short: "Crecimiento de ingresos y beneficios comparado contra la mediana de crecimiento del sector.",

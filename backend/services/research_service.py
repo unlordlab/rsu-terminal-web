@@ -16,6 +16,7 @@ from config import settings
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "..", "shared"))
 from weinstein_phases import _ema_slope, classify_phase_debounced, classify_phase_weekly  # noqa: E402
 from time_utils import get_timestamp  # noqa: E402
+from rsu_flow import calcular_flujo, zona as zona_flujo  # noqa: E402
 from gist_ids import (  # noqa: E402
     SECTOR_MEDIANS_GIST_ID,
     SECTOR_MEDIANS_GIST_FILE,
@@ -1772,7 +1773,30 @@ def _get_technical_levels(ticker: str) -> dict:
         phase_label  = phase_info["phase_label"]
         early_reversal = (slope10_dir == "alcista" and slope20_dir == "alcista" and price > ema20)
 
+        # Indicador RSU de flujo de dinero. Sale de este MISMO `hist` de 2 años
+        # que ya está descargado aquí, así que no cuesta ninguna petición extra.
+        try:
+            flujo_serie = calcular_flujo(hist)
+            vivos = flujo_serie.dropna()
+            if len(vivos) >= 20:
+                # Solo se enseña el último medio año; el resto del histórico
+                # existe para poder situar el dato, no para pintarlo.
+                recorte = vivos.tail(126)
+                flujo_actual = round(float(vivos.iloc[-1]), 1)
+                rsu_flow = {
+                    "ok":     True,
+                    "valor":  flujo_actual,
+                    "zona":   zona_flujo(flujo_actual),
+                    "fechas": [d.strftime("%Y-%m-%d") for d in recorte.index],
+                    "serie":  [round(float(v), 1) for v in recorte],
+                }
+            else:
+                rsu_flow = {"ok": False, "error": "Histórico insuficiente para situar el flujo"}
+        except Exception as e:
+            rsu_flow = {"ok": False, "error": str(e)}
+
         return {
+            "rsu_flow":      rsu_flow,
             "sma20":         sma20,
             "sma50":         sma50,
             "sma200":        sma200,

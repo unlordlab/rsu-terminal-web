@@ -16,7 +16,7 @@ import { errorMessage, esc, safeUrl, fmtFecha } from '/core/ui.js';
 // DOM y la referencia que hubiéramos guardado apuntaría a un elemento
 // huérfano. Chart.getChart(id) resuelve siempre el gráfico realmente vivo.
 const _RESEARCH_CHART_IDS = [
-    'crypto-chart', 'sparkline-chart',
+    'crypto-chart', 'sparkline-chart', 'rsu-flow-chart',
     'earnings-chart', 'income-statement-chart', 'insider-volume-chart',
 ];
 
@@ -76,6 +76,7 @@ export async function render(container) {
             renderIncomeStatementChart(data);
             renderInsiderVolumeChart(data);
             renderCryptoChart(data);
+            renderRsuFlowChart(data);
         } catch(e) {
             result.innerHTML = errorMessage(e.message);
         } finally {
@@ -311,9 +312,12 @@ function renderResearch(data) {
         + descriptionSection(data)
         + rsuScoreSection(score, scoreColor)
         + piotroskiSection(data)
-        + chartSection(data)
-        + technicalSection(data)
+        // Valoración, rentabilidad y crecimiento suben por encima del gráfico:
+        // son lo que se mira antes de nada al abrir una ficha.
         + metricsSection(data)
+        + chartSection(data)
+        + rsuFlowSection(data)
+        + technicalSection(data)
         + incomeStatementSection(data)
         + consensoSection(data)
         + analystChangesSection(data)
@@ -503,6 +507,67 @@ function chartSection(data) {
         + '</div>';
 }
 
+function rsuFlowSection(data) {
+    const f = (data.technical_levels || {}).rsu_flow;
+    if (!f || !f.ok) return '';
+    const col = f.zona === 'entrando' ? 'var(--color-accent)'
+              : f.zona === 'saliendo' ? '#f23645' : '#ffb800';
+    const texto = f.zona === 'entrando' ? 'Está entrando más dinero de lo habitual en este valor'
+                : f.zona === 'saliendo' ? 'Está saliendo más dinero de lo habitual en este valor'
+                :                          'El dinero entra y sale a un ritmo normal para este valor';
+    return '<div style="background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius);padding:1.25rem;margin-bottom:1rem;">'
+        + '<div style="display:flex;justify-content:space-between;align-items:baseline;gap:1rem;flex-wrap:wrap;margin-bottom:0.75rem;">'
+        + '<div style="color:var(--color-accent);font-size:12px;letter-spacing:0.08em;">INDICADOR RSU · FLUJO DE DINERO ' + tt('rsu-flow') + '</div>'
+        + '<div style="color:' + col + ';font-size:20px;font-weight:600;">' + f.valor.toFixed(0)
+        + '<span style="color:var(--color-muted);font-size:11px;font-weight:400;"> / 100</span></div>'
+        + '</div>'
+        + '<div style="color:' + col + ';font-size:12px;margin-bottom:0.75rem;">' + texto + '</div>'
+        + '<div style="position:relative;height:150px;"><canvas id="rsu-flow-chart"></canvas></div>'
+        + '<div style="color:var(--color-muted);font-size:10px;margin-top:0.5rem;">'
+        + 'Últimos 6 meses. Compara con lo normal en este mismo valor durante el último año, '
+        + 'así que 80 no significa lo mismo aquí que en otra acción: significa más entrada que en el 80% de sus días recientes.'
+        + '</div>'
+        + '</div>';
+}
+
+function renderRsuFlowChart(data) {
+    const f = (data.technical_levels || {}).rsu_flow;
+    if (!f || !f.ok) return;
+    loadChartJs(() => {
+        const ctx = document.getElementById('rsu-flow-chart');
+        if (!ctx) return;
+        new Chart(ctx, {
+            type: 'line',
+            data: {
+                labels: f.fechas,
+                datasets: [{
+                    label: 'Flujo RSU', data: f.serie,
+                    borderColor: 'var(--color-accent)', borderWidth: 1.5,
+                    pointRadius: 0, tension: 0.25, fill: false,
+                }]
+            },
+            options: {
+                responsive: true, maintainAspectRatio: false,
+                interaction: { mode: 'index', intersect: false },
+                plugins: {
+                    legend: { display: false },
+                    tooltip: { callbacks: { label: c => c.parsed.y.toFixed(0) + ' / 100' } },
+                },
+                scales: {
+                    x: { ticks: { color: '#444', font: { size: 8 }, maxTicksLimit: 6 },
+                         grid: { color: 'rgba(255,255,255,0.03)' } },
+                    // Escala fija 0-100: es un percentil, no una magnitud que
+                    // deba reescalarse sola, y dejarla libre haría parecer
+                    // extremo cualquier movimiento pequeño.
+                    y: { min: 0, max: 100,
+                         ticks: { color: '#444', font: { size: 8 }, stepSize: 20 },
+                         grid: { color: 'rgba(255,255,255,0.03)' } },
+                },
+            }
+        });
+    });
+}
+
 function metricsSection(data) {
     const m = data.metrics;
     const p = data.profitability;
@@ -527,7 +592,7 @@ function metricsSection(data) {
     const pctFmt = v => v ? (v*100).toFixed(1) + '%' : 'N/A';
     const xFmt   = v => v ? v.toFixed(1) + 'x' : 'N/A';
 
-    return '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:1rem;margin-bottom:1rem;">'
+    return '<div class="rsu-grid-cards" style="gap:1rem;margin-bottom:1rem;">'
         + metricCard('VALORACIÓN ' + tt('sector-valuation'), [
             ['P/E Trailing ' + tt('pe-ratio'),  m.trailing_pe,    v => v ? v.toFixed(1) + 'x' : 'N/A', sec('trailing_pe', xFmt)],
             ['P/E Forward',   m.forward_pe,     v => v ? v.toFixed(1) + 'x' : 'N/A', sec('forward_pe', xFmt)],
