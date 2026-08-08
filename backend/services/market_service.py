@@ -1,3 +1,4 @@
+from services.gist_client import cabeceras_gist
 from datetime import datetime, timedelta, timezone
 import yfinance as yf
 import pandas as pd
@@ -1127,7 +1128,7 @@ def get_nightly_briefing():
     try:
         r = _req.get(
             f"https://api.github.com/gists/{BRIEFING_GIST_ID}",
-            headers={"Accept": "application/vnd.github+json"},
+            headers=cabeceras_gist(),
             timeout=10,
         )
         if r.status_code != 200:

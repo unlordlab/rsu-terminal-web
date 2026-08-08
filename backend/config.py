@@ -63,6 +63,14 @@ class Settings(BaseSettings):
     xai_api_key: str = ""
     fmp_api_key: str = ""
     finnhub_api_key: str = ""
+    # Token de GitHub para LEER los Gists de los scans nocturnos. Sin él, la
+    # API de Gists limita a 60 peticiones/hora y el límite es POR IP, así que
+    # las 7 lecturas del backend (briefing, RS/RW, Scanner, Thematic, CANSLIM,
+    # medianas sectoriales, Congress) comparten el mismo cupo. Con token son
+    # 5.000/hora. Es el mismo secret `GIST_TOKEN` que ya usan los Actions para
+    # ESCRIBIR esos Gists; aquí solo hace falta permiso de lectura.
+    # Vacío = se lee sin autenticar, exactamente como hasta ahora.
+    github_token: str = ""
     # Precios de Cartera en vivo por el WebSocket de trades de Finnhub, en vez
     # de las cotizaciones diferidas de yfinance. Ver
     # services/finnhub_stream_service.py.

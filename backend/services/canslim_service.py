@@ -3,6 +3,7 @@ CAN SLIM Service — RSU Terminal
 Universo: S&P 500 completo (ver shared/sp500_universe.py -- fuente única, sesión 19)
 Fixes: NaN sanitization, RS real percentile, N+I criteria, Market widget
 """
+from services.gist_client import cabeceras_gist
 import json
 import requests
 import pandas as pd
@@ -644,7 +645,7 @@ def _load_canslim_gist() -> dict | None:
         r = requests.get(
             f"https://api.github.com/gists/{CANSLIM_GIST_ID}",
             timeout=10,
-            headers={"Accept": "application/vnd.github.v3+json"},
+            headers=cabeceras_gist(),
         )
         r.raise_for_status()
         content = r.json()["files"][CANSLIM_GIST_FILE]["content"]

@@ -14,6 +14,7 @@ Si quieres editar las 29 cestas o sus tickers, edita
 scripts/thematic_scan.py (es la única fuente de verdad del scan) — este
 archivo no tiene la lista de tickers porque no la necesita.
 """
+from services.gist_client import cabeceras_gist
 import json
 import requests
 from services.cache import cache
@@ -31,7 +32,7 @@ def _load_gist() -> dict | None:
         r = requests.get(
             f"https://api.github.com/gists/{GIST_ID}",
             timeout=10,
-            headers={"Accept": "application/vnd.github.v3+json"}
+            headers=cabeceras_gist()
         )
         r.raise_for_status()
         content = r.json()["files"][GIST_FILE]["content"]

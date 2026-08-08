@@ -1,3 +1,4 @@
+from services.gist_client import cabeceras_gist
 import yfinance as yf
 import requests
 import json
@@ -2321,7 +2322,7 @@ def _get_sector_medians_data() -> dict:
         r = requests.get(
             f"https://api.github.com/gists/{SECTOR_MEDIANS_GIST_ID}",
             timeout=10,
-            headers={"Accept": "application/vnd.github.v3+json"},
+            headers=cabeceras_gist(),
         )
         r.raise_for_status()
         ficheros = r.json().get("files", {})

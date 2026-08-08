@@ -1,3 +1,4 @@
+from services.gist_client import cabeceras_gist
 import json
 import requests
 
@@ -11,7 +12,7 @@ def _load_congress_gist() -> dict | None:
     try:
         r = requests.get(
             f"https://api.github.com/gists/{CONGRESS_GIST_ID}",
-            headers={"Accept": "application/vnd.github+json"}, timeout=10,
+            headers=cabeceras_gist(), timeout=10,
         )
         if r.status_code != 200:
             return None
