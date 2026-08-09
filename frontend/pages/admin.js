@@ -1,15 +1,24 @@
 import { renderThemeMaker } from '/pages/admin_theme_maker.js';
 import { esc } from '/core/ui.js';
 
-const ADMIN_KEY_STORAGE = 'rsu_admin_key';
+// La clave de administracion vive en una cookie httpOnly que pone el
+// backend al canjearla (POST /auth/admin/session). Este codigo NO la tiene
+// ni puede leerla, que es justo el objetivo: el 08/08 se demostro que un
+// POST anonimo a /analytics/track bastaba para ejecutar codigo en este
+// panel, y entonces la clave era un sessionStorage.getItem() -- la
+// credencial mas potente del proyecto al alcance de cualquier XSS.
+//
+// ADMIN_SESSION_FLAG no es una credencial: solo dice si hay sesion de admin
+// abierta, para elegir entre pintar el panel o el formulario de la clave.
+// Falsificarlo a mano no da acceso a nada; cada endpoint comprueba la
+// cookie en el servidor.
+const ADMIN_SESSION_FLAG = 'rsu_admin_ok';
 
 async function keyFetch(fullPath, options = {}) {
-    const key = sessionStorage.getItem(ADMIN_KEY_STORAGE);
     const res = await fetch(fullPath, {
         ...options,
         headers: {
             'Content-Type': 'application/json',
-            'X-Admin-Key': key || '',
             ...(options.headers || {}),
         },
     });
@@ -20,7 +29,7 @@ async function keyFetch(fullPath, options = {}) {
     }
     if (!res.ok) {
         const body = await res.json().catch(() => ({ detail: 'Error desconocido' }));
-        throw new Error(body.detail || `HTTP ${res.status}`);
+        throw new Error(body.detail || `HTTP ${esc(res.status)}`);
     }
     return res.json();
 }
@@ -104,7 +113,7 @@ export async function render(container) {
 
     async function renderActiveTab() {
         setActiveTabUI();
-        if (!sessionStorage.getItem(ADMIN_KEY_STORAGE)) {
+        if (!sessionStorage.getItem(ADMIN_SESSION_FLAG)) {
             renderKeyPrompt(content, renderActiveTab);
             return;
         }
@@ -197,13 +206,24 @@ function renderKeyPrompt(content, onSuccess) {
     async function tryKey() {
         const key = input.value.trim();
         if (!key) return;
-        sessionStorage.setItem(ADMIN_KEY_STORAGE, key);
         error.textContent = '';
         btn.textContent = 'VERIFICANDO...';
         try {
+            // Unico sitio donde la clave se manda por cabecera. El backend
+            // la valida y responde con la cookie httpOnly; a partir de aqui
+            // el panel ya no la tiene en ninguna variable ni almacen.
+            const res = await fetch('/api/v1/auth/admin/session', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'X-Admin-Key': key },
+            });
+            if (!res.ok) {
+                const body = await res.json().catch(() => ({}));
+                throw new Error(body.detail || 'Clave inválida');
+            }
+            sessionStorage.setItem(ADMIN_SESSION_FLAG, '1');
             await onSuccess();
         } catch (err) {
-            sessionStorage.removeItem(ADMIN_KEY_STORAGE);
+            sessionStorage.removeItem(ADMIN_SESSION_FLAG);
             error.textContent = '✗ ' + (err.message || 'Clave inválida');
             btn.textContent = 'ENTRAR';
         }
@@ -221,7 +241,7 @@ async function renderUsersPanel(content) {
         data = await adminFetch('/admin/users');
     } catch (err) {
         if (err.isAuthError) {
-            sessionStorage.removeItem(ADMIN_KEY_STORAGE);
+            sessionStorage.removeItem(ADMIN_SESSION_FLAG);
         }
         renderKeyPrompt(content, () => renderUsersPanel(content));
         if (err.isAuthError) {
@@ -329,8 +349,10 @@ async function renderUsersPanel(content) {
     });
 
     content.querySelector('#admin-refresh').addEventListener('click', () => renderUsersPanel(content));
-    content.querySelector('#admin-logout').addEventListener('click', () => {
-        sessionStorage.removeItem(ADMIN_KEY_STORAGE);
+    content.querySelector('#admin-logout').addEventListener('click', async () => {
+        // La cookie es httpOnly: borrarla solo puede hacerlo el backend.
+        try { await fetch('/api/v1/auth/admin/logout', { method: 'POST' }); } catch (e) { /* sin red */ }
+        sessionStorage.removeItem(ADMIN_SESSION_FLAG);
         renderKeyPrompt(content, () => renderUsersPanel(content));
     });
 }
@@ -343,10 +365,10 @@ let healthHours = 24;
 async function renderMetricsPanel(content) {
     let data;
     try {
-        data = await analyticsFetch(`/summary?days=${metricsDays}`);
+        data = await analyticsFetch(`/summary?days=${esc(metricsDays)}`);
     } catch (err) {
         if (err.isAuthError) {
-            sessionStorage.removeItem(ADMIN_KEY_STORAGE);
+            sessionStorage.removeItem(ADMIN_SESSION_FLAG);
         }
         renderKeyPrompt(content, () => renderMetricsPanel(content));
         if (err.isAuthError) {
@@ -364,8 +386,8 @@ async function renderMetricsPanel(content) {
         return `
             <div style="margin-bottom:8px;">
                 <div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:3px;">
-                    <span style="color:var(--color-text);">${label}</span>
-                    <span style="color:var(--color-muted);">${value}${sub ? ` · ${sub}` : ''}</span>
+                    <span style="color:var(--color-text);">${esc(label)}</span>
+                    <span style="color:var(--color-muted);">${esc(value)}${sub ? ` · ${esc(sub)}` : ''}</span>
                 </div>
                 <div style="background:var(--color-surface2);border-radius:3px;height:6px;overflow:hidden;">
                     <div style="width:${pct}%;height:100%;background:var(--color-accent);"></div>
@@ -443,10 +465,10 @@ function healthColor(rate) {
 async function renderHealthPanel(content) {
     let data;
     try {
-        data = await analyticsFetch(`/yfinance-health?hours=${healthHours}`);
+        data = await analyticsFetch(`/yfinance-health?hours=${esc(healthHours)}`);
     } catch (err) {
         if (err.isAuthError) {
-            sessionStorage.removeItem(ADMIN_KEY_STORAGE);
+            sessionStorage.removeItem(ADMIN_SESSION_FLAG);
         }
         renderKeyPrompt(content, () => renderHealthPanel(content));
         if (err.isAuthError) {
@@ -541,7 +563,7 @@ async function renderTesisPanel(content) {
         pendingData = await tesisFetch('/admin/pending');
         approvedData = await tesisFetch('/admin/approved?limit=20');
     } catch (err) {
-        if (err.isAuthError) sessionStorage.removeItem(ADMIN_KEY_STORAGE);
+        if (err.isAuthError) sessionStorage.removeItem(ADMIN_SESSION_FLAG);
         renderKeyPrompt(content, () => renderTesisPanel(content));
         if (err.isAuthError) content.querySelector('#admin-key-error').textContent = '\u2717 Clave de administrador inv\u00e1lida';
         return;
@@ -589,7 +611,7 @@ async function renderTesisPanel(content) {
                 <div>
                     <div style="font-size:14px;color:var(--color-text);font-weight:600;">${esc(item.ticker)} \u00b7 ${esc(item.rating)}</div>
                     <div style="font-size:12px;color:var(--color-muted);margin-top:2px;">${item.titulo ? esc(item.titulo) : '(sin t\u00edtulo)'}</div>
-                    <div style="font-size:11px;color:var(--color-muted);margin-top:4px;">${fuenteLabel} \u00b7 ${fecha}${item.criterio ? ' \u00b7 ' + esc(item.criterio) : ''}</div>
+                    <div style="font-size:11px;color:var(--color-muted);margin-top:4px;">${esc(fuenteLabel)} \u00b7 ${esc(fecha)}${item.criterio ? ' \u00b7 ' + esc(item.criterio) : ''}</div>
                     ${avisoGemini}
                 </div>
                 <div style="display:flex;gap:6px;flex-shrink:0;">
@@ -646,7 +668,7 @@ async function renderTesisPanel(content) {
         row.innerHTML = `
             <span style="color:var(--color-text);">${esc(item.ticker)} \u00b7 ${esc(item.rating)} \u2014 <span style="color:var(--color-muted);">${item.titulo ? esc(item.titulo) : ''}</span></span>
             <div style="display:flex;align-items:center;gap:8px;flex-shrink:0;">
-                <span style="color:var(--color-muted);font-size:10px;">${fechaAprobado}</span>
+                <span style="color:var(--color-muted);font-size:10px;">${esc(fechaAprobado)}</span>
                 <button class="tesis-unpublish-btn" style="background:none;border:1px solid #e0b13e;color:#e0b13e;padding:3px 8px;border-radius:var(--radius);cursor:pointer;font-family:var(--font-mono);font-size:10px;">RETIRAR</button>
             </div>
         `;
@@ -669,7 +691,7 @@ async function renderAcademyReviewPanel(content) {
         pendingData = await academyReviewFetch('/pending');
         approvedData = await academyReviewFetch('/approved?limit=20');
     } catch (err) {
-        if (err.isAuthError) sessionStorage.removeItem(ADMIN_KEY_STORAGE);
+        if (err.isAuthError) sessionStorage.removeItem(ADMIN_SESSION_FLAG);
         renderKeyPrompt(content, () => renderAcademyReviewPanel(content));
         if (err.isAuthError) content.querySelector('#admin-key-error').textContent = '\u2717 Clave de administrador inv\u00e1lida';
         return;
@@ -711,9 +733,9 @@ async function renderAcademyReviewPanel(content) {
         card.innerHTML = `
             <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px;flex-wrap:wrap;">
                 <div>
-                    <div style="font-size:14px;color:var(--color-text);font-weight:600;">${item.titulo}</div>
-                    <div style="font-size:11px;color:var(--color-muted);margin-top:4px;">${tipoLabel}${item.leccion_ref ? ' \u00b7 leccion ' + item.leccion_ref : ''} \u00b7 ${fecha}</div>
-                    ${item.resumen ? `<div style="font-size:12px;color:var(--color-muted);margin-top:6px;">${item.resumen}</div>` : ''}
+                    <div style="font-size:14px;color:var(--color-text);font-weight:600;">${esc(item.titulo)}</div>
+                    <div style="font-size:11px;color:var(--color-muted);margin-top:4px;">${esc(tipoLabel)}${item.leccion_ref ? ' \u00b7 leccion ' + item.leccion_ref : ''} \u00b7 ${esc(fecha)}</div>
+                    ${item.resumen ? `<div style="font-size:12px;color:var(--color-muted);margin-top:6px;">${esc(item.resumen)}</div>` : ''}
                 </div>
                 <div style="display:flex;gap:6px;flex-shrink:0;flex-wrap:wrap;">
                     <button class="academy-preview-btn" style="background:none;border:1px solid var(--color-accent);color:var(--color-accent);padding:4px 10px;border-radius:var(--radius);cursor:pointer;font-family:var(--font-mono);font-size:11px;">VISTA PREVIA</button>
@@ -724,7 +746,7 @@ async function renderAcademyReviewPanel(content) {
                 </div>
             </div>
             <div class="academy-preview-content" style="display:none;margin-top:12px;padding:16px;background:var(--color-bg);border:1px solid var(--color-border);border-radius:var(--radius);max-height:600px;overflow-y:auto;"></div>
-            <pre class="academy-full-content" style="display:none;margin-top:12px;padding:10px;background:var(--color-surface2);border-radius:var(--radius);white-space:pre-wrap;font-size:11px;line-height:1.5;color:var(--color-text);max-height:500px;overflow-y:auto;font-family:var(--font-mono);">${item.bloque_js}</pre>
+            <pre class="academy-full-content" style="display:none;margin-top:12px;padding:10px;background:var(--color-surface2);border-radius:var(--radius);white-space:pre-wrap;font-size:11px;line-height:1.5;color:var(--color-text);max-height:500px;overflow-y:auto;font-family:var(--font-mono);">${esc(item.bloque_js)}</pre>
         `;
         list.appendChild(card);
 
@@ -797,9 +819,9 @@ async function renderAcademyReviewPanel(content) {
         `;
         const fechaAprobado = item.approved_at ? new Date(item.approved_at * 1000).toLocaleDateString('es-ES') : '';
         row.innerHTML = `
-            <span style="color:var(--color-text);">${item.titulo}</span>
+            <span style="color:var(--color-text);">${esc(item.titulo)}</span>
             <div style="display:flex;align-items:center;gap:8px;flex-shrink:0;">
-                <span style="color:var(--color-muted);font-size:10px;">${fechaAprobado}</span>
+                <span style="color:var(--color-muted);font-size:10px;">${esc(fechaAprobado)}</span>
                 <button class="academy-unapprove-btn" style="background:none;border:1px solid #e0b13e;color:#e0b13e;padding:3px 8px;border-radius:var(--radius);cursor:pointer;font-family:var(--font-mono);font-size:10px;">RETIRAR</button>
             </div>
         `;
@@ -819,21 +841,21 @@ async function renderAcademyReviewPanel(content) {
 function renderAcademyBlock(block) {
     switch (block.type) {
         case 'text':
-            return `<p style="color:var(--color-text);font-size:13px;line-height:1.7;margin:0.6rem 0;">${block.content}</p>`;
+            return `<p style="color:var(--color-text);font-size:13px;line-height:1.7;margin:0.6rem 0;">${esc(block.content)}</p>`;
         case 'tip':
             return `<div style="background:var(--color-surface2);border-left:2px solid var(--color-accent);border-radius:var(--radius);padding:10px 14px;margin:12px 0;">
                 <div style="color:var(--color-accent);font-size:10px;letter-spacing:.1em;margin-bottom:5px;">${block.label || 'CONSEJO'}</div>
-                <div style="color:var(--color-text);font-size:13px;line-height:1.7;">${block.content}</div>
+                <div style="color:var(--color-text);font-size:13px;line-height:1.7;">${esc(block.content)}</div>
             </div>`;
         case 'warning':
             return `<div style="background:var(--color-surface2);border-left:2px solid #ff9800;border-radius:var(--radius);padding:10px 14px;margin:12px 0;">
                 <div style="color:#ff9800;font-size:10px;letter-spacing:.1em;margin-bottom:5px;">⚠ ATENCIÓN</div>
-                <div style="color:var(--color-text);font-size:13px;line-height:1.7;">${block.content}</div>
+                <div style="color:var(--color-text);font-size:13px;line-height:1.7;">${esc(block.content)}</div>
             </div>`;
         case 'concept':
             return `<div style="background:var(--color-surface2);border-left:2px solid var(--color-secondary);border-radius:var(--radius);padding:10px 14px;margin:12px 0;">
                 <div style="color:var(--color-secondary);font-size:11px;letter-spacing:.1em;margin-bottom:8px;">💡 CONCEPTO — ${(block.title || '').toUpperCase()}</div>
-                <div style="color:var(--color-text);font-size:13px;line-height:1.7;">${block.content}</div>
+                <div style="color:var(--color-text);font-size:13px;line-height:1.7;">${esc(block.content)}</div>
             </div>`;
         case 'steps':
             return `<ol style="color:var(--color-text);font-size:13px;line-height:1.9;padding-left:1.4rem;margin:0.75rem 0;">
@@ -842,8 +864,8 @@ function renderAcademyBlock(block) {
         case 'table':
             return `<div style="overflow-x:auto;margin:14px 0;">
                 <table style="border-collapse:collapse;width:100%;font-size:12px;">
-                    <thead><tr>${(block.headers || []).map(h => `<th style="border:1px solid var(--color-border);padding:6px 10px;text-align:left;color:var(--color-accent);background:var(--color-surface2);">${h}</th>`).join('')}</tr></thead>
-                    <tbody>${(block.rows || []).map(row => `<tr>${row.map(cell => `<td style="border:1px solid var(--color-border);padding:6px 10px;">${cell}</td>`).join('')}</tr>`).join('')}</tbody>
+                    <thead><tr>${(block.headers || []).map(h => `<th style="border:1px solid var(--color-border);padding:6px 10px;text-align:left;color:var(--color-accent);background:var(--color-surface2);">${esc(h)}</th>`).join('')}</tr></thead>
+                    <tbody>${(block.rows || []).map(row => `<tr>${row.map(cell => `<td style="border:1px solid var(--color-border);padding:6px 10px;">${esc(cell)}</td>`).join('')}</tr>`).join('')}</tbody>
                 </table>
             </div>`;
         case 'divider':
@@ -877,7 +899,7 @@ function renderAcademyPreview(parsed, tipo) {
     }
     // tipo === 'revision': una sola sección suelta
     return renderAcademySection(parsed) + (parsed.justificacion
-        ? `<p style="color:var(--color-muted);font-size:11px;font-style:italic;margin-top:1rem;">Por qué Elia propone esto: ${parsed.justificacion}</p>`
+        ? `<p style="color:var(--color-muted);font-size:11px;font-style:italic;margin-top:1rem;">Por qué Elia propone esto: ${esc(parsed.justificacion)}</p>`
         : '');
 }
 
@@ -886,7 +908,7 @@ async function renderLaiaPanel(content) {
     try {
         data = await laiaFetch('/verdicts?limit=30');
     } catch (err) {
-        if (err.isAuthError) sessionStorage.removeItem(ADMIN_KEY_STORAGE);
+        if (err.isAuthError) sessionStorage.removeItem(ADMIN_SESSION_FLAG);
         renderKeyPrompt(content, () => renderLaiaPanel(content));
         if (err.isAuthError) content.querySelector('#admin-key-error').textContent = '✗ Clave de administrador inválida';
         return;
@@ -928,13 +950,13 @@ async function renderLaiaPanel(content) {
 
         card.innerHTML = `
             <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px;flex-wrap:wrap;margin-bottom:8px;">
-                <div style="font-size:11px;color:var(--color-muted);">${fecha} · ${item.tesis_auditadas} tesis auditadas</div>
+                <div style="font-size:11px;color:var(--color-muted);">${esc(fecha)} · ${esc(item.tesis_auditadas)} tesis auditadas</div>
                 <div style="display:flex;gap:10px;font-size:10px;">
-                    <span style="color:${sesgoColor};">${sesgoLabel}</span>
-                    <span style="color:var(--color-muted);">${envioLabel}</span>
+                    <span style="color:${sesgoColor};">${esc(sesgoLabel)}</span>
+                    <span style="color:var(--color-muted);">${esc(envioLabel)}</span>
                 </div>
             </div>
-            <p style="color:var(--color-text);font-size:13px;line-height:1.6;white-space:pre-wrap;margin:0 0 8px;">${item.texto}</p>
+            <p style="color:var(--color-text);font-size:13px;line-height:1.6;white-space:pre-wrap;margin:0 0 8px;">${esc(item.texto)}</p>
             ${hallazgos.length ? `<div style="font-size:10px;color:var(--color-muted);">Hype detectado en: ${hallazgos.map(h => h.ticker).join(', ')}</div>` : ''}
         `;
         list.appendChild(card);
@@ -959,7 +981,7 @@ async function renderMeetingRoomPanel(content) {
     try {
         data = await meetingRoomFetch('/historial?limit=100');
     } catch (err) {
-        if (err.isAuthError) sessionStorage.removeItem(ADMIN_KEY_STORAGE);
+        if (err.isAuthError) sessionStorage.removeItem(ADMIN_SESSION_FLAG);
         renderKeyPrompt(content, () => renderMeetingRoomPanel(content));
         if (err.isAuthError) content.querySelector('#admin-key-error').textContent = '✗ Clave de administrador inválida';
         return;
@@ -1026,8 +1048,8 @@ function renderMeetingRoomMessages(chatBox, items) {
             : '';
         return `<div style="align-self:${esMarc ? 'flex-end' : 'flex-start'};max-width:75%;">
             <div style="display:flex;gap:6px;align-items:baseline;margin-bottom:2px;${esMarc ? 'justify-content:flex-end;' : ''}">
-                <span style="color:${color};font-size:11px;font-weight:600;">${label}</span>
-                <span style="color:var(--color-muted);font-size:9px;">${fecha} ${estadoTag}</span>
+                <span style="color:${color};font-size:11px;font-weight:600;">${esc(label)}</span>
+                <span style="color:var(--color-muted);font-size:9px;">${esc(fecha)} ${esc(estadoTag)}</span>
             </div>
             <div style="background:${esMarc ? 'var(--color-surface2)' : 'rgba(255,255,255,0.03)'};border:1px solid var(--color-border);border-radius:var(--radius);padding:8px 12px;color:var(--color-text);font-size:12px;line-height:1.5;white-space:pre-wrap;">${esc(m.mensaje)}${!esMarc && m.destinatario ? '' : ''}${esMarc && m.destinatario ? '<div style="color:var(--color-muted);font-size:9px;margin-top:4px;">→ ' + esc(AGENTE_LABEL[m.destinatario] || m.destinatario) + '</div>' : ''}</div>
         </div>`;
@@ -1039,7 +1061,7 @@ function statCard(label, value) {
     return `
         <div style="background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius-lg);padding:0.9rem 1rem;">
             <div style="color:var(--color-muted);font-size:10px;letter-spacing:0.08em;margin-bottom:4px;">${label.toUpperCase()}</div>
-            <div style="color:var(--color-text);font-size:22px;">${value}</div>
+            <div style="color:var(--color-text);font-size:22px;">${esc(value)}</div>
         </div>
     `;
 }
@@ -1061,7 +1083,7 @@ async function renderFeedbackPanel(content) {
                 <div style="background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius);padding:0.9rem 1rem;margin-bottom:0.6rem;${bg !== 'transparent' ? 'border-left:2px solid var(--color-accent);' : ''}background:${bg};">
                     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;flex-wrap:wrap;gap:6px;">
                         <span style="font-size:11px;color:var(--color-accent);">${FB_TYPE_LABEL[f.tipo] || esc(f.tipo)}</span>
-                        <span style="font-size:10px;color:var(--color-muted);">${when} ${f.user_email ? '· ' + esc(f.user_email) : ''}</span>
+                        <span style="font-size:10px;color:var(--color-muted);">${esc(when)} ${f.user_email ? '· ' + esc(f.user_email) : ''}</span>
                     </div>
                     <div style="color:var(--color-text);font-size:13px;line-height:1.5;white-space:pre-wrap;">${esc(f.mensaje)}</div>
                     ${f.contacto ? `<div style="margin-top:6px;font-size:11px;color:var(--color-muted);">Responder a: <a href="mailto:${esc(f.contacto)}" style="color:var(--color-secondary);">${esc(f.contacto)}</a></div>` : ''}
@@ -1079,10 +1101,10 @@ async function renderFeedbackPanel(content) {
         });
     } catch (e) {
         if (e.isAuthError) {
-            sessionStorage.removeItem(ADMIN_KEY_STORAGE);
+            sessionStorage.removeItem(ADMIN_SESSION_FLAG);
             renderKeyPrompt(content, () => renderFeedbackPanel(content));
             return;
         }
-        content.innerHTML = `<div style="color:#f23645;font-size:12px;">${e.message}</div>`;
+        content.innerHTML = `<div style="color:#f23645;font-size:12px;">${esc(e.message)}</div>`;
     }
 }

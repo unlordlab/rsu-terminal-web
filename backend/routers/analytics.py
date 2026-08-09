@@ -1,20 +1,54 @@
+import re
+
 from fastapi import APIRouter, Depends, Request
-from pydantic import BaseModel
-from auth import decode_token, verify_admin_key
+from pydantic import BaseModel, field_validator
+from auth import decode_token, verify_admin_key, COOKIE_NAME
 from services import analytics_service
 
 router = APIRouter(prefix="/api/v1/analytics", tags=["analytics"])
+
+# Rutas de la SPA: barra inicial, minúsculas, dígitos y guiones. Nada más.
+# Todas las secciones reales encajan aquí ("/", "/market", "/btc-stratum"...).
+_SECTION_RE = re.compile(r"^/[a-z0-9\-/]{0,40}$")
 
 
 class TrackRequest(BaseModel):
     section: str
 
+    @field_validator("section")
+    @classmethod
+    def _validar_section(cls, v: str) -> str:
+        # /track es un endpoint de ESCRITURA ANÓNIMO: no exige token a
+        # propósito (ver el docstring de track()). Aceptar texto libre en un
+        # sitio así fue una cadena de ataque real, demostrada de extremo a
+        # extremo el 08/08: bastaba un POST sin cuenta con
+        # section="<img src=x onerror=...>" para que el texto se guardara,
+        # saliera por /summary y el panel de admin lo pintara sin escapar en
+        # la pestaña de Métricas -- ejecución de código con la sesión del
+        # admin, y de ahí la ADMIN_KEY, que entonces vivía en sessionStorage.
+        # Se arreglaron los tres eslabones; este es el primero, y el que
+        # impide que la basura llegue siquiera a guardarse.
+        v = (v or "").strip()
+        if not _SECTION_RE.match(v):
+            raise ValueError("Sección no válida")
+        return v
+
 
 def _email_from_request(request: Request) -> str | None:
-    authz = request.headers.get("authorization")
-    if not authz or not authz.lower().startswith("bearer "):
-        return None
-    payload = decode_token(authz.split(" ", 1)[1])
+    """Quién ha visitado, si se puede saber. Mira primero la cookie de
+    sesión y luego la cabecera Bearer -- mismo orden que verify_token().
+
+    La cookie NO es opcional aquí: desde que la sesión pasó a cookie
+    httpOnly, el frontend ya no manda cabecera Authorization, así que
+    mirar solo la cabecera dejaba TODAS las visitas como anónimas y las
+    métricas por usuario del panel se habrían ido apagando en silencio."""
+    token = request.cookies.get(COOKIE_NAME)
+    if not token:
+        authz = request.headers.get("authorization")
+        if not authz or not authz.lower().startswith("bearer "):
+            return None
+        token = authz.split(" ", 1)[1]
+    payload = decode_token(token)
     return payload.get("sub") if payload else None
 
 

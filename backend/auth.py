@@ -22,6 +22,15 @@ from config import settings
 # cross-site, y lax bloquea justamente las que vendrían de fuera.
 COOKIE_NAME = "rsu_session"
 
+# La clave de administración sigue el mismo criterio, y por un motivo que no
+# es teórico: el 08/08 se demostró de extremo a extremo que un POST anónimo a
+# /analytics/track bastaba para ejecutar código en el panel de admin, y desde
+# ahí la clave era un sessionStorage.getItem() -- o sea, la credencial más
+# potente del proyecto (cambiar tiers, resetear cualquier contraseña, emitir
+# tokens de años) al alcance de cualquiera que colase un XSS. Con la cookie
+# httpOnly, un XSS futuro que se escape ya no puede leerla.
+ADMIN_COOKIE_NAME = "rsu_admin"
+
 bearer = HTTPBearer(auto_error=False)
 
 
@@ -153,8 +162,29 @@ def require_tier(min_tier: str):
 ADMIN_KEY_FAIL_LIMIT  = 20    # intentos fallidos permitidos
 ADMIN_KEY_FAIL_WINDOW = 3600  # por hora, por IP
 
+def set_admin_cookie(response: Response, key: str) -> None:
+    """Cookie de sesión (sin max-age): la clave de admin no debe sobrevivir
+    al cierre del navegador. Antes vivía en sessionStorage, que tiene esa
+    misma duración pero es legible desde JavaScript."""
+    response.set_cookie(
+        key=ADMIN_COOKIE_NAME, value=key,
+        httponly=True, samesite="lax", secure=settings.cookie_secure, path="/",
+    )
+
+
+def clear_admin_cookie(response: Response) -> None:
+    response.delete_cookie(
+        key=ADMIN_COOKIE_NAME, httponly=True, samesite="lax",
+        secure=settings.cookie_secure, path="/",
+    )
+
+
 def verify_admin_key(request: Request, x_admin_key: str = Header(None)) -> None:
-    if not settings.admin_key or not x_admin_key or not secrets.compare_digest(x_admin_key, settings.admin_key):
+    # Cookie primero, cabecera después. La cabecera se mantiene porque la
+    # usan procesos sin navegador: el workflow que dispara el escaneo de
+    # Options Flow manda X-Admin-Key y no tiene dónde guardar una cookie.
+    clave = request.cookies.get(ADMIN_COOKIE_NAME) or x_admin_key
+    if not settings.admin_key or not clave or not secrets.compare_digest(clave, settings.admin_key):
         # Solo los fallos cuentan contra este límite -- el uso legítimo con la
         # clave correcta (todo el panel /admin) no se ve afectado nunca.
         from middleware.rate_limit import _check_limit, _get_ip

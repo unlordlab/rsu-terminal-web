@@ -3,6 +3,7 @@ from pydantic import BaseModel, field_validator
 from auth import (
     create_token, verify_token, verify_admin_key,
     set_session_cookie, clear_session_cookie,
+    set_admin_cookie, clear_admin_cookie,
 )
 from middleware.rate_limit import login_rate_limit
 from services import users_service
@@ -216,6 +217,39 @@ async def telegram_unlink(payload: dict = Depends(verify_token)):
     if not user:
         raise HTTPException(status_code=401, detail="Usuario no encontrado")
     return users_service.unlink_telegram(user["id"])
+
+
+@router.post("/admin/session")
+async def admin_session(response: Response, _admin: None = Depends(verify_admin_key)):
+    """Canjea la clave de administración por una cookie httpOnly.
+
+    El panel la llama UNA vez, al introducir la clave, y a partir de ahí no
+    vuelve a tocarla: la cookie viaja sola en cada petición y JavaScript no
+    puede leerla. Antes la clave se guardaba en sessionStorage y se enviaba
+    a mano en cada llamada, así que cualquier XSS en el panel se la llevaba
+    -- y eso no era hipotético: el 08/08 se demostró la cadena entera desde
+    un POST anónimo a /analytics/track.
+
+    La comprobación de la clave la hace verify_admin_key, con su límite de
+    intentos fallidos, así que este endpoint no puede usarse para probar
+    claves a ciegas más rápido que cualquier otro."""
+    # Si la dependencia ha dejado pasar la petición es porque la clave
+    # recibida coincide exactamente con settings.admin_key (comparación en
+    # tiempo constante), así que sembrar la cookie con ese valor es lo
+    # mismo que sembrarla con la que vino, sin tener que leer la cabecera
+    # aquí otra vez.
+    set_admin_cookie(response, settings.admin_key)
+    return {"ok": True}
+
+
+@router.post("/admin/logout")
+async def admin_logout(response: Response):
+    """Cierra la sesión de administración de este navegador. Sin
+    verify_admin_key a propósito, mismo criterio que /auth/logout: si la
+    cookie ya no vale, poder deshacerse de ella no debe depender de que
+    valga."""
+    clear_admin_cookie(response)
+    return {"ok": True}
 
 
 @router.post("/admin/set-tier")

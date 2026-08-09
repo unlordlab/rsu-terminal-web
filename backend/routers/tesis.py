@@ -132,10 +132,17 @@ async def admin_create_tesis(req: CreateTesisRequest, _admin: None = Depends(ver
     """Creación manual — sustituye al flujo antiguo de añadir una fila al
     Google Sheet. Por defecto queda 'pending' igual que las del agente,
     salvo que se indique status='approved' explícitamente."""
-    new_id = create_tesis(
-        ticker=req.ticker, contenido=req.contenido, rating=req.rating,
-        titulo=req.titulo, nombre=req.nombre, sector=req.sector, autor=req.autor,
-        resumen=req.resumen, imagen=req.imagen, riesgo=req.riesgo,
-        precio_objetivo=req.precio_objetivo, fuente="manual", status=req.status
-    )
+    try:
+        new_id = create_tesis(
+            ticker=req.ticker, contenido=req.contenido, rating=req.rating,
+            titulo=req.titulo, nombre=req.nombre, sector=req.sector, autor=req.autor,
+            resumen=req.resumen, imagen=req.imagen, riesgo=req.riesgo,
+            precio_objetivo=req.precio_objetivo, fuente="manual", status=req.status
+        )
+    except ValueError as e:
+        # Estado o rating fuera de los valores conocidos. Se devuelve 400 con
+        # el motivo en vez de dejar que salga un 500: quien se equivoca aquí
+        # está escribiendo a mano y necesita saber qué valor esperaba el
+        # sistema. Ver ESTADOS_VALIDOS en tesis_service.
+        raise HTTPException(status_code=400, detail=str(e))
     return {"ok": True, "id": new_id}

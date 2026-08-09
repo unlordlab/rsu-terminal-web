@@ -231,12 +231,42 @@ def get_tesis_detail(ticker: str, fecha: str = "") -> dict:
 
 # ── Gestión (admin) ──────────────────────────────────────────────────────
 
+# Los únicos estados que el resto del código sabe leer. Todas las consultas
+# filtran por igualdad exacta (status = 'approved' / 'pending'), así que
+# cualquier otro valor crea una fila que NO sale en la sección pública, NO
+# sale en la bandeja de pendientes y NO se puede aprobar: queda invisible e
+# inalcanzable, y nada avisa de que existe. Comprobado el 08/08 creando una
+# con status="Approved" —una mayúscula de más— y viéndola desaparecer.
+# Mismo patrón de fallo mudo que el 200-con-null de la API.
+ESTADOS_VALIDOS  = {"pending", "approved", "rejected"}
+RATINGS_VALIDOS  = {"BUY", "HOLD", "SELL", "STRONG BUY", "STRONG SELL"}
+
+
 def create_tesis(ticker: str, contenido: str, rating: str = "HOLD", titulo: str = "",
                   nombre: str = "", sector: str = "", autor: str = "", resumen: str = "",
                   imagen: str = "", riesgo: str = "", precio_objetivo: float = None,
                   fuente: str = "manual", criterio: str = None, status: str = "pending") -> int:
     """Crea una tesis nueva. Por defecto queda 'pending' — hace falta
-    aprobarla explícitamente para que aparezca en la sección pública."""
+    aprobarla explícitamente para que aparezca en la sección pública.
+
+    Lanza ValueError si el estado o el rating no son de los conocidos: más
+    vale un error ruidoso al crear que una tesis que se traga el sistema sin
+    decir nada (ver ESTADOS_VALIDOS)."""
+    status = (status or "pending").strip()
+    if status not in ESTADOS_VALIDOS:
+        raise ValueError(
+            f"Estado de tesis no válido: {status!r}. "
+            f"Válidos: {', '.join(sorted(ESTADOS_VALIDOS))}"
+        )
+    rating = (rating or "HOLD").strip().upper()
+    if rating not in RATINGS_VALIDOS:
+        # El rating no esconde la tesis, pero sí ensucia el desplegable de
+        # filtros de la sección pública, que se construye con un
+        # SELECT DISTINCT rating -- una errata crea una opción fantasma.
+        raise ValueError(
+            f"Rating no válido: {rating!r}. "
+            f"Válidos: {', '.join(sorted(RATINGS_VALIDOS))}"
+        )
     conn = _conn()
     cur = conn.execute(
         """INSERT INTO tesis (ticker, nombre, fecha, rating, sector, autor, titulo, resumen,
