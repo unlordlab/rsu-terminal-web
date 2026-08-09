@@ -724,8 +724,11 @@ Ojo con leer la cifra de prima como el importe de una sola orden: es el volumen 
 LO QUE BUSCAMOS (actualizado tras el ajuste de criterios de 14/07/2026):
 ▸ Volumen mínimo 200 contratos y Open Interest mínimo 100 → filtra contratos ilíquidos donde cualquier ratio es ruido, no señal
 ▸ Vol/OI ratio alto (≥2x) → posición completamente nueva, no ajuste de una posición existente
-▸ Prima MUY POR ENCIMA de la media propia del ticker (cuando hay 5+ días de histórico guardado) → un trade de $500K en una small-cap no es lo mismo que en NVDA, así que se compara cada ticker contra sí mismo, no contra un umbral fijo igual para todos. Sin histórico suficiente todavía, cae a un umbral absoluto (>$100K) como red de seguridad
+▸ Prima entre las más altas del propio ticker (cuando hay 5+ días de histórico guardado) → un movimiento de $500K en una small-cap no es lo mismo que en NVDA, así que cada ticker se compara consigo mismo, no contra un umbral fijo igual para todos. Sin histórico suficiente todavía, cae a un umbral absoluto (>$100K) como red de seguridad
 ▸ IV en percentil alto DENTRO del histórico propio del ticker (mismo criterio que la prima) — 60% de IV es raro en una utility y rutinario en una biotecnológica
+
+CONSECUENCIA QUE CONVIENE TENER PRESENTE:
+Como la comparación es contra el propio ticker, la MISMA cantidad de dinero puntúa distinto según dónde aparezca. En un valor donde mover $3M es lo normal, $3M no destaca; en uno donde nunca pasa, sí. Es deliberado — es lo que hace útil la señal — pero significa que la puntuación no sirve para comparar tamaños entre tickers distintos. Para eso mira la cifra de prima directamente, que se muestra siempre.
 ▸ Strike OTM 5-25% → el sweet spot táctico institucional
 ▸ Vencimiento 14-60 días → timing direccional, no especulativo
 

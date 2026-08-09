@@ -1115,37 +1115,69 @@ def _ticker_baseline(ticker: str, dias: int = 30) -> dict:
             (ticker, from_dt, datetime.now().strftime('%Y-%m-%d'))
         ).fetchall()
         conn.close()
-        if len(rows) < 5:  # muy poco histórico para que la media signifique algo — no ajustar
-            return {"avg_premium": None, "iv_values": []}
-        avg_premium = sum(r["premium"] for r in rows) / len(rows)
-        iv_values   = sorted(r["iv"] for r in rows if r["iv"] is not None)
-        return {"avg_premium": avg_premium, "iv_values": iv_values}
+        if len(rows) < 5:  # muy poco histórico para que signifique algo — no ajustar
+            return {"avg_premium": None, "premium_values": [], "iv_values": []}
+        avg_premium    = sum(r["premium"] for r in rows) / len(rows)
+        premium_values = sorted(r["premium"] for r in rows if r["premium"] is not None)
+        iv_values      = sorted(r["iv"] for r in rows if r["iv"] is not None)
+        return {"avg_premium": avg_premium, "premium_values": premium_values,
+                "iv_values": iv_values}
     except Exception:
-        return {"avg_premium": None, "iv_values": []}
+        return {"avg_premium": None, "premium_values": [], "iv_values": []}
 
-def _iv_percentile(iv_actual: float, iv_values_historicos: list) -> float | None:
-    """Percentil de la IV de hoy dentro del propio histórico del ticker (0-100).
-    Ej: 80 significa que la IV de hoy es más alta que el 80% de sus lecturas
-    de los últimos 30 días — más informativo que un umbral fijo de IV, porque
-    lo que es 'alto' varía muchísimo entre una biotecnológica y una utility."""
-    if not iv_values_historicos or iv_actual is None:
+def _percentil(valor: float, historico: list) -> float | None:
+    """Percentil de un valor dentro del propio histórico del ticker (0-100).
+    Ej: 80 significa que está por encima del 80% de sus lecturas de los
+    últimos 30 días — más informativo que un umbral fijo, porque lo que es
+    'alto' varía muchísimo de un ticker a otro.
+
+    Lo usan las dos mitades relativas de _score_entry, la de IV y la de
+    prima. Antes se llamaba _iv_percentile y solo servía para la IV; la de
+    prima usaba un ratio contra la media, que es lo que provocaba el
+    hallazgo #9 (ver _score_entry)."""
+    if not historico or valor is None:
         return None
-    por_debajo = sum(1 for v in iv_values_historicos if v <= iv_actual)
-    return round(por_debajo / len(iv_values_historicos) * 100, 1)
+    por_debajo = sum(1 for v in historico if v <= valor)
+    return round(por_debajo / len(historico) * 100, 1)
 
 def _score_entry(vol, oi, premium, iv, exp_days, strike_pct_val, baseline: dict = None) -> tuple:
     score  = 0
     signal = "LOW"
-    baseline = baseline or {"avg_premium": None, "iv_values": []}
+    baseline = baseline or {"avg_premium": None, "premium_values": [], "iv_values": []}
 
-    # Prima — relativa al propio histórico del ticker cuando hay suficiente
-    # (5+ entradas en 30 días), si no cae al umbral absoluto de siempre.
-    if baseline["avg_premium"]:
-        ratio = premium / baseline["avg_premium"]
-        if ratio >= 5:    score += 4
-        elif ratio >= 3:  score += 3
-        elif ratio >= 1.5: score += 2
-        elif ratio >= 1:  score += 1
+    # Prima — percentil dentro del propio histórico del ticker cuando hay
+    # suficiente (5+ entradas en 30 días), si no cae al umbral absoluto.
+    #
+    # Antes esta mitad comparaba la prima contra la MEDIA de las entradas
+    # guardadas del ticker y exigía 5x esa media para la puntuación máxima.
+    # El problema, medido sobre los datos reales (08/08): la media se calcula
+    # sobre entradas que YA pasaron el filtro, o sea que ya son de las
+    # grandes, y pedir 5x de esa media pone el techo por encima de lo que
+    # ese ticker ha registrado nunca. **15 de 16 tickers con historial no
+    # podían sacar los 4 puntos ni con su mejor operación jamás vista**, y
+    # el 60,4% de las filas se quedaba en 0 puntos por prima: el componente
+    # estaba prácticamente muerto para cualquier ticker con recorrido.
+    #
+    # El percentil no tiene ese problema porque se calibra solo: la mejor
+    # entrada de cualquier ticker está en el percentil 100 por definición.
+    # Medido con el cambio: los 16 de 16 alcanzan el tope, y el reparto pasa
+    # a 16/19/23/19/23% en vez de 0,4/2/17/20/60%.
+    #
+    # Y de paso las dos mitades relativas de esta función (prima e IV) pasan
+    # a usar el MISMO criterio; antes la de IV ya iba por percentil y solo
+    # la de prima por ratio. Ver auditoría de Options Flow, hallazgo #9.
+    #
+    # Lo que NO se corrige, porque es la función y no el defecto: un ticker
+    # con historial sigue puntuando por debajo de lo que sacaría el mismo
+    # importe sin historial (medido: 1 punto de media, antes 2,24). Eso es
+    # exactamente lo que se busca — que $3M en un valor donde $3M es rutina
+    # no se lea igual que $3M en uno donde nunca pasa.
+    premium_pct = _percentil(premium, baseline.get("premium_values") or [])
+    if premium_pct is not None:
+        if premium_pct >= 90:   score += 4
+        elif premium_pct >= 70: score += 3
+        elif premium_pct >= 50: score += 2
+        elif premium_pct >= 30: score += 1
     else:
         if premium >= 2_000_000: score += 4
         elif premium >= 1_000_000: score += 3
@@ -1160,8 +1192,8 @@ def _score_entry(vol, oi, premium, iv, exp_days, strike_pct_val, baseline: dict 
 
     # IV — percentil dentro del propio histórico del ticker cuando hay
     # suficiente, si no cae al umbral absoluto de siempre (60%/40% biotech
-    # vs utility no significan lo mismo, ver _iv_percentile).
-    iv_pct = _iv_percentile(iv, baseline["iv_values"])
+    # vs utility no significan lo mismo, ver _percentil).
+    iv_pct = _percentil(iv, baseline.get("iv_values") or [])
     if iv_pct is not None:
         if iv_pct >= 90:   score += 2
         elif iv_pct >= 70: score += 1
