@@ -741,29 +741,35 @@ def get_ticker_history_summary(ticker: str) -> dict:
     # Net Premium Score normalizado [-1, +1]
     nps = (bull_prem - bear_prem) / total_prem if total_prem > 0 else 0.0
 
-    # Agrupar por mes con prima ponderada
-    weekly: dict = {}
+    # Agrupar por MES (scan_date[:7] es AAAA-MM) con prima ponderada.
+    #
+    # Antes todo esto se llamaba "weekly"/"week" -- variable, clave del dict
+    # y campo de la respuesta de la API -- mientras el comentario de encima
+    # ya decía "agrupar por mes". El cálculo siempre fue correcto; lo que
+    # engañaba era el nombre, y llegaba hasta la API. Renombrado a mensual.
+    # Ver auditoría de Options Flow, hallazgo #16.
+    mensual: dict = {}
     for r in records:
-        week = r['scan_date'][:7]
-        if week not in weekly:
-            weekly[week] = {"bull_prem": 0, "bear_prem": 0, "bull_cnt": 0,
+        mes = r['scan_date'][:7]
+        if mes not in mensual:
+            mensual[mes] = {"bull_prem": 0, "bear_prem": 0, "bull_cnt": 0,
                             "bear_cnt": 0, "count": 0, "price": r['underlying_price']}
         is_bull = (r['type']=='call' and r['action']=='buy') or \
                   (r['type']=='put'  and r['action']=='sell')
         if is_bull:
-            weekly[week]['bull_prem'] += r['premium']
-            weekly[week]['bull_cnt']  += 1
+            mensual[mes]['bull_prem'] += r['premium']
+            mensual[mes]['bull_cnt']  += 1
         else:
-            weekly[week]['bear_prem'] += r['premium']
-            weekly[week]['bear_cnt']  += 1
-        weekly[week]['count'] += 1
+            mensual[mes]['bear_prem'] += r['premium']
+            mensual[mes]['bear_cnt']  += 1
+        mensual[mes]['count'] += 1
 
-    weekly_list = []
-    for k, v in sorted(weekly.items(), reverse=True):
+    mensual_list = []
+    for k, v in sorted(mensual.items(), reverse=True):
         tp = v['bull_prem'] + v['bear_prem']
         nps_w = (v['bull_prem'] - v['bear_prem']) / tp if tp > 0 else 0
-        weekly_list.append({
-            "week":       k,
+        mensual_list.append({
+            "month":      k,
             "bull_prem":  _fmt_premium(v['bull_prem']),
             "bear_prem":  _fmt_premium(v['bear_prem']),
             "bull_cnt":   v['bull_cnt'],
@@ -792,7 +798,7 @@ def get_ticker_history_summary(ticker: str) -> dict:
         "net_bias":        net_bias,
         "sentiment_momentum": sentiment_momentum,
         "records":         records[:50],
-        "weekly":          weekly_list,
+        "monthly":         mensual_list,
     }
 
 def _calc_sentiment_momentum(records: list) -> dict:

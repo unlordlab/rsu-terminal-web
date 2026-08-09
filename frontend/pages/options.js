@@ -23,8 +23,13 @@ let currentPeriod = '1w';
 
 export async function render(container) {
     container.innerHTML = pageHeader() + '<div id="options-body"></div>';
-    setupSearch(container);
-    loadDashboard(container);
+    // setupSearch devuelve true si un ?ticker= de la URL ya ha lanzado la
+    // vista de ticker. En ese caso NO se carga el panel: las dos peticiones
+    // escriben en el mismo #options-body y la que acabe última gana, así
+    // que el deep-link se perdería la mitad de las veces según cuál de las
+    // dos respondiera antes.
+    const conDeepLink = setupSearch(container);
+    if (!conDeepLink) loadDashboard(container);
 }
 
 function pageHeader() {
@@ -47,6 +52,12 @@ function setupSearch(container) {
         const t = input.value.trim().toUpperCase();
         if (!t) return;
         backBtn.style.display = 'inline-block';
+        // La URL refleja el ticker que se está viendo, para poder
+        // compartirla o recargar sin perder la vista. replaceState y no
+        // pushState: buscar tres tickers seguidos no debe dejar tres pasos
+        // que deshacer con el botón de atrás del navegador -- para volver
+        // al panel ya está el botón "← Volver" de esta misma página.
+        history.replaceState(history.state, '', '/options?ticker=' + encodeURIComponent(t));
         loadTicker(t, '1w');
     };
     btn.addEventListener('click', buscar);
@@ -55,8 +66,22 @@ function setupSearch(container) {
         backBtn.style.display = 'none';
         input.value = '';
         currentTicker = null;
+        history.replaceState(history.state, '', '/options');
         loadDashboard(container);
     });
+
+    // Deep-link ?ticker= -- mismo patrón que research.js, insider.js,
+    // rsrw.js y canslim.js (sesión 16). Options Flow era el único módulo
+    // con vista de ticker que no lo tenía. Ver auditoría, hallazgo #19.
+    const urlTicker = new URLSearchParams(window.location.search).get('ticker');
+    if (urlTicker) {
+        const t = urlTicker.trim().toUpperCase();
+        input.value = t;
+        backBtn.style.display = 'inline-block';
+        loadTicker(t, '1w');
+        return true;
+    }
+    return false;
 }
 
 // ── DASHBOARD (vista por defecto) ───────────────────────────────────────────
@@ -130,7 +155,7 @@ function renderDashboard(data) {
         </div>`;
 
     const topBoxes = `<div style="display:flex;gap:14px;flex-wrap:wrap;margin-bottom:1.5rem;">
-        ${tickerListBox('TOP PREMIUM', data.top_premium)}
+        ${tickerListBox('MAYOR PRIMA EST. ' + tt('options-prima'), data.top_premium)}
         ${tickerListBox('TOP BULLISH', data.top_bullish)}
         ${tickerListBox('TOP BEARISH', data.top_bearish)}
     </div>`;
@@ -171,7 +196,7 @@ function flowTable(title, rows, color) {
             <span style="color:var(--color-muted);font-size:11px;">${rows.length}</span>
         </div>
         <div style="display:grid;grid-template-columns:70px 1fr 90px 70px;gap:8px;padding:6px 14px;border-bottom:1px solid var(--color-border);font-size:9px;color:var(--color-muted);letter-spacing:0.05em;">
-            <div>TICKER</div><div>STRIKE</div><div>EXP</div><div style="text-align:right;">PREMIUM</div>
+            <div>TICKER</div><div>STRIKE</div><div>EXP</div><div style="text-align:right;">PRIMA EST. ${tt('options-prima')}</div>
         </div>
         <div style="max-height:340px;overflow-y:auto;">
             ${rows.length ? rows.map(r => `
@@ -410,7 +435,7 @@ function renderTicker(data) {
             <span style="color:var(--color-muted);font-size:11px;">${esc(data.total)}</span>
         </div>
         <div style="display:grid;grid-template-columns:90px 100px 90px 90px 60px 90px;gap:8px;padding:8px 14px;border-bottom:1px solid var(--color-border);font-size:10px;color:var(--color-muted);">
-            <div>TRADE DATE</div><div>ORDER TYPE</div><div>STRIKE</div><div>EXP</div><div>OI</div><div style="text-align:right;">PREMIUM</div>
+            <div>TRADE DATE</div><div>ORDER TYPE</div><div>STRIKE</div><div>EXP</div><div>OI</div><div style="text-align:right;">PRIMA EST. ${tt('options-prima')}</div>
         </div>
         ${data.entradas.map(e => {
             const bullish = e.order_type === 'Buy Call' || e.order_type === 'Sell Put';

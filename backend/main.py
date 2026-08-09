@@ -1,4 +1,4 @@
-from fastapi import FastAPI, Depends
+from fastapi import FastAPI, Depends, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
@@ -208,8 +208,18 @@ async def pwa_manifest():
 
 @app.get("/{full_path:path}")
 async def spa_fallback(full_path: str):
-    if not full_path.startswith("api/"):
-        # index.html es el punto de entrada del grafo de módulos: si se
-        # sirve cacheado, arrastra consigo la versión vieja de todo lo demás.
-        return FileResponse("../frontend/index.html",
-                            headers={"Cache-Control": "no-cache"})
+    # Una ruta de API que no existe tiene que decirlo. Antes esta función
+    # simplemente terminaba sin `return` para esas rutas, y FastAPI
+    # serializa el None implícito como un 200 con cuerpo `null` -- así que
+    # un fetch contra una URL mal escrita, o contra un endpoint retirado,
+    # no fallaba nunca de forma visible: el módulo se quedaba vacío en
+    # silencio y no había nada en la consola que lo delatase. Es el mismo
+    # patrón de fallo mudo que ya costó caro en _get_yf_earnings. Ver
+    # auditoría de Options Flow, hallazgo #27 (encontrado ahí, pero afecta
+    # a toda la API).
+    if full_path.startswith("api/"):
+        raise HTTPException(status_code=404, detail=f"Endpoint no encontrado: /{full_path}")
+    # index.html es el punto de entrada del grafo de módulos: si se
+    # sirve cacheado, arrastra consigo la versión vieja de todo lo demás.
+    return FileResponse("../frontend/index.html",
+                        headers={"Cache-Control": "no-cache"})

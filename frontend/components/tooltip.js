@@ -717,7 +717,9 @@ El McClellan de arriba es direccional (positivo = más avances, negativo = más 
         long: `El flujo de opciones inusual rastrea operaciones donde el volumen y la prima pagada superan significativamente lo habitual para ese contrato.
 
 POR QUÉ IMPORTA:
-Las instituciones no pueden ocultar sus operaciones en opciones. Cuando alguien paga $3M en calls de HOOD a 60 días, eso deja huella en el volumen — y nosotros la vemos.
+Las instituciones no pueden ocultar su actividad en opciones. Cuando se mueven millones en calls de un valor a 60 días, eso deja huella en el volumen — y nosotros la vemos.
+
+Ojo con leer la cifra de prima como el importe de una sola orden: es el volumen del día por el último precio del contrato, así que puede ser una operación grande o muchas pequeñas. Sirve para saber dónde se concentra la actividad, no para afirmar que alguien puso esa cantidad de golpe.
 
 LO QUE BUSCAMOS (actualizado tras el ajuste de criterios de 14/07/2026):
 ▸ Volumen mínimo 200 contratos y Open Interest mínimo 100 → filtra contratos ilíquidos donde cualquier ratio es ruido, no señal
@@ -763,6 +765,23 @@ Un aumento grande de OI en un contrato concreto significa que se están abriendo
 
 LIMITACIÓN:
 Solo puede calcularse a partir del segundo día de escaneo guardado — con un único día de histórico no hay nada contra lo que comparar, y esta sección aparecerá vacía hasta entonces.`
+    },
+
+    "options-prima": {
+        title: "Prima estimada",
+        short: "Volumen del día × último precio del contrato × 100. Sirve para ordenar por tamaño, pero no es el dinero de una sola operación.",
+        long: `La cifra de prima que ves en cada fila se calcula así: todo el volumen negociado del contrato ese día, multiplicado por su último precio, multiplicado por 100 (un contrato equivale a 100 acciones).
+
+QUÉ SIGNIFICA Y QUÉ NO:
+Es una medida del tamaño del interés que ha habido en ese contrato durante la jornada, y funciona bien para ordenar: un contrato con prima de 5 millones ha movido mucho más dinero que uno de 200.000.
+
+Lo que NO es: el importe de una única operación. Si ves "$5M" no significa que alguien haya puesto cinco millones de golpe. Puede ser una sola orden grande, o cien órdenes pequeñas repartidas por la sesión. Desde fuera no hay forma de distinguirlo, porque los datos públicos dan el volumen agregado del día, no las operaciones una por una.
+
+TAMPOCO ES EL PRECIO MEDIO PAGADO:
+Se usa el último precio del contrato, no el precio de cada operación. Si el contrato se ha movido mucho durante el día, la cifra puede quedar por encima o por debajo de lo que realmente se pagó.
+
+CÓMO USARLA:
+Como termómetro de tamaño, para saber dónde se está concentrando la actividad. Para decidir si detrás hay una apuesta concreta, mira también el ratio Volumen/Open Interest: cuando el volumen supera con claridad al interés abierto previo, es señal de posiciones nuevas y no de ajustes de las que ya había.`
     },
 
     "options-gex": {
