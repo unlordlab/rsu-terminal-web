@@ -127,7 +127,6 @@ hallazgos ya cerrados.
 1. **SPXL #4** — Ni `/live` ni `/backtest` tienen caché: cada visita descarga 17 años y ejecuta el motor completo
    `0 usos de cache.get en spxl_service.py: cada visita descarga 17 años y corre el motor`
 ## Btc Stratum  (16 hallazgos — ❌1 · ✅1 · ❓14)
-
 | | # | Sev | Hallazgo | Estado / evidencia |
 |-|---|-----|----------|--------------------|
 | ❌ | 1 | 🔴 | El MVRV Z-Score no usa Realized Cap — y la alerta le dice al usuario que sí | btc_stratum_service.py:189 documenta que el Realized Cap es una aproximación por EMA365 del market cap. El proxy sigue ahí; queda comprobar si la UI lo declara |
@@ -147,8 +146,7 @@ hallazgos ya cerrados.
 | ❓ | 15 | 🟡 | `ath = close.max()` sobre el histórico disponible | *sin comprobar* |
 | ❓ | 16 | 🟡 | `_get_zone` es la salida más prescriptiva de toda la terminal | *sin comprobar* |
 
-## Canslim  (28 hallazgos — ❌1 · ✅27 · ❓0)
-
+## Canslim  (28 hallazgos — ❌1 · ✅27)
 | | # | Sev | Hallazgo | Estado / evidencia |
 |-|---|-----|----------|--------------------|
 | ✅ | 1 | 🔴 | El RS Rating es un número inventado en el uso normal del módulo — y de él dependen el criterio "S" y el 35% del Composite | fallback 50+perf/2 eliminado y RS real desde el Gist de RS/RW |
@@ -180,8 +178,7 @@ hallazgos ya cerrados.
 | ❌ | 23 | 🔴 | **Detección de bases y pivot points — LA PIEZA QUE FALTA DEL MÉTODO** | ABIERTO. **Subido a crítico el 01/08 por decisión del usuario**: es lo único de CANSLIM que queda sin construir y es el corazón del método de O'Neil. Hoy el módulo dice QUÉ valores están fuertes, pero no DÓNDE está el punto de compra — y O'Neil no compraba fuerza, compraba la ruptura de una base en su pivote, con volumen. Sin eso, la L y la N dicen que el valor va bien, no si estás comprando en el sitio o persiguiendo una vela. **Diseño acordado, para no repetir errores ya cometidos**: (a) NO clasificar la figura («taza con asa», «doble suelo») — con 500 tickers y ventanas flexibles siempre se encuentran figuras, y cada parámetro que se toca para que «salgan mejor» es una decisión inauditable; en su lugar medir las propiedades estructurales que comparten todas las bases válidas (subida previa, profundidad, duración, contracción del rango, sequía de volumen) y derivar el pivote del máximo de la base, que es un hecho y no una interpretación. (b) Vivir en `shared/canslim_bases.py` y ser consumido por el scan nocturno Y el análisis individual **desde el primer día** — la lección de #6, donde una función que nació solo en el análisis acabó con dos definiciones contradiciéndose en el 23,8% del universo. (c) Guardar los campos de base en `canslim_history.db` para poder medirlo. **La prueba que puede matarlo antes de escribir la UI: la TASA BASE.** Si al correrlo sobre los 500 tickers resulta que el 60% «tiene base», el detector no detecta nada, describe el mercado. Más la sensibilidad: mover los parámetros ±20% y ver cuánto cambia esa tasa. **Por qué conviene esperar unas semanas**: los parámetros saldrían de libros, no de datos — igual que los umbrales de #25. Con `canslim_history.db` llenándose desde el 01/08, en unas semanas se pueden elegir con evidencia y contrastar si los candidatos con base rinden mejor que los que no la tienen |
 | ✅ | 24 | 🟢 | Cruce con Insider y Options Flow | HECHO 01/08: badge ⚡ en la tabla del scan y en el análisis individual, con el mismo patrón que 💼/⭐. Se consume `get_confluence_tickers()` de `insider_service`, que ya usan Insider y Options — no se recalcula ni se descarga nada, y falla en silencio a conjunto vacío para que un problema de esos dos módulos no deje sin scanner a CANSLIM. **Comprobado que las DOS fuentes están vivas** antes de dar por buena la intersección vacía de hoy: Insider devuelve 1 ticker (XAIR) y Options 6, sin solape — el cero es real, no una fuente muerta. **Limitación honesta que sale de esa comprobación**: con Insider aflorando un solo ticker, el badge apenas se encenderá. La causa está en Insider Flow, que tiene sus 23 hallazgos sin verificar |
 
-## Cartera  (53 hallazgos — ❌3 · ✅38 · ❓7 · ⬜5)
-
+## Cartera  (53 hallazgos — ❌2 · ✅39 · ❓7 · ⬜5)
 **Mejora pedida el 04/08 (no es un hallazgo de auditoría): aviso de
 resultados próximos.** Icono 📊 junto al ticker de cada posición abierta que
 presenta resultados en los **7 días corridos** siguientes, más un resumen
@@ -257,7 +254,6 @@ lo llevan, que es correcto.
 | ✅ | 53 | 🟠 | La caché de barras diarias cruzaba la medianoche y dejaba el «cierre anterior» dos sesiones atrás | HECHO 07/08, **detectado por el usuario** al pasar las cifras de su pantalla. Cinco de siete posiciones cuadraban al céntimo con el movimiento real del día, pero dos no: SPCX marcaba **+15,60% cuando su movimiento real era +8,91%**, y RKLB **+7,60% frente a +6,40%**. Las dos por lo alto, las dos usando el cierre de dos sesiones atrás. El fallo de emparejamiento de fechas ya estaba corregido el 06/08; lo que quedaba era la vía de la caché. `_get_daily_bars` guarda seis horas, que sobran dentro de una sesión pero pueden cruzar la medianoche: las entradas cacheadas el día 6 —cuando el proveedor estaba degradado y solo servía hasta el 5— seguían vivas el día 7, describiendo una sesión que ya no era la última, así que su «cierre anterior» pasó a ser el de dos días antes. Los tickers cuya caché sí había expirado salían bien, y por eso fallaban unos sí y otros no: el síntoma parecía aleatorio. Ahora la entrada guarda el día del fetch en horario de Nueva York y se descarta al cambiar de día, sin depender de acertar con la duración del TTL. Verificado en tres frentes: una entrada sembrada con fecha de ayer y TTL fresco se ignora y se vuelve a descargar; una de hoy se sigue reutilizando (la caché no se ha desactivado de hecho); y los cuatro tickers medidos vuelven a cuadrar con el movimiento real |
 
 ## Infraestructura Y Valoracion Global  (20 hallazgos — ❌1 · ✅4 · ❓14 · ⬜1)
-
 | | # | Sev | Hallazgo | Estado / evidencia |
 |-|---|-----|----------|--------------------|
 | ✅ | 20 | 🟠 | El CI puede estar en rojo sin que nadie se entere: dos commits seguidos pasaron con `Backend Tests` fallando | DETECTADO Y RESUELTO 08/08, no venia de ninguna auditoria. `0a627cb` y `031ea39` se subieron con el CI en rojo y nadie lo miro. Causa: `test_cartera_tickers.py` parcheaba `pd.read_csv` pero `get_cartera_tickers()` comprueba `URL_CARTERA` ANTES de leer, asi que el parcheo no se usaba nunca — en local hay `.env` con la URL y pasaba, el runner arranca sin `.env` y fallaba. Reproducido copiando el repo con `git archive` a un directorio limpio sin `.env` ni `.db`, que es la forma barata de simular el runner desde aqui. Arreglado en `d8425fe`, CI verde. **Leccion operativa: comprobar el CI despues de cada push, no solo los tests en local** — un test que depende del `.env` pasa siempre en local y siempre falla en CI |
@@ -281,8 +277,7 @@ lo llevan, que es correcto.
 | ❓ | 18 | 🟡 | `sector_medians.yml` existe pero su Gist no está configurado | *sin comprobar* |
 | ❌ | 19 | 🟠 | **La terminal no es usable en móvil, y la vista móvil que existe no la encuentra nadie** | ANOTADO 01/08 a petición del usuario. Sale de la medición de Cartera #23 (31/07) pero **no es un problema de Cartera ni de ninguna página concreta: es del armazón**. Medido a 375px: la página entera desborda (contenido de 708px) porque la barra lateral sigue en `display:block` y la barra superior mide 435px; a 768px ya no desborda. Las tablas NO son la causa — tienen `overflow-x:auto` y hacen scroll propio. Además existe una vista `/mobile` construida a propósito (una columna: Algoritmo, Mercado, Cartera, Watchlist) a la que **no redirige ni enlaza nada**: es una ruta manual que ningún usuario va a descubrir. Son dos decisiones, no una: (a) qué hacer con el armazón a <768px, y (b) si `/mobile` se adopta como destino real (con redirección por ancho o por user-agent) o se borra por ser código muerto |
 
-## Insider Flow  (23 hallazgos — ❌0 · ✅19 · ❓4)
-
+## Insider Flow  (23 hallazgos — ✅19 · ❓4)
 **Pasada completa el 04/08**: los 23 revisados uno a uno contra el código y
 contra la base real, y **cerrado del todo el mismo día** — sexto módulo sin
 ningún hallazgo abierto. Seis ya estaban resueltos por sesiones anteriores sin
@@ -317,8 +312,7 @@ estaba duplicada — ver su fila.
 | ❓ | 22 | 🟢 | Efectividad del insider | No construido |
 | ✅ | 23 | 🟢 | Cruce Insider × Options Flow | Ya resuelto: `get_confluence_tickers()`, badge ⚡ (sesión 16) |
 
-## Market  (35 hallazgos — ❌0 · ✅33 · ❓2 · ⬜0)
-
+## Market  (35 hallazgos — ✅33 · ❓2)
 | | # | Sev | Hallazgo | Estado / evidencia |
 |-|---|-----|----------|--------------------|
 | ✅ | 1 | 🔴 | Net Liquidity sobreestimada ~$0,7–0,9T (TGA sin convertir de unidades) | **EL HALLAZGO ERA FALSO**, comprobado 06/08 con datos reales de FRED y el código no se toca. La auditoría decía que el TGA se restaba sin convertir de unidades, sobreestimando la liquidez en ~0,7-0,9 billones. Los valores crudos de FRED lo desmienten: `WALCL = 6.738.190` (millones → 6,74 B$, que es el tamaño real del balance de la Fed), `WTREGEN = 910.776` (millones → 910 mil M$, el TGA real) y `RRPONTSYD = 1,65` (miles de millones). O sea que **WALCL y WTREGEN vienen los dos en millones** y solo el RRP viene en miles de millones — que es exactamente lo que hace el código, multiplicar solo el RRP por 1.000. Aplicar la «corrección» propuesta daría una liquidez neta de **−904 billones de dólares**, un absurdo que delata el error de partida. El resultado actual, 5,83 B$, es coherente (6,74 − 0,91 − 0,002). Me equivoqué igual que el auditor al empezar a comprobarlo, y fue el número absurdo lo que lo destapó |
@@ -358,7 +352,6 @@ estaba duplicada — ver su fila.
 | ✅ | 35 | 🟡 | El historial de resultados de un ticker aparecía fuera de la vista | HECHO 06/08, **pedido por el usuario**: «cuando quieres consultar el histórico de earnings de un activo se despliega al final del scroll». Reproducido: el bloque de detalle se insertaba DESPUÉS de una lista de 280 px dentro de un widget de 420, así que al buscar un ticker o clicar una fila el resultado nacía fuera de la pantalla y había que bajar con el scroll de la página para encontrarlo. Ahora va justo debajo del buscador, encima de la lista; la lista se encoge a 120 px mientras el detalle está abierto para que el widget no se desborde, y vuelve a 280 px al cerrarlo con la ✕ nueva. Añadida una línea que dice que se puede clicar cualquier fila, porque las filas ya eran clicables pero nada lo indicaba. Verificado en el navegador por los dos caminos (clic en fila y buscador): el detalle queda por encima de la lista y dentro del widget, sin errores de consola |
 
 ## Modulos 2026-07-19  (10 hallazgos — ❓10)
-
 | | # | Sev | Hallazgo | Estado / evidencia |
 |-|---|-----|----------|--------------------|
 | ❓ | 1 | ⚪ | [Metodológico, real] `rs_momentum` compara magnitudes de horizontes distintos | *sin comprobar* |
@@ -373,7 +366,6 @@ estaba duplicada — ver su fila.
 | ❓ | B4 | ⚪ | SPXL — el motor ya está sano; el riesgo ahora es epistemológico | *sin comprobar* |
 
 ## Newsfeed  (31 hallazgos — ❌1 · ✅5 · ❓25)
-
 Los #27–#31 no vienen de la auditoría: salieron al fallar el briefing diario en
 producción dos días seguidos (30 y 31/07), cada día por una causa distinta. Se agrupan aquí porque `scripts/daily_briefing.py`
 alimenta el modal "Resumen de Mercado Diario", aunque sea un script aparte.
@@ -412,8 +404,7 @@ alimenta el modal "Resumen de Mercado Diario", aunque sea un script aparte.
 | ✅ | 30 | 🔴 | **El contador de tokens subestimaba un 13%**, así que el recorte automático dejaba pasar prompts que Groq rechazaba | 31/07: el briefing volvió a fallar, ahora con 413 pese a pasar la comprobación interna. Medición exacta: el script estimó 5.744 tok y Groq pidió 8.401 con `max_tokens=1800`, o sea **6.601 reales**. 20.104 chars / 6.601 = **3,046 chars/token**, no los 3,5 configurados. Recalibrado a 2,9 (por debajo de lo medido a propósito: sobrestimar cuesta contexto, subestimar cuesta el briefing entero) |
 | ✅ | 31 | 🟠 | Un 413 de Groq mataba el proceso en vez de reintentar con menos contexto | 31/07: cualquier estimación por caracteres se desvía del tokenizador real, así que la única fuente de verdad es la respuesta de la API. Ahora el 413 se distingue del resto de errores (`PromptDemasiadoGrande`) y baja un nivel de recorte; construir y llamar viven en el mismo bucle. Verificado con un Groq simulado más estricto que la estimación: falla en 'normal', reintenta en 'medio' y genera |
 
-## Options Flow  (27 hallazgos — ❌4 · ✅22 · ❓0 · ⬜1)
-
+## Options Flow  (27 hallazgos — ❌4 · ✅22 · ⬜1)
 **Pasada parcial el 05/08**: cerrados los tres críticos de seguridad y verificados ocho de los veinte «sin comprobar». **Los ocho estaban abiertos de verdad** — a diferencia de CANSLIM e Insider, donde buena parte ya estaba hecha, aquí la auditoría acertaba. Quedan doce sin mirar.
 
 **Mismo día, después**: cerrados los cuatro que corrompían el dato (#6 perdía filas, #11 las fechaba en el día equivocado, #12 no comparaba nada, #17 no tenía techo). Quedan abiertos #13 (mitigado), #14 (etiqueta), #16 (nombre) y #19 (deep-link) — ninguno corrompe datos.
@@ -453,7 +444,6 @@ alimenta el modal "Resumen de Mercado Diario", aunque sea un script aparte.
 | ✅ | 27 | 🔵 | Una ruta `/api/v1/...` inexistente devuelve 200 con `null`, no 404 | HECHO 08/08. **Es el de mayor alcance de los cinco: no era de Options Flow, afectaba a toda la API.** El catch-all `spa_fallback()` de `main.py` sirve `index.html` para las rutas de la SPA, pero para las que empiezan por `api/` simplemente terminaba sin `return` — y FastAPI serializa ese `None` implicito como un **200 con cuerpo `null`**. El efecto: un fetch contra una URL mal escrita, o contra un endpoint retirado, no fallaba nunca de forma visible; el modulo se quedaba vacio en silencio y no habia nada en consola que lo delatase. Mismo patron de fallo mudo que ya costo caro en `_get_yf_earnings` (Market #34). Ahora lanza 404 con el detalle de la ruta. Verificado que la otra mitad no se rompe: `/`, `/options`, `/research` y `/cartera` siguen devolviendo el HTML de la SPA. Dos tests nuevos en `test_smoke.py`, uno por cada mitad, y el sabotaje (volver al `return None`) tumba el primero |
 
 ## Paginas Contenido  (25 hallazgos — ❌1 · ✅7 · ❓17)
-
 | | # | Sev | Hallazgo | Estado / evidencia |
 |-|---|-----|----------|--------------------|
 | ❌ | 1 | 🔴 | No existe política de privacidad — y eso es un requisito legal, no una buena práctica | bloque legal Fase 1, nunca empezado. Bloquea la monetización |
@@ -482,8 +472,7 @@ alimenta el modal "Resumen de Mercado Diario", aunque sea un script aparte.
 | ❓ | 24 | 🟢 | Roadmap con registro de aciertos | *sin comprobar* |
 | ❓ | 25 | 🟢 | Página pública de landing | *sin comprobar* |
 
-## Research  (27 hallazgos — ❌0 · ✅21 · ❓6 · ⬜0)
-
+## Research  (27 hallazgos — ✅21 · ❓6)
 | | # | Sev | Hallazgo | Estado / evidencia |
 |-|---|-----|----------|--------------------|
 | ✅ | 1 | 🔴 | Cada research en frío = ~20 descargas a Yahoo, con datos repetidos hasta 6 veces, fuera del pool global | _info_de() comparte .info (3→1) + caché de precio/volumen (841b977) |
@@ -515,8 +504,7 @@ alimenta el modal "Resumen de Mercado Diario", aunque sea un script aparte.
 | ✅ | 27 | 🔵 | **Peticion del usuario, no de la auditoria**: fuera las senales de rotacion y absorcion, y en su lugar un Indicador RSU de flujo de dinero debajo del grafico | HECHO 07/08. El usuario no les veia utilidad a las dos senales. No eran solo frontend: cada research llamaba a `get_turnover_comparison()` y `get_absorption_signal()`, asi que retirarlas ahorra **2 descargas de 180 dias por consulta en frio**. `turnover_service.py` se borra entero (Research era su unico consumidor); `shared/absorption.py` se queda porque el scan nocturno del Scanner lo usa. **El indicador nuevo se midio ANTES de construirlo**, para no acabar dejando puesto un oscilador bonito que no predice nada. Referencia: el L3 Banker Fund Flow, que pese al nombre **no usa volumen en ningun momento** -- su formula real es un estocastico de 27 sesiones doblemente suavizado contra otro de 34, con una constante 1,032 sin justificar (verificado en dos fuentes independientes del codigo publicado). Comparados los dos sobre 62 valores y 3 anos, mismos 33.967 dias-ticker: **la mecanica de cruces del original no ordena nada** -- sus senales de salida rendian MEJOR que las de entrada (3,15% vs 2,44% a 20 sesiones) -- y por niveles su patron no es monotono (solo destaca el quintil alto) con correlacion de rangos -0,006. La variante con volumen si ordena a 3 meses, de forma monotona por quintiles: 4,98 / 5,42 / 6,11 / 6,50 / 7,54%, correlacion +0,023. **Pero la magnitud es modesta**: 2,56 puntos entre quintil alto y bajo, y a 20 sesiones no predice nada. Por eso se construye como indicador de CONTEXTO, sin senales de compra/venta, y el tooltip lo dice en esos terminos. Caveats anotados: las ventanas de 60 dias se solapan mucho, asi que la significancia aparente esta inflada, y 3 anos mayormente alcistas no son un juicio completo. Sale del mismo historico de 2 anos que `_get_technical_levels()` ya descarga, asi que **no cuesta ninguna peticion extra**. Verificado en el navegador y con 7 valores reales, discriminando bien (TSLA 15,2 saliendo; AAPL 95,6 entrando; NVDA 64 neutro). 4 tests nuevos, comprobados quitando el volumen al calculo a proposito. **De paso**, tambien a peticion del usuario, Valoracion/Rentabilidad/Crecimiento suben por encima del grafico y esa fila pasa a usar la rejilla que se recoloca sola |
 
 
-## Rsrw  (22 hallazgos — ❌0 · ✅20 · ❓2)
-
+## Rsrw  (22 hallazgos — ✅20 · ❓2)
 **Pasada completa el 30/07** (commit `34a659f`): los 22 hallazgos revisados uno
 a uno contra el código, seis cerrados en esa sesión. Es, junto a Research, el
 único módulo con el tier completo verificado.
@@ -555,8 +543,7 @@ notificación por Telegram montada, así que el top decil es una métrica más.
 | ✅ | 21 | 🟢 | Rotación sectorial en el tiempo | HECHO 02/08. Sección nueva **ROTACIÓN SECTORIAL**: RS medio de cada sector hoy frente al inicio de la ventana, con la variación y cuántos líderes aporta. La tabla sectorial que ya había es una foto; esto dice hacia dónde se mueve el dinero. **Es literalmente una suma cero, y se comprobó antes de escribirlo en la pantalla**: la media ponderada de todos los sectores dio 25100,0 en las dos fechas comparadas, **diferencia +0,0000000000**, porque el percentil medio de un universo es su propio rango medio. Por eso se usa la media y no la mediana: con medianas la suma se movía 771 puntos entre esas mismas dos fechas, o sea que un sector podía «subir» sin que ningún otro bajase — y entonces la palabra rotación dejaría de describir un trasvase. Con datos reales, cuatro sesiones: entra dinero en Salud (+4,9), Consumo Discrecional (+4,2) y Financieros (+2,1); sale de Servicios Públicos (−6,3), Energía (−4,1) e Industriales (−2,8). Misma ventana y mismas fechas que MOVIMIENTOS DEL PERCENTIL RS, para que las dos pantallas no puedan hablar de periodos distintos, y el mismo aviso cuando hay pocas sesiones |
 | ❓ | 22 | 🟢 | Alerta de entrada en el top decil | *sin comprobar* |
 
-## Rsu Algoritmo  (30 hallazgos — ❌1 · ✅26 · ❓0 · ⬜3)
-
+## Rsu Algoritmo  (30 hallazgos — ❌1 · ✅26 · ⬜3)
 **Módulo con el tier completo verificado** — el tercero, tras Research y RS/RW.
 Cero hallazgos sin comprobar.
 
@@ -607,7 +594,6 @@ Queda abierto #12, medido y descartado por marginal.
 | ✅ | 18 | 🟠 | ¿Es correcto que estar sobre la SMA200 BAJE el umbral de VERDE a 54? Parece un sesgo optimista: es más fácil declarar un suelo con el mercado fuerte | **EVALUADO 31/07, la asimetría es correcta y se queda.** Cuatro configuraciones barridas con el backtest real en dos periodos. Ventaja a 60d: ACTUAL 54/63 → **+4,30pp (10a) y +4,76pp (máx)**; fijo 58/58 → +1,12 / +1,02; fijo 54/54 → +0,27 / +1,05; inverso 63/54 → +0,98 / +1,54. Mismo orden en ambos periodos. Matiz: a 10d el inverso rinde algo más y n=14-35, así que es direccional, no medición fina |
 
 ## Scanner  (20 hallazgos — ✅9 · ❓11)
-
 | | # | Sev | Hallazgo | Estado / evidencia |
 |-|---|-----|----------|--------------------|
 | ✅ | 1 | 🟠 | La columna "Absorción" muestra 0/10 para casi todo el universo — sabes que el umbral es provisional, pero el frontend lo presenta  | umbral 0.75 restaurado y unificado en shared/absorption.py |
@@ -632,7 +618,6 @@ Queda abierto #12, medido y descartado por marginal.
 | ❓ | 20 | 🟢 | Divergencia S&P 500 vs Russell 2000 | *sin comprobar* |
 
 ## Spxl  (14 hallazgos — ❌1 · ✅3 · ❓10)
-
 | | # | Sev | Hallazgo | Estado / evidencia |
 |-|---|-----|----------|--------------------|
 | ✅ | 1 | 🔴 | Cuarto bug de la misma familia: en el Escenario A el objetivo del runner es inalcanzable por construcción | first_sell_px asignado en Escenario A (48422ff) |
@@ -651,7 +636,6 @@ Queda abierto #12, medido y descartado por marginal.
 | ❓ | 14 | 🟡 | `_is_market_open()` depende de `pytz` con fallback a UTC fijo | *sin comprobar* |
 
 ## Tesis Admin  (22 hallazgos — ✅5 · ❓17)
-
 | | # | Sev | Hallazgo | Estado / evidencia |
 |-|---|-----|----------|--------------------|
 | ✅ | 1 | 🔴 | Inyección de HTML/CSS en el PDF de tesis vía interpolación f-string sin escapar | html.escape() en generar_pdf_tesis() |
@@ -678,7 +662,6 @@ Queda abierto #12, medido y descartado por marginal.
 | ❓ | 22 | 🟢 | Rotación de la ADMIN_KEY | *sin comprobar* |
 
 ## Watchlist Community  (20 hallazgos — ✅1 · ❓19)
-
 | | # | Sev | Hallazgo | Estado / evidencia |
 |-|---|-----|----------|--------------------|
 | ✅ | 1 | 🔴 | Las alertas se disparan, se guardan… y nadie se entera | notificación Telegram por usuario + vinculación de cuenta |
