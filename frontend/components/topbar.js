@@ -8,6 +8,7 @@ const TIER_COLORS = { free: 'var(--color-muted)', tier1: 'var(--color-accent)', 
 
 export function renderTopbar(container, navigate) {
     container.innerHTML = `
+        <button id="nav-toggle" aria-label="Abrir el menú de secciones" aria-expanded="false">☰</button>
         <div style="flex:1;overflow:hidden;position:relative;min-width:0;height:48px;">
             <div id="ticker-track" style="
                 display:inline-flex;
@@ -130,6 +131,34 @@ export function renderTopbar(container, navigate) {
     });
 
     updateThemeLabel(container);
+
+    // Cajón de navegación (solo visible por debajo de 768px, ver index.html).
+    // El estado vive en una clase de #app y no en JS: así el CSS decide
+    // cuándo aplica y no hay dos fuentes de verdad que se contradigan al
+    // girar el móvil o cambiar de tamaño.
+    const app    = document.getElementById('app');
+    const toggle = container.querySelector('#nav-toggle');
+    const velo   = document.getElementById('nav-velo');
+
+    const cerrarNav = () => {
+        app.classList.remove('nav-abierta');
+        toggle.setAttribute('aria-expanded', 'false');
+    };
+    toggle.addEventListener('click', () => {
+        const abierta = app.classList.toggle('nav-abierta');
+        toggle.setAttribute('aria-expanded', String(abierta));
+    });
+    if (velo) velo.addEventListener('click', cerrarNav);
+    // Tocar una sección tiene que cerrar el cajón: si no, se queda tapando
+    // la página que se acaba de abrir. Delegado en el propio sidebar para
+    // que siga funcionando cuando renderSidebar() lo repinte entero.
+    const sidebar = document.getElementById('sidebar');
+    if (sidebar) sidebar.addEventListener('click', e => {
+        if (e.target.closest('.nav-item')) cerrarNav();
+    });
+    document.addEventListener('keydown', e => {
+        if (e.key === 'Escape' && app.classList.contains('nav-abierta')) cerrarNav();
+    });
 
     // Iniciar WebSocket
     if (isLoggedIn()) initWebSocket();

@@ -61,6 +61,134 @@
       max-width: 1400px;
     }
 
+    /* ── Móvil ──────────────────────────────────────────────────────────
+       A 375px la terminal no se podía usar: el grid pedía 220px fijos de
+       barra lateral pasara lo que pasara, así que la página entera
+       desbordaba 333px (contenido de 708px en un viewport de 375) y
+       scrolleaba en horizontal. Las tablas NO eran la causa: ya tienen su
+       propio overflow-x. Era el armazón.
+
+       Por debajo de 768px la barra lateral sale del flujo y pasa a ser un
+       cajón que se despliega desde la izquierda con el botón ☰ de la barra
+       superior. El contenido recupera el ancho completo. Ver auditoría de
+       Infraestructura, hallazgo #19. */
+    @media (max-width: 768px) {
+      #app {
+        grid-template-columns: 1fr;
+      }
+
+      #sidebar {
+        position: fixed;
+        top: 0;
+        left: 0;
+        bottom: 0;
+        width: var(--sidebar-w);
+        max-width: 82vw;          /* que siempre se vea algo del fondo detrás */
+        z-index: 1000;
+        transform: translateX(-100%);
+        transition: transform .22s ease;
+        will-change: transform;
+      }
+
+      #app.nav-abierta #sidebar {
+        transform: translateX(0);
+      }
+
+      /* El velo cierra el cajón al tocar fuera, que es lo que espera
+         cualquiera en un móvil. Vive siempre en el DOM y solo se muestra
+         con el cajón abierto -- así la transición tiene de dónde salir. */
+      #nav-velo {
+        position: fixed;
+        inset: 0;
+        background: rgba(0, 0, 0, .55);
+        z-index: 999;
+        opacity: 0;
+        pointer-events: none;
+        transition: opacity .22s ease;
+      }
+
+      #app.nav-abierta #nav-velo {
+        opacity: 1;
+        pointer-events: auto;
+      }
+
+      #topbar, #main {
+        grid-column: 1;
+      }
+
+      #topbar {
+        padding: 0 0.75rem;
+        gap: 0.5rem;
+      }
+
+      #main {
+        padding: 1rem 0.75rem;
+      }
+
+      /* Sin esto, un hijo ancho (una tabla, un gráfico) estira el grid en
+         vez de scrollear dentro de su contenedor: `min-width:auto` es el
+         valor por defecto de un item de grid y le deja crecer. Va también
+         en #topbar, que era quien de verdad estiraba la columna. */
+      #topbar, #main, #view {
+        min-width: 0;
+      }
+
+      /* La cinta de cotizaciones se oculta en móvil. Es decorativa, no
+         cabe, y encima anima en bucle: en un teléfono solo gasta batería.
+         Los mismos datos están en Market, a un toque. */
+      #topbar > div:first-of-type {
+        display: none;
+      }
+
+      /* El grupo de la derecha tenía flex-shrink:0 en todos sus hijos, así
+         que no cabía en 375px y estiraba la columna entera del grid. Se le
+         deja envolver y se esconde lo que en un móvil no aporta: el reloj
+         (lo tiene el propio teléfono), el texto de estado del mercado (el
+         punto de color ya lo dice) y el aviso de precios. */
+      #topbar > div:last-of-type {
+        margin-left: auto;
+        gap: 0.4rem;
+      }
+
+      #topbar-time,
+      #market-status,
+      #pricing-info-btn {
+        display: none;
+      }
+
+      #theme-toggle {
+        display: none;   /* el tema se cambia una vez, no desde el móvil */
+      }
+    }
+
+    /* El botón del cajón solo existe en móvil: en escritorio la barra
+       lateral está siempre visible y sobraría. */
+    #nav-toggle { display: none; }
+
+    @media (max-width: 768px) {
+      #nav-toggle {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        background: none;
+        border: 1px solid var(--color-border);
+        color: var(--color-muted);
+        border-radius: var(--radius);
+        /* 40px de lado: por debajo de eso el dedo falla más de lo que
+           acierta. */
+        width: 40px;
+        height: 40px;
+        font-size: 17px;
+        line-height: 1;
+        cursor: pointer;
+        flex-shrink: 0;
+      }
+    }
+
+    @media (min-width: 769px) {
+      #nav-velo { display: none; }
+    }
+
     #back-bar {
       max-width: 1400px;
       margin-bottom: 1rem;
@@ -105,6 +233,7 @@
 <body>
   <div id="app">
     <nav id="sidebar"></nav>
+    <div id="nav-velo"></div>
     <header id="topbar"></header>
     <main id="main">
       <div id="back-bar" style="display:none;">
