@@ -55,9 +55,27 @@ def _fetch_cds() -> float | None:
         pass
     return None
 
+# ── Cache ─────────────────────────────────────────────────────────────────────
+# Ninguna de las cuatro funciones publicas tenia cache: cada visita a la pagina
+# descargaba SPXL desde 2008 y volvia a correr el motor. Medido el 08/08, una
+# sola carga hacia **5 peticiones a Yahoo de la MISMA serie de 17 anios** (una
+# por funcion, mas la de 2 anios de la vista en vivo), ~3,7s en frio.
+#
+# El tiempo no era lo grave: la cuota de Yahoo la comparte toda la terminal
+# -- Research, Market y Cartera tiran del mismo sitio -- asi que quemarla
+# cinco veces por visita en datos identicos se lo quita a los demas modulos.
+#
+# Ver auditoria de SPXL, hallazgo #4.
+from services.cache import cache, TTL  # noqa: E402
+
+
 # ── LIVE DATA ─────────────────────────────────────────────────────────────────
 
+@cache.single_flight("spxl:live")
 def get_spxl_live() -> dict:
+    cacheado = cache.get("spxl:live")
+    if cacheado:
+        return cacheado
     try:
         spxl = yf.Ticker("SPXL")
         hist = spxl.history(period="2y")
@@ -141,7 +159,7 @@ def get_spxl_live() -> dict:
             "closes": [round(float(c), 2) for c in chart_data.values],
         }
 
-        return {
+        resultado = {
             "ok":           True,
             "price":        round(current, 2),
             "chg_pct":      round(chg_pct, 2),
@@ -162,6 +180,8 @@ def get_spxl_live() -> dict:
             "chart":        chart,
             "timestamp":    get_timestamp(),
         }
+        cache.set("spxl:live", resultado, TTL["spxl_live"])
+        return resultado
     except Exception as e:
         return {"ok": False, "error": str(e)}
 
@@ -433,7 +453,12 @@ def compute_stats(trades, eq_curve, bnh_curve, initial_capital):
         "years":         round(years, 1),
     }
 
+@cache.single_flight(lambda initial_capital=100_000: f"spxl:bt:{initial_capital}")
 def get_backtest(initial_capital: float = 100_000) -> dict:
+    clave = f"spxl:bt:{initial_capital}"
+    cacheado = cache.get(clave)
+    if cacheado:
+        return cacheado
     try:
         spxl    = yf.Ticker("SPXL")
         df_raw  = spxl.history(start="2008-11-05")[["Close", "Low"]].copy()
@@ -448,7 +473,7 @@ def get_backtest(initial_capital: float = 100_000) -> dict:
         eq_chart  = result['equity_curve'][-500:]
         bnh_chart = result['bnh_curve'][-500:]
 
-        return {
+        resultado = {
             "ok":           True,
             "stats":        stats,
             "trades":       result['trades'][-50:],
@@ -456,6 +481,8 @@ def get_backtest(initial_capital: float = 100_000) -> dict:
             "bnh_chart":    bnh_chart,
             "timestamp":    get_timestamp(),
         }
+        cache.set(clave, resultado, TTL["spxl_bt"])
+        return resultado
     except Exception as e:
         return {"ok": False, "error": str(e)}
 
@@ -480,11 +507,16 @@ SUBPERIODOS = [
 ]
 
 
+@cache.single_flight(lambda initial_capital=100_000: f"spxl:btval:{initial_capital}")
 def get_backtest_validation(initial_capital: float = 100_000) -> dict:
     """Corre el backtest por separado en cada sub-periodo, con capital
     inicial completo y estado limpio en cada uno. Permite ver si la
     estrategia se comporta de forma parecida en regímenes de mercado
     distintos, o si su resultado global depende de un único tramo."""
+    clave = f"spxl:btval:{initial_capital}"
+    cacheado = cache.get(clave)
+    if cacheado:
+        return cacheado
     try:
         spxl   = yf.Ticker("SPXL")
         df_raw = spxl.history(start="2008-11-05")[["Close", "Low"]].copy()
@@ -549,13 +581,15 @@ def get_backtest_validation(initial_capital: float = 100_000) -> dict:
             veredicto = "insuficiente"
             detalle = "No hay suficientes tramos con operaciones para valorar la consistencia."
 
-        return {
+        resultado = {
             "ok":        True,
             "periodos":  periodos,
             "veredicto": veredicto,
             "detalle":   detalle,
             "timestamp": get_timestamp(),
         }
+        cache.set(clave, resultado, TTL["spxl_bt"])
+        return resultado
     except Exception as e:
         return {"ok": False, "error": str(e)}
 
@@ -580,11 +614,16 @@ SLIPPAGE_ESCENARIOS = [
 ]
 
 
+@cache.single_flight(lambda initial_capital=100_000: f"spxl:btslip:{initial_capital}")
 def get_backtest_con_slippage(initial_capital: float = 100_000) -> dict:
     """Recalcula el resultado final aplicando distintos niveles de coste de
     ejecución por operación, para dar un RANGO honesto en vez de un número
     puntual. No modifica el backtest en sí -- aplica el coste sobre las
     operaciones que ese backtest ya generó."""
+    clave = f"spxl:btslip:{initial_capital}"
+    cacheado = cache.get(clave)
+    if cacheado:
+        return cacheado
     try:
         spxl   = yf.Ticker("SPXL")
         df_raw = spxl.history(start="2008-11-05")[["Close"]].copy()
@@ -620,7 +659,7 @@ def get_backtest_con_slippage(initial_capital: float = 100_000) -> dict:
                 "diferencia_vs_limpio": round(equity_ajustado - eq_final_limpio, 2),
             })
 
-        return {
+        resultado = {
             "ok":              True,
             "n_operaciones":   n_operaciones,
             "equity_limpio":   round(eq_final_limpio, 2),
@@ -632,5 +671,7 @@ def get_backtest_con_slippage(initial_capital: float = 100_000) -> dict:
                      "ese coste — el escenario realista suele estar entre el 0,10% y el 0,20%."),
             "timestamp":       get_timestamp(),
         }
+        cache.set(clave, resultado, TTL["spxl_bt"])
+        return resultado
     except Exception as e:
         return {"ok": False, "error": str(e)}

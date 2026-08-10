@@ -270,4 +270,10 @@ TTL = {
     "bull_info":   3600,  # 1 hora — .info crudo cacheado para Gael, ver conversación 18/07/2026
     "rsrw":        300,   # 5 min  — RS/RW scanner
     "options":     300,   # 5 min (antes 120s) — options flow
+    "spxl_live":   300,   # 5 min  — precio y fase actual de SPXL
+    "spxl_bt":     3600,  # 1 hora — los tres backtests. Corren sobre 17 años
+                           # de cierres diarios: entre una visita y la
+                           # siguiente del mismo día el resultado es el mismo
+                           # salvo por la vela de hoy, así que refrescar más a
+                           # menudo solo repetiría el trabajo.
 }
