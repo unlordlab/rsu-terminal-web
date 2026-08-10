@@ -1,4 +1,5 @@
 import re
+from functools import lru_cache
 import math
 import html as _html
 import requests
@@ -10,6 +11,7 @@ import yfinance as yf
 from config import settings
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "..", "shared"))
 from time_utils import get_timestamp  # noqa: E402
+from services.cache import cache, TTL  # noqa: E402
 
 # ── SOURCES ───────────────────────────────────────────────────────────────────
 
@@ -142,16 +144,62 @@ def _strip_html(text: str) -> str:
     text = re.sub(r"<[^>]+>", " ", text)
     return re.sub(r"\s+", " ", text).strip()
 
+# Cada keyword se busca como PALABRA, no como trozo de palabra.
+#
+# El clasificador usaba `kw in texto`, y con keywords de tres o cuatro letras
+# eso etiquetaba mal casi la mitad del feed. Medido el 08/08 sobre 118
+# titulares reales: **26 de los 57 clasificados HIGH/MED (el 46%) lo estaban
+# por un fragmento**, no por la palabra. Ejemplos textuales de ese día:
+#   "double dipping portfolio"      -> HIGH, por "ppi" dentro de "dipping"
+#   "space agency"                  -> MED,  por "spac" dentro de "space"
+#   "Citi sees growth in second quarter" -> MED, por "sec" dentro de "second"
+#   "FedEx beats estimates"         -> HIGH, por "fed" dentro de "FedEx"
+#   "software update"               -> HIGH, por "war" dentro de "software"
+# El filtro de impacto es lo que da valor al módulo; con ese ruido, un HIGH
+# no significaba nada. Ver auditoría de Newsfeed, hallazgo #2.
+#
+# Se compilan una vez y se cachean: son ~50 keywords por cada titular de los
+# ~120 que trae un ciclo, y recompilar la expresión en cada comprobación se
+# nota.
+@lru_cache(maxsize=512)
+def _rx_palabra(keyword: str):
+    # Se admiten los sufijos habituales de plural y de verbo. Sin ellos, el
+    # límite de palabra a secas se lleva por delante titulares que SÍ había
+    # que clasificar: "Raymond James downgrades Arko" dejaba de ser MED
+    # porque `\bdowngrade\b` no casa con "downgrades". Detectado al mirar
+    # el antes/después titular a titular, no en el total.
+    #
+    # Los sufijos no reabren el agujero que esto viene a cerrar, porque
+    # tienen que encajar ENTEROS y acabar en límite de palabra:
+    #   war    -> "wars" sí, "warning" no ("ning" no es un sufijo)
+    #   fed    -> "feds" sí, "federal" no
+    #   sec    -> "secs" sí, "second" no
+    #   short  -> "shorts"/"shorted" sí, "shortage" no
+    #
+    # \b no funciona si la keyword empieza o acaba en un carácter que no es
+    # de palabra (p.ej. un guion), así que el límite se pone solo del lado
+    # que lo admite. Con las keywords actuales siempre aplica a ambos, pero
+    # añadir mañana una con símbolo no debe romper la búsqueda en silencio.
+    ini = r"\b" if keyword[:1].isalnum() else ""
+    fin = r"(?:s|es|ed|ing)?\b" if keyword[-1:].isalnum() else ""
+    return re.compile(ini + re.escape(keyword) + fin)
+
+
+def _contiene(text: str, keyword: str) -> bool:
+    """¿Aparece la keyword como palabra suelta en el texto?"""
+    return _rx_palabra(keyword).search(text) is not None
+
+
 def _is_negated(text: str, keyword: str) -> bool:
     """
     Comprueba si una keyword aparece precedida de un prefijo de negación
     en una ventana de ~5 palabras. Cubre casos como:
       "no signs of recession", "avoids crash", "not a crisis", "rules out rate cut"
     """
-    idx = text.find(keyword)
-    if idx == -1:
+    m = _rx_palabra(keyword).search(text)
+    if m is None:
         return False
-    window = text[max(0, idx - 40):idx]
+    window = text[max(0, m.start() - 40):m.start()]
     return any(neg in window for neg in NEGATION_PREFIXES)
 
 def _classify_impact(text: str, finnhub_related: list = None) -> str:
@@ -163,16 +211,16 @@ def _classify_impact(text: str, finnhub_related: list = None) -> str:
 
     # "surge" solo es HIGH si se refiere a activos de mercado, no a datos macro negativos
     # "plunge" igual — "plunge in yields" puede ser bueno o malo, pero en activos es impacto alto
-    if "surge" in t and not _is_negated(t, "surge"):
+    if _contiene(t, "surge") and not _is_negated(t, "surge"):
         if any(ctx in t for ctx in CONTEXT_HIGH_SURGE):
             return "HIGH"
-    if "plunge" in t and not _is_negated(t, "plunge"):
+    if _contiene(t, "plunge") and not _is_negated(t, "plunge"):
         if any(ctx in t for ctx in CONTEXT_HIGH_PLUNGE):
             return "HIGH"
 
     # Keywords HIGH con detección de negación
     for kw in HIGH_KW:
-        if kw in t and not _is_negated(t, kw):
+        if _contiene(t, kw) and not _is_negated(t, kw):
             return "HIGH"
 
     # Nivel 2: si Finnhub dice que hay artículos relacionados con símbolos de alto impacto
@@ -183,7 +231,7 @@ def _classify_impact(text: str, finnhub_related: list = None) -> str:
             return "MED"
 
     for kw in MED_KW:
-        if kw in t and not _is_negated(t, kw):
+        if _contiene(t, kw) and not _is_negated(t, kw):
             return "MED"
 
     return "LOW"
@@ -204,25 +252,25 @@ def _sentiment(text: str) -> str:
     neg_words = ["plunge","crash","fall","drop","sink","miss","weak","bear","collapse","selloff",
                  "tumble","underperform","downgrade","miss expectations","layoffs","bankrupt"]
 
-    pos = sum(1 for w in pos_words if w in t and not _is_negated(t, w))
-    neg = sum(1 for w in neg_words if w in t and not _is_negated(t, w))
+    pos = sum(1 for w in pos_words if _contiene(t, w) and not _is_negated(t, w))
+    neg = sum(1 for w in neg_words if _contiene(t, w) and not _is_negated(t, w))
 
     # "surge" es positivo SOLO si va con activos de mercado, no con datos macro negativos
-    if "surge" in t and not _is_negated(t, "surge"):
+    if _contiene(t, "surge") and not _is_negated(t, "surge"):
         if any(ctx in t for ctx in ["stock","share","price","market","equity","s&p","nasdaq"]):
             pos += 1
         elif any(ctx in t for ctx in ["unemployment","jobless","layoff","inflation","deficit","debt"]):
             neg += 1  # surge en datos negativos = señal bearish
 
     # 'high' en contexto de precio/mercado es positivo; en contexto macro (unemployment, inflation) es negativo
-    if "high" in t:
+    if _contiene(t, "high"):
         if any(ctx in t for ctx in ["stock","share","price","market","record","52-week"]):
             pos += 1
         elif any(ctx in t for ctx in ["unemployment","inflation","rate","deficit","debt","risk"]):
             neg += 1
 
     # 'low' es el inverso
-    if "low" in t:
+    if _contiene(t, "low"):
         if any(ctx in t for ctx in ["unemployment","inflation","rate","volatility"]):
             pos += 1
         elif any(ctx in t for ctx in ["stock","share","price","market","52-week"]):
@@ -245,8 +293,11 @@ def _sector(text: str, finnhub_category: str = None) -> str:
 
     # Nivel 1: keyword matching como fallback
     t = text.lower()
+    # Mismo problema que el impacto y por la misma via: con substring, la
+    # keyword "ai" de TECH casaba con said, again, raised, chain, remain...
+    # Cualquier titular con una de esas palabras se etiquetaba TECH.
     for sec, kws in SECTORS_MAP.items():
-        if any(k in t for k in kws):
+        if any(_contiene(t, k) for k in kws):
             return sec
     return "GENERAL"
 
@@ -609,5 +660,23 @@ def get_newsfeed(sources: list = None, impact: str = None, sector: str = None, l
         "timestamp": get_timestamp(),
     }
 
+@cache.single_flight("newsfeed:prices")
 def get_newsfeed_prices() -> list:
-    return _get_prices()
+    # Sin caché, cada visita a Newsfeed disparaba los 10 tickers del widget
+    # contra yfinance. Medido el 08/08 interceptando las llamadas: **30
+    # peticiones a Yahoo por carga**, no 10 -- cada ticker hace history()
+    # y ademas fast_info, que a su vez pide lo suyo.
+    #
+    # Igual que en SPXL, lo que importa no es el segundo y medio que tarda,
+    # sino que la cuota de Yahoo la comparte toda la terminal. 5 min es el
+    # mismo TTL que usa Market para sus indices, y por el mismo motivo que
+    # se documento alli: con 60s caducaba tan rapido que volvia a disparar
+    # llamadas en vivo constantemente. Ver auditoria de Newsfeed, #4.
+    from services.cache import cache, TTL
+    cacheado = cache.get("newsfeed:prices")
+    if cacheado is not None:
+        return cacheado
+    precios = _get_prices()
+    if precios:   # una lista vacia es un fallo de red, no un resultado
+        cache.set("newsfeed:prices", precios, TTL["market"])
+    return precios
