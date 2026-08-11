@@ -295,6 +295,36 @@ def _fetch_price_single(ticker: str) -> dict | None:
                 prev = prev_bar
                 if not price:
                     price = last_bar
+            elif fecha_ultima and fecha_ultima < _ultima_sesion_esperada():
+                # FALTAN SESIONES. La rama de abajo empareja el precio de hoy
+                # con `last_bar` dando por hecho que esa barra es la de AYER.
+                # Cuando el proveedor se salta sesiones deja de serlo, y el
+                # porcentaje pasa a ser el de varios días presentado como el
+                # de hoy -- que es peor que no dar nada, porque es plausible.
+                #
+                # Reportado el 11/08 y medido al céntimo: con el mercado
+                # abierto, la terminal enseñaba COHR -14,50%, LITE -10,09% y
+                # RKLB -6,31%. Esos números son exactos... contra el cierre
+                # del VIERNES 7, porque las barras diarias no traían la
+                # sesión del lunes 10. Contra el cierre real de ayer eran
+                # -0,31%, -1,62% y -3,05%.
+                #
+                # Aquí se prefiere decir "no lo sé": `chg` a None hace que la
+                # tabla pinte "—" con su explicación, en vez de un número
+                # que invita a tomar decisiones.
+                #
+                # No salta en el caso normal: a primera hora de una sesión
+                # corriente `fecha_ultima` ES la sesión anterior y todo sigue
+                # igual. Solo salta si de verdad falta alguna. En un festivo
+                # que _ultima_sesion_esperada() no conoce puede saltar de más
+                # y mostrar "—" un día: es la dirección segura del error.
+                entry = {"ticker": ticker, "price": round(price or last_bar, 2),
+                         "prev": round(last_bar, 2), "chg": None,
+                         "chg_fecha": None, "sin_datos_hoy": True,
+                         "ultimo_cierre": str(fecha_ultima),
+                         "updated": now}
+                _price_cache[ticker] = entry
+                return entry
             else:
                 # No hay barra de hoy todavía (pasa a diario al principio de la
                 # sesión, y de forma permanente si el proveedor está degradado).

@@ -112,3 +112,57 @@ def test_cual_es_la_ultima_sesion_segun_el_momento(ahora, esperada, motivo):
 
     with patch.object(C, "datetime", _dt):
         assert C._ultima_sesion_esperada() == esperada, motivo
+
+
+# ── El hueco de sesiones: precio de hoy contra un cierre de anteayer ─────
+
+def _precio_con_barras(fecha_ultima, last=379.13, prev=334.22, vivo=324.15):
+    """Ejecuta _fetch_price_single con el mercado abierto y unas barras
+    diarias cuya ULTIMA fecha se controla, que es la variable del fallo."""
+    C._price_cache.clear()
+
+    class _FastInfo:
+        last_price = vivo
+
+    class _Ticker:
+        fast_info = _FastInfo()
+
+    with patch.object(C, "_get_daily_bars", return_value=(last, prev, fecha_ultima)), \
+         patch("yfinance.Ticker", return_value=_Ticker()), \
+         patch.object(C, "_is_market_open", return_value=True), \
+         patch.object(C, "_ultima_sesion_esperada", return_value=date(2026, 8, 10)):
+        return C._fetch_price_single("COHR")
+
+
+def test_si_faltan_sesiones_no_se_inventa_el_porcentaje_del_dia():
+    """EL CASO REPORTADO el 11/08, medido al céntimo antes de arreglarlo.
+
+    Con el mercado abierto la terminal enseñaba COHR -14,50%, LITE -10,09%
+    y RKLB -6,31%. Esos números eran exactos... contra el cierre del
+    VIERNES 7, porque las barras diarias no traían la sesión del lunes 10.
+    Contra el cierre real de ayer eran -0,31%, -1,62% y -3,05%.
+
+    La rama que lo producía empareja el precio de hoy con la última barra
+    conocida dando por hecho que es la de AYER. Cuando el proveedor se
+    salta sesiones deja de serlo, y sale el movimiento de varios días
+    etiquetado como el de hoy -- peor que no dar nada, porque es
+    plausible."""
+    r = _precio_con_barras(date(2026, 8, 7))     # falta la sesión del 10
+    assert r["chg"] is None, f"se inventó un {r['chg']}% con una sesión de hueco"
+    assert r["sin_datos_hoy"] is True
+    assert r["ultimo_cierre"] == "2026-08-07"
+
+
+def test_con_las_barras_al_dia_el_porcentaje_se_calcula_normal():
+    """La otra mitad: el guardia NO puede saltar en el caso corriente. A
+    primera hora de una sesión normal todavía no hay barra de hoy y la
+    última ES la de ayer -- ahí el cálculo debe seguir saliendo."""
+    r = _precio_con_barras(date(2026, 8, 10))    # la última es la sesión anterior
+    assert r["chg"] is not None
+    assert r["sin_datos_hoy"] is False
+
+
+def test_si_la_barra_de_hoy_ya_esta_publicada_se_usa_la_anterior():
+    r = _precio_con_barras(date(2026, 8, 11))
+    assert r["chg"] is not None
+    assert r["prev"] == 334.22, "con la barra de hoy publicada, el cierre de referencia es el penúltimo"
