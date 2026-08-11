@@ -1279,7 +1279,13 @@ def get_cartera():
                 # indistinguible de una posición inexistente. Se marca para que
                 # la tabla pueda decir que existe pero está sin dimensionar, en
                 # vez de enseñar un cero que parece un dato.
-                sin_dimensionar = bool(is_open and inv == 0 and compra > 0)
+                # Antes esto era `is_open and inv == 0 and compra > 0`, así que
+                # en una CERRADA no se activaba nunca y su $0 pasaba mudo — que
+                # es justo lo que dejaba al "P&L Total Acum." describiendo 37 de
+                # 43 operaciones sin avisar (reportado el 11/08/2026). El caso es
+                # el mismo en abiertas y cerradas: la simulación no pudo asignar
+                # capital a esa posición.
+                sin_dimensionar = bool(inv == 0 and compra > 0)
 
                 # Días en posición: desde la compra hasta hoy si sigue abierta,
                 # o hasta el cierre si ya salió. Es el dato que falta para saber
@@ -1458,12 +1464,24 @@ def get_cartera():
                 sum(r["pnl"] * r["inv"] for r in cerradas_rows) / inv_cerradas
                 if inv_cerradas > 0 else 0.0
             )
+            # En una media ponderada, una operación con inv=0 pesa cero: no
+            # entra en el número. Pasa cuando la simulación cronológica no
+            # pudo dimensionarla (se abrió con el capital comprometido al
+            # completo) y la hoja tampoco trae Cantidad ni Inversión. Con la
+            # cartera del 11/08/2026 eran 6 de 43, y la tarjeta anunciaba un
+            # +55,75% que describía las otras 37 sin decirlo. Ese cero NO se
+            # rellena con el peso del nivel -- sería inventar capital que el
+            # modelo dice que no había, fuera de la propia simulación, y
+            # reescribir el P&L realizado de una operación ya cerrada. Lo que
+            # se arregla es el silencio, no el número.
+            n_ponderadas = sum(1 for r in cerradas_rows if r["inv"] > 0)
             closed_stats = {
-                "total":    len(cerradas_rows),
-                "ganadas":  ganadas,
-                "perdidas": perdidas,
-                "win_rate": round(win_rate, 1),
-                "avg_pnl":  round(avg_pnl, 2),
+                "total":        len(cerradas_rows),
+                "ganadas":      ganadas,
+                "perdidas":     perdidas,
+                "win_rate":     round(win_rate, 1),
+                "avg_pnl":      round(avg_pnl, 2),
+                "n_ponderadas": n_ponderadas,
             }
 
         mkt_status, mkt_color = get_market_status()

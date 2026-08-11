@@ -992,10 +992,17 @@ function pnlHistogram(cerradas) {
 function closedStats(c) {
     const wrColor  = c.win_rate >= 50 ? 'var(--color-accent)' : '#f23645';
     const pnlColor = c.avg_pnl  >= 0  ? 'var(--color-accent)' : '#f23645';
+    // Al ponderar por capital, una operación sin capital asignado pesa cero y
+    // no entra en el número. Si hay alguna, la tarjeta dice sobre cuántas se
+    // calcula en vez de dar a entender que están todas.
+    const parciales = c.n_ponderadas != null && c.n_ponderadas < c.total;
+    const pnlSub = parciales
+        ? 'Ponderada por capital · sobre ' + c.n_ponderadas + ' de ' + c.total
+        : 'Media ponderada por capital';
     return `<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:1rem;margin-bottom:1rem;">
         ${metricCard('Trades Cerrados', c.total, c.ganadas + 'W / ' + c.perdidas + 'L', 'var(--color-text)')}
         ${metricCard('Win Rate', fix(c.win_rate,1) + '%', 'Operaciones ganadoras', wrColor)}
-        ${metricCard('P&L Total Acum.', (c.avg_pnl >= 0 ? '+' : '') + fix(c.avg_pnl) + '%', 'Media ponderada por capital', pnlColor)}
+        ${metricCard('P&L Total Acum.', (c.avg_pnl >= 0 ? '+' : '') + fix(c.avg_pnl) + '%', pnlSub, pnlColor)}
     </div>`;
 }
 
@@ -1025,6 +1032,12 @@ function closedTable(rows) {
 
     const trs = rows.map(r => {
         const c = r.pnl >= 0 ? 'var(--color-accent)' : '#f23645';
+        // Sin capital asignado, esta operación no pesa en el "P&L Total Acum."
+        // de arriba. Se marca en la propia fila para que se pueda ver cuáles
+        // son, en vez de solo saber cuántas quedan fuera.
+        const fuera = r.sin_dimensionar
+            ? ` <span style="color:#ffb800;font-size:10px;cursor:help;" title="Esta operación no cuenta en el P&amp;L Total Acumulado: no se le asignó capital, porque cuando se abrió ya estaba todo comprometido en otras posiciones.">*</span>`
+            : '';
         return `<tr class="cartera-tr" style="border-bottom:1px solid var(--color-border);">
             <td style="padding:8px 12px;color:var(--color-muted);font-size:11px;">${r.fecha_display || r.fecha}</td>
             <td style="padding:8px 12px;">
@@ -1032,7 +1045,7 @@ function closedTable(rows) {
             </td>
             <td style="padding:8px 12px;color:var(--color-text);font-size:12px;">$${usd(r.compra)}</td>
             <td style="padding:8px 12px;color:var(--color-text);font-size:12px;">$${usd(r.actual)}</td>
-            <td style="padding:8px 12px;color:${c};font-size:12px;font-weight:500;">${r.pnl >= 0 ? '+' : ''}${fix(r.pnl)}%</td>
+            <td style="padding:8px 12px;color:${c};font-size:12px;font-weight:500;">${r.pnl >= 0 ? '+' : ''}${fix(r.pnl)}%${fuera}</td>
             <td style="padding:8px 12px;color:var(--color-muted);font-size:11px;">${r.dias == null ? '—' : r.dias + 'd'}</td>
             <td style="padding:8px 12px;color:var(--color-muted);font-size:11px;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${r.comment || ''}">${r.comment || '—'}</td>
         </tr>`;

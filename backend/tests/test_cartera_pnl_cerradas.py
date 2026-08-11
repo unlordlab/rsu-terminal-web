@@ -122,10 +122,31 @@ def test_si_la_hoja_dice_cuanto_se_invirtio_ese_dato_manda_sobre_el_cero():
 
 
 def test_una_abierta_sin_capital_sigue_marcandose_sin_dimensionar():
-    """El mismo caso en una posición ABIERTA sí lleva aviso: la tabla la pinta
-    como «sin dimensionar» en vez de como una posición de $0. Lo que faltaba
-    era el equivalente para las cerradas."""
+    """El mismo caso en una posición ABIERTA ya llevaba aviso: la tabla la
+    pinta como «sin dimensionar» en vez de como una posición de $0."""
     filas = list(_VEINTIUNA[:-1]) + [_abierta("ZZZ", "01/06/2026", 100.0, "CORE")]
     abiertas = {r["ticker"]: r for r in _cartera(filas)["abiertas"]}
     assert abiertas["ZZZ"]["inv"] == 0.0
     assert abiertas["ZZZ"]["sin_dimensionar"] is True
+
+
+def test_una_cerrada_sin_capital_tambien_se_marca():
+    """Lo que faltaba: el flag estaba definido como `is_open and inv == 0`, así
+    que en una cerrada no se activaba nunca y su $0 pasaba mudo."""
+    cerradas = {r["ticker"]: r for r in _cartera(_VEINTIUNA)["cerradas"]}
+    assert cerradas["ZZZ"]["sin_dimensionar"] is True
+
+
+def test_la_tarjeta_sabe_sobre_cuantas_operaciones_se_calcula():
+    """`n_ponderadas` es lo que deja a la tarjeta decir «sobre 37 de 43» en vez
+    de dar a entender que están todas. El número en sí no cambia."""
+    d = _cartera(_VEINTIUNA)
+    c = d["closed_stats"]
+    assert c["total"] == 1
+    assert c["n_ponderadas"] == 0, "ZZZ no pesa: es la única cerrada y va sin capital"
+
+    d2 = _cartera([
+        _cerrada("AAA", "01/02/2026", 100.0, 200.0, "CORE"),
+        _cerrada("BBB", "01/03/2026", 100.0, 110.0, "LOTTERY"),
+    ])
+    assert d2["closed_stats"]["n_ponderadas"] == 2, "aquí sí cuentan las dos"
