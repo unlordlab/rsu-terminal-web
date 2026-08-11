@@ -1404,7 +1404,45 @@ TITULARES DE ALTO IMPACTO — MEDIOS INTERNACIONALES (Reuters/Bloomberg/WSJ/AP/F
 
 # ── LLAMAR A GROQ ─────────────────────────────────────────────────────────────
 
-def generate_briefing(prompt: str) -> str:
+def _diagnostico_ratelimit(r) -> dict:
+    """Lo que Groq dice de VERDAD sobre el presupuesto, leído de la respuesta.
+
+    Dos preguntas que hasta ahora se contestaban de memoria o leyendo la
+    documentación, y que la propia respuesta ya trae gratis en cada llamada:
+
+      1. ¿Cuál es el límite real de TPM de esta cuenta? Está en la cabecera
+         `x-ratelimit-limit-tokens`. GROQ_TPM_LIMIT es un 8000 copiado de la
+         tabla pública del tier; si el límite real fuera mayor, el recorte
+         progresivo de datos estaría degradando el briefing para nada.
+      2. ¿Cuánto se desvía mi estimación por caracteres del tokenizador real?
+         Está en `usage.prompt_tokens`. El 31/07/2026 el desvío fue del 13%
+         (estimé 5744, Groq contó 6601) y CHARS_POR_TOKEN se recalibró a mano
+         con esa única medición. Registrarlo en cada ejecución convierte esa
+         calibración puntual en una serie.
+
+    Se lee también en el camino del 413 -- ahí no hay `usage`, pero las
+    cabeceras sí vienen, que es justo cuando más interesa saber el límite.
+    """
+    h = r.headers
+    diag = {
+        "tpm_limite_real":    h.get("x-ratelimit-limit-tokens"),
+        "tpm_restante":       h.get("x-ratelimit-remaining-tokens"),
+        "rpm_limite_real":    h.get("x-ratelimit-limit-requests"),
+        "tokens_estimados":   None,
+        "tokens_reales":      None,
+        "desvio_estimacion":  None,
+    }
+    try:
+        uso = r.json().get("usage") or {}
+        diag["tokens_reales"] = uso.get("prompt_tokens")
+    except Exception:
+        pass
+    return diag
+
+
+def generate_briefing(prompt: str) -> tuple:
+    """Devuelve (texto_del_briefing, diagnóstico). El diagnóstico sale de la
+    propia respuesta de Groq -- ver _diagnostico_ratelimit."""
     if not GROQ_KEY:
         raise ValueError("GROQ_API_KEY no configurada")
 
@@ -1477,12 +1515,30 @@ def generate_briefing(prompt: str) -> str:
     # CHARS_POR_TOKEN con esa medición, pero CUALQUIER estimación por
     # caracteres se va a desviar del tokenizador real -- la única fuente de
     # verdad es la respuesta de Groq, así que hay que saber reaccionar a ella.
+    diag = _diagnostico_ratelimit(r)
+    diag["tokens_estimados"] = prompt_tokens
+    if diag["tpm_limite_real"]:
+        print(f"📉 Groq dice: límite real {diag['tpm_limite_real']} TPM "
+              f"(el script asume {GROQ_TPM_LIMIT}) · restante {diag['tpm_restante']}")
+
     if r.status_code == 413:
         raise PromptDemasiadoGrande(f"Groq 413: {r.text[:200]}")
     if r.status_code != 200:
         raise ValueError(f"Groq error {r.status_code}: {r.text[:200]}")
 
-    return r.json()["choices"][0]["message"]["content"]
+    if diag["tokens_reales"]:
+        desvio = (diag["tokens_reales"] - prompt_tokens) / prompt_tokens * 100
+        diag["desvio_estimacion"] = round(desvio, 1)
+        # CHARS_POR_TOKEN que habría clavado la cuenta de hoy. Si sale muy
+        # distinto del valor vigente varios días seguidos, hay que ajustarlo:
+        # estimar de menos provoca 413 y estimar de más recorta datos que sí
+        # cabían.
+        ideal = len(prompt) / diag["tokens_reales"]
+        print(f"🧾 Groq contó {diag['tokens_reales']} tokens de prompt, yo estimé "
+              f"{prompt_tokens} ({desvio:+.1f}%) · CHARS_POR_TOKEN exacto de hoy: "
+              f"{ideal:.2f} (vigente {CHARS_POR_TOKEN})")
+
+    return r.json()["choices"][0]["message"]["content"], diag
 
 
 def extract_bias_tag(text: str) -> tuple:
@@ -1539,7 +1595,8 @@ def format_bias_history(history: list) -> str:
 
 # ── GUARDAR EN GIST ───────────────────────────────────────────────────────────
 
-def save_to_gist(content: str, market_data: dict, bias: str, bias_history: list, briefing_history: list):
+def save_to_gist(content: str, market_data: dict, bias: str, bias_history: list, briefing_history: list,
+                  nivel_usado: dict = None, diag: dict = None):
     if not GIST_TOKEN:
         raise ValueError("GIST_TOKEN no configurado")
 
@@ -1550,6 +1607,18 @@ def save_to_gist(content: str, market_data: dict, bias: str, bias_history: list,
         "model":  MODEL,
         "source": "Groq + Qwen3.6 27B",
         "bias":   bias,
+        # Con qué se escribió el briefing de hoy. Hasta ahora esto solo
+        # existía en los logs del GitHub Action, que no lee nadie -- y el
+        # nivel de recorte importa: en "agresivo" el modelo ve 3 titulares
+        # por fuente en vez de 5 y un calendario podado, así que un briefing
+        # más pobre de lo normal tiene una explicación registrada en vez de
+        # parecer que el modelo tuvo un mal día.
+        "diagnostico": {
+            "nivel_recorte":  (nivel_usado or {}).get("nombre"),
+            "historial_chars": (nivel_usado or {}).get("historial"),
+            "titulares_por_fuente": (nivel_usado or {}).get("titulares"),
+            **(diag or {}),
+        },
     }
 
     updated_history = _append_bias(bias_history, market_data["date"], bias or "N/D")
@@ -1632,7 +1701,7 @@ def main():
     # comprueba primero contra la estimación (barato, evita una llamada
     # condenada) y, si pasa, contra Groq. Un 413 baja al siguiente nivel igual
     # que lo haría una estimación por encima del techo.
-    raw_briefing, nivel_usado = None, None
+    raw_briefing, nivel_usado, diag = None, None, {}
     for i, nivel in enumerate(NIVELES_RECORTE):
         prompt = build_prompt(market_data, news, major_headlines, earnings, breadth,
                               insider_clusters, briefing_history, bias_history,
@@ -1642,13 +1711,12 @@ def main():
             print(f"✂️  Nivel '{nivel['nombre']}': ~{tokens} tok, por encima del techo "
                   f"({TECHO_PROMPT}) — probando el siguiente recorte")
             continue
-        if i > 0:
-            print(f"✂️  Usando nivel '{nivel['nombre']}' (~{tokens} tok): historial "
-                  f"{nivel['historial']} chars, {nivel['titulares']} titulares por fuente, "
-                  f"calendario {nivel['calendario'] or 'completo'}")
+        print(f"{'✂️ ' if i > 0 else '📏'} Nivel '{nivel['nombre']}' (~{tokens} tok): historial "
+              f"{nivel['historial']} chars, {nivel['titulares']} titulares por fuente, "
+              f"calendario {nivel['calendario'] or 'completo'}")
         print(f"🧠 Llamando a {MODEL} via Groq...")
         try:
-            raw_briefing = generate_briefing(prompt)
+            raw_briefing, diag = generate_briefing(prompt)
             nivel_usado = nivel
             break
         except PromptDemasiadoGrande as e:
@@ -1678,7 +1746,7 @@ def main():
         )
 
     print("💾 Guardando en GitHub Gist...")
-    save_to_gist(briefing, market_data, bias, bias_history, briefing_history)
+    save_to_gist(briefing, market_data, bias, bias_history, briefing_history, nivel_usado, diag)
 
     print("✅ Briefing completado")
     print(f"📝 Palabras generadas: {len(briefing.split())}")
