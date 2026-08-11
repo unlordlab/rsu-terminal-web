@@ -3,10 +3,11 @@ from functools import lru_cache
 import math
 import html as _html
 import requests
+import time
 import xml.etree.ElementTree as ET
 import sys, os
 from datetime import datetime, timezone
-from concurrent.futures import ThreadPoolExecutor, as_completed
+from concurrent.futures import ThreadPoolExecutor, TimeoutError as FuturoExpirado, as_completed
 import yfinance as yf
 from config import settings
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "..", "shared"))
@@ -60,6 +61,23 @@ SOURCES = [
 # frecuencia legítimas (Fed, Substacks) siguen entrando, y un congelamiento
 # de verdad (meses) se descarta solo.
 MAX_ANTIGUEDAD_MINS = 30 * 24 * 60
+
+# Presupuesto de tiempo del feed. Los tres números salen de medir las 14
+# fuentes reales el 11/08/2026, no de elegirlos a ojo:
+#
+#   13 de 14 respondieron por debajo de 0,7s (la más lenta que aportaba algo,
+#   0,61s). La catorceava, benzinga, se comió los 8s enteros del timeout que
+#   había antes para devolver CERO items -- y como el bucle esperaba a todas,
+#   ESA era la latencia del endpoint: 8,15s de reloj para el usuario.
+#
+# FUENTE_TIMEOUT da cuatro veces el margen de la fuente útil más lenta.
+# TANDA_DEADLINE es la red de seguridad del conjunto (una fuente puede
+# encadenar backoff + segundo intento): pasado ese tope se sirve lo que haya
+# llegado en vez de seguir esperando. Con estos valores, cortar por deadline
+# no habría perdido ni uno de los 108 items medidos.
+FUENTE_TIMEOUT  = 2.5
+FUENTE_BACKOFF  = 0.3
+TANDA_DEADLINE  = 6.0
 
 # URL de la web de cada fuente — para hipervínculo directo al clicar el label
 SOURCE_URLS = {
@@ -359,6 +377,33 @@ def _parse_rss(content, src: dict) -> list:
         pass
     return items
 
+_RASTREO = ("utm_", "fbclid", "gclid", "mc_cid", "mc_eid", "ref", "src")
+
+
+def _url_canonica(url: str) -> str:
+    """URL reducida a lo que identifica el artículo, para deduplicar.
+
+    Se quitan esquema, "www.", la barra final y los parámetros de rastreo --
+    el MISMO artículo llega con `?utm_source=rss` desde un feed y limpio desde
+    otro, y comparándolos en crudo salen como dos noticias distintas. Los
+    parámetros que no son de rastreo se conservan: hay sitios donde el
+    identificador del artículo viaja en la query (`?id=1234`), y limpiarla
+    entera fusionaría artículos que no tienen nada que ver.
+    """
+    if not url:
+        return ""
+    try:
+        from urllib.parse import urlsplit, parse_qsl, urlencode
+        p = urlsplit(url.strip())
+        host = (p.netloc or "").lower().removeprefix("www.")
+        query = urlencode([(k, v) for k, v in parse_qsl(p.query)
+                           if not k.lower().startswith(_RASTREO)])
+        camino = (p.path or "").rstrip("/")
+        return f"{host}{camino}" + (f"?{query}" if query else "")
+    except Exception:
+        return url.strip().lower()
+
+
 def _build(title: str, desc: str, link: str, src: dict, pub: str) -> dict:
     text   = title + ' ' + desc
     mins   = _mins_ago(pub) if pub else 999
@@ -377,15 +422,40 @@ def _build(title: str, desc: str, link: str, src: dict, pub: str) -> dict:
     }
 
 def _fetch_source(src: dict) -> tuple:
-    """Devuelve (items, source_id, ok) para poder rastrear qué fuentes funcionan."""
+    """Devuelve (items, source_id, ok) para poder rastrear qué fuentes funcionan.
+
+    TIMEOUT DE 2,5s, no de 8. Medido el 11/08/2026 con las 14 fuentes reales:
+    13 responden en menos de 0,7s (la más lenta que aporta algo, 0,61s) y la
+    catorceava —benzinga— agotaba los 8s enteros para devolver CERO items. Con
+    un tope de 2,5s se le da cuatro veces el margen de la fuente útil más
+    lenta, y el endpoint deja de esperar ocho segundos por nada.
+
+    UN REINTENTO, y solo para fallos de CONEXIÓN. Un timeout no se reintenta:
+    significa que el servidor va lento, y volver a preguntarle solo suma otro
+    timeout al reloj del usuario. Un ConnectionError/DNS, en cambio, suele ser
+    un tropiezo instantáneo del que se sale a la primera. Esa distinción es lo
+    que hace que el reintento no coma latencia en el caso malo. Ver auditoría
+    de Newsfeed, hallazgos #14 y #16.
+    """
     if not src.get('url'):
         return [], src['id'], False
     headers = {
         "User-Agent": "Mozilla/5.0 (compatible; RSUTerminal/2.0)",
         "Accept": "application/rss+xml, application/xml, text/xml, */*",
     }
+    r = None
+    for intento in range(2):
+        try:
+            r = requests.get(src['url'], headers=headers, timeout=FUENTE_TIMEOUT)
+            break
+        except requests.exceptions.Timeout:
+            return [], src['id'], False
+        except Exception:
+            if intento == 0:
+                time.sleep(FUENTE_BACKOFF)
+                continue
+            return [], src['id'], False
     try:
-        r = requests.get(src['url'], headers=headers, timeout=8)
         if r.status_code == 200:
             # r.content (bytes), NO r.text: un feed que empieza con BOM UTF-8
             # -- el de la Fed lo hace -- rompe ElementTree si se le pasa ya
@@ -601,27 +671,59 @@ def _fetch_all_items() -> tuple:
     source_status  = {}
     all_items      = []
 
-    with ThreadPoolExecutor(max_workers=12) as ex:
+    # Sin `with`: al salir de un bloque `with` el executor hace shutdown(wait=True)
+    # y vuelve a esperar a los rezagados, deshaciendo el deadline que acabamos de
+    # aplicar. Se cierra a mano con wait=False.
+    ex = ThreadPoolExecutor(max_workers=16)
+    try:
         rss_futures    = {ex.submit(_fetch_source, src): src for src in active_sources}
         finnhub_future = ex.submit(_fetch_finnhub_news)
+        source_status  = {src['id']: False for src in active_sources}
+        source_status['finnhub'] = False
 
-        for f in as_completed(rss_futures):
-            items, src_id, ok = f.result()
-            all_items.extend(items)
-            source_status[src_id] = ok
+        inicio = time.monotonic()
+        try:
+            for f in as_completed(list(rss_futures) + [finnhub_future], timeout=TANDA_DEADLINE):
+                if f is finnhub_future:
+                    fh_items, fh_ok = f.result()
+                    all_items.extend(fh_items)
+                    source_status['finnhub'] = fh_ok
+                else:
+                    items, src_id, ok = f.result()
+                    all_items.extend(items)
+                    source_status[src_id] = ok
+        except FuturoExpirado:
+            # Se sirve lo que haya llegado. Las que no contestaron se quedan en
+            # False (arrancan así), que es exactamente lo que ya significa esa
+            # bandera: la fuente no aportó nada en este ciclo. El semáforo de
+            # fuentes del frontend las pinta en rojo sin cambios.
+            pendientes = [rss_futures[f]['id'] for f in rss_futures if not f.done()]
+            print(f"[Newsfeed] Tope de {TANDA_DEADLINE:.0f}s alcanzado, se sirve lo recibido. "
+                  f"Sin contestar: {pendientes or ['finnhub']}")
+        else:
+            # max_workers >= nº de tareas, así que todas arrancan a la vez y el
+            # reloj es el de la más lenta. Con 8 fuentes por 12 workers no era
+            # así: las que no cabían esperaban turno y sumaban al total.
+            print(f"[Newsfeed] {len(active_sources) + 1} fuentes en {time.monotonic() - inicio:.2f}s")
+    finally:
+        ex.shutdown(wait=False, cancel_futures=True)
 
-        fh_items, fh_ok = finnhub_future.result()
-        all_items.extend(fh_items)
-        source_status['finnhub'] = fh_ok
-
-    # Deduplicar por título
-    seen   = set()
+    # Deduplicar por TÍTULO y por URL. Con solo el título se colaba el mismo
+    # artículo dos veces cuando dos fuentes lo sindican con titulares
+    # ligeramente distintos ("Fed holds rates" vs "Fed holds rates steady") pero
+    # apuntando al mismo enlace. Ver auditoría de Newsfeed, hallazgo #15.
+    seen_titulo = set()
+    seen_url    = set()
     unique = []
     for item in all_items:
-        key = item['title'][:60].lower()
-        if key not in seen:
-            seen.add(key)
-            unique.append(item)
+        k_titulo = item['title'][:60].lower()
+        k_url    = _url_canonica(item.get('url'))
+        if k_titulo in seen_titulo or (k_url and k_url in seen_url):
+            continue
+        seen_titulo.add(k_titulo)
+        if k_url:
+            seen_url.add(k_url)
+        unique.append(item)
 
     unique.sort(key=lambda x: x['mins_ago'])
 
@@ -653,7 +755,14 @@ def _fetch_all_items() -> tuple:
 
     return unique, source_status, all_source_defs
 
-def get_newsfeed(sources: list = None, impact: str = None, sector: str = None, limit: int = 50) -> dict:
+def get_newsfeed(impact: str = None, sector: str = None, limit: int = 50) -> dict:
+    """El parámetro `sources` que había aquí se ha eliminado: lo aceptaba pero
+    no lo miraba en ningún sitio, así que `get_newsfeed(sources=['ft'])` habría
+    devuelto TODAS las fuentes como si el filtro se hubiera aplicado. Nadie lo
+    llamaba con él (el router nunca lo pasaba), pero una firma que promete un
+    filtro que no existe es una trampa esperando. Si algún día se quiere filtrar
+    por fuente, se añade con el filtro de verdad. Ver auditoría de Newsfeed, #13.
+    """
     unique, source_status, all_source_defs = _fetch_all_items()
 
     # Filtros aplicados en memoria sobre los datos ya cacheados — sin coste de red
