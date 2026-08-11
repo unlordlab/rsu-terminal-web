@@ -3,7 +3,7 @@ import unicodedata
 import re
 import time
 import math
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from zoneinfo import ZoneInfo
 from concurrent.futures import ThreadPoolExecutor
 from services.yf_pool import yf_executor
@@ -156,6 +156,59 @@ def _get_daily_bars(tk_obj, ticker: str) -> tuple[float, float, object]:
         return last, prev, fecha
     except Exception:
         return 0.0, 0.0, None
+
+def _ultima_sesion_esperada() -> "object":
+    """Qué sesión de mercado debería ser la última con datos, ahora mismo.
+
+    Retrocede desde hoy (Nueva York) saltando sábados y domingos, y si el
+    mercado aún no ha cerrado hoy, retrocede un día más: durante la sesión
+    en curso la última barra COMPLETA sigue siendo la de ayer. No conoce
+    los festivos, y por eso el llamador da un día de margen antes de gritar
+    -- vale más callarse el 4 de julio que avisar en falso cada festivo."""
+    d = datetime.now(ZoneInfo("America/New_York"))
+    dia = d.date()
+    if not (d.hour > 16 or (d.hour == 16 and d.minute >= 5)):
+        dia -= timedelta(days=1)
+    while dia.weekday() >= 5:          # 5 sábado, 6 domingo
+        dia -= timedelta(days=1)
+    return dia
+
+
+def _estado_de_los_precios(filas: list) -> dict:
+    """De qué sesión son los precios que se están enseñando, y si eso es un
+    problema.
+
+    La columna se llama "HOY %", pero el dato puede ser de otro día: si el
+    proveedor deja de servir cotizaciones (y desde el VPS pasa, que Yahoo
+    limita las IP de centro de datos), el backend sigue devolviendo el
+    último porcentaje que consiguió calcular. Hasta ahora la tabla lo
+    pintaba igual, sin una pista de que no era de hoy -- reportado el
+    11/08: los valores llevaban CUATRO días congelados en el viernes 7,
+    coherentes entre sí y perfectamente plausibles.
+
+    Se devuelve la fecha real de los datos para que la pantalla pueda
+    decirlo, en vez de que cada quien deduzca por su cuenta si ese +15% es
+    de hoy."""
+    fechas = sorted({f.get("chg_fecha") for f in filas if f.get("chg_fecha")})
+    if not fechas:
+        return {"sesion_datos": None, "sesion_desfase_dias": None,
+                "sesion_desfasada": False}
+    sesion = fechas[-1]                       # la más reciente que hay
+    try:
+        sesion_d = datetime.strptime(sesion, "%Y-%m-%d").date()
+    except (TypeError, ValueError):
+        return {"sesion_datos": sesion, "sesion_desfase_dias": None,
+                "sesion_desfasada": False}
+    desfase = (_ultima_sesion_esperada() - sesion_d).days
+    return {
+        "sesion_datos": sesion,
+        "sesion_desfase_dias": max(0, desfase),
+        # Un día de margen: cubre los festivos, que esta función no conoce.
+        # A partir de dos, ya no es calendario -- es que los precios no se
+        # están actualizando.
+        "sesion_desfasada": desfase >= 2,
+    }
+
 
 def norm_col(s):
     return unicodedata.normalize("NFKD", s).encode("ascii", "ignore").decode().lower().strip()
@@ -1406,6 +1459,7 @@ def get_cartera():
             "mkt_status":   mkt_status,
             "mkt_color":    mkt_color,
             "last_update":  datetime.now(ZoneInfo("Europe/Madrid")).strftime("%d/%m/%Y %H:%M:%S"),
+            **_estado_de_los_precios(abiertas_rows),
         })
         # Solo se cachea un resultado bueno -- un fallo de red o de formato de
         # la hoja no debe quedarse pegado 60 s, mismo criterio que el resto

@@ -773,6 +773,25 @@ function sortArrow(sortState, key) {
     return sortState.dir === 1 ? ' ▲' : ' ▼';
 }
 
+// Los precios que se enseñan pueden no ser de hoy. Pasa cuando el proveedor
+// deja de servir cotizaciones -- desde el VPS ocurre, porque Yahoo limita las
+// IP de centro de datos -- y entonces el backend sigue devolviendo el ultimo
+// porcentaje que consiguio calcular. La tabla lo pintaba igual bajo el rotulo
+// "HOY %", sin una pista de que no era de hoy: reportado el 11/08, los valores
+// llevaban CUATRO dias congelados en el viernes 7, coherentes entre si y
+// perfectamente plausibles. Un numero plausible y viejo engaña mas que un hueco.
+function avisoSesion(data) {
+    if (!data || !data.sesion_desfasada || !data.sesion_datos) return '';
+    const dias = data.sesion_desfase_dias;
+    const f = data.sesion_datos.split('-').reverse().join('/');
+    return `<div style="background:rgba(255,184,0,0.10);border:1px solid #ffb800;border-radius:var(--radius);padding:10px 14px;margin-bottom:1rem;font-size:12px;color:var(--color-text);">
+        <strong>Los precios no son de hoy.</strong> El ultimo dato disponible es de la sesion del
+        <strong>${esc(f)}</strong>${dias ? ` (${esc(dias)} ${dias === 1 ? 'sesion' : 'sesiones'} de retraso)` : ''}.
+        La columna &laquo;HOY %&raquo; muestra la variacion de ESE dia, no la de hoy, y el P&amp;L
+        esta calculado con esos precios.
+    </div>`;
+}
+
 function renderActiveSection() {
     if (!_carteraData) return;
     const wrap = document.getElementById('active-table-wrap');
@@ -783,7 +802,8 @@ function renderActiveSection() {
         rows = rows.filter(r => r.ticker.toLowerCase().includes(f) || (r.comment||'').toLowerCase().includes(f) || (r.sector||'').toLowerCase().includes(f) || (r.tier||'').toLowerCase().includes(f));
     }
     rows = sortRows(rows, _sortActive);
-    wrap.innerHTML = avisoEarnings(_carteraData.abiertas || [])
+    wrap.innerHTML = avisoSesion(_carteraData)
+        + avisoEarnings(_carteraData.abiertas || [])
         + tableControls('active', _filterActive, rows.length, (_carteraData.abiertas||[]).length)
         + activeTable(rows);
     rows.forEach((r, i) => drawSparklineFor(`spark-active-${i}-${r.ticker}`, r.ticker));
@@ -832,7 +852,12 @@ function activeTable(rows) {
         { label: 'SECTOR',      key: 'sector' },
         { label: 'P. COMPRA',   key: 'compra' },
         { label: 'P. ACTUAL',   key: 'actual' },
-        { label: 'HOY %',       key: 'chg_hoy' },
+        // El rotulo dice de que sesion habla cuando no es la ultima: llamar
+        // "HOY %" a un dato de hace cuatro dias es la parte que engaña.
+        { label: (_carteraData && _carteraData.sesion_desfasada && _carteraData.sesion_datos)
+                    ? esc(_carteraData.sesion_datos.slice(8) + '/' + _carteraData.sesion_datos.slice(5,7)) + ' %'
+                    : 'HOY %',
+          key: 'chg_hoy' },
         { label: 'P&L %',       key: 'pnl' },
         // P&L en dólares: el porcentaje solo no dice nada del impacto real.
         // Un +40% en una posición de 1.000 $ pesa mucho menos en la cartera
@@ -876,7 +901,12 @@ function activeTable(rows) {
             ? (r.chg_fecha || r.sin_datos_hoy
                 ? `Todavía no hay cotización de hoy para ${r.ticker}. El precio que ves es el último cierre disponible.`
                 : `Sin datos de variación para ${r.ticker}.`)
-            : '';
+            // Con un numero SI hay dato, pero puede no ser de hoy -- antes esta
+            // rama estaba vacia y por eso la tabla callaba justo en el caso que
+            // mas confunde.
+            : (_carteraData && _carteraData.sesion_desfasada && r.chg_fecha
+                ? `Variación de la sesión del ${r.chg_fecha.split('-').reverse().join('/')}, no de hoy.`
+                : '');
         const comment  = r.comment || '—';
         const sparkId  = `spark-active-${i}-${r.ticker}`;
         // La celda de peso lleva su propia función: hay dos casos que no son
