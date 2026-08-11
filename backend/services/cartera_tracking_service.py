@@ -17,6 +17,10 @@ import os
 from datetime import datetime
 
 from services.telegram_service import enviar_telegram
+# Los pesos objetivo por nivel (CORE 5% / HIGH 3% / LOTTERY 1%) viven en un
+# solo sitio: se importan en vez de repetirlos aquí, para que cambiarlos en
+# cartera_service.py no deje el aviso de Telegram diciendo otra cosa.
+from services.cartera_service import TIER_WEIGHTS
 
 DB_PATH = os.path.join(os.path.dirname(__file__), '..', 'cartera_notificaciones.db')
 
@@ -42,10 +46,44 @@ def init_db():
     conn.close()
 
 
+def _lineas_sizing(row) -> str:
+    """Nivel de convicción y tamaño en $ de la operación, para que el aviso
+    diga no solo QUÉ se ha comprado sino CUÁNTO pesa — un LOTTERY del 1% y un
+    CORE del 5% son decisiones muy distintas y hasta ahora llegaban al
+    Telegram exactamente iguales.
+
+    Los dos casos raros se dicen, no se rellenan con un número inventado
+    (mismo criterio que el resto de Cartera):
+
+    - Fila sin nivel válido en la hoja: `norm_tier()` devuelve None y el
+      sizing cae al cálculo antiguo por Cantidad/Inversión. Se etiqueta «sin
+      clasificar» en vez de suponer un nivel.
+    - `sin_dimensionar`: la posición está abierta de verdad pero la
+      simulación de niveles está saturada y la hoja no trae Cantidad ni
+      Inversión, así que `inv` es 0. Poner «Tamaño: $0» ahí sería
+      indistinguible de una posición que no existe.
+    """
+    tier = row.get("tier")
+    if tier:
+        peso = TIER_WEIGHTS.get(tier)
+        linea = f"🎯 Nivel: {tier}" + (f" ({peso:g}% objetivo)\n" if peso else "\n")
+    else:
+        linea = "🎯 Nivel: sin clasificar\n"
+
+    if row.get("sin_dimensionar"):
+        linea += "💼 Tamaño: sin asignar (capital comprometido al completo)\n"
+    elif row.get("inv"):
+        # 💼 y no 💵: en el mensaje de cierre el 💵 ya es el P&L, y dos líneas
+        # con el mismo icono se leen como si fueran la misma cosa.
+        linea += f"💼 Tamaño: ${row['inv']:,.0f}\n"
+    return linea
+
+
 def _mensaje_apertura(row):
     return (
         "🟢 *NUEVA ENTRADA*\n\n"
         f"📈 Ticker: {row['ticker']}\n"
+        f"{_lineas_sizing(row)}"
         f"💰 P. Compra: ${row['compra']}\n"
         f"📅 Fecha: {row['fecha']}\n\n"
         "_CARTERA RSU // POSICIÓN ABIERTA_"
@@ -59,6 +97,7 @@ def _mensaje_cierre(row):
     return (
         "🔴 *POSICIÓN CERRADA*\n\n"
         f"📈 Ticker: {row['ticker']}\n"
+        f"{_lineas_sizing(row)}"
         f"💰 P. Entrada: ${row['compra']}\n"
         f"💵 P&L: {signo}{row['pnl']}% {check}\n"
         f"📅 Entrada: {row['fecha']}\n\n"
