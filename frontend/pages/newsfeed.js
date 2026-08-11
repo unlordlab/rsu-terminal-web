@@ -2,7 +2,11 @@ import { authHeader } from '/core/api.js';
 import { tt } from '/components/tooltip.js';
 import { errorMessage, esc, safeUrl } from '/core/ui.js';
 
-const SECTORS = ['GENERAL','TECH','FINANCE','ENERGY','HEALTH','MACRO','CRYPTO','POLICY','DEFENSE'];
+// 'ALL' va PRIMERO y existe de verdad: el estado inicial ya era activeSector
+// = 'ALL', pero no habia ningun boton con ese valor, asi que al pulsar
+// cualquier sector no habia forma de volver a verlos todos sin recargar la
+// pagina. Ver auditoria de Newsfeed, #6.
+const SECTORS = ['ALL','GENERAL','TECH','FINANCE','ENERGY','HEALTH','MACRO','CRYPTO','POLICY','DEFENSE'];
 const IMPACTS = ['ALL','HIGH','MED','LOW'];
 
 let activeImpact = 'ALL';
@@ -71,15 +75,15 @@ export async function render(container) {
     container.querySelectorAll('.impact-btn').forEach(btn => {
         btn.addEventListener('click', () => {
             activeImpact = btn.getAttribute('data-impact');
-            renderFeedFromCache(container);
             updateFilterStyles(container);
+            loadNews(container);   // el backend filtra sobre TODO, no sobre los 80 bajados
         });
     });
     container.querySelectorAll('.sector-btn').forEach(btn => {
         btn.addEventListener('click', () => {
             activeSector = btn.getAttribute('data-sector');
-            renderFeedFromCache(container);
             updateFilterStyles(container);
+            loadNews(container);
         });
     });
 
@@ -119,7 +123,7 @@ function startAutoRefresh(container) {
 
     refreshTimer = setInterval(async () => {
         secondsLeft = 300;
-        await loadNews(container);
+        await loadNews(container, { silencioso: true });
         loadTrump(container.querySelector('#trump-feed'));
     }, 300000); // 5 minutos
 }
@@ -135,14 +139,30 @@ function updateCountdown(container) {
 
 // ── NEWS PRINCIPAL ────────────────────────────────────────────────────────────
 
-async function loadNews(container) {
+// silencioso: no pinta el "Cargando..." ni mueve el scroll. Es lo que quiere
+// el refresco automatico cada 5 minutos -- el placeholder colapsa la lista
+// entera, la pagina se queda de golpe sin altura y el scroll salta arriba, en
+// mitad de lo que estabas leyendo. En una carga normal o al cambiar de filtro
+// SI se pinta, porque ahi el contenido cambia de verdad y sin aviso pareceria
+// que la pagina se ha quedado colgada. Ver auditoria de Newsfeed, #8.
+async function loadNews(container, { silencioso = false } = {}) {
     const feed  = container.querySelector('#news-feed');
     const stats = container.querySelector('#news-stats');
     const health = container.querySelector('#source-health');
-    if (feed) feed.innerHTML = '<div style="color:var(--color-muted);font-size:12px;padding:1rem;">Cargando...</div>';
+    const scrollPrevio = window.scrollY;
+    if (feed && !silencioso) feed.innerHTML = '<div style="color:var(--color-muted);font-size:12px;padding:1rem;">Cargando...</div>';
 
     try {
-        const res   = await fetch('/api/v1/newsfeed/?limit=80', {
+        // El filtro viaja al backend. Antes se bajaban siempre los 80 mas
+        // recientes y se filtraban en el navegador, pero el backend filtra
+        // ANTES de recortar, asi que filtrar aqui deja fuera noticias que si
+        // existen. Medido el 08/08 con 120 noticias en el ciclo: pedir HIGH
+        // enseñaba 9 de las 22 que habia -- se perdian 13 de alto impacto,
+        // que es justo el filtro que mas importa. Ver auditoria, #7.
+        const q = new URLSearchParams({ limit: '80' });
+        if (activeImpact !== 'ALL') q.set('impact', activeImpact);
+        if (activeSector !== 'ALL') q.set('sector', activeSector);
+        const res   = await fetch('/api/v1/newsfeed/?' + q, {
             headers: authHeader()
         });
         const data  = await res.json();
@@ -180,10 +200,27 @@ async function loadNews(container) {
         }
 
         renderFeedFromCache(container);
+        // La lista nueva puede tener otra altura (una noticia mas, una menos),
+        // asi que se restaura la posicion en vez de darla por intacta.
+        if (silencioso) window.scrollTo({ top: scrollPrevio });
 
     } catch(e) {
         if (feed) feed.innerHTML = errorMessage(e.message);
     }
+}
+
+// 999 no es una edad: es el centinela que pone el backend cuando la noticia
+// llega SIN fecha de publicacion. Se pintaba con la misma formula que las
+// demas y salia un "16h" perfectamente creible (999 min = 16,6 h), asi que
+// una noticia de antiguedad desconocida se presentaba como si se supiera.
+// Ahora se dice que no se sabe. Ver auditoria de Newsfeed, #9.
+const SIN_FECHA = 999;
+
+function edadTexto(mins) {
+    if (mins == null || mins === SIN_FECHA) return '—';
+    if (mins < 60)   return mins + 'm';
+    if (mins < 1440) return Math.floor(mins / 60) + 'h';
+    return Math.floor(mins / 1440) + 'd';
 }
 
 function renderFeedFromCache(container) {
@@ -192,8 +229,9 @@ function renderFeedFromCache(container) {
 
     let items = cachedData.items || [];
 
-    if (activeImpact !== 'ALL') items = items.filter(i => i.impact === activeImpact);
-    if (activeSector !== 'ALL') items = items.filter(i => i.sector === activeSector);
+    // Sin filtrar aqui: los items ya vienen filtrados del backend (ver
+    // loadNews). Volver a filtrarlos no cambiaria nada y esconderia de
+    // donde sale el recorte real.
 
     if (!items.length) {
         feed.innerHTML = '<div style="padding:2rem;color:var(--color-muted);font-size:12px;text-align:center;">No hay noticias con los filtros seleccionados.</div>';
@@ -205,11 +243,7 @@ function renderFeedFromCache(container) {
 function newsCard(item) {
     const ic = impactColor(item.impact);
     const sc = sentimentColor(item.sentiment);
-    const timeStr = item.mins_ago < 60
-        ? item.mins_ago + 'm'
-        : item.mins_ago < 1440
-        ? Math.floor(item.mins_ago / 60) + 'h'
-        : Math.floor(item.mins_ago / 1440) + 'd';
+    const timeStr = edadTexto(item.mins_ago);
 
     // Badge especial para Finnhub
     const isFinnhub = item.source_id === 'finnhub';
@@ -262,11 +296,7 @@ async function loadTrump(el) {
 }
 
 function trumpCard(post) {
-    const timeStr = post.mins_ago < 60
-        ? post.mins_ago + 'm'
-        : post.mins_ago < 1440
-        ? Math.floor(post.mins_ago / 60) + 'h'
-        : Math.floor(post.mins_ago / 1440) + 'd';
+    const timeStr = edadTexto(post.mins_ago);
     const ic     = impactColor(post.impact);
     const text   = post.content || post.title || '';
     const isHigh = post.impact === 'HIGH';

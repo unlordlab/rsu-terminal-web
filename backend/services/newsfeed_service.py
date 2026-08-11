@@ -590,6 +590,13 @@ def _fetch_all_items() -> tuple:
     if cached:
         return cached['items'], cached['source_status'], cached['all_source_defs']
 
+    # Compas de espera tras una caida general (ver el final de esta funcion).
+    # Se devuelve vacio sin tocar la red: el frontend ya sabe pintar "sin
+    # noticias", y es mejor eso que quince peticiones mas a servidores que
+    # acaban de fallar.
+    if cache.get("newsfeed:caida"):
+        return [], {}, SOURCES + [{"id": "finnhub", "label": "FINNHUB"}]
+
     active_sources = SOURCES
     source_status  = {}
     all_items      = []
@@ -629,6 +636,20 @@ def _fetch_all_items() -> tuple:
             "source_status":   source_status,
             "all_source_defs": all_source_defs,
         }, 300)
+    else:
+        # Caída general de las fuentes. Sin nada que guardar, la siguiente
+        # visita repetiría los 15 fetches en paralelo, y la siguiente, y la
+        # siguiente: con ~100 usuarios eso es martillear a quince servidores
+        # que ya están fallando, justo cuando peor les viene.
+        #
+        # Se guarda una marca corta (no el resultado vacío, que se serviría
+        # como si fuera bueno) para saltarse el ciclo mientras dure. 60s en
+        # vez de los 300 del camino normal: es un compás de espera, no una
+        # caché de contenido, y el feed tiene que recuperarse en cuanto las
+        # fuentes vuelvan. Mismo criterio que el negative cache de Reddit
+        # Pulse (services/cache.py, TTL "reddit_fail"). Ver auditoría de
+        # Newsfeed, hallazgo #11.
+        cache.set("newsfeed:caida", True, 60)
 
     return unique, source_status, all_source_defs
 

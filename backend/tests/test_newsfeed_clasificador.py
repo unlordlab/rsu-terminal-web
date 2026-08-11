@@ -127,3 +127,56 @@ def test_una_respuesta_vacia_no_se_cachea():
     with patch.object(N, "_get_prices", return_value=[]):
         assert N.get_newsfeed_prices() == []
     assert cache.get("newsfeed:prices") is None
+
+
+# ── #11: una caída general no puede convertirse en un martilleo ──────────
+
+def test_si_se_caen_todas_las_fuentes_no_se_reintenta_en_cada_visita():
+    """Sin nada que cachear, la siguiente visita repetía los 15 fetches en
+    paralelo, y la siguiente, y la siguiente: con ~100 usuarios eso es
+    martillear a quince servidores que ya están fallando, justo cuando peor
+    les viene. Se guarda una marca corta (60s) para saltarse el ciclo.
+
+    Se guarda una MARCA, no el resultado vacío: cachear la lista vacía la
+    serviría como si fuera buena."""
+    from services import newsfeed_service as NF
+    cache.delete("newsfeed:raw")
+    cache.delete("newsfeed:caida")
+    intentos = []
+
+    def caida(src):
+        intentos.append(src["id"])
+        return [], src["id"], False
+
+    try:
+        with patch.object(NF, "_fetch_source", side_effect=caida), \
+             patch.object(NF, "_fetch_finnhub_news", return_value=([], False)):
+            NF._fetch_all_items()
+            primera = len(intentos)
+            intentos.clear()
+            NF._fetch_all_items()
+            segunda = len(intentos)
+        assert primera > 0, "la primera visita sí debe intentarlo"
+        assert segunda == 0, f"la segunda repitió {segunda} peticiones a fuentes caídas"
+        assert cache.get("newsfeed:raw") is None, "no se puede cachear un feed vacío como si fuera bueno"
+    finally:
+        cache.delete("newsfeed:caida")
+
+
+def test_un_feed_sano_no_deja_marca_de_caida():
+    """Si la marca se pusiera con datos buenos, el feed se quedaría en blanco
+    un minuto sin motivo."""
+    from services import newsfeed_service as NF
+    cache.delete("newsfeed:raw")
+    cache.delete("newsfeed:caida")
+    sanos = [{"title": f"noticia {i}", "mins_ago": i, "impact": "LOW",
+              "sector": "GENERAL", "sentiment": "neutral"} for i in range(20)]
+    try:
+        with patch.object(NF, "_fetch_source", side_effect=lambda s: (sanos, s["id"], True)), \
+             patch.object(NF, "_fetch_finnhub_news", return_value=([], True)):
+            NF._fetch_all_items()
+        assert cache.get("newsfeed:caida") is None
+        assert cache.get("newsfeed:raw") is not None
+    finally:
+        cache.delete("newsfeed:caida")
+        cache.delete("newsfeed:raw")
