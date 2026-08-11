@@ -189,6 +189,20 @@
       #nav-velo { display: none; }
     }
 
+    /* Newsfeed en pantalla estrecha. El feed y el panel de Truth Social viven
+       en un grid de "1fr 340px": en un móvil de 375px eso deja el feed en unos
+       20px y los titulares salen en columna de una palabra. Se apilan, y el
+       panel deja de ser sticky (pegado arriba en vertical tapa el feed al
+       hacer scroll). Ver auditoría de Newsfeed, #20. */
+    @media (max-width: 768px) {
+      #newsfeed-grid {
+        grid-template-columns: 1fr !important;
+      }
+      #newsfeed-grid > div > div[style*="sticky"] {
+        position: static !important;
+      }
+    }
+
     #back-bar {
       max-width: 1400px;
       margin-bottom: 1rem;

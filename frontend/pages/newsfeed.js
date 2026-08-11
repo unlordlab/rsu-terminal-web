@@ -11,6 +11,9 @@ const IMPACTS = ['ALL','HIGH','MED','LOW'];
 
 let activeImpact = 'ALL';
 let activeSector = 'ALL';
+let activeSource = null;   // id de fuente, null = todas
+let busqueda     = '';
+let busquedaTimer = null;
 let refreshTimer = null;
 let countdownTimer = null;
 let secondsLeft = 300;
@@ -47,12 +50,20 @@ export async function render(container) {
             + s + '</button>').join('')
         + '</div>'
 
+        // Buscador
+        + '<div style="display:flex;gap:8px;margin-bottom:8px;align-items:center;">'
+        + '<input id="news-buscar" type="search" placeholder="Buscar en titulares, descripciones y tickers..." '
+        + 'style="flex:1;min-width:0;background:var(--color-surface);border:1px solid var(--color-border);'
+        + 'border-radius:var(--radius);padding:6px 10px;color:var(--color-text);font-family:var(--font-mono);font-size:11px;">'
+        + '<span id="news-buscar-estado" style="color:var(--color-muted);font-size:10px;white-space:nowrap;"></span>'
+        + '</div>'
+
         // Stats + source health
         + '<div id="news-stats" style="margin-bottom:8px;"></div>'
         + '<div id="source-health" style="margin-bottom:1rem;"></div>'
 
         // Layout: feed principal + panel Trump
-        + '<div style="display:grid;grid-template-columns:1fr 340px;gap:1rem;align-items:start;">'
+        + '<div id="newsfeed-grid" style="display:grid;grid-template-columns:1fr 340px;gap:1rem;align-items:start;">'
 
         // Feed principal
         + '<div id="news-feed"><div style="color:var(--color-muted);font-size:12px;padding:1rem;">Cargando noticias...</div></div>'
@@ -87,6 +98,25 @@ export async function render(container) {
         });
     });
 
+    // Buscador. El texto viaja al backend igual que impacto y sector, no se
+    // filtra aquí: el backend recorta a `limit` DESPUÉS de filtrar, así que
+    // buscar sobre lo ya descargado dejaría fuera noticias que sí existen --
+    // es el mismo error que se corrigió con el filtro de impacto (#7).
+    //
+    // 350ms de espera antes de pedir: sin ellos, escribir "tesla" son cinco
+    // peticiones y las respuestas pueden llegar desordenadas, dejando en
+    // pantalla el resultado de "tesl".
+    const inputBuscar = container.querySelector('#news-buscar');
+    if (inputBuscar) {
+        inputBuscar.addEventListener('input', () => {
+            clearTimeout(busquedaTimer);
+            busquedaTimer = setTimeout(() => {
+                busqueda = inputBuscar.value.trim();
+                loadNews(container);
+            }, 350);
+        });
+    }
+
     // Carga inicial
     loadPrices(container.querySelector('#prices-bar'));
     await loadNews(container);
@@ -104,8 +134,16 @@ export async function render(container) {
 export function cleanup() {
     if (refreshTimer)   clearInterval(refreshTimer);
     if (countdownTimer) clearInterval(countdownTimer);
+    if (busquedaTimer)  clearTimeout(busquedaTimer);
     refreshTimer = null;
     countdownTimer = null;
+    busquedaTimer = null;
+    // Estas dos viven en el módulo, así que sobreviven a salir de la página.
+    // El campo de búsqueda, en cambio, se vuelve a pintar vacío al volver: sin
+    // resetear, se volvería a un feed filtrado con la caja de búsqueda en
+    // blanco y nada que explicara por qué faltan noticias.
+    busqueda = '';
+    activeSource = null;
 }
 
 function startAutoRefresh(container) {
@@ -162,6 +200,8 @@ async function loadNews(container, { silencioso = false } = {}) {
         const q = new URLSearchParams({ limit: '80' });
         if (activeImpact !== 'ALL') q.set('impact', activeImpact);
         if (activeSector !== 'ALL') q.set('sector', activeSector);
+        if (activeSource)           q.set('source', activeSource);
+        if (busqueda)               q.set('q', busqueda.slice(0, 80));
         const res   = await fetch('/api/v1/newsfeed/?' + q, {
             headers: authHeader()
         });
@@ -184,19 +224,45 @@ async function loadNews(container, { silencioso = false } = {}) {
                 + '</div>';
         }
 
-        // Source health indicator
+        // Fuentes: estado (verde/gris) Y filtro. Antes el clic abría la web de
+        // la fuente en otra pestaña; ese enlace ya está en cada noticia (el
+        // nombre de la fuente bajo el titular), así que el clic aquí se dedica
+        // a lo que no se podía hacer de ninguna otra forma: ver solo esa
+        // fuente. Se vuelve a todas pulsando la que ya está activa.
         if (health && data.sources) {
             const active  = data.sources.filter(s => s.ok).length;
             const total   = data.sources.length;
             health.innerHTML = '<div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;">'
                 + '<span style="color:var(--color-muted);font-size:10px;">Fuentes activas: <b style="color:var(--color-accent);">' + active + '/' + total + '</b></span>'
                 + data.sources.map(s => {
+                    const sel   = s.id === activeSource;
                     const color = s.ok ? 'var(--color-accent)' : '#444';
-                    const href  = s.url ? ' onclick="window.open(\'' + s.url + '\',\'_blank\')"' : '';
-                    return '<span style="color:' + color + ';font-size:9px;padding:1px 5px;border:1px solid ' + color + '33;border-radius:2px;cursor:' + (s.url ? 'pointer' : 'default') + ';"'
-                        + (s.url ? href : '') + '>' + s.label + '</span>';
+                    return '<span class="source-chip" data-source="' + esc(s.id) + '" title="'
+                        + (sel ? 'Quitar el filtro y ver todas las fuentes' : 'Ver solo ' + esc(s.label))
+                        + '" style="color:' + (sel ? '#000' : color) + ';background:' + (sel ? color : 'transparent')
+                        + ';font-size:9px;padding:1px 5px;border:1px solid ' + color + (sel ? '' : '33')
+                        + ';border-radius:2px;cursor:pointer;">' + esc(s.label) + '</span>';
                 }).join('')
+                + (activeSource ? '<span style="color:var(--color-muted);font-size:10px;">· filtrando por fuente</span>' : '')
                 + '</div>';
+
+            health.querySelectorAll('.source-chip').forEach(chip => {
+                chip.addEventListener('click', () => {
+                    const id = chip.getAttribute('data-source');
+                    activeSource = (activeSource === id) ? null : id;
+                    loadNews(container);
+                });
+            });
+        }
+
+        // Cuántas quedan tras los filtros, sobre el total del ciclo. Sin esto,
+        // buscar algo que no existe y quedarse sin resultados es indistinguible
+        // de que el feed se haya roto.
+        const estado = container.querySelector('#news-buscar-estado');
+        if (estado) {
+            const filtrando = busqueda || activeSource || activeImpact !== 'ALL' || activeSector !== 'ALL';
+            const n = data.filtrados != null ? data.filtrados : data.items.length;
+            estado.textContent = filtrando ? n + ' de ' + data.total : '';
         }
 
         renderFeedFromCache(container);
@@ -240,6 +306,26 @@ function renderFeedFromCache(container) {
     feed.innerHTML = items.map(item => newsCard(item)).join('');
 }
 
+// Los símbolos que el backend haya reconocido en el titular, enlazados a
+// Research. La mayoría de noticias no llevan ninguno (los titulares nombran a
+// las empresas por su nombre, no por su símbolo) y entonces esto no pinta
+// nada: es un atajo cuando aparece, no una columna que rellenar.
+//
+// `encodeURIComponent` y no solo esc(): el ticker acaba dentro de una URL, y
+// ahí escapar entidades HTML no basta -- un valor con `&` o `#` cortaría la
+// query. El backend ya solo devuelve símbolos de 1-5 letras, pero esto no
+// depende de eso.
+function tickerChips(tickers) {
+    if (!tickers || !tickers.length) return '';
+    return tickers.map(t =>
+        '<a href="/research?ticker=' + encodeURIComponent(t) + '" '
+        + 'onclick="event.preventDefault();window.__navigate(\'/research?ticker=' + encodeURIComponent(t) + '\')" '
+        + 'title="Ver ' + esc(t) + ' en Research" '
+        + 'style="color:var(--color-accent);font-size:10px;padding:1px 6px;border:1px solid var(--color-accent)33;'
+        + 'border-radius:3px;text-decoration:none;cursor:pointer;">' + esc(t) + '</a>'
+    ).join('');
+}
+
 function newsCard(item) {
     const ic = impactColor(item.impact);
     const sc = sentimentColor(item.sentiment);
@@ -265,6 +351,7 @@ function newsCard(item) {
         + '<span style="color:' + ic + ';font-size:10px;border:1px solid ' + ic + '33;padding:1px 6px;border-radius:3px;">' + item.impact + '</span>'
         + '<span style="color:' + sc + ';font-size:10px;">' + sentimentIcon(item.sentiment) + ' ' + item.sentiment + '</span>'
         + '<span style="color:var(--color-secondary);font-size:10px;padding:1px 6px;background:rgba(0,217,255,0.08);border-radius:3px;">' + esc(item.sector) + '</span>'
+        + tickerChips(item.tickers)
         + sourceBadge
         + '<span style="color:var(--color-muted);font-size:10px;margin-left:auto;">' + timeStr + '</span>'
         + '</div>'

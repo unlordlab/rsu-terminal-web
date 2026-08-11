@@ -12,6 +12,7 @@ import yfinance as yf
 from config import settings
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "..", "shared"))
 from time_utils import get_timestamp  # noqa: E402
+from sp500_universe import SP500_SECTOR_MAP  # noqa: E402
 from services.cache import cache, TTL  # noqa: E402
 
 # ── SOURCES ───────────────────────────────────────────────────────────────────
@@ -379,6 +380,60 @@ def _parse_rss(content, src: dict) -> list:
 
 _RASTREO = ("utm_", "fbclid", "gclid", "mc_cid", "mc_eid", "ref", "src")
 
+# Tickers reconocibles en un titular. Se exige que el símbolo EXISTA en el
+# S&P 500 en vez de aceptar cualquier palabra en mayúsculas -- si no, "CEO",
+# "GDP", "FOMC" o "EE UU" pasarían por tickers y el enlace llevaría a una
+# página de Research vacía.
+_TICKERS_CONOCIDOS = set(SP500_SECTOR_MAP.keys())
+
+# Miembros reales del índice cuyo símbolo es además una palabra inglesa
+# corriente en titulares financieros. Sin esta lista, "shares hit a new LOW"
+# enlazaría a Lowe's y "the FED said" a FedEx. Se pierden menciones legítimas
+# de estas 20 empresas a cambio de no fabricar enlaces falsos -- el mismo
+# criterio de "mejor sin dato que con uno inventado" del resto del proyecto.
+# Un cashtag ($LOW) sí las recupera: ahí la intención es inequívoca.
+_PALABRAS_NO_TICKER = {
+    "A", "ALL", "ARE", "BEN", "CAT", "CEO", "DAY", "EA", "ED", "FAST", "GO",
+    "HAS", "HD", "IT", "KEY", "LOW", "MA", "MET", "MO", "NEE", "NOW", "ON",
+    "OPEN", "PM", "SO", "TAP", "WELL", "WM", "US", "USA", "EU", "UK", "AI",
+    "CPI", "GDP", "FED", "IPO", "ETF", "SEC", "NYSE", "TV", "AM", "PM",
+}
+
+_RX_CASHTAG = re.compile(r"\$([A-Z]{1,5})\b")
+_RX_MAYUSCULAS = re.compile(r"\b([A-Z]{2,5})\b")
+
+
+def _extraer_tickers(texto: str, related: list = None) -> list:
+    """Símbolos mencionados en un titular, para poder enlazarlos a Research.
+
+    Tres orígenes, de más a menos fiable:
+      1. `related` de Finnhub -- viene etiquetado en origen, no se adivina.
+      2. Cashtags ($AAPL) -- la intención es explícita, se aceptan aunque el
+         símbolo no esté en el S&P 500 (puede ser una small cap).
+      3. Mayúsculas sueltas -- solo si el símbolo existe en el S&P 500 y no
+         es una palabra corriente (ver _PALABRAS_NO_TICKER).
+
+    Devuelve como mucho 3: un titular con seis enlaces deja de ser un titular.
+    """
+    encontrados = []
+
+    def _add(sym):
+        sym = (sym or "").strip().upper()
+        if sym and sym not in encontrados:
+            encontrados.append(sym)
+
+    for r in (related or []):
+        _add(r.get("symbol") if isinstance(r, dict) else r)
+
+    for sym in _RX_CASHTAG.findall(texto or ""):
+        _add(sym)
+
+    for sym in _RX_MAYUSCULAS.findall(texto or ""):
+        if sym in _TICKERS_CONOCIDOS and sym not in _PALABRAS_NO_TICKER:
+            _add(sym)
+
+    return encontrados[:3]
+
 
 def _url_canonica(url: str) -> str:
     """URL reducida a lo que identifica el artículo, para deduplicar.
@@ -419,6 +474,11 @@ def _build(title: str, desc: str, link: str, src: dict, pub: str) -> dict:
         "sector":     _sector(text),
         "mins_ago":   mins,
         "pub":        pub,
+        # Solo del TITULAR, no de la descripción: el resumen de un feed suele
+        # arrastrar la lista de "empresas relacionadas" del pie del artículo, y
+        # entonces cada noticia salía con tres enlaces que no tenían nada que
+        # ver con lo que contaba. Ver auditoría de Newsfeed, #17.
+        "tickers":    _extraer_tickers(title),
     }
 
 def _fetch_source(src: dict) -> tuple:
@@ -534,6 +594,9 @@ def _fetch_finnhub_news() -> tuple:
                 "sector":     _sector(text, finnhub_category=category),
                 "mins_ago":   mins,
                 "pub":        str(ts),
+                # Aquí `related` viene etiquetado por Finnhub, así que no hay
+                # que adivinar nada -- es el origen más fiable de los tres.
+                "tickers":    _extraer_tickers(headline, related=related),
             }
             items.append(item)
         return items, len(items) > 0
@@ -755,22 +818,38 @@ def _fetch_all_items() -> tuple:
 
     return unique, source_status, all_source_defs
 
-def get_newsfeed(impact: str = None, sector: str = None, limit: int = 50) -> dict:
-    """El parámetro `sources` que había aquí se ha eliminado: lo aceptaba pero
-    no lo miraba en ningún sitio, así que `get_newsfeed(sources=['ft'])` habría
-    devuelto TODAS las fuentes como si el filtro se hubiera aplicado. Nadie lo
-    llamaba con él (el router nunca lo pasaba), pero una firma que promete un
-    filtro que no existe es una trampa esperando. Si algún día se quiere filtrar
-    por fuente, se añade con el filtro de verdad. Ver auditoría de Newsfeed, #13.
+def get_newsfeed(impact: str = None, sector: str = None, source: str = None,
+                  q: str = None, limit: int = 50) -> dict:
+    """Antes había aquí un parámetro `sources: list` que la función aceptaba y
+    no miraba en ninguna línea, así que `get_newsfeed(sources=['ft'])` devolvía
+    TODAS las fuentes como si el filtro se hubiera aplicado (auditoría #13). Se
+    eliminó, y `source` es su sustituto de verdad: un único id de fuente, con
+    el filtro implementado y con tests. `q` busca en titular, descripción y
+    tickers. Ver auditoría de Newsfeed, #18 y #19.
     """
     unique, source_status, all_source_defs = _fetch_all_items()
 
-    # Filtros aplicados en memoria sobre los datos ya cacheados — sin coste de red
+    # Filtros aplicados en memoria sobre los datos ya cacheados — sin coste de red.
+    #
+    # TODOS van aquí, en el backend, y NO en el navegador: el recorte a `limit`
+    # ocurre al final, así que filtrar en el cliente sobre lo ya recortado deja
+    # fuera noticias que sí existen. Medido el 08/08 con el filtro de impacto:
+    # pedir HIGH enseñaba 9 de las 22 que había. Ver auditoría, #7 -- `source` y
+    # `q` se añaden por el mismo camino para no repetir ese error.
     filtered = unique
     if impact:
         filtered = [i for i in filtered if i['impact'] == impact.upper()]
     if sector:
         filtered = [i for i in filtered if i['sector'] == sector.upper()]
+    if source:
+        filtered = [i for i in filtered if i['source_id'] == source.lower()]
+    if q:
+        aguja = q.strip().lower()
+        if aguja:
+            filtered = [i for i in filtered
+                        if aguja in i['title'].lower()
+                        or aguja in (i.get('desc') or '').lower()
+                        or any(aguja == t.lower() for t in i.get('tickers', []))]
 
     # Stats sobre el conjunto completo (no solo la página filtrada)
     high = sum(1 for i in unique if i['impact'] == 'HIGH')
@@ -783,6 +862,10 @@ def get_newsfeed(impact: str = None, sector: str = None, limit: int = 50) -> dic
         "ok":      True,
         "items":   filtered[:limit],
         "total":   len(unique),
+        # Coincidencias ANTES de recortar a `limit`. Sin este número, la UI
+        # solo puede decir "80 de 120", que mezcla dos cosas: cuántas encajan
+        # con el filtro y cuántas caben en la página.
+        "filtrados": len(filtered),
         "stats":   {"high": high, "med": med, "low": low, "bullish": bull, "bearish": bear},
         "sources": [{"id": s['id'], "label": s['label'],
                      "ok": source_status.get(s['id'], False),
