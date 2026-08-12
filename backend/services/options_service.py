@@ -702,6 +702,74 @@ def get_repeat_signals(days: int = 7, min_repeats: int = 2) -> list:
         result.append(d)
     return result
 
+def get_flow_badge(ticker: str, days: int = 14) -> dict | None:
+    """Resumen mínimo del flujo de opciones de un ticker, para enseñarlo en
+    OTRO módulo (hoy Research). `None` si no hay nada que contar.
+
+    Existe aparte de `get_ticker_history_summary()` a propósito: aquella pide
+    el precio a yfinance para calcular el upside, y esto se llama desde
+    `get_research()`, que ya trae su propio precio y no necesita otra descarga
+    -- ni gastar cuota de Yahoo para pintar una etiqueta. Aquí solo se lee el
+    SQLite local, que es barato. Ver auditoría de Options Flow, #21.
+
+    `nps` es el Net Premium Score en [-1, +1]: prima alcista menos bajista
+    sobre el total. Misma definición que usa el propio módulo de Options Flow,
+    para que las dos pantallas no digan cosas distintas del mismo ticker.
+    """
+    try:
+        init_db()
+        desde = (datetime.now() - timedelta(days=days)).strftime('%Y-%m-%d')
+        conn = sqlite3.connect(DB_PATH)
+        conn.row_factory = sqlite3.Row
+        filas = conn.execute('''
+            SELECT type, action, premium, score, scan_date
+            FROM options_flow
+            WHERE ticker = ? AND scan_date >= ?
+        ''', (ticker.upper(), desde)).fetchall()
+        conn.close()
+        if not filas:
+            return None
+
+        def _es_alcista(r):
+            return (r['type'] == 'call' and r['action'] == 'buy') or \
+                   (r['type'] == 'put' and r['action'] == 'sell')
+
+        prima_bull = sum(r['premium'] or 0 for r in filas if _es_alcista(r))
+        prima_bear = sum(r['premium'] or 0 for r in filas if not _es_alcista(r))
+        total = prima_bull + prima_bear
+        if total <= 0:
+            return None
+        # Se redondea ANTES de clasificar, no después: con el crudo, un 0,1997
+        # se enseña como "0.2" y se etiqueta MIXTO porque no llega al umbral de
+        # 0,20, y el usuario ve una contradicción que no puede explicarse desde
+        # la pantalla. Clasificando sobre el número que se muestra, la etiqueta
+        # siempre cuadra con la cifra que la acompaña.
+        nps = round((prima_bull - prima_bear) / total, 2)
+
+        # Umbral de ±0,20 para no llamar "alcista" a un 51/49. Por debajo es
+        # ruido: hay flujo, pero no apunta a ningún lado.
+        if nps >= 0.20:
+            sesgo = "ALCISTA"
+        elif nps <= -0.20:
+            sesgo = "BAJISTA"
+        else:
+            sesgo = "MIXTO"
+
+        return {
+            "sesgo":        sesgo,
+            "nps":          nps,
+            "n_señales":    len(filas),
+            "prima_total":  round(total, 0),
+            "prima_fmt":    _fmt_premium(total),
+            "score_max":    max((r['score'] or 0) for r in filas),
+            "ultimo_scan":  max(r['scan_date'] for r in filas),
+            "dias":         days,
+        }
+    except Exception:
+        # Una etiqueta de otro módulo nunca puede tumbar el research.
+        return None
+
+
 def get_ticker_history_summary(ticker: str) -> dict:
     """Resumen de un ticker con prima ponderada y momentum de sentimiento."""
     init_db()

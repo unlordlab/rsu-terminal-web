@@ -1600,6 +1600,18 @@ def _get_short_interest(ticker: str) -> dict:
     except Exception:
         return {}
 
+def _get_flow_badge(ticker: str):
+    """Puente hacia Options Flow. Import diferido y envuelto: Research no debe
+    quedarse sin cargar porque el módulo de opciones falle o su base todavía
+    no exista (el escaneo es nocturno y en una instalación nueva no ha corrido
+    nunca). Sin dato, None -- y la tarjeta simplemente no se pinta."""
+    try:
+        from services.options_service import get_flow_badge
+        return get_flow_badge(ticker)
+    except Exception:
+        return None
+
+
 def _get_next_earnings(ticker: str) -> dict:
     try:
         key = settings.finnhub_api_key
@@ -2270,6 +2282,14 @@ def get_research(ticker: str) -> dict:
         "quarterly_earnings": av_data.get('quarterly_earnings', []),
         "suggestions":        suggestions,
         "rsu_score":          rsu_score,
+        # Flujo de opciones del ticker, si el escaneo nocturno vio algo. Es
+        # una lectura del SQLite local -- sin red, sin cuota de Yahoo -- y
+        # devuelve None cuando no hay nada, que es lo normal: el escaneo solo
+        # guarda lo que pasa sus filtros, así que la mayoría de tickers no
+        # tienen flujo destacable ningún día. Ver auditoría de Options Flow,
+        # #21: Research no sabía nada de Options Flow pese a que el dato ya
+        # estaba calculado y guardado.
+        "options_flow":       _get_flow_badge(ticker),
         "piotroski":          piotroski,
         "institutional":      instit,
         "analyst_changes":    analyst_chg_data,

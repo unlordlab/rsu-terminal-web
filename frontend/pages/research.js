@@ -324,6 +324,10 @@ function renderResearch(data) {
         + analystChangesSection(data)
         + institutionalSection(data)
         + seasonalitySection(data)
+        // Junto a Insider a propósito: las dos responden a la misma pregunta
+        // —qué está haciendo el dinero grande con este valor— desde ángulos
+        // distintos, y se leen mejor seguidas.
+        + optionsFlowSection(data)
         + insiderSection(data)
         + earningsSection(data)
         + suggestionsSection(data)
@@ -1114,6 +1118,45 @@ function seasonalitySection(data) {
         }).join('')
         + '</div>'
         + '</div>';
+}
+
+// Flujo de opciones del ticker, si el escaneo nocturno vio algo. La mayoría
+// de tickers no tienen nada la mayoría de los días —el escaneo solo guarda lo
+// que pasa sus filtros— y entonces esta sección no se pinta: es un aviso
+// cuando lo hay, no una fila más que rellenar con ceros.
+function optionsFlowSection(data) {
+    const f = data.options_flow;
+    if (!f) return '';
+    const color = f.sesgo === 'ALCISTA' ? 'var(--color-accent)'
+                : f.sesgo === 'BAJISTA' ? '#f23645' : '#ffb800';
+    // El NPS va de -1 a +1; la barra lo mapea a 0-100% con el centro en 50.
+    const pos = Math.round((f.nps + 1) / 2 * 100);
+    return '<div style="background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius);overflow:hidden;margin-bottom:1rem;">'
+        + '<div style="padding:10px 14px;border-bottom:1px solid var(--color-border);display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;">'
+        + '<span style="color:var(--color-accent);font-size:12px;letter-spacing:0.08em;">FLUJO DE OPCIONES ' + tt('research-options-flow') + '</span>'
+        + '<span style="color:' + color + ';font-size:13px;font-weight:500;">' + esc(f.sesgo) + '</span>'
+        + '</div>'
+        + '<div style="padding:12px 14px;">'
+        + '<div style="display:flex;gap:1.5rem;flex-wrap:wrap;font-size:11px;margin-bottom:10px;">'
+        + '<span style="color:var(--color-muted);">Operaciones detectadas: <b style="color:var(--color-text);">' + esc(f.n_señales) + '</b></span>'
+        + '<span style="color:var(--color-muted);">Prima total: <b style="color:var(--color-text);">' + esc(f.prima_fmt) + '</b></span>'
+        + '<span style="color:var(--color-muted);">Señal más fuerte: <b style="color:var(--color-text);">' + esc(f.score_max) + '/12</b></span>'
+        + '<span style="color:var(--color-muted);margin-left:auto;">Últimos ' + esc(f.dias) + ' días · visto el ' + esc(f.ultimo_scan) + '</span>'
+        + '</div>'
+        // Barra con el centro marcado: sin la referencia del cero, un 0,15 y
+        // un 0,55 se ven casi igual de "llenos".
+        + '<div style="position:relative;background:var(--color-bg,#0a0a0a);border-radius:3px;height:8px;">'
+        + '<div style="position:absolute;left:50%;top:-2px;bottom:-2px;width:1px;background:var(--color-border);"></div>'
+        + '<div style="position:absolute;top:0;bottom:0;border-radius:3px;background:' + color + ';'
+        + (f.nps >= 0 ? 'left:50%;width:' + (pos - 50) + '%;' : 'right:50%;width:' + (50 - pos) + '%;') + '"></div>'
+        + '</div>'
+        + '<div style="display:flex;justify-content:space-between;font-size:9px;color:var(--color-muted);margin-top:4px;">'
+        + '<span>Todo en puts</span><span>Equilibrado</span><span>Todo en calls</span></div>'
+        + '<div style="color:var(--color-muted);font-size:10px;margin-top:8px;line-height:1.5;">'
+        + 'Compara el dinero que se ha movido apostando al alza con el que apuesta a la baja (' + esc(f.nps) + ' sobre un máximo de ±1). '
+        + 'Solo cuenta operaciones grandes o inusuales, no toda la actividad del valor.'
+        + '</div>'
+        + '</div></div>';
 }
 
 function insiderSection(data) {

@@ -1393,6 +1393,26 @@ Una acción que cumple las 7 condiciones está en Etapa 2 confirmada.
 Minervini ganó el US Investing Championship con +155% en 1997 usando este sistema.`
     },
 
+    "research-options-flow": {
+        title: "Flujo de opciones",
+        short: "Si alguien ha movido dinero grande en opciones sobre este valor en las últimas dos semanas, y en qué dirección apostaba.",
+        long: `Cada noche se revisan las opciones de unos 570 valores buscando operaciones que se salgan de lo normal: primas muy altas, volumen desproporcionado frente a los contratos ya abiertos, órdenes ejecutadas de golpe. Lo que aparece aquí es el resumen de lo que se encontró en este valor durante las últimas dos semanas.
+
+CÓMO SE LEE EL SESGO:
+- ALCISTA → predomina el dinero apostando a que sube (compra de calls, venta de puts)
+- BAJISTA → predomina el contrario (compra de puts, venta de calls)
+- MIXTO → hay movimiento, pero no apunta claramente a ningún lado
+
+La barra sitúa ese equilibrio entre "todo en puts" y "todo en calls", con el centro marcado. El número entre paréntesis va de −1 a +1 y es la misma cifra: cuánto pesa un lado sobre el otro, medido en dinero, no en número de operaciones.
+
+QUÉ NO ES:
+- No es toda la actividad del valor, solo la que llama la atención.
+- No dice quién opera ni por qué: una compra de puts puede ser una apuesta bajista o la cobertura de alguien que tiene las acciones.
+- No hay constancia de si estas señales aciertan. Todavía no se lleva ese registro, así que trátalo como una pista de dónde mirar, no como una recomendación.
+
+Si esta sección no aparece, es que no se detectó nada destacable — lo normal en la mayoría de valores.`
+    },
+
     "rs-rating": {
         title: "RS Rating — Relative Strength",
         short: "Compara el rendimiento de la acción vs el universo completo. 99 = top 1%.",
