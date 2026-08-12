@@ -482,6 +482,30 @@ def get_options_flow_simple() -> dict:
     else:
         dia_bias_pct, dia_bias_label = None, "SIN DATOS"
 
+    # Put/Call ratio del día. NO es lo mismo que `dia_bias`, y por eso van los
+    # dos: el sesgo mide DIRECCIÓN (calls compradas + puts vendidas contra lo
+    # contrario) y el put/call no mira dirección ninguna, solo cuántos puts hay
+    # por cada call. Pueden discrepar con toda naturalidad — una tarde de
+    # ventas masivas de puts es alcista y sube el put/call a la vez — y esa
+    # discrepancia es informativa, no un error.
+    #
+    # Se da por VOLUMEN, que es la definición estándar (la que publica el CBOE)
+    # y también por prima, que es la unidad en la que piensa el resto del
+    # módulo. Ver auditoría de Options Flow, #24.
+    vol_call   = sum(r["volume"] or 0 for r in rows if r["type"] == "call")
+    vol_put    = sum(r["volume"] or 0 for r in rows if r["type"] == "put")
+    prem_call  = sum(r["premium"] or 0 for r in rows if r["type"] == "call")
+    prem_put   = sum(r["premium"] or 0 for r in rows if r["type"] == "put")
+    put_call = {
+        "por_volumen":  round(vol_put / vol_call, 2) if vol_call else None,
+        "por_prima":    round(prem_put / prem_call, 2) if prem_call else None,
+        "vol_call":     vol_call,
+        "vol_put":      vol_put,
+        "prima_call_fmt": _fmt_premium(prem_call),
+        "prima_put_fmt":  _fmt_premium(prem_put),
+        "n_contratos":  len(rows),
+    } if (vol_call or vol_put) else None
+
     # Cobertura del escaneo que produjo estos datos. Va junto al sesgo del día
     # a propósito: si el escaneo se dejó medio universo, ese sesgo está
     # calculado sobre media muestra y el usuario tiene que poder saberlo antes
@@ -492,6 +516,7 @@ def get_options_flow_simple() -> dict:
         "cobertura":          get_scan_log(ultima_fecha),
         "dia_bias_pct":       dia_bias_pct,
         "dia_bias_label":     dia_bias_label,
+        "put_call":           put_call,
         "calls_bought":       [_entrada_simple(e, "Buy Call",  cartera_tickers, repetidos) for e in grupos["Buy Call"]][:25],
         "puts_sold":          [_entrada_simple(e, "Sell Put",  cartera_tickers, repetidos) for e in grupos["Sell Put"]][:25],
         "puts_bought":        [_entrada_simple(e, "Buy Put",   cartera_tickers, repetidos) for e in grupos["Buy Put"]][:20],

@@ -112,6 +112,26 @@ function _marcaEarnings(r) {
     return ' <span title="Vence justo DESPUÉS de la publicación de resultados: la opción sigue viva durante el anuncio">📅</span>';
 }
 
+// Put/Call ratio del día, debajo del sesgo. Van juntos porque miden cosas
+// distintas y pueden discrepar: el sesgo es direccional (vender puts es
+// alcista) y el put/call no mira dirección, solo cuántos puts hay por call.
+// Esa discrepancia informa; verlos separados en la página haría pensar que
+// uno de los dos está mal.
+function putCallLinea(pc) {
+    if (!pc || pc.por_volumen == null) return '';
+    // Sin color ni etiqueta de "alcista/bajista" a propósito: la lectura
+    // clásica del put/call (alto = miedo) está calibrada sobre el mercado
+    // entero, y esto solo mira las operaciones inusuales que pasan el filtro
+    // del escaneo. Ponerle un semáforo sería vender una interpretación que
+    // aquí no está comprobada.
+    return `<div style="color:var(--color-muted);font-size:11px;margin-top:6px;padding-top:6px;border-top:1px solid var(--color-border);">
+        Put/Call del día: <b style="color:var(--color-text);">${esc(pc.por_volumen)}</b> por volumen
+        (<b style="color:var(--color-text);">${esc(pc.por_prima)}</b> por prima) ${tt('options-put-call')}
+        · ${esc(pc.vol_put.toLocaleString('en-US'))} contratos put frente a ${esc(pc.vol_call.toLocaleString('en-US'))} call,
+        sobre las ${esc(pc.n_contratos)} operaciones que detectó el escaneo — no sobre todo el mercado
+    </div>`;
+}
+
 function renderDashboard(data) {
     const cob = data.cobertura;
     // Cuántos valores respondieron de los que se pidieron. Un escaneo corto
@@ -143,6 +163,7 @@ function renderDashboard(data) {
     const biasBanner = data.dia_bias_pct != null
         ? `<div style="background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius);padding:12px 16px;margin-bottom:1rem;font-size:13px;">
             <span style="color:var(--color-muted);">Hoy: </span><span style="color:${biasColor};font-weight:700;">${esc(data.dia_bias_pct)}% ${esc(data.dia_bias_label)}</span><span style="color:var(--color-muted);"> por prima (Calls Bought + Puts Sold vs. Puts Bought + Calls Sold) ${tt('options-dia-bias')}</span>
+            ${putCallLinea(data.put_call)}
         </div>`
         : '';
 

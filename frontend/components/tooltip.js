@@ -1393,6 +1393,24 @@ Una acción que cumple las 7 condiciones está en Etapa 2 confirmada.
 Minervini ganó el US Investing Championship con +155% en 1997 usando este sistema.`
     },
 
+    "options-put-call": {
+        title: "Put/Call del día",
+        short: "Cuántos contratos put se han movido por cada call. Mide volumen, no dirección — y solo sobre las operaciones que detectó el escaneo.",
+        long: `Es el cociente entre los contratos put y los call del escaneo de hoy. Por debajo de 1 hay más calls que puts; por encima, al revés.
+
+POR QUÉ NO COINCIDE CON EL SESGO DE ARRIBA:
+Miden cosas distintas y pueden discrepar sin que ninguno esté mal. El sesgo mira la DIRECCIÓN de la apuesta: vender un put es alcista (cobras por comprometerte a comprar más abajo). El Put/Call no mira dirección ninguna, solo cuenta contratos. Una tarde de ventas masivas de puts sale alcista en el sesgo y sube el Put/Call a la vez.
+
+SE DAN DOS CIFRAS:
+- Por volumen: la definición estándar, la que publican las bolsas.
+- Por prima: el mismo cociente pero pesando por dinero movido, que es la unidad en la que piensa el resto de esta pantalla. Una operación grande cuenta más que diez pequeñas.
+
+LO IMPORTANTE, Y POR ESO NO LLEVA COLOR:
+Este número NO es comparable con el Put/Call que publican las bolsas o que verás en otras webs. Aquellos miden todo el mercado; este mide solo las operaciones grandes o inusuales que pasan el filtro del escaneo, y ese filtro tira hacia las calls. La lectura clásica —"put/call alto = miedo en el mercado"— está calibrada sobre el mercado entero y no se traslada aquí.
+
+Úsalo para comparar un día con otro dentro de esta misma pantalla, no contra una cifra de fuera.`
+    },
+
     "research-options-flow": {
         title: "Flujo de opciones",
         short: "Si alguien ha movido dinero grande en opciones sobre este valor en las últimas dos semanas, y en qué dirección apostaba.",
