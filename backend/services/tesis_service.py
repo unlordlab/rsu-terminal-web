@@ -21,6 +21,7 @@ import sys
 import re
 import time
 from datetime import datetime
+from zoneinfo import ZoneInfo
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "..", "shared"))
 from time_utils import get_timestamp  # noqa: E402
 
@@ -101,40 +102,81 @@ def _normalize_doc_url(url: str) -> str:
     return url
 
 
+def _hoy_madrid():
+    """La fecha en la zona del proyecto, no la del contenedor.
+
+    `datetime.now()` en el VPS es UTC. Una tesis creada a las 00:30 de Madrid
+    se guardaba con la fecha del día ANTERIOR (22:30 UTC en verano), y el
+    mismo desfase decidía si una tesis es "nueva". Es el mismo criterio que ya
+    aplica `shared/time_utils.get_timestamp()` al resto de la terminal. Ver
+    auditoría de Tesis, #7.
+    """
+    return datetime.now(ZoneInfo("Europe/Madrid")).date()
+
+
 def _es_nuevo(fecha_str: str) -> bool:
     try:
-        fecha_dt = datetime.strptime(fecha_str, "%Y-%m-%d")
-        return (datetime.now() - fecha_dt).days <= 7
+        fecha_dt = datetime.strptime(fecha_str, "%Y-%m-%d").date()
+        return (_hoy_madrid() - fecha_dt).days <= 7
     except Exception:
         return False
 
 
 # ── Lectura pública (solo tesis aprobadas) ──────────────────────────────
 
+def _escapar_like(texto: str) -> str:
+    """Neutraliza los comodines de LIKE en un término de búsqueda.
+
+    Los parámetros van ligados, así que esto NO es una inyección -- es un
+    problema de resultados: en LIKE, `%` significa "cualquier cosa" y `_`
+    "un carácter cualquiera", así que buscar `A_B` devolvía también AXB, y
+    buscar `%` te devolvía la lista entera como si no hubieras filtrado. El
+    escape se declara con ESCAPE '\\' en cada cláusula. Ver auditoría de
+    Tesis, #8.
+    """
+    return (texto.replace("\\", "\\\\")
+                 .replace("%", "\\%")
+                 .replace("_", "\\_"))
+
+
+# Columnas que necesita la rejilla de tarjetas. La lista NO lleva `contenido`
+# a propósito: es el markdown completo de la tesis, y traerlo para pintar una
+# tarjeta que solo enseña 300 caracteres de `resumen` significa mover el texto
+# íntegro de TODAS las tesis aprobadas en cada carga de la página. Ver #6.
+_COLS_LISTA = ("id, ticker, nombre, fecha, rating, sector, autor, resumen, "
+               "imagen, riesgo, titulo")
+
+
 def get_tesis_list(search: str = "", rating: str = "", page: int = 1, per_page: int = 9) -> dict:
     conn = _conn()
-    query = "SELECT * FROM tesis WHERE status = 'approved'"
+    where = "WHERE status = 'approved'"
     params = []
     if search:
-        query += " AND (ticker LIKE ? OR nombre LIKE ?)"
-        params.extend([f"%{search.upper()}%", f"%{search}%"])
+        # Mismo patrón para las dos columnas, con el término ya escapado.
+        aguja_tk = f"%{_escapar_like(search.upper())}%"
+        aguja_nb = f"%{_escapar_like(search)}%"
+        where += " AND (ticker LIKE ? ESCAPE '\\' OR nombre LIKE ? ESCAPE '\\')"
+        params.extend([aguja_tk, aguja_nb])
     if rating and rating != "Todos":
-        query += " AND rating = ?"
+        where += " AND rating = ?"
         params.append(rating.upper())
-    query += " ORDER BY fecha DESC, id DESC"
 
-    all_rows = conn.execute(query, params).fetchall()
+    # El total se cuenta en SQL. Antes salía de `len(all_rows)` sobre un
+    # fetchall() de todo, que es la razón por la que había que traerlo todo.
+    total = conn.execute(f"SELECT COUNT(*) AS n FROM tesis {where}", params).fetchone()["n"]
+    total_pages = max(1, (total + per_page - 1) // per_page)
+    page = max(1, min(page, total_pages))
+    start = (page - 1) * per_page
+
+    page_rows = conn.execute(
+        f"SELECT {_COLS_LISTA} FROM tesis {where} ORDER BY fecha DESC, id DESC LIMIT ? OFFSET ?",
+        params + [per_page, start]
+    ).fetchall()
 
     ratings_rows = conn.execute(
         "SELECT DISTINCT rating FROM tesis WHERE status = 'approved' ORDER BY rating"
     ).fetchall()
     conn.close()
-
-    total = len(all_rows)
-    total_pages = max(1, (total + per_page - 1) // per_page)
-    page = max(1, min(page, total_pages))
-    start = (page - 1) * per_page
-    page_rows = all_rows[start:start + per_page]
 
     items = []
     for r in page_rows:
@@ -186,14 +228,34 @@ def get_tesis_detail(ticker: str, fecha: str = "") -> dict:
     cfg = _get_rating_cfg(row["rating"])
     ticker_up = row["ticker"]
 
-    # Precio actual en vivo (mismo patrón que la versión anterior — yfinance
-    # vía cartera_service, no un valor congelado desde el día de creación).
+    # Precio actual (yfinance vía cartera_service, no un valor congelado desde
+    # el día de creación), pero CACHEADO 15 MINUTOS.
+    #
+    # `fetch_live_prices` cachea 60s, que es el TTL correcto para la página de
+    # Cartera: ahí el precio es el dato. Aquí no: lo único que se hace con él
+    # es un `upside` contra un precio objetivo puesto a semanas vista, y ese
+    # porcentaje no cambia de forma significativa en quince minutos. Con el TTL
+    # de un minuto, cada apertura de tesis podía disparar una descarga nueva
+    # (~3 peticiones a Yahoo entre history() y fast_info), y esa cuota la
+    # comparte TODA la terminal -- Research, Market y Cartera se quedan sin
+    # ella. Medido el 11/08/2026 en este mismo proyecto: agotar la cuota de
+    # Yahoo deja media terminal sin datos. Ver auditoría de Tesis, #9.
     precio_actual = None
     try:
-        from services.cartera_service import fetch_live_prices
-        live = fetch_live_prices([ticker_up])
-        if ticker_up in live and live[ticker_up].get('price'):
-            precio_actual = float(live[ticker_up]['price'])
+        from services.cache import cache
+        clave = f"tesis:precio:{ticker_up}"
+        cacheado = cache.get(clave)
+        if cacheado is not None:
+            precio_actual = cacheado
+        else:
+            from services.cartera_service import fetch_live_prices
+            live = fetch_live_prices([ticker_up])
+            if ticker_up in live and live[ticker_up].get('price'):
+                precio_actual = float(live[ticker_up]['price'])
+                # Solo se cachea un precio real. Un fallo de red no se guarda:
+                # se reintenta en la siguiente apertura en vez de dejar la
+                # tesis sin upside durante quince minutos.
+                cache.set(clave, precio_actual, 900)
     except Exception:
         pass
 
@@ -272,7 +334,7 @@ def create_tesis(ticker: str, contenido: str, rating: str = "HOLD", titulo: str 
         """INSERT INTO tesis (ticker, nombre, fecha, rating, sector, autor, titulo, resumen,
                                imagen, riesgo, precio_objetivo, contenido, status, fuente, criterio, created_at)
            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
-        (ticker.upper(), nombre, datetime.now().strftime("%Y-%m-%d"), rating.upper(), sector,
+        (ticker.upper(), nombre, _hoy_madrid().strftime("%Y-%m-%d"), rating.upper(), sector,
          autor, titulo, resumen, imagen, riesgo, precio_objetivo, contenido, status, fuente,
          criterio, time.time())
     )
