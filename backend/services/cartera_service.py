@@ -665,7 +665,19 @@ def get_portfolio_history(abiertas_rows: list, days: int = 180, cerradas_rows: l
     for ticker, s in yf_executor.map(_hist_for, tickers):
         if s is not None and not s.empty:
             s.index = s.index.tz_localize(None)
-            series[ticker] = s
+            # dropna() NO es cosmética. yfinance devuelve fila para la sesión
+            # en curso con el cierre a NaN mientras no está consolidada, y eso
+            # envenenaba el día entero: `mercado` pasaba a NaN en cuanto UNA
+            # posición lo tuviera, el equity del día salía NaN y _sanitize lo
+            # convertía en null, así que el gráfico pintaba el último punto a
+            # CERO -- una cartera de $331.465 apareciendo como $0,00.
+            # Reportado por el usuario el 12/08/2026, con 11 de sus tickers en
+            # ese estado a la vez. Quitando los NaN, para ese día se usa el
+            # último cierre bueno del ticker, que es lo que se quiere en una
+            # curva de patrimonio.
+            s = s.dropna()
+            if not s.empty:
+                series[ticker] = s
 
     if not series:
         return []
@@ -713,7 +725,12 @@ def get_portfolio_history(abiertas_rows: list, days: int = 180, cerradas_rows: l
             mercado += float(px_series.iloc[-1]) * p["shares"]
 
         equity = mercado + caja
-        if equity <= 0:
+        # `not (equity > 0)` y no `equity <= 0`: con un NaN TODA comparación es
+        # falsa, así que `NaN <= 0` da False y el día malo se colaba por el
+        # guardia que existe justamente para saltárselo. Es el mecanismo exacto
+        # del punto a cero del 12/08/2026. La forma negada atrapa NaN, 0 y
+        # negativos de una vez.
+        if not (equity > 0):
             continue
 
         # TWR: se descuenta la aportación del día ANTES de medir la variación,
