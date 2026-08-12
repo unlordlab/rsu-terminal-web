@@ -218,8 +218,6 @@ def run_backtest(df, initial_capital=100_000, debug=False):
     bnh_curve    = []
     bnh_shares   = initial_capital / prices[0]
     bnh_cash     = 0.0
-    peak_equity  = initial_capital
-    max_dd       = 0.0
     cycle_equity = initial_capital
     runner_shares   = 0.0
     runner_peak     = 0.0
@@ -235,9 +233,8 @@ def run_backtest(df, initial_capital=100_000, debug=False):
         equity_curve.append({"date": str(date)[:10], "equity": round(cur_equity, 2)})
         bnh_curve.append({"date": str(date)[:10], "equity": round(bnh_val, 2)})
 
-        if cur_equity > peak_equity: peak_equity = cur_equity
-        dd = (peak_equity - cur_equity) / peak_equity * 100
-        if dd > max_dd: max_dd = dd
+        # (El máximo drawdown se calcula una sola vez, en compute_stats, sobre
+        # esta misma `equity_curve`. Aquí había una segunda cuenta idéntica.)
 
         # Mientras no hay ninguna fase activa (STAND BY), la referencia de
         # máximo debe seguir el precio real según hace nuevos máximos --
@@ -322,7 +319,15 @@ def run_backtest(df, initial_capital=100_000, debug=False):
                         phases_spent = []; entry_date = None
                         sold_trim1 = sold_trim2 = False; first_sell_px = None
                         phase_high   = price
-                        cycle_equity = cash + runner_shares * price
+                        # Sin `runner_shares`: el Escenario C no abre runner
+                        # (solo lo hacen A y B), y cuando C cierra, cualquier
+                        # runner de un ciclo anterior ya se cerró con él.
+                        # Comprobado sobre el histórico completo: en los 3
+                        # C-final que dispara, `runner_shares` vale 0 las tres
+                        # veces, así que el término no cambiaba ningún número
+                        # -- pero sugería una posición que en este escenario no
+                        # existe. Ver auditoría de SPXL, #10.
+                        cycle_equity = cash
 
             elif n_phases >= 4:  # Scenario B
                 if not in_runner and gain >= CFG["sell_b_tp"]:
@@ -397,7 +402,6 @@ def run_backtest(df, initial_capital=100_000, debug=False):
         "trades":       trades,
         "equity_curve": equity_curve,
         "bnh_curve":    bnh_curve,
-        "max_dd":       round(max_dd, 2),
         # Estado final al terminar de recorrer los datos -- ver conversación
         # 18/07/2026: esto es lo que usa get_spxl_live() para saber en qué
         # fase está la estrategia AHORA MISMO, con el mismo motor exacto
@@ -417,7 +421,18 @@ def run_backtest(df, initial_capital=100_000, debug=False):
     }
 
 def compute_stats(trades, eq_curve, bnh_curve, initial_capital):
-    if not trades or not eq_curve:
+    """Sin operaciones NO se devuelve {} vacío.
+
+    Antes bastaba con que la estrategia no hubiera operado en el periodo para
+    que esta función devolviera un diccionario vacío, y con él se iban también
+    el Buy & Hold, el drawdown y los años evaluados -- que no dependen de que
+    haya habido operaciones. La página se quedaba sin la comparación con el
+    índice justo en el escenario donde más falta hace: el de "no hizo nada".
+    Ahora solo las métricas POR OPERACIÓN (win rate, media de ganadoras y
+    perdedoras) quedan a None, que es lo honesto cuando no hay muestra. Ver
+    auditoría de SPXL, #7.
+    """
+    if not eq_curve or not bnh_curve:
         return {}
     final_equity = eq_curve[-1]['equity']
     final_bnh    = bnh_curve[-1]['equity']
@@ -426,11 +441,19 @@ def compute_stats(trades, eq_curve, bnh_curve, initial_capital):
     years        = max((end_date - start_date).days / 365.25, 0.01)
     cagr         = ((final_equity / initial_capital) ** (1/years) - 1) * 100
     bnh_cagr     = ((final_bnh / initial_capital) ** (1/years) - 1) * 100
+    # Sin operaciones estas tres no existen, y un 0 dice algo distinto de "no
+    # hay dato": un win rate del 0% suena a estrategia que pierde siempre.
     wins         = [t for t in trades if t['pnl'] > 0]
     losses       = [t for t in trades if t['pnl'] <= 0]
-    win_rate     = len(wins) / len(trades) * 100 if trades else 0
-    avg_win      = np.mean([t['pnl_pct'] for t in wins]) if wins else 0
-    avg_loss     = np.mean([t['pnl_pct'] for t in losses]) if losses else 0
+    win_rate     = len(wins) / len(trades) * 100 if trades else None
+    avg_win      = float(np.mean([t['pnl_pct'] for t in wins])) if wins else None
+    avg_loss     = float(np.mean([t['pnl_pct'] for t in losses])) if losses else None
+    # El máximo drawdown se calcula AQUÍ y en ningún otro sitio. run_backtest
+    # lo llevaba también en su propio bucle y lo devolvía en su dict; las dos
+    # cuentas partían del mismo `initial_capital` y recorrían la misma serie,
+    # así que daban lo mismo (47,77 en el histórico completo, comprobado) --
+    # no era un número mal, era la misma cuenta escrita dos veces esperando a
+    # divergir el día que alguien tocara una de las dos. Ver auditoría SPXL, #8.
     peak         = initial_capital
     max_dd       = 0.0
     for pt in eq_curve:
@@ -440,9 +463,9 @@ def compute_stats(trades, eq_curve, bnh_curve, initial_capital):
 
     return {
         "total_trades":  len(trades),
-        "win_rate":      round(win_rate, 1),
-        "avg_win":       round(avg_win, 2),
-        "avg_loss":      round(avg_loss, 2),
+        "win_rate":      round(win_rate, 1) if win_rate is not None else None,
+        "avg_win":       round(avg_win, 2) if avg_win is not None else None,
+        "avg_loss":      round(avg_loss, 2) if avg_loss is not None else None,
         "final_equity":  round(final_equity, 2),
         "total_return":  round((final_equity - initial_capital) / initial_capital * 100, 2),
         "cagr":          round(cagr, 2),
@@ -625,10 +648,17 @@ def get_backtest_con_slippage(initial_capital: float = 100_000) -> dict:
     if cacheado:
         return cacheado
     try:
+        # Con `Low`, igual que get_backtest(). Aquí se descargaba solo `Close`,
+        # así que `run_backtest` caía a su respaldo `lows = prices` y los stops
+        # dejaban de poder dispararse intradía: salía OTRO backtest. El
+        # resultado era que esta tabla anunciaba un "equity limpio" de $611.775
+        # mientras el titular de la misma página decía $634.606 -- dos cifras
+        # distintas para lo mismo, en la misma pantalla. Detectado el 12/08 al
+        # sacar esta tabla a la interfaz.
         spxl   = yf.Ticker("SPXL")
-        df_raw = spxl.history(start="2008-11-05")[["Close"]].copy()
+        df_raw = spxl.history(start="2008-11-05")[["Close", "Low"]].copy()
         df_raw.index   = df_raw.index.tz_localize(None)
-        df_raw.columns = ["price"]
+        df_raw.columns = ["price", "low"]
         df_raw = df_raw[~df_raw.index.duplicated(keep="last")].sort_index().dropna()
 
         resultado = run_backtest(df_raw, initial_capital)
@@ -642,6 +672,17 @@ def get_backtest_con_slippage(initial_capital: float = 100_000) -> dict:
         # pasaría en la realidad.
         n_operaciones = len(trades) * 2
 
+        # Los años salen de la propia curva, no de una constante. Estaban
+        # clavados en 17,7 desde el día que se escribió esto, y el histórico
+        # crece solo: hoy ya son 17,8, así que el CAGR ajustado se calculaba
+        # sobre un periodo que ya no era el del backtest.
+        curva = resultado["equity_curve"]
+        años = max(
+            (datetime.strptime(curva[-1]["date"], "%Y-%m-%d")
+             - datetime.strptime(curva[0]["date"], "%Y-%m-%d")).days / 365.25,
+            0.01
+        ) if len(curva) >= 2 else 0.01
+
         escenarios = []
         for coste, etiqueta in SLIPPAGE_ESCENARIOS:
             # Aproximación: cada operación pierde `coste` sobre el capital
@@ -649,7 +690,6 @@ def get_backtest_con_slippage(initial_capital: float = 100_000) -> dict:
             # compone -- de ahí el (1-coste)^n en vez de una resta simple.
             factor = (1 - coste) ** n_operaciones
             equity_ajustado = eq_final_limpio * factor
-            años = 17.7  # periodo del backtest completo, ver stats
             cagr_ajustado = ((equity_ajustado / initial_capital) ** (1 / años) - 1) * 100
             escenarios.append({
                 "coste_pct":     round(coste * 100, 2),

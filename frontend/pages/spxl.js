@@ -1,6 +1,6 @@
 import { authHeader } from '/core/api.js';
 import { tt } from '/components/tooltip.js';
-import { errorMessage, fmtFecha } from '/core/ui.js';
+import { errorMessage, esc, fmtFecha } from '/core/ui.js';
 export async function render(container) {
     container.innerHTML = '<div style="margin-bottom:1.5rem;">'
         + '<div style="color:var(--color-accent);font-size:18px;letter-spacing:0.1em;text-shadow:var(--glow-text);margin-bottom:4px;">SPXL STRATEGY ' + tt('spxl') + '</div>'
@@ -129,25 +129,37 @@ async function loadBacktest(container, capital) {
     el.innerHTML = '<div style="color:var(--color-muted);font-size:12px;padding:1rem;">Ejecutando backtest desde 2008... esto puede tardar ~15 segundos.</div>';
 
     try {
-        const res  = await fetch('/api/v1/spxl/backtest?capital=' + capital, {
-            headers: authHeader()
-        });
+        // El rango con costes viaja en paralelo: es un extra, así que si falla
+        // o tarda no debe impedir que se vea el backtest.
+        const [res, resSlip] = await Promise.all([
+            fetch('/api/v1/spxl/backtest?capital=' + capital, { headers: authHeader() }),
+            fetch('/api/v1/spxl/backtest/slippage?capital=' + capital, { headers: authHeader() })
+                .catch(() => null),
+        ]);
         const data = await res.json();
         if (!data.ok) throw new Error(data.error);
+        const slip = resSlip ? await resSlip.json().catch(() => null) : null;
 
         const s = data.stats;
         const stratColor = s.total_return >= s.bnh_return ? 'var(--color-accent)' : '#ff9800';
+        // Sin operaciones en el periodo, estas tres no existen. El backend
+        // devuelve null (antes devolvía el dict entero vacío y se caía la
+        // página); aquí se pintan como «—» en vez de un 0 que se leería como
+        // "0% de aciertos".
+        const pct = (v, signo) => v == null ? '—' : (signo && v >= 0 ? '+' : '') + v.toFixed(1) + '%';
 
         el.innerHTML = '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:1rem;margin-bottom:1rem;">'
             + kpiCard('Equity Final ' + tt('spxl-equity-final'), '$' + s.final_equity.toLocaleString('en-US', {maximumFractionDigits:0}), 'Estrategia RSU', stratColor)
             + kpiCard('B&H Final ' + tt('spxl-bnh-final'),   '$' + s.final_bnh.toLocaleString('en-US', {maximumFractionDigits:0}),   'Buy & Hold',    'var(--color-muted)')
             + kpiCard('CAGR ' + tt('spxl-cagr'),        s.cagr.toFixed(1) + '%',      'Estrategia', stratColor)
             + kpiCard('CAGR B&H ' + tt('spxl-cagr-bnh'),    s.bnh_cagr.toFixed(1) + '%',  'Buy & Hold', 'var(--color-muted)')
-            + kpiCard('Win Rate ' + tt('spxl-win-rate'),    s.win_rate.toFixed(1) + '%',   s.total_trades + ' trades', 'var(--color-accent)')
+            + kpiCard('Win Rate ' + tt('spxl-win-rate'),    pct(s.win_rate),   s.total_trades + ' trades', 'var(--color-accent)')
             + kpiCard('Max DD ' + tt('spxl-max-dd'),      '-' + s.max_dd.toFixed(1) + '%', 'Drawdown máximo', '#f23645')
-            + kpiCard('Avg Win ' + tt('spxl-avg-win'),     '+' + s.avg_win.toFixed(1) + '%', 'Por trade', 'var(--color-accent)')
+            + kpiCard('Avg Win ' + tt('spxl-avg-win'),     pct(s.avg_win, true), 'Por trade', 'var(--color-accent)')
             + kpiCard('Años',        s.years.toFixed(1), '2008 → hoy', 'var(--color-muted)')
             + '</div>'
+
+            + slippageSection(slip)
 
             // Equity chart
             + '<div style="background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius);padding:1.25rem;margin-bottom:1rem;">'
@@ -267,6 +279,39 @@ function renderEquityChart(data) {
             }
         });
     });
+}
+
+// Rango del resultado según lo que cuesten las operaciones.
+//
+// El backtest de arriba no aplica ni comisiones ni deslizamiento, así que su
+// cifra es un techo, no una previsión. Este cálculo ya existía en el backend
+// (`/backtest/slippage`) desde hace tiempo — y la página nunca lo pedía, así
+// que el usuario solo veía el número limpio. Ver auditoría de SPXL, #6.
+function slippageSection(slip) {
+    if (!slip || !slip.ok || !slip.escenarios || !slip.escenarios.length) return '';
+    const filas = slip.escenarios.map(e => {
+        const peor = e.diferencia_vs_limpio < 0;
+        return '<div style="display:grid;grid-template-columns:1fr 90px 110px 120px;gap:8px;padding:6px 14px;align-items:center;font-size:11px;border-top:1px solid var(--color-border);">'
+            + '<span style="color:var(--color-text);">' + esc(e.etiqueta) + '</span>'
+            + '<span style="color:var(--color-muted);text-align:right;">' + esc(e.coste_pct) + '% / op.</span>'
+            + '<span style="color:var(--color-text);text-align:right;">$' + Number(e.equity_final).toLocaleString('en-US', {maximumFractionDigits: 0}) + '</span>'
+            + '<span style="color:' + (peor ? '#f23645' : 'var(--color-accent)') + ';text-align:right;">'
+            + Number(e.cagr).toFixed(1) + '% CAGR</span>'
+            + '</div>';
+    }).join('');
+    return '<div style="background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius);overflow:hidden;margin-bottom:1rem;">'
+        + '<div style="padding:10px 14px;border-bottom:1px solid var(--color-border);">'
+        + '<span style="color:#ffb800;font-size:12px;letter-spacing:0.08em;">QUÉ QUEDA AL DESCONTAR COSTES</span>'
+        + '<div style="color:var(--color-muted);font-size:10px;margin-top:3px;">'
+        + 'El resultado de arriba no descuenta comisiones ni deslizamiento. Con '
+        + esc(slip.n_operaciones) + ' ejecuciones (entrada y salida de cada operación), esto es lo que quedaría:'
+        + '</div></div>'
+        + '<div style="display:grid;grid-template-columns:1fr 90px 110px 120px;gap:8px;padding:6px 14px;font-size:10px;color:var(--color-muted);">'
+        + '<span>ESCENARIO</span><span style="text-align:right;">COSTE</span>'
+        + '<span style="text-align:right;">EQUITY FINAL</span><span style="text-align:right;">RENTAB. ANUAL</span></div>'
+        + filas
+        + (slip.nota ? '<div style="padding:8px 14px;border-top:1px solid var(--color-border);font-size:10px;color:var(--color-muted);line-height:1.5;">' + esc(slip.nota) + '</div>' : '')
+        + '</div>';
 }
 
 function kpiCard(label, value, sub, color) {
