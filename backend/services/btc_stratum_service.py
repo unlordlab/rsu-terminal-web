@@ -62,6 +62,16 @@ def _get_btc_history_coingecko(days: int = 3650) -> pd.DataFrame:
             headers={"Accept": "application/json"}
         )
         if r.status_code != 200:
+            # Se LOGUEA, no se traga en silencio. Comprobado el 11/08/2026:
+            # este endpoint devuelve 401 -- CoinGecko movió el histórico
+            # (`/market_chart`) detrás de una API key, mientras que el precio
+            # actual (`/simple/price`) sigue siendo libre. El efecto no era
+            # visible: la serie cae al respaldo de yfinance y el módulo sigue
+            # pintando números, pero SIN market cap histórico, que es lo único
+            # con lo que se puede construir el MVRV bueno. Ese fallo mudo es lo
+            # que dejó el MVRV en su proxy sin que nadie se enterara.
+            print(f"[BTCStratum] CoinGecko /market_chart devolvió {r.status_code} — "
+                  f"sin market cap histórico, el MVRV usará su proxy de precio")
             return pd.DataFrame()
         data = r.json()
         prices     = data.get("prices", [])
@@ -182,6 +192,18 @@ def _calc_ma200w(close: pd.Series) -> pd.Series:
     # se usaba igual que un MA200W completo (ver sesión "fallbacks
     # fabricados", 22/07/2026, mismo patrón que DXY/Yield2Y/RS CANSLIM).
     return close.rolling(window=1400, min_periods=1400).mean()
+
+# Origen de cada indicador, tal cual lo lee el usuario bajo su tarjeta. Viven
+# aquí y no incrustados en el dict de respuesta por dos motivos: el frontend
+# pinta en ámbar los que empiezan por "Aproximado" (así que ese prefijo es un
+# contrato, no una florritura), y un test puede comprobarlo sin salir a la red.
+ORIGEN_MA200      = "Precio vs media de 200 semanas"
+ORIGEN_MVRV_REAL  = "Capitalización de mercado vs su media anual"
+ORIGEN_MVRV_PROXY = "Aproximado: precio vs media de 200 semanas (sin dato on-chain)"
+ORIGEN_PUELL_REAL = "Ingresos reales de mineros (Blockchain.com)"
+ORIGEN_PUELL_PROXY = "Aproximado: precio vs su media de 365 días"
+ORIGEN_AHR999     = "Precio vs media de 200 semanas"
+
 
 def _calc_mvrv_z_improved(df: pd.DataFrame) -> dict:
     """
@@ -365,7 +387,7 @@ def _get_macro_data() -> dict:
         return {"dxy": None, "dxy_score": None, "liquidity_score": None, "status": None}
 
 def _calc_alerts(price: float, ma200: float, rsu: float,
-                 mvrv_z: float, puell: float) -> list:
+                 mvrv_z: float, puell: float, mvrv_metodo: str = "proxy") -> list:
     alerts = []
 
     if price > ma200:
@@ -381,7 +403,17 @@ def _calc_alerts(price: float, ma200: float, rsu: float,
         alerts.append({"icon": "🚨", "msg": f"RSU Score extremo ({rsu:.1f}) — señal histórica de suelo", "color": "#00ffad"})
 
     if mvrv_z < -0.5:
-        alerts.append({"icon": "💎", "msg": f"MVRV Z-Score negativo ({mvrv_z:.2f}) — BTC infravalorado vs realized cap", "color": "#00d9ff"})
+        # El "vs realized cap" que decía antes esta alerta era falso siempre
+        # que el MVRV viniera del proxy -- que en producción es SIEMPRE, porque
+        # CoinGecko dejó el market cap histórico detrás de una API key y la
+        # rama buena no llega a ejecutarse. Afirmar una comparación on-chain
+        # que no se ha hecho es peor que no decir nada: el usuario no tiene
+        # forma de saber que el número mide otra cosa. Ahora cada rama dice lo
+        # que de verdad ha comparado.
+        detalle = ("BTC por debajo de su capitalización media del último año"
+                   if mvrv_metodo == "capmercado"
+                   else "precio muy por debajo de su media de 200 semanas (aprox., sin dato on-chain)")
+        alerts.append({"icon": "💎", "msg": f"MVRV Z-Score negativo ({mvrv_z:.2f}) — {detalle}", "color": "#00d9ff"})
 
     if puell < 0.6:
         alerts.append({"icon": "⛏️", "msg": f"Puell Multiple bajo ({puell:.2f}) — mineros en stress, señal de suelo", "color": "#ffd60a"})
@@ -585,15 +617,31 @@ def get_btc_dashboard() -> dict:
         if np.isnan(ma_val):
             return {"ok": False, "error": "Histórico insuficiente para calcular MA200W (hacen falta 1400 días)"}
 
-        # MVRV mejorado
+        # MVRV. Dos caminos MUY distintos, y hasta ahora nada decía cuál se
+        # estaba mirando: (a) market cap real ÷ su EMA365 -- una aproximación
+        # del realized cap, pero construida sobre capitalización de verdad; o
+        # (b) `(precio − MA200W)/MA200W × 3,5`, que no es un Z-score de nada,
+        # solo la distancia a la media reescalada por una constante elegida a
+        # ojo. Los dos números no son comparables entre sí, así que el método
+        # viaja en la respuesta y se usa para redactar la alerta.
         mvrv_data = _calc_mvrv_z_improved(hist_df)
-        mvrv_z    = mvrv_data.get("mvrv_z") or float(((close - ma200) / ma200 * 3.5).iloc[-1])
+        if mvrv_data.get("mvrv_z") is not None:
+            mvrv_z = mvrv_data["mvrv_z"]
+            mvrv_metodo = "capmercado"
+        else:
+            mvrv_z = float(((close - ma200) / ma200 * 3.5).iloc[-1])
+            mvrv_metodo = "proxy"
 
-        # Puell — real si disponible, proxy si no
+        # Puell — real si disponible, proxy si no. Verificado el 11/08/2026:
+        # en producción SÍ llega el real (Blockchain.com, ingresos diarios de
+        # mineros contra su SMA365), pese a que la UI lo anunciaba como una
+        # aproximación de precio. De ahí que ahora se declare cuál es.
         if puell_data.get("puell"):
             puell = puell_data["puell"]
+            puell_metodo = "real"
         else:
             puell = _calc_puell_from_series(close)
+            puell_metodo = "proxy"
 
         # AHR999
         ahr_data = _calc_ahr999_improved(close, ma200)
@@ -607,7 +655,7 @@ def get_btc_dashboard() -> dict:
         zone     = _get_zone(rsu)
         signal   = _get_signal_label(rsu)
         halving  = _get_halving_cycle()
-        alerts   = _calc_alerts(price, ma_val, rsu, mvrv_z, puell)
+        alerts   = _calc_alerts(price, ma_val, rsu, mvrv_z, puell, mvrv_metodo)
         stress   = _run_stress_tests(price, zone["allocation"])
 
         # MA curvatura
@@ -673,11 +721,22 @@ def get_btc_dashboard() -> dict:
             "rsu_score":   rsu,
             "rsu_signal":  signal,
             "zone":        zone,
+            # `origen` por componente. Hasta ahora la página decía en bloque
+            # que los tres eran "aproximaciones basadas en precio/MA200W", y
+            # eso era falso en los dos sentidos: el Puell suele ser un dato
+            # on-chain REAL (ingresos de mineros vía Blockchain.com) que se
+            # estaba infravendiendo, y el MVRV no tiene nada que ver con la
+            # MA200W cuando corre por su rama buena. Cada tarjeta dice ahora de
+            # dónde sale su número. Ver auditoría de BTC Stratum, #1.
             "components": {
-                "ma200":  {"score": scores["ma200"],  "raw": round(deviation/100, 3), "weight": 40},
-                "mvrv":   {"score": scores["mvrv"],   "raw": round(mvrv_z, 3),        "weight": 30},
-                "puell":  {"score": scores["puell"],  "raw": round(puell, 3),         "weight": 20},
-                "ahr999": {"score": scores["ahr999"], "raw": round(ahr, 4),           "weight": 10},
+                "ma200":  {"score": scores["ma200"],  "raw": round(deviation/100, 3), "weight": 40,
+                           "origen": ORIGEN_MA200},
+                "mvrv":   {"score": scores["mvrv"],   "raw": round(mvrv_z, 3),        "weight": 30,
+                           "origen": ORIGEN_MVRV_REAL if mvrv_metodo == "capmercado" else ORIGEN_MVRV_PROXY},
+                "puell":  {"score": scores["puell"],  "raw": round(puell, 3),         "weight": 20,
+                           "origen": ORIGEN_PUELL_REAL if puell_metodo == "real" else ORIGEN_PUELL_PROXY},
+                "ahr999": {"score": scores["ahr999"], "raw": round(ahr, 4),           "weight": 10,
+                           "origen": ORIGEN_AHR999},
             },
             "curvature":   curvature,
             "halving":     halving,

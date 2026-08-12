@@ -2773,7 +2773,9 @@ La pendiente y aceleración de la MA200W revelan la salud de la tendencia de lar
         short: "Market Value to Realized Value Z-Score — mide si BTC está sobrevalorado o infravalorado. <0 = zona de acumulación extrema.",
         long: `El MVRV Z-Score compara el valor de mercado total de BTC con el "valor realizado" (el precio al que cada BTC cambió de manos por última vez).
 
-IMPORTANTE: Este módulo usa una APROXIMACIÓN basada en desviación del precio vs MA200W. El MVRV real requiere datos on-chain de Glassnode.
+IMPORTANTE: aquí no se está midiendo eso. El valor realizado exige un histórico de capitalización que hoy es de pago, así que este número se estima a partir de la distancia del precio a su media de 200 semanas. La tarjeta del indicador dice cuál de los dos cálculos se ha usado hoy.
+
+Los cortes de abajo son los del MVRV DE VERDAD, y no se trasladan tal cual a la estimación: comparten el signo (por debajo de cero sigue señalando zona de suelo) pero no la escala, así que no esperes ver un 7 en la estimación aunque el mercado esté eufórico.
 
 INTERPRETACIÓN DEL MVRV REAL:
 - Z-Score < 0 → Valor realizado > Valor mercado → Inversores en pérdidas → Zona de suelo histórica
@@ -2790,14 +2792,14 @@ Para datos reales: glassnode.com (requiere suscripción)`
     },
 
     "puell-multiple": {
-        title: "Puell Multiple (Proxy)",
+        title: "Puell Multiple",
         short: "Ratio entre ingresos diarios de mineros y su media anual. <0.5 indica mineros en stress, históricamente zona de suelo.",
         long: `El Puell Multiple mide los ingresos de los mineros de Bitcoin en relación con su media histórica anual.
 
-IMPORTANTE: Este módulo usa una APROXIMACIÓN basada en precio actual vs SMA365. El Puell real requiere datos de emisión on-chain.
+Normalmente es un dato REAL, no una estimación: los ingresos diarios de los mineros se leen de la propia cadena de bloques (vía Blockchain.com) y se dividen entre su media de los últimos 365 días. Si ese dato no llega, se cae a una estimación con el precio frente a su media anual — y entonces la tarjeta del indicador lo dice en ámbar.
 
-FÓRMULA APROXIMADA:
-Puell = Precio actual / SMA365
+FÓRMULA:
+Puell = Ingresos de los mineros hoy / media de los últimos 365 días
 
 INTERPRETACIÓN:
 - Puell < 0.5 → Mineros en stress severo. Históricamente zona de suelo.

@@ -1,6 +1,6 @@
 import { authHeader } from '/core/api.js';
 import { tt } from '/components/tooltip.js';
-import { errorMessage, fmtFecha } from '/core/ui.js';
+import { errorMessage, esc, fmtFecha } from '/core/ui.js';
 
 export async function render(container) {
     container.innerHTML = pageShell();
@@ -134,6 +134,15 @@ function componentCard(name, comp, weight, tooltip) {
         + '<div style="height:100%;width:' + comp.score + '%;background:' + color + ';border-radius:2px;"></div>'
         + '</div>'
         + '<div style="color:var(--color-muted);font-size:10px;margin-top:4px;">Raw: ' + comp.raw + '</div>'
+        // De dónde sale este número, por tarjeta. Antes había un único aviso
+        // al pie diciendo que los tres eran aproximaciones de precio/MA200W, y
+        // no era cierto para dos de ellos: el Puell suele venir de ingresos
+        // reales de mineros. Un dato real y uno aproximado no merecen la misma
+        // confianza, y hasta ahora no había forma de distinguirlos.
+        + (comp.origen
+            ? '<div style="color:' + (comp.origen.startsWith('Aproximado') ? '#ffb800' : 'var(--color-muted)')
+              + ';font-size:9px;margin-top:4px;line-height:1.3;">' + esc(comp.origen) + '</div>'
+            : '')
         + '</div>';
 }
 
@@ -269,10 +278,15 @@ function methodologySection() {
     return '<div style="background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius);padding:1.25rem;margin-bottom:1rem;">'
         + '<div style="color:var(--color-accent);font-size:12px;letter-spacing:0.08em;margin-bottom:0.75rem;">METODOLOGÍA RSU v2.1</div>'
         + '<div style="color:var(--color-muted);font-size:11px;line-height:1.8;">'
-        + '⚠️ <strong style="color:var(--color-text);">IMPORTANTE</strong>: Los indicadores MVRV, Puell y AHR999 son aproximaciones basadas en precio/MA200W. Los valores reales requieren datos on-chain de Glassnode. Usar como orientación, no como señal definitiva.<br><br>'
+        // El aviso anterior metía los tres indicadores en el mismo saco
+        // ("aproximaciones basadas en precio/MA200W") y era falso para dos:
+        // el Puell suele ser un dato on-chain real, y el MVRV no usa la MA200W
+        // cuando corre por su rama buena. Ahora cada tarjeta dice su origen
+        // real y este bloque solo explica qué mide cada uno.
+        + '⚠️ <strong style="color:var(--color-text);">IMPORTANTE</strong>: no todos estos indicadores se calculan igual. Cada tarjeta de arriba dice de dónde sale su número, y las que ponen «Aproximado» en ámbar no usan datos on-chain: son una estimación a partir del precio. Usar como orientación, no como señal definitiva.<br><br>'
         + '<strong style="color:var(--color-text);">MA 200 Semanas (40%)</strong> — Soporte histórico más importante de BTC. Precio bajo = oportunidad histórica.<br>'
-        + '<strong style="color:var(--color-text);">MVRV Z-Score (30%)</strong> — Proxy de valor de mercado vs valor realizado. &lt;0 = infravalorado.<br>'
-        + '<strong style="color:var(--color-text);">Puell Multiple (20%)</strong> — Proxy de ingresos mineros vs media anual. &lt;0.5 = stress minero.<br>'
+        + '<strong style="color:var(--color-text);">MVRV Z-Score (30%)</strong> — Compara lo que vale BTC hoy con lo que valía de media. Lo ideal es medirlo contra el «valor realizado» (el precio al que cada bitcoin cambió de manos por última vez), pero eso exige un histórico de capitalización de pago: hoy se estima con el precio frente a su media larga. &lt;0 = infravalorado.<br>'
+        + '<strong style="color:var(--color-text);">Puell Multiple (20%)</strong> — Ingresos diarios de los mineros frente a su media anual. Cuando el dato llega de Blockchain.com es real, no una estimación. &lt;0.5 = stress minero.<br>'
         + '<strong style="color:var(--color-text);">AHR999 (10%)</strong> — Índice de acumulación basado en relación precio/MA200. &lt;0.45 = compra fuerte.<br><br>'
         + '<strong style="color:#f23645;">Este módulo no es asesoramiento financiero. Bitcoin es un activo de alto riesgo. Solo invertir lo que puedas permitirte perder.</strong>'
         + '</div>'

@@ -27,7 +27,8 @@ Uso:
     python -m pytest tests/test_cartera_sesion.py -v
 """
 import sys, os
-from datetime import date
+from datetime import date, datetime
+from zoneinfo import ZoneInfo
 from unittest.mock import patch
 
 import pytest
@@ -163,6 +164,17 @@ def test_con_las_barras_al_dia_el_porcentaje_se_calcula_normal():
 
 
 def test_si_la_barra_de_hoy_ya_esta_publicada_se_usa_la_anterior():
-    r = _precio_con_barras(date(2026, 8, 11))
+    """La fecha se calcula, no se escribe a mano.
+
+    Esta rama de `_fetch_price_single` no compara contra
+    `_ultima_sesion_esperada()` (que el helper sí controla) sino contra
+    `datetime.now(America/New_York).date()`, o sea el reloj de verdad. La
+    primera versión pasaba `date(2026, 8, 11)` porque ese era el día en que se
+    escribió: aguantó unas horas y empezó a fallar en cuanto cambió la fecha en
+    Nueva York. Un test que caduca es peor que no tenerlo, porque el CI se pone
+    rojo por una razón que no tiene nada que ver con el código.
+    """
+    hoy_ny = datetime.now(ZoneInfo("America/New_York")).date()
+    r = _precio_con_barras(hoy_ny)
     assert r["chg"] is not None
     assert r["prev"] == 334.22, "con la barra de hoy publicada, el cierre de referencia es el penúltimo"
