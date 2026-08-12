@@ -89,7 +89,7 @@ def _get_daily_bars(tk_obj, ticker: str) -> tuple[float, float, object]:
     if (cached
             and (now - cached["updated"]) < _DAILY_BARS_TTL
             and cached.get("dia_fetch") == hoy_ny):
-        return cached["last"], cached["prev"], cached.get("fecha")
+        return cached["last"], cached["prev"], cached.get("fecha"), cached.get("fecha_prev")
     try:
         # auto_adjust=False a propósito (auditoría de Cartera, #A2). Con el
         # valor por defecto (True) yfinance reescala las barras antiguas para
@@ -140,22 +140,27 @@ def _get_daily_bars(tk_obj, ticker: str) -> tuple[float, float, object]:
             if fallback and math.isfinite(fallback):
                 last, prev = fallback, float(closes.iloc[-1])
                 fecha = raw_closes.index[-1].date()
-                _daily_bars_cache[ticker] = {"last": last, "prev": prev,
-                                             "fecha": fecha, "updated": now, "dia_fetch": hoy_ny}
-                return last, prev, fecha
+                fecha_prev = closes.index[-1].date()
+                _daily_bars_cache[ticker] = {"last": last, "prev": prev, "fecha": fecha,
+                                             "fecha_prev": fecha_prev,
+                                             "updated": now, "dia_fetch": hoy_ny}
+                return last, prev, fecha, fecha_prev
 
         if len(closes) >= 2:
             last, prev = float(closes.iloc[-1]), float(closes.iloc[-2])
+            fecha_prev = closes.index[-2].date()
         elif len(closes) == 1:
             last = prev = float(closes.iloc[-1])
+            fecha_prev = closes.index[-1].date()
         else:
-            return 0.0, 0.0, None
+            return 0.0, 0.0, None, None
         fecha = closes.index[-1].date()
-        _daily_bars_cache[ticker] = {"last": last, "prev": prev,
-                                     "fecha": fecha, "updated": now, "dia_fetch": hoy_ny}
-        return last, prev, fecha
+        _daily_bars_cache[ticker] = {"last": last, "prev": prev, "fecha": fecha,
+                                     "fecha_prev": fecha_prev,
+                                     "updated": now, "dia_fetch": hoy_ny}
+        return last, prev, fecha, fecha_prev
     except Exception:
-        return 0.0, 0.0, None
+        return 0.0, 0.0, None, None
 
 def _ultima_sesion_esperada() -> "object":
     """Qué sesión de mercado debería ser la última con datos, ahora mismo.
@@ -286,12 +291,46 @@ def _fetch_price_single(ticker: str) -> dict | None:
                     price = 0.0
             except Exception:
                 pass
-            last_bar, prev_bar, fecha_ultima = _get_daily_bars(tk_obj, ticker)
+            last_bar, prev_bar, fecha_ultima, fecha_prev = _get_daily_bars(tk_obj, ticker)
             hoy_ny = datetime.now(ZoneInfo("America/New_York")).date()
 
             if fecha_ultima == hoy_ny:
-                # La barra de hoy ya está publicada: el cierre de referencia es
-                # el de la sesión anterior, como siempre.
+                # La barra de hoy ya está publicada. Pero que exista la de HOY
+                # no garantiza que la de AYER también: yfinance deja huecos por
+                # ticker, y entonces `prev_bar` es de dos sesiones atrás y el
+                # porcentaje pasa a ser el de VARIOS días con la etiqueta de
+                # hoy. Es exactamente el mismo fallo que el guardia de la rama
+                # de abajo, y esta rama se quedó sin cubrir el 11/08.
+                #
+                # Reportado el 12/08 y medido: de 42 posiciones abiertas, 15
+                # tenían barra de hoy y NINGUNA de ayer -- NBIS enseñaba
+                # +25,65%, GLXY +9,02%, LITE +8,16%, todos movimientos del 10
+                # al 12 presentados como del día. Y como el precio en vivo sí
+                # se actualizaba, el número parecía fresco.
+                if fecha_prev and fecha_prev != _ultima_sesion_esperada():
+                    # Antes de rendirse, Finnhub: su /quote trae precio Y
+                    # cierre anterior en la MISMA llamada, así que no depende
+                    # de que yfinance tenga la barra de ayer. Es justo el
+                    # hueco que deja este caso, y evita quedarse con 15 filas
+                    # a "—" cuando el dato existe en otro proveedor.
+                    try:
+                        from services.finnhub_stream_service import quote as _fh_quote
+                        q = _fh_quote(ticker)
+                    except Exception:
+                        q = None
+                    if q:
+                        entry = {"ticker": ticker, "price": q["price"], "prev": q["prev"],
+                                 "chg": q["chg"], "chg_fecha": str(hoy_ny),
+                                 "sin_datos_hoy": False, "fuente": "finnhub-quote",
+                                 "updated": now}
+                        _price_cache[ticker] = entry
+                        return entry
+                    entry = {"ticker": ticker, "price": round(price or last_bar, 2),
+                             "prev": round(prev_bar, 2), "chg": None,
+                             "chg_fecha": None, "sin_datos_hoy": True,
+                             "ultimo_cierre": str(fecha_prev), "updated": now}
+                    _price_cache[ticker] = entry
+                    return entry
                 prev = prev_bar
                 if not price:
                     price = last_bar
@@ -393,7 +432,12 @@ def _fetch_price_single(ticker: str) -> dict | None:
             # (un sábado interesa el cierre del viernes). Lo que se añade es
             # la fecha, para que la pantalla pueda decir de qué sesión habla
             # en vez de dar por hecho que es la de hoy.
-            price, prev, fecha_ultima = _get_daily_bars(tk_obj, ticker)
+            # Con el mercado cerrado no se comprueba `fecha_prev`: aquí ambos
+            # valores salen de la MISMA petición y describen dos sesiones
+            # consecutivas de las barras, sea cual sea su fecha. El problema de
+            # arriba nace de emparejar un precio EN VIVO de hoy con un cierre
+            # que se supone de ayer; aquí no hay precio en vivo que emparejar.
+            price, prev, fecha_ultima, _ = _get_daily_bars(tk_obj, ticker)
 
         if not price or not math.isfinite(price):
             return None

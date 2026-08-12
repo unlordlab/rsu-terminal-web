@@ -117,9 +117,18 @@ def test_cual_es_la_ultima_sesion_segun_el_momento(ahora, esperada, motivo):
 
 # ── El hueco de sesiones: precio de hoy contra un cierre de anteayer ─────
 
-def _precio_con_barras(fecha_ultima, last=379.13, prev=334.22, vivo=324.15):
+def _precio_con_barras(fecha_ultima, last=379.13, prev=334.22, vivo=324.15,
+                        fecha_prev=date(2026, 8, 10), con_finnhub=None):
     """Ejecuta _fetch_price_single con el mercado abierto y unas barras
-    diarias cuya ULTIMA fecha se controla, que es la variable del fallo."""
+    diarias cuyas DOS fechas se controlan.
+
+    `fecha_prev` es la del cierre de referencia, y no es un adorno: que exista
+    la barra de HOY no garantiza que exista la de AYER, y ahí estaba el fallo
+    del 12/08. Por defecto vale la sesión que `_ultima_sesion_esperada()`
+    devuelve en estas pruebas, o sea el caso sano.
+
+    `con_finnhub`: qué devuelve el /quote de Finnhub. None = apagado o sin
+    dato, que es lo que fuerza el "no lo sé"."""
     C._price_cache.clear()
 
     class _FastInfo:
@@ -128,9 +137,12 @@ def _precio_con_barras(fecha_ultima, last=379.13, prev=334.22, vivo=324.15):
     class _Ticker:
         fast_info = _FastInfo()
 
-    with patch.object(C, "_get_daily_bars", return_value=(last, prev, fecha_ultima)), \
+    import services.finnhub_stream_service as F
+    with patch.object(C, "_get_daily_bars",
+                      return_value=(last, prev, fecha_ultima, fecha_prev)), \
          patch("yfinance.Ticker", return_value=_Ticker()), \
          patch.object(C, "_is_market_open", return_value=True), \
+         patch.object(F, "quote", return_value=con_finnhub), \
          patch.object(C, "_ultima_sesion_esperada", return_value=date(2026, 8, 10)):
         return C._fetch_price_single("COHR")
 
@@ -178,3 +190,128 @@ def test_si_la_barra_de_hoy_ya_esta_publicada_se_usa_la_anterior():
     r = _precio_con_barras(hoy_ny)
     assert r["chg"] is not None
     assert r["prev"] == 334.22, "con la barra de hoy publicada, el cierre de referencia es el penúltimo"
+
+
+# ── El hueco de AYER: la barra de hoy está, la de ayer no (12/08/2026) ───────
+#
+# El guardia de arriba cubre "la última barra es vieja". Faltaba el caso
+# simétrico y más traicionero: la barra de HOY sí existe, así que esa rama
+# cogía `prev_bar` dando por hecho que era el cierre de ayer. Cuando yfinance
+# deja un hueco en ayer para ese ticker, `prev_bar` es de dos sesiones atrás y
+# el porcentaje pasa a ser el de VARIOS días con la etiqueta de hoy -- y como
+# el precio en vivo sí se actualizaba, el número parecía fresco.
+#
+# Reportado por el usuario el 12/08 ("cada día me pasa lo mismo") y medido: de
+# 42 posiciones abiertas, 15 tenían barra de hoy y ninguna de ayer. NBIS
+# enseñaba +25,65%, GLXY +9,02%, LITE +8,16% -- movimientos del 10 al 12.
+
+
+def test_con_la_barra_de_ayer_ausente_no_se_da_el_movimiento_de_dos_sesiones():
+    hoy_ny = datetime.now(ZoneInfo("America/New_York")).date()
+    r = _precio_con_barras(hoy_ny, fecha_prev=date(2026, 8, 7))   # falta el 10
+    assert r["chg"] is None, "el % de dos sesiones no puede presentarse como el de hoy"
+    assert r["sin_datos_hoy"] is True
+    assert r["ultimo_cierre"] == "2026-08-07", "se dice de cuándo es el cierre que hay"
+
+
+def test_con_la_barra_de_ayer_presente_el_porcentaje_sale_normal():
+    """El guardia no puede saltar en el caso corriente: si `fecha_prev` ES la
+    sesión anterior, todo sigue igual que siempre."""
+    hoy_ny = datetime.now(ZoneInfo("America/New_York")).date()
+    r = _precio_con_barras(hoy_ny, fecha_prev=date(2026, 8, 10))
+    assert r["chg"] is not None
+    assert r["sin_datos_hoy"] is False
+    assert r["prev"] == 334.22
+
+
+def test_antes_de_rendirse_se_pregunta_a_finnhub():
+    """Finnhub /quote trae precio Y cierre anterior en la misma llamada, así
+    que no depende de que yfinance tenga la barra de ayer -- que es justo el
+    hueco de este caso. Verificado en producción: con Finnhub encendido las 44
+    posiciones recuperan su porcentaje en vez de quedarse 15 en «—»."""
+    hoy_ny = datetime.now(ZoneInfo("America/New_York")).date()
+    r = _precio_con_barras(hoy_ny, fecha_prev=date(2026, 8, 7),
+                           con_finnhub={"price": 234.35, "prev": 193.23, "chg": 21.28})
+    assert r["chg"] == 21.28
+    assert r["sin_datos_hoy"] is False
+    assert r["fuente"] == "finnhub-quote"
+    assert r["prev"] == 193.23, "el cierre de referencia también viene de Finnhub"
+
+
+def test_sin_finnhub_se_prefiere_no_decir_nada():
+    """Es la dirección segura del error: perder un porcentaje antes que dar el
+    de dos sesiones como si fuera el del día."""
+    hoy_ny = datetime.now(ZoneInfo("America/New_York")).date()
+    r = _precio_con_barras(hoy_ny, fecha_prev=date(2026, 8, 7), con_finnhub=None)
+    assert r["chg"] is None
+
+
+def test_el_cierre_de_referencia_sigue_viajando_para_el_stream():
+    """`prev` NO puede ir a None aunque el porcentaje sí: el WebSocket de
+    Finnhub solo manda precio y recalcula contra este `prev`. Si llegara vacío
+    descartaría todos sus ticks y la fila se quedaría congelada."""
+    hoy_ny = datetime.now(ZoneInfo("America/New_York")).date()
+    r = _precio_con_barras(hoy_ny, fecha_prev=date(2026, 8, 7))
+    assert r["prev"] == 334.22 and r["prev"] > 0
+
+
+# ── La función que lee las barras, probada de verdad ────────────────────────
+#
+# Los tests de arriba parchean `_get_daily_bars` entera para controlar el
+# escenario, así que la función REAL no estaba cubierta por ninguno. El
+# sabotaje lo destapó: hacerle devolver `fecha_prev = None` no rompía nada,
+# y con eso el guardia (`if fecha_prev and ...`) deja de saltar para siempre,
+# en silencio. Estos dos tests cierran ese hueco.
+
+def _barras(fechas, cierres):
+    import pandas as pd
+    idx = pd.to_datetime(fechas)
+
+    class _Tk:
+        def history(self, **kw):
+            return pd.DataFrame({"Close": cierres}, index=idx)
+
+    C._daily_bars_cache.clear()
+    return C._get_daily_bars(_Tk(), "TEST")
+
+
+def test_get_daily_bars_devuelve_la_fecha_del_cierre_de_referencia():
+    """Sin esta cuarta pieza el llamador no puede saber si el cierre contra el
+    que va a medir es el de ayer o el de hace tres sesiones."""
+    last, prev, fecha, fecha_prev = _barras(
+        ["2026-08-07", "2026-08-10", "2026-08-12"], [100.0, 110.0, 120.0])
+    assert (last, prev) == (120.0, 110.0)
+    assert fecha == date(2026, 8, 12)
+    assert fecha_prev == date(2026, 8, 10), "la fecha del cierre anterior, no la del último"
+
+
+def test_con_una_sola_barra_las_dos_fechas_son_la_misma():
+    """Un ticker recién listado no tiene contra qué compararse; lo que no puede
+    es devolver una fecha inventada."""
+    last, prev, fecha, fecha_prev = _barras(["2026-08-12"], [120.0])
+    assert last == prev == 120.0
+    assert fecha == fecha_prev == date(2026, 8, 12)
+
+
+def test_con_la_ultima_fila_a_nan_se_usa_fast_info_y_la_fecha_del_ultimo_cierre_real():
+    """`_get_daily_bars` tiene DOS salidas y esta es la que faltaba cubrir: si
+    yfinance devuelve la fila de hoy con el cierre a NaN (pasa a diario), se
+    rellena con `fast_info` y el cierre de referencia es el último real. Un
+    sabotaje que dejaba `fecha_prev` a None en esta rama no rompía nada."""
+    import pandas as pd
+    idx = pd.to_datetime(["2026-08-10", "2026-08-11", "2026-08-12"])
+
+    class _FastInfo:
+        last_price = 125.0
+
+    class _Tk:
+        fast_info = _FastInfo()
+        def history(self, **kw):
+            return pd.DataFrame({"Close": [100.0, 110.0, float("nan")]}, index=idx)
+
+    C._daily_bars_cache.clear()
+    last, prev, fecha, fecha_prev = C._get_daily_bars(_Tk(), "TEST")
+    assert last == 125.0, "el precio de hoy sale de fast_info, no del NaN"
+    assert prev == 110.0, "el cierre de referencia es el último REAL"
+    assert fecha == date(2026, 8, 12)
+    assert fecha_prev == date(2026, 8, 11), "sin esta fecha el guardia no puede comprobar nada"
