@@ -33,13 +33,27 @@ from services.cache import cache, TTL  # noqa: E402
 # comprobó la distribución de fechas y publican de forma regular pero
 # espaciada (la Fed no saca notas a diario) -- baja frecuencia legítima, no
 # congelamiento. Confundir ambas cosas habría tirado fuentes que funcionan.
+#
+# Re-auditadas el 13/08/2026, mismo criterio doble más un tercero que antes no
+# existía: que quepan en el presupuesto de tiempo (ver FUENTE_TIMEOUT). Tres
+# bajas, medidas en la misma pasada que el resto para que la comparación sea
+# justa:
+#   - benzinga -> viva (200, 10 items de 21h), pero tarda 4,2s contra un
+#                 timeout de 2,5s: expira SIEMPRE. No aportaba ni un item y sí
+#                 dos intentos de conexión por cada carga del feed.
+#   - macroalf -> 31,0 días. Justo al otro lado del corte de 30. La excepción
+#                 de "baja frecuencia legítima" que se le concedió en julio ya
+#                 no se sostiene: el Substack dejó de publicar.
+#   - valuewalk-> 44,7 días. Mismo caso, sin margen de duda.
+# Las dos rancias respondían 200 con 10 artículos cada una -- exactamente el
+# fallo silencioso que documenta MAX_ANTIGUEDAD_MINS. El filtro hacía su
+# trabajo (los descartaba), pero se pagaba la petición igual.
 SOURCES = [
     {"id":"ft",           "label":"FT",          "url":"https://www.ft.com/companies?format=rss"},
     {"id":"seekingalpha", "label":"SEEKING A.",  "url":"https://seekingalpha.com/market_currents.xml"},
     {"id":"cnbc",         "label":"CNBC",        "url":"https://www.cnbc.com/id/20910258/device/rss/rss.html"},
     {"id":"marketwatch",  "label":"MKTWATCH",    "url":"https://feeds.content.dowjones.io/public/rss/mw_topstories"},
     {"id":"yahoofinance", "label":"YAHOO FIN",   "url":"https://finance.yahoo.com/rss/topstories"},
-    {"id":"benzinga",     "label":"BENZINGA",    "url":"https://www.benzinga.com/feed"},
     {"id":"zerohedge",    "label":"ZEROHEDGE",   "url":"https://feeds.feedburner.com/zerohedge/feed"},
     {"id":"investing",    "label":"INVESTING",   "url":"https://www.investing.com/rss/news.rss"},
     {"id":"reddit",       "label":"REDDIT",      "url":"https://www.reddit.com/r/investing+stocks+options/new.rss"},
@@ -48,10 +62,27 @@ SOURCES = [
     # y además empieza con BOM UTF-8, que rompía el parseo. Ya no hace falta
     # declarar formato -- se detecta solo.
     {"id":"fed",          "label":"FED",         "url":"https://www.federalreserve.gov/feeds/press_all.xml"},
-    {"id":"macroalf",     "label":"MACRO ALF",   "url":"https://themacrocompass.substack.com/feed"},
     {"id":"coindesk",     "label":"COINDESK",    "url":"https://www.coindesk.com/arc/outboundfeeds/rss/"},
-    {"id":"valuewalk",    "label":"VALUEWALK",   "url":"https://www.valuewalk.com/feed"},
     {"id":"businessins",  "label":"BUS. INSIDER","url":"https://markets.businessinsider.com/rss/news"},
+    # Altas del 13/08/2026 (medidas en la misma pasada que las de arriba, ver
+    # el bloque de bajas). Cada una cubre una dimensión que las anteriores no
+    # tenían, en vez de sumar otra cabecera generalista más:
+    #   ftmarkets  - FT ya estaba, pero solo su sección de EMPRESAS; mercados
+    #                es otra portada distinta (0,2s, 2,9h).
+    #   bls        - fuente PRIMARIA del IPC y del informe de empleo, las dos
+    #                publicaciones que el clasificador puntúa más alto. Trae un
+    #                item por pasada, pero es el original, no la crónica.
+    #   ecb        - había Fed y no había BCE. Baja frecuencia legítima, igual
+    #                que la Fed (2 días en la medición).
+    #   oilprice   - energía y materias primas: cero cobertura hasta ahora.
+    #   bbcbiz     - el feed más rápido y más fresco de los 24 probados.
+    #   wolfstreet - macro y crédito; ocupa el hueco que deja MACRO ALF.
+    {"id":"ftmarkets",    "label":"FT MERCADOS", "url":"https://www.ft.com/markets?format=rss"},
+    {"id":"bls",          "label":"BLS",         "url":"https://www.bls.gov/feed/bls_latest.rss"},
+    {"id":"ecb",          "label":"BCE",         "url":"https://www.ecb.europa.eu/rss/press.html"},
+    {"id":"oilprice",     "label":"OILPRICE",    "url":"https://oilprice.com/rss/main"},
+    {"id":"bbcbiz",       "label":"BBC",         "url":"https://feeds.bbci.co.uk/news/business/rss.xml"},
+    {"id":"wolfstreet",   "label":"WOLF STREET", "url":"https://wolfstreet.com/feed/"},
 ]
 
 # Máxima antigüedad admitida para un artículo. Un feed que se congela sigue
@@ -87,15 +118,18 @@ SOURCE_URLS = {
     "cnbc":         "https://www.cnbc.com/markets/",
     "marketwatch":  "https://www.marketwatch.com/",
     "yahoofinance": "https://finance.yahoo.com/",
-    "benzinga":     "https://www.benzinga.com/",
     "zerohedge":    "https://www.zerohedge.com/",
     "investing":    "https://www.investing.com/news/",
     "reddit":       "https://www.reddit.com/r/investing/",
     "fed":          "https://www.federalreserve.gov/newsevents/pressreleases.htm",
-    "macroalf":     "https://themacrocompass.substack.com/",
     "coindesk":     "https://www.coindesk.com/",
-    "valuewalk":    "https://www.valuewalk.com/",
     "businessins":  "https://markets.businessinsider.com/news",
+    "ftmarkets":    "https://www.ft.com/markets",
+    "bls":          "https://www.bls.gov/bls/newsrels.htm",
+    "ecb":          "https://www.ecb.europa.eu/press/html/index.en.html",
+    "oilprice":     "https://oilprice.com/",
+    "bbcbiz":       "https://www.bbc.com/news/business",
+    "wolfstreet":   "https://wolfstreet.com/",
     "finnhub":      "https://finnhub.io/",
 }
 
@@ -110,6 +144,13 @@ HIGH_KW = [
     "default","bankrupt","bailout","systemic","inflation surge","cpi","ppi","nonfarm",
     "crisis","emergency","plunge","circuit breaker","black swan","contagion",
     "tariff","sanction","executive order","nuclear","war","attack",
+    # El informe de empleo se colaba solo si aparecía la palabra "nonfarm", que
+    # los titulares casi nunca usan: "U.S. economy unexpectedly lost 23,000
+    # jobs in July" solo se cazaba por un "nonfarm" perdido en el cuerpo. Es
+    # la publicación macro que más mueve el mercado cada mes, así que se
+    # nombra como la nombran los titulares. Detectado al revisar el
+    # clasificador contra 129 titulares reales, 13/08/2026.
+    "payrolls","jobs report","jobless claims",
     # "surge" y "plunge" se tratan aparte con contexto — ver _classify_impact()
 ]
 MED_KW = [
@@ -125,8 +166,16 @@ NEGATION_PREFIXES = ["no ", "not ", "avoids ", "avoid ", "no sign", "no risk", "
 
 # Keywords de impacto que son sensibles al contexto (no clasificar como HIGH si van con
 # sujetos que las anulan, p.ej. "surge in unemployment" no es bullish)
-CONTEXT_HIGH_SURGE  = ["market","stock","share","equity","price","rally","s&p","nasdaq","dow","index"]
-CONTEXT_HIGH_PLUNGE = ["market","stock","share","equity","price","s&p","nasdaq","dow","index","yield","oil","gold"]
+# Sin "price" a secas: lo cumple cualquier precio, y con él
+# "Lettuce prices see record-setting plunge as cyclospora spooks consumers"
+# entraba como impacto ALTO. Se pide un contexto que sea de MERCADO —un
+# activo o un índice—, no la palabra genérica. Medido el 13/08/2026 sobre 129
+# titulares reales: era el único falso positivo que sobrevivía al recuento por
+# acumulación.
+CONTEXT_HIGH_SURGE  = ["market","stock","share","equity","rally","s&p","nasdaq","dow","index",
+                       "shares","futures","bond","yield"]
+CONTEXT_HIGH_PLUNGE = ["market","stock","share","equity","s&p","nasdaq","dow","index",
+                       "shares","futures","bond","yield","oil","gold","crude"]
 
 SECTORS_MAP = {
     "TECH":    ["nvidia","apple","microsoft","google","meta","tesla","amd","chip","ai","cloud","software","semiconductor"],
@@ -221,38 +270,101 @@ def _is_negated(text: str, keyword: str) -> bool:
     window = text[max(0, m.start() - 40):m.start()]
     return any(neg in window for neg in NEGATION_PREFIXES)
 
-def _classify_impact(text: str, finnhub_related: list = None) -> str:
-    """
-    Nivel 1: clasificación con detección de negación y contexto para keywords ambiguas.
-    Nivel 2: si se pasan related articles de Finnhub, los usa para reforzar la clasificación.
+# Cuánto vale una señal según dónde aparezca. Un titular es lo que el autor
+# eligió destacar; la descripción es relleno donde una palabra puede aparecer
+# de pasada. Antes pesaban IGUAL, y de ahí salían falsos HIGH como "Common
+# Blood Pressure Drug Recalled Nationwide" -- clasificado por una palabra
+# escondida en 300 caracteres de resumen.
+PESO_TITULO = 2
+PESO_DESC   = 1
+
+# Umbrales de acumulación. La versión anterior era "gana la primera keyword
+# que aparezca": UNA palabra en cualquier sitio decidía la etiqueta, así que
+# un titular con «Fed» + «CPI» + «recession» valía lo mismo que otro con
+# «attack» perdido en el resumen. Medido el 13/08 sobre 129 titulares reales:
+# el 24% salía HIGH, y con una cuarta parte del feed en rojo la etiqueta deja
+# de distinguir nada.
+UMBRAL_HIGH = 3
+UMBRAL_MED  = 1
+
+# No todas las palabras de HIGH_KW pesan igual. "war" o "attack" aparecen en
+# cualquier crónica internacional; "fomc" o "circuit breaker" no admiten duda.
+# Sin esta distinción, un titular con UNA sola señal inequívoca —"Trump
+# announces 50% tariff on China"— se quedaba en MED, porque una keyword en el
+# titular vale 2 y el umbral son 3. Estas llegan solas.
+CRITICO_KW = [
+    "fomc", "rate hike", "rate cut", "recession", "crash", "circuit breaker",
+    "black swan", "default", "bailout", "contagion", "tariff", "cpi",
+    # Las dos publicaciones macro que más mueven el mercado cada mes son el IPC
+    # y el informe de empleo. Dejar "cpi" aquí y el empleo fuera era una
+    # incoherencia del propio diseño: "...takeaways from the July jobs report"
+    # se quedaba en MED por un solo punto.
+    "payrolls", "jobs report", "jobless claims",
+    # Mismo hueco de vocabulario: estaba "rate hike"/"rate cut", pero los
+    # titulares dicen "raises rates" o "by 50 basis points". "Fed raises rates
+    # by 50 basis points" se quedaba en MED por no nombrar la subida como la
+    # nombra el manual.
+    "raises rates", "cuts rates", "raise rates", "cut rates",
+    "rate decision", "basis points",
+]
+
+
+def _puntos(titulo_l: str, desc_l: str, keywords, valor: int) -> int:
+    """Suma el peso de cada keyword que aparezca, contándola UNA vez y en el
+    sitio donde más vale. Una misma noticia puede acumular varias señales, que
+    es justo lo que distingue un titular de mercado de una mención suelta."""
+    total = 0
+    for kw in keywords:
+        if _contiene(titulo_l, kw) and not _is_negated(titulo_l, kw):
+            total += valor * PESO_TITULO
+        elif _contiene(desc_l, kw) and not _is_negated(desc_l, kw):
+            total += valor * PESO_DESC
+    return total
+
+
+def _classify_impact(text: str, finnhub_related: list = None, titulo: str = None) -> str:
+    """Impacto por ACUMULACIÓN de señales, no por la primera que aparezca.
+
+    `titulo` separa el titular del resto para poder pesarlos distinto. Si no se
+    pasa, todo el texto cuenta como titular -- así los llamadores antiguos no
+    cambian de comportamiento de golpe, solo dejan de tener la ventaja del
+    peso.
+
+    Ver auditoría de Newsfeed, #2 (el clasificador) y la revisión del 13/08.
     """
     t = text.lower()
+    titulo_l = (titulo or text).lower()
+    desc_l = t if titulo is None else t.replace(titulo_l, " ", 1)
 
-    # "surge" solo es HIGH si se refiere a activos de mercado, no a datos macro negativos
-    # "plunge" igual — "plunge in yields" puede ser bueno o malo, pero en activos es impacto alto
-    if _contiene(t, "surge") and not _is_negated(t, "surge"):
-        if any(ctx in t for ctx in CONTEXT_HIGH_SURGE):
-            return "HIGH"
-    if _contiene(t, "plunge") and not _is_negated(t, "plunge"):
-        if any(ctx in t for ctx in CONTEXT_HIGH_PLUNGE):
-            return "HIGH"
+    puntos = 0
 
-    # Keywords HIGH con detección de negación
-    for kw in HIGH_KW:
-        if _contiene(t, kw) and not _is_negated(t, kw):
-            return "HIGH"
+    # "surge"/"plunge" solo cuentan con contexto de activo: "surge in
+    # unemployment" no es lo mismo que "shares surge". Se mantienen aparte
+    # porque su ambigüedad no la resuelve el peso, la resuelve el contexto.
+    for palabra, contextos in (("surge", CONTEXT_HIGH_SURGE), ("plunge", CONTEXT_HIGH_PLUNGE)):
+        if _contiene(t, palabra) and not _is_negated(t, palabra) and any(c in t for c in contextos):
+            puntos += PESO_TITULO if _contiene(titulo_l, palabra) else PESO_DESC
 
-    # Nivel 2: si Finnhub dice que hay artículos relacionados con símbolos de alto impacto
-    # (Fed, mercado, macro) — tratar como MED mínimo aunque las keywords no aparezcan
+    # Las críticas primero y se descuentan de HIGH_KW, para no cobrarlas dos
+    # veces: "tariff" está en las dos listas por diseño.
+    puntos += _puntos(titulo_l, desc_l, CRITICO_KW, 1.5)
+    puntos += _puntos(titulo_l, desc_l, [k for k in HIGH_KW if k not in CRITICO_KW], 1)
+    # Las MED valen la mitad: acumular tres de ellas no debería igualar a un
+    # titular con dos señales de crisis.
+    puntos += _puntos(titulo_l, desc_l, MED_KW, 1) / 2
+
+    # Finnhub dice que la noticia toca índices o macro: suelo de MED, igual
+    # que antes. No sube a HIGH por sí solo -- es una pista de tema, no de
+    # magnitud.
     if finnhub_related:
-        macro_symbols = {"SPY","QQQ","TLT","GLD","DXY","VIX","ES","NQ"}
-        if any(r.get('symbol','') in macro_symbols for r in finnhub_related):
-            return "MED"
+        macro_symbols = {"SPY", "QQQ", "TLT", "GLD", "DXY", "VIX", "ES", "NQ"}
+        if any(r.get('symbol', '') in macro_symbols for r in finnhub_related):
+            puntos = max(puntos, UMBRAL_MED)
 
-    for kw in MED_KW:
-        if _contiene(t, kw) and not _is_negated(t, kw):
-            return "MED"
-
+    if puntos >= UMBRAL_HIGH:
+        return "HIGH"
+    if puntos >= UMBRAL_MED:
+        return "MED"
     return "LOW"
 
 def _sentiment(text: str) -> str:
@@ -469,7 +581,7 @@ def _build(title: str, desc: str, link: str, src: dict, pub: str) -> dict:
         "source":     src['label'],
         "source_id":  src['id'],
         "source_url": SOURCE_URLS.get(src['id'], ''),
-        "impact":     _classify_impact(text),
+        "impact":     _classify_impact(text, titulo=title),
         "sentiment":  _sentiment(text),
         "sector":     _sector(text),
         "mins_ago":   mins,
@@ -589,7 +701,7 @@ def _fetch_finnhub_news() -> tuple:
                 "source":     "FINNHUB",
                 "source_id":  "finnhub",
                 "source_url": SOURCE_URLS.get("finnhub", ""),
-                "impact":     _classify_impact(text, finnhub_related=related),
+                "impact":     _classify_impact(text, finnhub_related=related, titulo=headline),
                 "sentiment":  _sentiment(text),
                 "sector":     _sector(text, finnhub_category=category),
                 "mins_ago":   mins,
@@ -637,6 +749,8 @@ def get_trump_feed(limit: int = 15) -> dict:
 
             # Clasificar impacto del post por keywords financieras/política
             text = (title + ' ' + content).lower()
+            # Un post de Truth Social no tiene titular aparte: el texto ES
+            # el mensaje, así que todo cuenta como titular.
             impact = _classify_impact(text)
 
             posts.append({
@@ -737,7 +851,11 @@ def _fetch_all_items() -> tuple:
     # Sin `with`: al salir de un bloque `with` el executor hace shutdown(wait=True)
     # y vuelve a esperar a los rezagados, deshaciendo el deadline que acabamos de
     # aplicar. Se cierra a mano con wait=False.
-    ex = ThreadPoolExecutor(max_workers=16)
+    # Tiene que ser >= nº de fuentes + 1 (Finnhub), o las que no caben esperan
+    # turno y su tiempo SE SUMA al total en vez de solaparse -- ver el print de
+    # más abajo. Estaba en 16 para 15 tareas; con las altas del 13/08/2026 son
+    # 18, así que sube con margen para las próximas.
+    ex = ThreadPoolExecutor(max_workers=24)
     try:
         rss_futures    = {ex.submit(_fetch_source, src): src for src in active_sources}
         finnhub_future = ex.submit(_fetch_finnhub_news)
