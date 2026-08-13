@@ -153,24 +153,52 @@ def _aplicar_trade(ticker: str, precio: float) -> bool:
     de ese ticker: sin `prev` no hay forma de calcular el «HOY %», y publicar
     el precio con un 0% sería exactamente el dato fabricado que este módulo
     lleva tiempo quitando (ver #A3).
+
+    UN `prev` EXISTENTE NO ES UN `prev` VÁLIDO, y esa confusión es la que hacía
+    que el «HOY %» volviera a salir mal un día sí y otro también. Cuando a
+    yfinance le falta la barra de ayer, `_fetch_price_single()` hace lo
+    correcto: devuelve `chg=None` y `sin_datos_hoy=True` para que la tabla
+    pinte «—»... pero SIGUE devolviendo `prev`, que ahí no es el cierre de
+    ayer sino el último que se pudo conseguir. Esta función solo miraba que
+    ese número existiera y fuera positivo, así que al llegar el primer tick
+    recalculaba el porcentaje contra él, convertía un «no lo sé» honesto en
+    el movimiento de DOS sesiones con la etiqueta del día, y de paso borraba
+    los campos que permitían avisarlo. Reproducido el 13/08/2026 con los
+    números reales de la cartera: LITE salía +13,45% cuando su movimiento del
+    día era +0,28%; SPCX y COHR aparecían subiendo cuando ambos bajaban.
+
+    Por eso los arreglos anteriores no aguantaban: los tres estaban en las
+    ramas de `_fetch_price_single()`, y la corrupción ocurre DESPUÉS, desde
+    otro módulo que escribe en la misma caché. Y no se veía en local porque
+    `FINNHUB_REALTIME` viene apagado por defecto: sin el flag este código no
+    llega a ejecutarse nunca, así que toda verificación local pasaba.
     """
     from services.cartera_service import _price_cache
 
-    previo = _price_cache.get(ticker)
-    prev = (previo or {}).get("prev")
+    previo = _price_cache.get(ticker) or {}
+    prev = previo.get("prev")
     if not prev or prev <= 0:
         return False
 
-    _price_cache[ticker] = {
-        "ticker":  ticker,
-        "price":   round(precio, 2),
-        "prev":    prev,
-        "chg":     round((precio - prev) / prev * 100, 2),
-        "updated": time.time(),
-        # Marca de origen: permite distinguir en diagnóstico un precio de
-        # stream de uno de yfinance sin tener que adivinarlo por la hora.
-        "fuente":  "finnhub",
-    }
+    # El precio en vivo SÍ se publica en los dos caminos: el P&L de cada
+    # posición se calcula contra el precio de compra, no contra `prev`, así que
+    # es correcto aunque no sepamos el porcentaje del día.
+    base = {**previo, "price": round(precio, 2), "prev": prev,
+            "updated": time.time()}
+
+    if previo.get("chg") is None or previo.get("sin_datos_hoy"):
+        # Quien puso `prev` ya dijo que no servía como referencia de hoy. Se
+        # respeta: el porcentaje sigue en None y se conservan `sin_datos_hoy`
+        # /`chg_fecha`/`ultimo_cierre` (vienen en `previo`), que son los que
+        # permiten a la pantalla explicar de qué sesión son los datos.
+        base.update({"chg": None, "fuente": "finnhub-sin-referencia"})
+        _price_cache[ticker] = base
+        return True
+
+    # Marca de origen: permite distinguir en diagnóstico un precio de stream
+    # de uno de yfinance sin tener que adivinarlo por la hora.
+    base.update({"chg": round((precio - prev) / prev * 100, 2), "fuente": "finnhub"})
+    _price_cache[ticker] = base
     return True
 
 
