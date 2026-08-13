@@ -228,12 +228,29 @@ async function loadNews(container, { silencioso = false } = {}) {
         // la fuente en otra pestaña; ese enlace ya está en cada noticia (el
         // nombre de la fuente bajo el titular), así que el clic aquí se dedica
         // a lo que no se podía hacer de ninguna otra forma: ver solo esa
-        // fuente. Se vuelve a todas pulsando la que ya está activa.
+        // fuente.
+        //
+        // El chip TODAS no es decorativo. Volver a ver el feed completo se
+        // podía hacer desde el principio -- pulsando otra vez la fuente ya
+        // activa, y el código lo hacía bien -- pero eso no lo dice nada en
+        // pantalla: quien filtra por una fuente se queda encerrado sin ver la
+        // salida. Es el MISMO fallo que el #6 de esta auditoría ("no hay botón
+        // ALL para sectores"), que se arregló para sectores y para impacto con
+        // una entrada 'ALL' explícita, y que aquí se quedó sin arreglar porque
+        // la barra de fuentes se construye aparte. Reportado usándolo, 13/08.
+        // Se conserva además el toggle sobre la fuente activa: quien ya lo
+        // conocía no pierde el atajo.
         if (health && data.sources) {
             const active  = data.sources.filter(s => s.ok).length;
             const total   = data.sources.length;
+            const todasSel = !activeSource;
             health.innerHTML = '<div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;">'
                 + '<span style="color:var(--color-muted);font-size:10px;">Fuentes activas: <b style="color:var(--color-accent);">' + active + '/' + total + '</b></span>'
+                + '<span class="source-chip" data-source="" title="Ver las noticias de todas las fuentes"'
+                + ' style="color:' + (todasSel ? '#000' : 'var(--color-accent)')
+                + ';background:' + (todasSel ? 'var(--color-accent)' : 'transparent')
+                + ';font-size:9px;padding:1px 5px;border:1px solid var(--color-accent)' + (todasSel ? '' : '33')
+                + ';border-radius:2px;cursor:pointer;font-weight:700;">TODAS</span>'
                 + data.sources.map(s => {
                     const sel   = s.id === activeSource;
                     const color = s.ok ? 'var(--color-accent)' : '#444';
@@ -249,7 +266,9 @@ async function loadNews(container, { silencioso = false } = {}) {
             health.querySelectorAll('.source-chip').forEach(chip => {
                 chip.addEventListener('click', () => {
                     const id = chip.getAttribute('data-source');
-                    activeSource = (activeSource === id) ? null : id;
+                    // data-source vacío = el chip TODAS: quita el filtro pase
+                    // lo que pase, sin depender de cuál esté activa ahora.
+                    activeSource = !id ? null : (activeSource === id ? null : id);
                     loadNews(container);
                 });
             });
