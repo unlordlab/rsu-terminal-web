@@ -257,23 +257,53 @@ function updatePricesWS(prices) {
             || document.querySelector('[data-ws-ticker="' + p.name + '"]')
             || document.querySelector('[data-ws-ticker="' + p.name + '-USD"]');
         if (!el) return;
-        const up      = p.chg >= 0;
-        const color   = up ? 'var(--color-accent)' : '#f23645';
+        // chg == null significa "no lo sé", no "cero". Pasa cuando a las
+        // barras diarias les falta la sesión anterior: el backend calla el
+        // porcentaje en vez de dar el movimiento de dos sesiones como si
+        // fuera el del día (ver ws.py::_get_quick_prices).
+        //
+        // Sin esta distinción el null se colaba como un dato normal:
+        // Math.abs(null) es 0, así que la barra pintaba un "▲ 0.00%" verde
+        // -- una sesión plana perfectamente creíble, inventada.
+        const sinDato = (p.chg == null);
+        const up      = !sinDato && p.chg >= 0;
+        const color   = sinDato ? 'var(--color-muted)' : (up ? 'var(--color-accent)' : '#f23645');
         const arrow   = up ? '▲' : '▼';
         const priceEl = el.querySelector('[data-ws-price]');
         const chgEl   = el.querySelector('[data-ws-chg]');
-        if (priceEl) {
+        if (priceEl && p.price != null) {
+            // El precio SÍ se actualiza aunque no haya porcentaje: ese dato es
+            // real, y es el que la gente mira.
             priceEl.textContent = (priceEl.dataset.wsPrefix || '') + p.price.toLocaleString('en-US');
-            priceEl.classList.remove('ws-blink-up','ws-blink-down');
-            void priceEl.offsetWidth;
-            priceEl.classList.add(up ? 'ws-blink-up' : 'ws-blink-down');
+            if (!sinDato) {
+                priceEl.classList.remove('ws-blink-up','ws-blink-down');
+                void priceEl.offsetWidth;
+                priceEl.classList.add(up ? 'ws-blink-up' : 'ws-blink-down');
+            }
         }
         if (chgEl) {
-            chgEl.textContent = arrow + ' ' + Math.abs(p.chg).toFixed(2) + '%';
+            chgEl.textContent = sinDato
+                ? '—'
+                : arrow + ' ' + Math.abs(p.chg).toFixed(2) + '%';
             chgEl.style.color = color;
-            chgEl.classList.remove('ws-blink-up','ws-blink-down');
-            void chgEl.offsetWidth;
-            chgEl.classList.add(up ? 'ws-blink-up' : 'ws-blink-down');
+            // El guion a secas parece un fallo de la página; al pasar el ratón
+            // se dice qué pasa. Mismo texto y mismo criterio que la tabla de
+            // Cartera para el mismo caso.
+            if (sinDato) {
+                chgEl.title = p.ultimo_cierre
+                    ? `Sin variación fiable para ${p.name}: faltan sesiones en los datos del proveedor. El último cierre disponible es del ${p.ultimo_cierre.split('-').reverse().join('/')}.`
+                    : `Sin variación disponible para ${p.name}.`;
+            } else if (p.sesion_desfasada && p.chg_fecha) {
+                // Hay número y es correcto, pero no es de hoy.
+                chgEl.title = `Variación de la sesión del ${p.chg_fecha.split('-').reverse().join('/')}, no de hoy.`;
+            } else {
+                chgEl.title = '';
+            }
+            if (!sinDato) {
+                chgEl.classList.remove('ws-blink-up','ws-blink-down');
+                void chgEl.offsetWidth;
+                chgEl.classList.add(up ? 'ws-blink-up' : 'ws-blink-down');
+            }
         }
     });
 }

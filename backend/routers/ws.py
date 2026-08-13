@@ -6,8 +6,12 @@ from auth import decode_token
 from datetime import datetime, timezone
 import asyncio
 import json
+import math
 import yfinance as yf
 import pytz
+import sys, os
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "..", "shared"))
+import market_calendar  # noqa: E402
 
 router = APIRouter()
 
@@ -107,15 +111,89 @@ async def _authenticate(websocket: WebSocket, min_tier: str | None = None) -> bo
 # ── HELPERS ───────────────────────────────────────────────────────────────────
 
 def _get_quick_prices() -> list:
+    """Precio y variación diaria de la barra superior de Market.
+
+    LA VENTANA ES DE 7 DÍAS Y NO DE 2 A PROPÓSITO. Esto pedía `period="2d"`,
+    que devuelve como mucho dos filas, y daba por hecho que `iloc[-2]` era la
+    sesión anterior. Con dos filas esa suposición no se puede ni comprobar: no
+    hay margen para VER que falta una sesión por medio. Cuando yfinance se
+    salta una barra —pasa por símbolo, y más desde el VPS, porque Yahoo limita
+    las IP de centro de datos— `iloc[-2]` es el cierre de hace DOS sesiones y
+    el porcentaje es el de dos días con la etiqueta del actual.
+
+    Es el mismo patrón que hizo fallar el «HOY %» de Cartera tres días
+    seguidos (11, 12 y 13/08/2026); ver `cartera_service._fetch_price_single`.
+    Allí se arregló mirando la FECHA de las barras en vez de su posición, y
+    aquí se aplica el mismo criterio con el mismo helper compartido
+    (`shared/market_calendar.py`), para que no se vuelvan a separar.
+
+    MEDIDO ANTES DE TOCAR NADA (13/08/2026, 10:36-10:52 Nueva York): de los 14
+    símbolos, 0 tenían hueco en ese momento, y en un mes de historial (24
+    sesiones × 14 símbolos) no faltaba ninguna barra. O sea: el fallo NO se
+    estaba produciendo al medirlo desde una IP residencial. La comprobación se
+    añade igualmente porque el código no tenía ninguna defensa —era incapaz de
+    detectar la condición aunque se diera—, porque el mismo patrón sí reventó
+    de forma repetida en producción con la cartera, y porque la medición desde
+    aquí no dice nada de lo que ve el VPS, que es donde duele.
+    """
     result = []
     for name, ticker in PRICE_TICKERS.items():
         try:
             t    = yf.Ticker(ticker)
-            hist = t.history(period="2d", interval="1d")
-            if len(hist) < 2: continue
-            prev = float(hist['Close'].iloc[-2])
-            last = float(hist['Close'].iloc[-1])
-            chg  = (last - prev) / prev * 100
+            hist = t.history(period="7d", interval="1d")
+            if hist.empty or "Close" not in hist:
+                continue
+            # dropna() por el mismo motivo que en _get_daily_bars: Yahoo
+            # devuelve la fila de la sesión en curso con el cierre a NaN
+            # mientras no ha asentado, y ese NaN se propagaría hasta el JSON.
+            closes = hist["Close"].dropna()
+            if len(closes) < 2:
+                continue
+            last   = float(closes.iloc[-1])
+            prev   = float(closes.iloc[-2])
+            if not prev or not math.isfinite(prev) or not math.isfinite(last):
+                continue
+            f_ult  = closes.index[-1].date()
+            f_prev = closes.index[-2].date()
+
+            # ¿El cierre de referencia es de la sesión INMEDIATAMENTE anterior
+            # a la última barra, o hay sesiones por medio? Cripto cotiza los
+            # siete días, así que ahí «la anterior» es el día natural anterior;
+            # aplicarle el calendario bursátil descartaría un dato bueno cada
+            # lunes.
+            esperada_prev = (market_calendar.dia_anterior_a(f_ult)
+                             if market_calendar.cotiza_todos_los_dias(ticker)
+                             else market_calendar.sesion_anterior_a(f_ult))
+
+            fila = {"name": name, "ticker": ticker, "price": round(last, 2),
+                    # De qué sesión es el dato. Viaja siempre, para que la
+                    # pantalla pueda decirlo en vez de dar por hecho que es hoy.
+                    "chg_fecha": str(f_ult)}
+
+            if f_prev != esperada_prev:
+                # Faltan sesiones entre las dos barras: el porcentaje que
+                # saldría de aquí es el de VARIOS días, y en la barra superior
+                # se leería como el del día. Se prefiere no decirlo -- mismo
+                # criterio anti-fabricación que Cartera: un número plausible y
+                # falso engaña más que un hueco.
+                #
+                # El precio SÍ se publica: ese es real y útil. Lo que se calla
+                # es la variación, que es lo que no sabemos.
+                fila.update({"chg": None, "sin_datos_hoy": True,
+                             "ultimo_cierre": str(f_prev)})
+            else:
+                fila.update({"chg": round((last - prev) / prev * 100, 2),
+                             "sin_datos_hoy": False})
+                # La referencia es buena, pero la última barra puede ser vieja:
+                # con el proveedor degradado el porcentaje sale internamente
+                # coherente y de hace días (así estuvo Cartera cuatro días
+                # congelada en el viernes 7 sin que nada lo dijera). Dos
+                # sesiones de margen, igual que _estado_de_los_precios(), para
+                # que un festivo no dispare el aviso.
+                desfase = (market_calendar.ultima_sesion_esperada() - f_ult).days
+                if desfase >= 2:
+                    fila["sesion_desfasada"] = True
+
             # Se manda TAMBIÉN el símbolo real, no solo la clave.
             #
             # La pantalla identifica cada fila por el símbolo de yfinance
@@ -125,8 +203,7 @@ def _get_quick_prices() -> list:
             # funcionaban; para materias primas y cripto no casaban nunca, así
             # que esas filas jamás recibían precio en vivo. Ver auditoría
             # Market, hallazgo #8.
-            result.append({"name": name, "ticker": ticker,
-                           "price": round(last, 2), "chg": round(chg, 2)})
+            result.append(fila)
         except Exception:
             continue
     return result

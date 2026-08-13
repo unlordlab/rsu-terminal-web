@@ -9,6 +9,9 @@ from concurrent.futures import ThreadPoolExecutor
 from services.yf_pool import yf_executor
 import pytz
 from config import settings
+import sys, os
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "..", "shared"))
+import market_calendar  # noqa: E402
 
 _price_cache: dict = {}
 _CACHE_TTL = 60
@@ -162,21 +165,12 @@ def _get_daily_bars(tk_obj, ticker: str) -> tuple[float, float, object]:
     except Exception:
         return 0.0, 0.0, None, None
 
-def _ultima_sesion_esperada() -> "object":
-    """Qué sesión de mercado debería ser la última con datos, ahora mismo.
-
-    Retrocede desde hoy (Nueva York) saltando sábados y domingos, y si el
-    mercado aún no ha cerrado hoy, retrocede un día más: durante la sesión
-    en curso la última barra COMPLETA sigue siendo la de ayer. No conoce
-    los festivos, y por eso el llamador da un día de margen antes de gritar
-    -- vale más callarse el 4 de julio que avisar en falso cada festivo."""
-    d = datetime.now(ZoneInfo("America/New_York"))
-    dia = d.date()
-    if not (d.hour > 16 or (d.hour == 16 and d.minute >= 5)):
-        dia -= timedelta(days=1)
-    while dia.weekday() >= 5:          # 5 sábado, 6 domingo
-        dia -= timedelta(days=1)
-    return dia
+# La lógica de "qué sesión toca" vive ahora en shared/market_calendar.py:
+# la barra superior de Market (routers/ws.py) necesita exactamente el mismo
+# criterio, y tenerla duplicada era asegurar que un día se arreglara en un
+# sitio y no en el otro. Se mantiene este nombre local -- lo usan tanto el
+# resto de este módulo como los tests, que lo parchean.
+_ultima_sesion_esperada = market_calendar.ultima_sesion_esperada
 
 
 def _estado_de_los_precios(filas: list) -> dict:

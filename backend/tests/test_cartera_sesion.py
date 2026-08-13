@@ -106,12 +106,20 @@ def test_cual_es_la_ultima_sesion_segun_el_momento(ahora, esperada, motivo):
     from zoneinfo import ZoneInfo
     fijo = datetime.strptime(ahora, "%Y-%m-%d %H:%M").replace(tzinfo=ZoneInfo("America/New_York"))
 
-    class _dt(C.datetime):
+    # El reloj se congela en `shared/market_calendar.py`, que es donde vive
+    # ahora la función (antes estaba en cartera_service y aquí se parcheaba
+    # `C.datetime`). `C._ultima_sesion_esperada` es un alias de la de allí, así
+    # que se sigue llamando por el nombre de siempre: lo que cambia es de quién
+    # es el reloj.
+    sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..', 'shared'))
+    import market_calendar as MC
+
+    class _dt(MC.datetime):
         @classmethod
         def now(cls, tz=None):
             return fijo
 
-    with patch.object(C, "datetime", _dt):
+    with patch.object(MC, "datetime", _dt):
         assert C._ultima_sesion_esperada() == esperada, motivo
 
 
