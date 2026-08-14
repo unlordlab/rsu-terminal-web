@@ -1779,8 +1779,45 @@ window.__fedMacroTvSwitch = function(btn, frameId) {
     btn.style.border = 'none';
 };
 
+// Reparto alcista/bajista REAL: la etiqueta que el propio autor pone a su
+// mensaje al publicarlo, no sentimiento inferido de un texto. Sin mensajes
+// etiquetados se pinta "—": un 50/50 de relleno sería indistinguible de un
+// valor de verdad dividido.
+//
+// La muestra va al lado a propósito: un 100% de 3 mensajes y un 100% de 25 no
+// dicen lo mismo, y sin ese número el primero se lee como unanimidad.
+function sentCelda(item) {
+    const s = item.sentimiento;
+    if (!s) return '<div style="color:var(--color-muted);font-size:10px;">—</div>';
+    const c = s.pct_alcista >= 70 ? 'var(--color-accent)'
+            : s.pct_alcista <= 40 ? '#f23645' : '#ffb800';
+    return '<div title="' + esc(s.alcistas + ' alcistas y ' + s.bajistas + ' bajistas de '
+            + s.muestra + ' mensajes recientes') + '">'
+        + '<div style="color:' + c + ';font-size:11px;font-weight:500;">' + s.pct_alcista + '%</div>'
+        + '<div style="color:var(--color-muted);font-size:9px;">' + s.mensajes + ' msj</div></div>';
+}
+
+// Recuento de señales de estrangulamiento, no una puntuación con pesos: "3/5"
+// se puede desglosar y defender, un "13" no. Las que no se pueden evaluar --un
+// ETF no tiene datos de posiciones cortas-- bajan el denominador en vez de
+// contar como incumplidas.
+function squeezeCelda(item) {
+    const n = item.senales;
+    if (!n || !n.de) return '<div style="color:var(--color-muted);font-size:10px;">—</div>';
+    const sq = item.squeeze || {};
+    const c = n.n >= 4 ? '#f23645' : n.n >= 3 ? '#ffb800' : 'var(--color-muted)';
+    const detalle = (n.cumplidas || []).join(' · ') || 'ninguna señal';
+    const edad = sq.dias_antiguedad != null
+        ? ' — dato de posiciones cortas del ' + sq.fecha_dato + ', ' + sq.dias_antiguedad + ' días atrás'
+        : '';
+    return '<div title="' + esc(detalle + edad) + '">'
+        + '<div style="color:' + c + ';font-size:11px;font-weight:500;">' + n.n + '/' + n.de + '</div>'
+        + '<div style="color:var(--color-muted);font-size:9px;">'
+        + (sq.pct_float_corto != null ? sq.pct_float_corto + '% cort.' : '') + '</div></div>';
+}
+
 async function loadReddit(el) {
-    el.innerHTML = widgetShell('REDDIT PULSE ' + tt('reddit-pulse'), 'Social buzz · Reddit + StockTwits', loading());
+    el.innerHTML = widgetShell('REDDIT PULSE ' + tt('reddit-pulse'), 'Sentimiento social y candidatos a estrangulamiento', loading());
     try {
         const res  = await fetch('/api/v1/market/reddit', { headers: authHeader() });
         const data = await res.json();
@@ -1790,9 +1827,11 @@ async function loadReddit(el) {
         // ningún sitio (hallazgo #27). Es justo lo que distingue "en Reddit
         // hablan de esto" de "además se está negociando de verdad", así que
         // pasa a tener columna propia en vez de tirarse.
-        const GRID = '30px 58px 78px 64px 56px 1fr';
+        // Dos columnas nuevas: SENT (reparto alcista/bajista real, no menciones)
+        // y SQUEEZE (recuento de señales, desglosable al pasar el ratón).
+        const GRID = '26px 54px 72px 56px 46px 62px 74px 1fr';
         const header  = '<div style="display:grid;grid-template-columns:' + GRID + ';gap:6px;padding:7px 12px;border-bottom:1px solid var(--color-border);font-size:10px;color:var(--color-muted);">'
-            + '<div>#</div><div>TICKER</div><div>PRECIO</div><div>BUZZ ' + tt('social-buzz') + '</div><div>VOL ' + tt('reddit-vol-relativo') + '</div><div>SEÑAL ' + tt('social-signal') + '</div>'
+            + '<div>#</div><div>TICKER</div><div>PRECIO</div><div>BUZZ ' + tt('social-buzz') + '</div><div>VOL ' + tt('reddit-vol-relativo') + '</div><div>SENT ' + tt('sentimiento-social') + '</div><div>SQUEEZE ' + tt('squeeze-senales') + '</div><div>FUENTE</div>'
             + '</div>';
         const rows = data.data.map((item, i) => {
             const up       = item.change >= 0;
@@ -1812,7 +1851,9 @@ async function loadReddit(el) {
                 + '<div><div style="color:var(--color-text);">' + priceStr + '</div><div style="color:' + chgColor + ';font-size:10px;">' + chgStr + '</div></div>'
                 + '<div><div style="background:var(--color-surface2);border-radius:2px;height:4px;margin-bottom:2px;"><div style="height:100%;width:' + item.buzz + '%;background:var(--color-accent);border-radius:2px;"></div></div><div style="color:var(--color-muted);font-size:10px;">' + item.buzz + '</div></div>'
                 + '<div style="color:' + volColor + ';font-size:11px;font-weight:500;">' + volStr + '</div>'
-                + '<div style="color:var(--color-muted);font-size:10px;">' + item.social_hype + '</div>'
+                + sentCelda(item)
+                + squeezeCelda(item)
+                + '<div style="color:var(--color-muted);font-size:10px;">' + esc(item.fuentes || '—') + '</div>'
                 + '</div>';
         }).join('');
         el.innerHTML = widgetShell('REDDIT PULSE ' + tt('reddit-pulse'), sources, header + rows, data.timestamp);

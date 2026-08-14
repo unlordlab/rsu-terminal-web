@@ -850,7 +850,146 @@ def _vol_ratio_desde_serie(vol_serie):
     return round(vol_today / esperado, 2) if esperado > 0 else None
 
 
-def _enrich_ticker(ticker, mention_count, max_mentions, st_tickers, vol_serie=None):
+def _sentimiento_stocktwits(ticker: str) -> dict | None:
+    """Reparto alcista/bajista REAL de los últimos mensajes sobre ese valor.
+
+    No es sentimiento inferido con un modelo -- que sobre jerga de foro acierta
+    poco -- sino la etiqueta que el PROPIO AUTOR pone a su mensaje al
+    publicarlo. Medido el 14/08/2026 sobre GME: 24 de 30 mensajes venían
+    etiquetados, 22 alcistas y 2 bajistas.
+
+    None si no se puede saber: sin mensajes etiquetados no se devuelve un 50/50
+    de relleno, que sería indistinguible de un valor realmente dividido.
+    """
+    from services.cache import cache
+    clave = f"market:st_sent:{ticker}"
+    cacheado = cache.get(clave)
+    if cacheado is not None:
+        return cacheado or None
+    try:
+        r = requests.get(
+            f"https://api.stocktwits.com/api/2/streams/symbol/{ticker}.json",
+            headers={"User-Agent": "Mozilla/5.0 (compatible; MarketDashboard/2.0)"},
+            timeout=8,
+        )
+        if r.status_code != 200:
+            cache.set(clave, {}, 900)      # negativo corto: no reintentar en cada refresco
+            return None
+        etiquetas = [
+            ((m.get("entities") or {}).get("sentiment") or {}).get("basic")
+            for m in r.json().get("messages", [])
+        ]
+        alcistas = sum(1 for e in etiquetas if e == "Bullish")
+        bajistas = sum(1 for e in etiquetas if e == "Bearish")
+        total    = alcistas + bajistas
+        if not total:
+            cache.set(clave, {}, 900)
+            return None
+        datos = {
+            "alcistas":    alcistas,
+            "bajistas":    bajistas,
+            "mensajes":    total,
+            "pct_alcista": round(alcistas / total * 100),
+            # De cuántos mensajes sale: 3 mensajes y 30 no dicen lo mismo, y
+            # sin esto un 100% de 2 mensajes se lee como una unanimidad.
+            "muestra":     len(etiquetas),
+        }
+        cache.set(clave, datos, 900)       # 15 min: el stream se mueve, pero no cada minuto
+        return datos
+    except Exception:
+        return None
+
+
+def _datos_squeeze(ticker: str) -> dict | None:
+    """Los ingredientes clásicos de un estrangulamiento de cortos, con su fecha.
+
+    El dato de posiciones cortas lo publica FINRA dos veces al mes y con
+    retraso -- medido el 14/08/2026, lo más reciente era del 31/07, catorce
+    días antes. NO lo invalida (el float y los días para cubrir se mueven
+    despacio) pero tiene que viajar con su antigüedad para que la pantalla lo
+    diga, igual que la columna HOY % de Cartera dice de qué sesión es.
+
+    Caché de 24 h: publicándose dos veces al mes, pedirlo más a menudo no puede
+    traer nada nuevo y `.info` es la llamada cara de yfinance.
+    """
+    from services.cache import cache
+    clave = f"market:squeeze:{ticker}"
+    cacheado = cache.get(clave)
+    if cacheado is not None:
+        return cacheado or None
+    try:
+        info  = yf.Ticker(ticker).info
+        flotante = info.get("floatShares")
+        cortos   = info.get("sharesShort")
+        if not flotante or not cortos:
+            cache.set(clave, {}, 86400)
+            return None
+        ts = info.get("dateShortInterest")
+        fecha = antiguedad = None
+        if ts:
+            d = datetime.fromtimestamp(ts, timezone.utc)
+            fecha      = d.strftime("%Y-%m-%d")
+            antiguedad = (datetime.now(timezone.utc) - d).days
+        datos = {
+            "float":            int(flotante),
+            "cortos":           int(cortos),
+            "pct_float_corto":  round(cortos / flotante * 100, 1),
+            "dias_para_cubrir": round(float(info["shortRatio"]), 1) if info.get("shortRatio") else None,
+            "fecha_dato":       fecha,
+            "dias_antiguedad":  antiguedad,
+        }
+        cache.set(clave, datos, 86400)
+        return datos
+    except Exception:
+        return None
+
+
+# Cortes de las señales de squeeze. No son una predicción: describen una
+# situación, y cada uno se puede señalar por separado en la pantalla.
+#
+# Referencia de por qué estos y no otros, medido el 14/08/2026: ONDS tenía el
+# 47,4% del float en corto con 2,24 días para cubrir, y era el número uno de
+# los rankings de ruido social de ese día. GME, con el 13,1%, necesitaba 16
+# días -- mucho más corto en proporción pero mucho más difícil de estrangular.
+SQUEEZE_PCT_FLOAT_ALTO = 20.0   # % del float en corto
+SQUEEZE_DIAS_CUBRIR    = 3.0    # días de volumen medio para recomprar lo prestado
+SQUEEZE_FLOAT_PEQUENO  = 150_000_000
+SQUEEZE_VOL_RATIO      = 2.0    # volumen de hoy frente a su media
+
+
+def _senales_squeeze(squeeze: dict | None, vol_ratio, sentimiento: dict | None) -> dict:
+    """Cuántas de las señales cumple, y CUÁLES. Es un recuento legible, no una
+    puntuación con pesos: «3 de 4» se puede desglosar y defender; un «13» no.
+
+    Una señal que no se puede evaluar no cuenta ni a favor ni en contra, y el
+    denominador baja -- así un valor sin dato de cortos no aparenta 0 de 4
+    cuando en realidad son 0 de 2."""
+    cumplidas, evaluables = [], 0
+    if squeeze and squeeze.get("pct_float_corto") is not None:
+        evaluables += 1
+        if squeeze["pct_float_corto"] >= SQUEEZE_PCT_FLOAT_ALTO:
+            cumplidas.append(f"{squeeze['pct_float_corto']:.0f}% del float en corto")
+    if squeeze and squeeze.get("dias_para_cubrir") is not None:
+        evaluables += 1
+        if squeeze["dias_para_cubrir"] <= SQUEEZE_DIAS_CUBRIR:
+            cumplidas.append(f"{squeeze['dias_para_cubrir']:g} días para cubrir")
+    if squeeze and squeeze.get("float"):
+        evaluables += 1
+        if squeeze["float"] <= SQUEEZE_FLOAT_PEQUENO:
+            cumplidas.append("float pequeño")
+    if vol_ratio:
+        evaluables += 1
+        if vol_ratio >= SQUEEZE_VOL_RATIO:
+            cumplidas.append(f"volumen {vol_ratio:g}× su media")
+    if sentimiento:
+        evaluables += 1
+        if sentimiento["pct_alcista"] >= 75:
+            cumplidas.append(f"{sentimiento['pct_alcista']}% de mensajes alcistas")
+    return {"cumplidas": cumplidas, "n": len(cumplidas), "de": evaluables}
+
+
+def _enrich_ticker(ticker, mention_count, max_mentions, st_tickers, vol_serie=None,
+                    reddit_tickers=None):
     """El volumen ya viene descargado en lote por el llamador (una sola
     petición para los 15 tickers) -- antes cada ticker hacía aquí su propio
     history(10d), 15 peticiones por refresco de caché, y encima el resultado
@@ -863,16 +1002,36 @@ def _enrich_ticker(ticker, mention_count, max_mentions, st_tickers, vol_serie=No
         change      = ((price - prev) / prev * 100) if price and prev and prev > 0 else 0.0
         hype_raw    = mention_count / max_mentions
         hype_stars  = max(1, min(5, round(hype_raw * 5)))
-        in_st        = ticker in st_tickers
-        hype_suffix  = " Reddit Top" if hype_raw > 0.5 else (" StockTwits" if in_st else "")
+
+        # La etiqueta dice de dónde SALE el ticker, no en qué puesto va.
+        #
+        # Antes era `" Reddit Top" if hype_raw > 0.5 else ...`, o sea que
+        # cualquier valor en la mitad alta del ranking se anunciaba como
+        # "Reddit Top" aunque viniera entero de StockTwits. Reportado por el
+        # usuario el 14/08/2026 («creo que stocktwits no funciona»): funcionaba,
+        # y de hecho era la única fuente que aportaba tickers ese día -- estaban
+        # todos rotulados como Reddit.
+        in_st = ticker in (st_tickers or [])
+        in_rd = ticker in (reddit_tickers or [])
+        if in_st and in_rd:  fuentes = "Reddit + StockTwits"
+        elif in_rd:          fuentes = "Reddit"
+        elif in_st:          fuentes = "StockTwits"
+        else:                fuentes = ""
+
+        sentimiento = _sentimiento_stocktwits(ticker)
+        squeeze     = _datos_squeeze(ticker)
         return {
             "ticker":      ticker,
             "price":       round(price, 2) if price else None,
             "change":      round(change, 2),
             "buzz":        round(hype_raw * 100),
             "vol_ratio":   vol_ratio,
-            "social_hype": "★" * hype_stars + "☆" * (5 - hype_stars) + hype_suffix,
+            "social_hype": "★" * hype_stars + "☆" * (5 - hype_stars) + (" " + fuentes if fuentes else ""),
+            "fuentes":     fuentes,
             "mentions":    mention_count,
+            "sentimiento": sentimiento,
+            "squeeze":     squeeze,
+            "senales":     _senales_squeeze(squeeze, vol_ratio, sentimiento),
             "ok":          True,
         }
     except Exception:
@@ -996,6 +1155,10 @@ def get_reddit_pulse():
         "Accept": "application/json",
     })
     ticker_mentions = {}
+    # De QUÉ fuente sale cada ticker. Hasta ahora no se guardaba, así que
+    # la pantalla no podía distinguirlas y las rotulaba por su puesto en
+    # el ranking -- de ahí que todo saliera como "Reddit Top".
+    reddit_tickers = set()
     sources = []
     reddit_ok = False
     st_tickers = []
@@ -1030,6 +1193,7 @@ def get_reddit_pulse():
                     text = f"{p.get('title','')} {p.get('selftext','')}".upper()
                     for ticker, count in _extract_tickers(text):
                         ticker_mentions[ticker] = ticker_mentions.get(ticker, 0) + count
+                        reddit_tickers.add(ticker)
             except Exception:
                 continue
         if subs_ok:
@@ -1093,12 +1257,19 @@ def get_reddit_pulse():
 
     results = []
     futures_map = {yf_executor.submit(_enrich_ticker, t, ticker_mentions[t], max_mentions,
-                                      st_tickers, vol_d.get(t)): t for t in top}
+                                      st_tickers, vol_d.get(t), reddit_tickers): t for t in top}
     for future in futures_map:
         results.append(future.result())
 
     results.sort(key=lambda x: -x["buzz"])
-    result = {"data": results[:15], "sources": list(set(sources)), "timestamp": get_timestamp(), "ok": True}
+    # Solo se anuncia como fuente la que de verdad ha APORTADO algún ticker.
+    # Antes bastaba con que respondiera: el 14/08/2026 la cabecera decía
+    # "Reddit + StockTwits" mientras las quince filas venían de StockTwits,
+    # porque Reddit contestó pero no se extrajo de sus titulares ni un
+    # ticker. Una fuente que no aporta nada no es una fuente.
+    aportaron = {f for r in results[:15] for f in (r.get("fuentes") or "").split(" + ") if f}
+    result = {"data": results[:15], "sources": sorted(aportaron) or list(set(sources)),
+              "timestamp": get_timestamp(), "ok": True}
     cache.set("market:reddit", result, TTL["reddit"])
     return result
 

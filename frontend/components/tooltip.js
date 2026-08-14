@@ -546,6 +546,42 @@ Debajo del gráfico verás dos porcentajes medidos sobre el histórico completo:
 Es contexto, no una señal. Los beneficios pueden caer sin que llegue ninguna recesión, y el mercado puede subir mientras caen.`
     },
 
+    "sentimiento-social": {
+        title: "Sentimiento social",
+        short: "De los mensajes recientes sobre este valor, cuántos son alcistas. No es una interpretación automática del texto: es la etiqueta que cada autor pone a su propio mensaje al publicarlo.",
+        long: `Cuando alguien publica un mensaje sobre un valor en una red financiera, puede marcarlo como alcista o bajista al escribirlo. Este porcentaje cuenta esas etiquetas.
+
+POR QUÉ IMPORTA QUE SEA ASÍ:
+Adivinar el tono de un mensaje leyéndolo con un programa funciona mal, sobre todo en foros llenos de ironía, jerga y bromas. Aquí no se adivina nada: se cuenta lo que cada persona declaró de su propio mensaje.
+
+MIRA SIEMPRE EL NÚMERO DE MENSAJES:
+Al lado del porcentaje aparece de cuántos sale. Un 100% de tres mensajes no significa nada; un 85% de veinticinco ya describe algo. Si no hay mensajes etiquetados verás un guion, no un 50% de relleno.
+
+LO QUE NO TE DICE:
+Que el precio vaya a subir. En una red financiera el sentimiento es alcista casi siempre —la gente habla de lo que ha comprado—, así que lo interesante no es que sea alto, sino que cambie o que sea inusualmente bajo.`
+    },
+
+    "squeeze-senales": {
+        title: "Señales de estrangulamiento de cortos",
+        short: "Cuántas condiciones cumple este valor de las que suelen acompañar a una subida forzada por el cierre de posiciones bajistas. Pasa el ratón para ver cuáles.",
+        long: `Cuando alguien apuesta a que una acción va a bajar, toma prestadas acciones y las vende. Para cerrar esa apuesta tiene que volver a comprarlas. Si el precio sube en vez de bajar, muchos se ven obligados a comprar a la vez, y esas compras empujan el precio todavía más arriba. A eso se le llama estrangulamiento.
+
+LAS CONDICIONES QUE SE CUENTAN:
+▸ Qué parte de las acciones disponibles está prestada. Cuanto mayor, más gente tendría que recomprar.
+▸ Cuántos días de negociación normal harían falta para recomprar todo. Pocos días significa que la salida es estrecha.
+▸ Si hay pocas acciones en circulación: con menos papel, el mismo dinero mueve más el precio.
+▸ Si hoy se negocia mucho más de lo habitual.
+▸ Si los mensajes recientes son mayoritariamente alcistas.
+
+POR QUÉ ES UN RECUENTO Y NO UNA PUNTUACIÓN:
+Un "3 de 5" se puede abrir y ver qué tres. Una nota de 13 sobre 100 no se puede discutir ni comprobar. Si alguna condición no se puede evaluar —los fondos cotizados no tienen datos de posiciones prestadas— baja el total en vez de contar como incumplida, para que no parezca que suspende algo que ni siquiera se le puede medir.
+
+EL DATO DE POSICIONES PRESTADAS LLEGA CON RETRASO:
+Se publica dos veces al mes y con días de demora. Al pasar el ratón verás de qué fecha es exactamente. No lo invalida —cambia despacio— pero no es de hoy.
+
+Y LO MÁS IMPORTANTE: esto describe una situación, no predice nada. La mayoría de valores con muchas posiciones bajistas las tienen por un motivo, y siguen bajando.`
+    },
+
     "shiller-cape": {
         title: "CAPE de Shiller",
         short: "P/E del S&P 500 ajustado por ciclo — precio dividido entre el beneficio medio real de los últimos 10 años. Mide si el mercado está caro o barato a largo plazo, no sirve para el corto plazo.",
