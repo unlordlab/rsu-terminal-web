@@ -697,10 +697,28 @@ function renderRsuFlowChart(data) {
         vertical('entrada', 'rgba(255,215,0,0.45)');
         vertical('salida',  'rgba(199,125,255,0.40)');
 
-        const barras = chartO.addHistogramSeries({ priceLineVisible: false, base: 0 });
-        barras.setData(f.osc.map(p => ({
-            time: p.time, value: p.value, color: _L3_COLOR[p.estado] || '#666',
-        })));
+        // El oscilador se dibuja como VELAS de sí mismo, no como histograma:
+        // cada barra va del valor de AYER al de HOY, así que encadena con la
+        // anterior. Es lo que da la sensación de continuidad del original —
+        // con un histograma todas las barras nacen del 0 y el panel se lee
+        // como una sucesión de columnas sueltas en vez de como un recorrido.
+        // Reportado por el usuario el 14/08/2026 comparando las dos capturas.
+        //
+        // No se dibujan mechas: `open` y `close` son los dos únicos valores
+        // que se conocen de cada sesión (el oscilador da un número por día, no
+        // un rango intradía), así que inventar un máximo y un mínimo sería
+        // dibujar un dato que no existe.
+        const barras = chartO.addCandlestickSeries({ priceLineVisible: false });
+        barras.setData(f.osc.map((p, i) => {
+            const previo = i > 0 ? f.osc[i - 1].value : p.value;
+            const color  = _L3_COLOR[p.estado] || '#666';
+            return {
+                time: p.time,
+                open: previo, close: p.value,
+                high: Math.max(previo, p.value), low: Math.min(previo, p.value),
+                color, borderColor: color, wickColor: color,
+            };
+        }));
         chartO.addLineSeries({ color: 'rgba(255,255,255,0.45)', lineWidth: 1, priceLineVisible: false })
               .setData(f.linea);
 
