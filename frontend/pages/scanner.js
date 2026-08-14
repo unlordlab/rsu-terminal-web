@@ -73,6 +73,7 @@ function criteriaPanel() {
         + selectCriterionBlock('phase', 'FASE WEINSTEIN ' + tt('market-phase'), PHASE_OPTIONS.map(o => '<option value="' + o.value + '">' + o.label + '</option>').join(''))
         + selectCriterionBlock('sector', 'SECTOR', '<option value="">Cargando sectores...</option>')
         + toggleCriterionBlock('newhigh', '🔥 MÁXIMOS 52 SEMANAS ' + tt('new-high-52w'), 'Aprox. a ATH')
+        + toggleCriterionBlock('l3zona', 'ZONA BAJA DEL INDICADOR RSU ' + tt('rsu-flow'), 'Entre 10 y 20')
 
         + '</div>'
         + '<div style="display:flex;justify-content:space-between;align-items:center;">'
@@ -242,6 +243,10 @@ function buildQuery(container) {
     if (newHighOn) {
         params.set('new_high_only', 'true');
     }
+    const l3ZonaOn = container.querySelector('#scanner-l3zona-toggle').checked;
+    if (l3ZonaOn) {
+        params.set('l3_zona_baja', 'true');
+    }
     params.set('limit', '200');
     return params.toString();
 }
@@ -285,11 +290,12 @@ function renderResults(el, data) {
         { label: 'RS%',     key: 'rs_pct' },
         { label: 'SCORE TÉC. ' + tt('score-tecnico'), key: 'score_tecnico' },
         { label: 'ABSORC',  key: 'dias_absorcion' },
+        { label: 'RSU ' + tt('rsu-flow'), key: 'l3_fundtrend' },
         { label: 'FASE',    key: 'phase' },
         { label: 'SECTOR',  key: 'sector' },
         { label: '',        key: null },
     ];
-    const tableHeader = '<div style="display:grid;grid-template-columns:70px 90px 60px 60px 70px 60px 1fr 1fr 34px;gap:6px;padding:7px 12px;border-bottom:1px solid var(--color-border);font-size:10px;color:var(--color-muted);letter-spacing:0.05em;">'
+    const tableHeader = '<div style="display:grid;grid-template-columns:70px 90px 60px 60px 70px 60px 62px 1fr 1fr 34px;gap:6px;padding:7px 12px;border-bottom:1px solid var(--color-border);font-size:10px;color:var(--color-muted);letter-spacing:0.05em;">'
         + cols.map(c => c.key
             ? '<div onclick="window.__scannerSort(\'' + c.key + '\')" style="cursor:pointer;user-select:none;">' + c.label + sortArrow(c.key) + '</div>'
             : '<div></div>'
@@ -307,14 +313,22 @@ function renderResults(el, data) {
         const carteraTag   = r.en_cartera   ? ' <span title="Ya tienes esta acción en Cartera">💼</span>' : '';
         const watchlistTag = r.in_watchlist ? ' <span title="En tu Watchlist">⭐</span>' : '';
         const absorcClr = (r.dias_absorcion || 0) >= 5 ? '#00ffad' : (r.dias_absorcion || 0) >= 2 ? '#ff9800' : 'var(--color-muted)';
+        // Mismo amarillo que la franja del indicador en Research, para que
+        // se reconozca como la misma zona sin tener que leer el número.
+        const l3 = r.l3_fundtrend;
+        const l3Clr = l3 == null ? 'var(--color-muted)'
+                    : (l3 >= 10 && l3 <= 20) ? '#ffd700'
+                    : l3 >= 80 ? '#c77dff'
+                    : 'var(--color-muted)';
 
-        return '<div style="display:grid;grid-template-columns:70px 90px 60px 60px 70px 60px 1fr 1fr 34px;gap:6px;padding:8px 12px;border-bottom:1px solid var(--color-border);font-size:11px;align-items:center;' + (r.new_high ? 'background:rgba(255,152,0,0.04);' : '') + '">'
+        return '<div style="display:grid;grid-template-columns:70px 90px 60px 60px 70px 60px 62px 1fr 1fr 34px;gap:6px;padding:8px 12px;border-bottom:1px solid var(--color-border);font-size:11px;align-items:center;' + (r.new_high ? 'background:rgba(255,152,0,0.04);' : '') + '">'
             + '<div onclick="goToResearch(\'' + esc(r.ticker || '') + '\')" class="ticker-link" style="color:var(--color-accent);font-weight:500;cursor:pointer;">' + esc(r.ticker || '') + athTag + carteraTag + watchlistTag + '</div>'
             + '<div style="color:var(--color-muted);">' + (r.precio != null ? '$' + r.precio.toFixed(2) : '—') + '</div>'
             + '<div style="color:' + rvolClr + ';">' + (r.rvol != null ? r.rvol.toFixed(2) + 'x' : '—') + '</div>'
             + '<div style="color:' + rsClr + ';font-weight:500;">' + (r.rs_pct != null ? r.rs_pct.toFixed(0) : '—') + '</div>'
             + '<div style="color:' + scoreClr + ';font-weight:500;">' + (r.score_tecnico != null ? r.score_tecnico.toFixed(0) : '—') + '</div>'
             + '<div style="color:' + absorcClr + ';font-weight:500;">' + esc(r.dias_absorcion || 0) + '/10</div>'
+            + '<div style="color:' + l3Clr + ';font-weight:500;" title="' + esc(r.l3_estado || 'sin lectura') + '">' + (l3 != null ? l3.toFixed(0) : '—') + '</div>'
             + '<div style="color:' + phaseClr + ';font-size:10px;">' + esc(r.phase_label || '—') + '</div>'
             + '<div style="color:var(--color-muted);font-size:10px;">' + esc(r.sector || '—') + '</div>'
             + '<div style="text-align:center;"><button onclick="window.__quickAddWatchlist(\'' + esc(r.ticker || '') + '\', this)" title="Añadir a watchlist" style="background:transparent;border:1px solid var(--color-border);color:var(--color-muted);border-radius:3px;padding:2px 6px;font-size:11px;cursor:pointer;">＋</button></div>'

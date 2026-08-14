@@ -74,6 +74,12 @@ def _freshness(generated_at: str) -> str:
         return "Desconocido"
 
 
+# La franja que el oscilador L3 dibuja como zona de sobreventa. No es el
+# umbral de la senal (la formula exige linea < 25 para dar entrada): es la
+# banda que el indicador PINTA, y es la que se pidio poder rastrear.
+L3_ZONA_BAJA = (10.0, 20.0)
+
+
 def _passes_filters(row: dict, criteria: dict) -> bool:
     """AND estricto: si un criterio está activo (no None), el ticker debe
     cumplirlo para pasar."""
@@ -94,6 +100,15 @@ def _passes_filters(row: dict, criteria: dict) -> bool:
             return False
     if criteria.get("new_high_only"):
         if not row.get("new_high"):
+            return False
+    # Zona baja del oscilador L3 (el "indicador RSU"): la franja amarilla que
+    # el indicador dibuja entre 10 y 20. `or 0` NO vale aquí: un ticker sin
+    # lectura tiene l3_fundtrend=None, y convertirlo en 0 lo metería dentro de
+    # la zona -- justo el ticker del que no sabemos nada aparecería como
+    # sobreventa extrema. Sin dato, fuera del filtro.
+    if criteria.get("l3_zona_baja"):
+        f = row.get("l3_fundtrend")
+        if f is None or not (L3_ZONA_BAJA[0] <= f <= L3_ZONA_BAJA[1]):
             return False
     if criteria.get("absorcion_min") is not None:
         if (row.get("dias_absorcion") or 0) < criteria["absorcion_min"]:
@@ -171,6 +186,7 @@ def run_filter(
     sector: str = None,
     new_high_only: bool = None,
     absorcion_min: int = None,
+    l3_zona_baja: bool = None,
     limit: int = 100,
 ) -> dict:
     cached = cache.get(CACHE_KEY)
@@ -192,6 +208,7 @@ def run_filter(
         "sector":        sector,
         "new_high_only": new_high_only,
         "absorcion_min": absorcion_min,
+        "l3_zona_baja":  l3_zona_baja,
     }
     active_criteria = {k: v for k, v in criteria.items() if v is not None}
 
@@ -215,6 +232,9 @@ def run_filter(
                 "new_high":      bool(row.get("new_high")),
                 "above_sma50":   row.get("above_sma50"),
                 "dias_absorcion": row.get("dias_absorcion", 0),
+                "l3_fundtrend":  row.get("l3_fundtrend"),
+                "l3_linea":      row.get("l3_linea"),
+                "l3_estado":     row.get("l3_estado"),
                 "en_cartera":    ticker in cartera_tickers,
             })
 

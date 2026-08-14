@@ -49,6 +49,7 @@ import yfinance as yf
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "shared"))
 from sp500_universe import SP500_SECTOR_MAP  # noqa: E402
 from weinstein_phases import classify_phase_debounced, classify_phase_weekly  # noqa: E402
+from l3_banker import calcular_l3  # noqa: E402
 from rsrw_engine import (  # noqa: E402
     rs_smooth as _rs_smooth, rs_percentile, PERIODS, WEIGHTS, EMA_SMOOTH,
 )
@@ -294,8 +295,12 @@ def _fetch_batch(all_syms: list) -> tuple:
     # Yahoo) se quedaba sin esos ~40 tickers para toda la noche. RS/RW ya
     # usa este mismo patrón (rsrw_service.py/rsrw_scan.py). Ver auditoría
     # Scanner 21/07/2026, hallazgo #2.
+    # include_hl trae Open/High/Low en la MISMA respuesta que ya se pedía --
+    # cero peticiones extra. Hace falta para el oscilador L3, que necesita el
+    # OHLC completo (su precio típico usa la apertura).
     return download_batch(all_syms, period="2y", batch_size=BATCH_SIZE, batch_sleep=BATCH_SLEEP,
-                           max_retries=3, coverage_threshold=0.85, log_prefix="[Scanner] ")
+                           max_retries=3, coverage_threshold=0.85, include_hl=True,
+                           log_prefix="[Scanner] ")
 
 
 def _technical_score(rs_pct: float, phase: int, rvol: float) -> float:
@@ -388,7 +393,7 @@ def run_scan() -> dict:
     all_syms = list(dict.fromkeys([BENCHMARK] + breadth_universe))
     print(f"🔍 Universo Scanner: {len(tickers)} tickers S&P 500 (RS/fase) · {len(breadth_universe)} tickers para amplitud (S&P 500 + Russell 2000)")
 
-    close_d, vol_d = _fetch_batch(all_syms)
+    close_d, vol_d, hl_d = _fetch_batch(all_syms)
     if BENCHMARK not in close_d:
         raise ValueError("Sin datos de SPY — cancelado")
 
@@ -471,9 +476,36 @@ def run_scan() -> dict:
             except Exception:
                 dias_absorcion = 0
 
+            # Oscilador L3 (el "indicador RSU" de Research), para poder
+            # rastrear desde el escáner los que están en la zona baja. Se
+            # calcula con el MISMO módulo que usa Research, no con una copia:
+            # si algún día cambia la fórmula, cambia en los dos sitios a la vez.
+            # Un ticker sin OHLC completo se queda sin estas tres columnas en
+            # vez de tumbar su fila entera -- el resto del escáner sigue
+            # sirviendo para él.
+            l3_fundtrend = l3_linea = l3_estado = None
+            hl = hl_d.get(ticker)
+            if hl is not None and not hl.empty:
+                try:
+                    ohlc = pd.DataFrame({
+                        "Open":  hl["Open"], "High": hl["High"],
+                        "Low":   hl["Low"],  "Close": prices,
+                    }).dropna()
+                    if len(ohlc) >= 60:
+                        l3 = calcular_l3(ohlc).dropna(subset=["fundtrend", "linea", "estado"])
+                        if not l3.empty:
+                            l3_fundtrend = round(float(l3["fundtrend"].iloc[-1]), 1)
+                            l3_linea     = round(float(l3["linea"].iloc[-1]), 1)
+                            l3_estado    = l3["estado"].iloc[-1]
+                except Exception:
+                    pass
+
             rows.append({
                 "ticker":            ticker,
                 "sector":            sector_raw,
+                "l3_fundtrend":      l3_fundtrend,
+                "l3_linea":          l3_linea,
+                "l3_estado":         l3_estado,
                 "precio":            round(price, 2),
                 "rs_score":          round(rs_score_raw * 100, 2),
                 "rvol":              rvol,
@@ -521,6 +553,12 @@ def run_scan() -> dict:
             # construcción (20,2% por encima de 80, todos los días). Ver
             # RS/RW #16, 02/08/2026.
             "rs_score":      round(float(r["rs_score"]), 2),
+            # Oscilador L3 -- el mismo "indicador RSU" que se ve en Research.
+            # None cuando ese ticker no tuvo OHLC completo: se muestra "—", no
+            # un 0 que parecería una lectura de sobreventa extrema.
+            "l3_fundtrend":  None if pd.isna(r.get("l3_fundtrend")) else float(r.get("l3_fundtrend")),
+            "l3_linea":      None if pd.isna(r.get("l3_linea")) else float(r.get("l3_linea")),
+            "l3_estado":     None if pd.isna(r.get("l3_estado")) else r.get("l3_estado"),
             "phase":         None if pd.isna(r["phase"]) else int(r["phase"]),
             "phase_label":   r["phase_label"],
             "phase_confirmed": None if pd.isna(r.get("phase_confirmed")) else bool(r.get("phase_confirmed")),

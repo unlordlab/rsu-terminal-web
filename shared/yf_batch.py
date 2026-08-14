@@ -30,9 +30,15 @@ def download_batch(tickers, period, batch_size=40, batch_sleep=1.8,
 
     include_hl=True (usado por scripts/canslim_scan.py, sesión 32) añade
     un tercer valor de retorno hl_d: dict[ticker] -> pd.DataFrame con
-    columnas High/Low, extraídas del mismo yf.download() ya en curso --
+    columnas Open/High/Low, extraídas del mismo yf.download() ya en curso --
     con include_hl=False (default) el retorno sigue siendo el 2-tuple de
     siempre, sin tocar el contrato de los 4 consumidores existentes.
+
+    El `Open` se añadió el 14/08/2026 para poder calcular el oscilador L3 en
+    el scan nocturno (shared/l3_banker.py necesita OHLC completo para su
+    precio típico). Es una columna MÁS en el mismo DataFrame, así que
+    canslim_scan.py, que lee hl["High"]/hl["Low"], no se entera. Viene en la
+    misma respuesta de yfinance: no cuesta ni una petición extra.
 
     Si la variable de entorno RSU_PRICE_CACHE apunta a un directorio, los
     tickers ya descargados esa misma noche por OTRO scan se sirven de ahí y
@@ -86,17 +92,20 @@ def download_batch(tickers, period, batch_size=40, batch_sleep=1.8,
                     vols   = raw["Volume"] if quiere_vol and "Volume" in raw.columns.get_level_values(0) else pd.DataFrame()
                     highs  = raw["High"] if quiere_hl and "High" in raw.columns.get_level_values(0) else pd.DataFrame()
                     lows   = raw["Low"] if quiere_hl and "Low" in raw.columns.get_level_values(0) else pd.DataFrame()
+                    opens  = raw["Open"] if quiere_hl and "Open" in raw.columns.get_level_values(0) else pd.DataFrame()
                 else:
                     closes = raw[["Close"]] if "Close" in raw.columns else pd.DataFrame()
                     vols   = raw[["Volume"]] if quiere_vol and "Volume" in raw.columns else pd.DataFrame()
                     highs  = raw[["High"]] if quiere_hl and "High" in raw.columns else pd.DataFrame()
                     lows   = raw[["Low"]] if quiere_hl and "Low" in raw.columns else pd.DataFrame()
+                    opens  = raw[["Open"]] if quiere_hl and "Open" in raw.columns else pd.DataFrame()
 
                 for sym in batch:
                     if sym in closes.columns:
                         series = closes[sym].dropna()
                         vol_sym = (vols[sym].dropna() if sym in vols.columns else pd.Series(dtype=float)) if quiere_vol else None
                         hl_sym  = pd.DataFrame({
+                            "Open": opens[sym] if sym in opens.columns else pd.Series(dtype=float),
                             "High": highs[sym] if sym in highs.columns else pd.Series(dtype=float),
                             "Low":  lows[sym]  if sym in lows.columns  else pd.Series(dtype=float),
                         }) if quiere_hl else None

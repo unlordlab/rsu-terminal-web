@@ -19,13 +19,14 @@ async def scanner_filter(
     sector: Optional[str] = Query(None),
     new_high_only: Optional[bool] = Query(None),
     absorcion_min: Optional[int] = Query(None, ge=0, le=10),
+    l3_zona_baja: Optional[bool] = Query(None),
     limit: int = Query(100, ge=1, le=500),
     user=Depends(verify_token),
 ):
     result = run_filter(
         rvol_min=rvol_min, rs_min=rs_min, score_min=score_min,
         phase=phase, sector=sector, new_high_only=new_high_only,
-        absorcion_min=absorcion_min, limit=limit,
+        absorcion_min=absorcion_min, l3_zona_baja=l3_zona_baja, limit=limit,
     )
     # in_watchlist se añade aquí, fuera de cualquier caché compartida --
     # es por usuario, a diferencia de en_cartera (Cartera es única/global,

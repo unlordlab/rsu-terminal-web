@@ -79,6 +79,11 @@ def _ruta(cache_dir: str, ticker: str) -> str:
     return os.path.join(cache_dir, f"{seguro}.pkl")
 
 
+# Lo que un `hl` cacheado tiene que traer para servir. Es el contrato que
+# escribe shared/yf_batch.py; si allí se añade otra columna, aquí también.
+_COLUMNAS_HL = {"Open", "High", "Low"}
+
+
 def leer(cache_dir: str, ticker: str, filas_necesarias, necesita_volumen: bool, necesita_hl: bool):
     """Devuelve (close, vol, hl) recortados a `filas_necesarias`, o None si
     no sirve: no está cacheado, es de otro día, tiene menos filas de las
@@ -99,6 +104,13 @@ def leer(cache_dir: str, ticker: str, filas_necesarias, necesita_volumen: bool, 
     if necesita_volumen and e.get("vol") is None:
         return None
     if necesita_hl and e.get("hl") is None:
+        return None
+    # Una entrada escrita ANTES de que el lote empezara a traer `Open`
+    # (14/08/2026) tiene el HL completo y pasaría todos los filtros de arriba,
+    # pero le falta la columna que necesita el oscilador L3 -- se serviría un
+    # DataFrame incompleto y el cálculo reventaría o, peor, se saltaría ese
+    # ticker en silencio. Se trata como fallo de caché: se vuelve a descargar.
+    if necesita_hl and not _COLUMNAS_HL.issubset(set(e["hl"].columns)):
         return None
 
     n = filas_necesarias
