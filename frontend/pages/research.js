@@ -610,6 +610,11 @@ function rsuFlowSection(data) {
         + '<div id="rsu-panel-precio" style="height:210px;"></div>'
         + '<div id="rsu-panel-osc" style="height:150px;"></div>'
         + '<div style="color:' + col + ';font-size:11px;margin-top:0.5rem;">Hoy: ' + esc(_L3_NOMBRE[f.estado_actual] || '—') + '</div>'
+        + (f.sma150 && f.sma150.length
+            ? '<div style="color:var(--color-muted);font-size:10px;margin-top:0.35rem;">'
+              + '<span style="display:inline-block;width:14px;height:2px;background:#ffb800;vertical-align:middle;margin-right:5px;"></span>'
+              + 'Media de 150 sesiones (30 semanas) sobre el precio</div>'
+            : '')
         + '<div style="color:var(--color-muted);font-size:10px;margin-top:0.5rem;line-height:1.7;">' + leyenda + '</div>'
         + '</div>';
 }
@@ -663,6 +668,21 @@ function renderRsuFlowChart(data) {
             borderUpColor: '#00ffad', borderDownColor: '#f23645',
             wickUpColor: '#00ffad', wickDownColor: '#f23645',
         }).setData(f.velas);
+
+        // Media de 150 sesiones sobre el precio. Es la de 30 semanas de
+        // Weinstein, la misma que decide la fase en el resto de la terminal,
+        // así que sirve de referencia común: por encima y subiendo es otra
+        // situación que por debajo y bajando, y el oscilador de abajo se lee
+        // distinto en cada una. Va en el panel de PRECIO, no en el del
+        // oscilador: una media de 150 sesiones sobre una serie ya suavizada
+        // no diría nada.
+        if (f.sma150 && f.sma150.length) {
+            chartP.addLineSeries({
+                color: '#ffb800', lineWidth: 1,
+                priceLineVisible: false, lastValueVisible: false,
+                crosshairMarkerVisible: false,
+            }).setData(f.sma150);
+        }
 
         // ── Las dos BANDAS del original ────────────────────────────────────
         //

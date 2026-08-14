@@ -7350,6 +7350,14 @@ export const LESSONS = {
                     { type: 'warning', title: 'No es un porcentaje de nada', content: 'Un valor de 90 no significa que la acción haya subido un 90%, ni que sea buena. Significa que está cotizando en la parte alta de <b>su propio</b> rango reciente. Dos acciones con 90 pueden llevar recorridos completamente distintos.' },
                 ]
             },
+            {
+                heading: 'La línea naranja del gráfico de arriba',
+                blocks: [
+                    { type: 'text', content: 'Sobre las velas de precio hay una línea naranja: es la <b>media de las últimas 150 sesiones</b>, unas 30 semanas. Se calcula sobre el precio, no sobre el indicador.' },
+                    { type: 'text', content: 'Está ahí porque es la misma media que el resto de la terminal usa para decidir en qué fase está un valor. Sirve de referencia común: no se lee igual el panel de abajo cuando el precio está por encima de esa línea y ella sube, que cuando está por debajo y ella baja.' },
+                    { type: 'tip', title: 'Míralas juntas', content: 'Un cruce del indicador con el precio por encima de su media de 150 y esa media subiendo es una situación; el mismo cruce con el precio por debajo y la media cayendo es otra bastante distinta. El indicador solo no puede distinguirlas.' },
+                ]
+            },
         ]
     },
 

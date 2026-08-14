@@ -1793,6 +1793,12 @@ def _get_technical_levels(ticker: str) -> dict:
         try:
             l3 = calcular_l3(hist)
             flujo_serie = calcular_flujo(hist)          # el de volumen, aparte
+            # Media de 150 sesiones (las 30 semanas de Weinstein, la misma que
+            # usa el clasificador de fases). Se calcula sobre el histórico
+            # COMPLETO y se recorta después, no al revés: hacerlo sobre el año
+            # que se pinta dejaría sin media las primeras 150 velas, que es
+            # justo el tramo donde se querría ver por dónde venía el precio.
+            sma150_serie = hist["Close"].rolling(150).mean()
             listo = l3.dropna(subset=["fundtrend", "linea", "estado"])
             if len(listo) >= 60:
                 # Un año de sesiones, para que cuadre con lo que enseña el
@@ -1823,6 +1829,16 @@ def _get_technical_levels(ticker: str) -> dict:
                     "linea": [
                         {"time": d.strftime("%Y-%m-%d"), "value": round(float(v), 2)}
                         for d, v in zip(recorte.index, recorte["linea"])
+                    ],
+                    # Los días sin media se OMITEN, no se mandan a 0 ni a null:
+                    # un valor a cero arrastraría la escala del panel de precio
+                    # hasta abajo y aplastaría las velas. Con un ticker de menos
+                    # de dos años la línea simplemente empieza más tarde, que es
+                    # la verdad de lo que se sabe.
+                    "sma150": [
+                        {"time": d.strftime("%Y-%m-%d"), "value": round(float(v), 2)}
+                        for d, v in zip(barras.index, sma150_serie.loc[barras.index])
+                        if np.isfinite(v)
                     ],
                 }
             else:
