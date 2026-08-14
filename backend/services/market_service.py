@@ -1398,6 +1398,143 @@ def get_shiller_cape() -> dict:
         return {"ok": False, "error": str(e)}
 
 
+# Cortes del ritmo interanual de beneficios. El de 0 no es una convención: es
+# el único que está MEDIDO contra las recesiones oficiales del NBER (ver
+# `senal` en get_corporate_profits). El de arriba es la media histórica de la
+# propia serie, redondeada — «crece más o menos que de costumbre», no un umbral
+# con poder predictivo.
+PROFITS_THRESHOLDS = {"contraccion": 0.0, "media_historica": 8.0}
+
+
+@cache.single_flight("market:corporate_profits")
+def get_corporate_profits() -> dict:
+    """Ritmo interanual de los beneficios empresariales de EE.UU. (FRED `CP`,
+    beneficios después de impuestos de las cuentas nacionales del BEA).
+
+    QUÉ MIDE Y QUÉ NO, porque la diferencia importa: cubre TODAS las empresas
+    americanas, incluidas las no cotizadas. Es una lectura del ciclo económico,
+    no de lo que va a ganar el S&P 500 -- para eso haría falta la serie de
+    beneficios del índice (fichero de Shiller, que ya se descarga aquí para el
+    CAPE pero del que hoy solo se expone el CAPE).
+
+    RETRASO: el BEA publica trimestralmente y con meses de demora, así que el
+    dato más reciente puede tener dos trimestres. Se devuelve
+    `retraso_trimestres` para que la pantalla lo diga en vez de dejar que
+    parezca actual -- mismo criterio que `chg_fecha` en Cartera.
+    """
+    from services.cache import cache
+    cached = cache.get("market:corporate_profits")
+    if cached:
+        return cached
+    try:
+        serie = fred_csv("CP", log_prefix="BeneficiosEmpresariales")
+        if not serie or len(serie) < 5:
+            return {"ok": False, "error": "FRED no devolvió suficientes trimestres de la serie CP"}
+
+        # Interanual = contra el MISMO trimestre del año anterior (4 atrás), no
+        # contra el trimestre previo: los beneficios tienen estacionalidad y
+        # comparar trimestres consecutivos mezcla ciclo con calendario.
+        historia = []
+        for i in range(4, len(serie)):
+            fecha, valor = serie[i]
+            valor_ano_antes = serie[i - 4][1]
+            if not valor_ano_antes:
+                continue
+            historia.append({"date": fecha,
+                             "yoy": round((valor - valor_ano_antes) / abs(valor_ano_antes) * 100, 1),
+                             "nivel_bn": round(valor, 1)})
+        if not historia:
+            return {"ok": False, "error": "No se pudo calcular ningún interanual con los datos recibidos"}
+
+        valores = [h["yoy"] for h in historia]
+        actual  = historia[-1]
+        media   = round(sum(valores) / len(valores), 1)
+        percentil = round(sum(1 for v in valores if v < actual["yoy"]) / len(valores) * 100)
+
+        if actual["yoy"] < PROFITS_THRESHOLDS["contraccion"]:
+            estado, estado_color = "CONTRACCIÓN", "#f23645"
+        elif actual["yoy"] < PROFITS_THRESHOLDS["media_historica"]:
+            estado, estado_color = "CRECE POR DEBAJO DE SU MEDIA", "#ffb800"
+        else:
+            estado, estado_color = "CRECE POR ENCIMA DE SU MEDIA", "var(--color-accent)"
+
+        # Cuántos trimestres de retraso lleva el dato más reciente.
+        # UTC basta: esto cuenta TRIMESTRES, y ninguna zona horaria cambia en
+        # qué trimestre estamos salvo unas horas al año en el límite exacto.
+        anio, mes = int(actual["date"][:4]), int(actual["date"][5:7])
+        hoy = datetime.now(timezone.utc)
+        retraso = max(0, (hoy.year - anio) * 4 + ((hoy.month - 1) // 3 - (mes - 1) // 3))
+
+        result = {
+            "ok":         True,
+            "yoy":        actual["yoy"],
+            "nivel_bn":   actual["nivel_bn"],
+            "date":       actual["date"],
+            "retraso_trimestres": retraso,
+            "media":      media,
+            "percentil":  percentil,
+            "estado":     estado,
+            "estado_color": estado_color,
+            "thresholds": PROFITS_THRESHOLDS,
+            "n_trimestres": len(historia),
+            "desde":      historia[0]["date"],
+            "history":    historia,
+            "senal":      _senal_recesion_beneficios(historia),
+            "timestamp":  get_timestamp(),
+        }
+        # 24h: es un dato TRIMESTRAL, refrescar más a menudo no puede traer
+        # nada nuevo. Mismo criterio que el CAPE, que es mensual.
+        cache.set("market:corporate_profits", result, 86400)
+        return result
+    except Exception as e:
+        print(f"[BeneficiosEmpresariales] ERROR: {type(e).__name__}: {e}")
+        return {"ok": False, "error": str(e)}
+
+
+def _senal_recesion_beneficios(historia: list) -> dict | None:
+    """Track record REAL del indicador contra las recesiones oficiales del NBER
+    (FRED `USREC`), recalculado con cada refresco en vez de dejarlo escrito a
+    mano: así no envejece en silencio.
+
+    Devuelve None si USREC no está disponible -- entonces la pantalla no dice
+    nada sobre el poder de aviso, en vez de citar una cifra que no se ha podido
+    comprobar (mismo criterio anti-fabricación del resto del proyecto).
+
+    Lo que compara: de los trimestres en que los beneficios CAÍAN
+    interanualmente, cuántos tenían una recesión dentro de los 12 meses
+    siguientes -- y lo mismo para los trimestres en que crecían, que es la base
+    contra la que hay que leer el primer número. Sin esa base, un 54% suelto no
+    dice si el indicador aporta algo.
+    """
+    try:
+        rec = dict(fred_csv("USREC", log_prefix="BeneficiosEmpresariales") or [])
+        if not rec:
+            return None
+
+        def recesion_en_los_proximos_meses(fecha_iso: str, meses: int = 12) -> bool:
+            anio, mes = int(fecha_iso[:4]), int(fecha_iso[5:7])
+            for k in range(meses + 1):
+                m = mes + k
+                if rec.get(f"{anio + (m - 1) // 12:04d}-{(m - 1) % 12 + 1:02d}-01") == 1:
+                    return True
+            return False
+
+        cayendo   = [h for h in historia if h["yoy"] < 0]
+        creciendo = [h for h in historia if h["yoy"] >= 0]
+        if not cayendo or not creciendo:
+            return None
+        return {
+            "meses_vista":    12,
+            "n_cayendo":      len(cayendo),
+            "pct_cayendo":    round(sum(1 for h in cayendo if recesion_en_los_proximos_meses(h["date"])) / len(cayendo) * 100),
+            "n_creciendo":    len(creciendo),
+            "pct_creciendo":  round(sum(1 for h in creciendo if recesion_en_los_proximos_meses(h["date"])) / len(creciendo) * 100),
+        }
+    except Exception as e:
+        print(f"[BeneficiosEmpresariales] Track record NBER no disponible: {type(e).__name__}: {e}")
+        return None
+
+
 @cache.single_flight("market:spreads")
 def get_credit_spreads():
     from services.cache import cache, TTL

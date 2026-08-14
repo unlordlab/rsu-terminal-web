@@ -48,6 +48,10 @@ function _programarRefrescos(container) {
         [1800, () => loadCalendar(container.querySelector('#widget-calendar'))],
         [3600, () => loadSpreads(container.querySelector('#widget-spreads'))],
         [3600, () => loadShillerCape(container.querySelector('#widget-shiller-cape'))],
+        // Trimestral: refrescar más a menudo no puede traer nada nuevo. Se deja
+        // en la hora igual que el CAPE por simplicidad -- el backend lo cachea
+        // 24h, así que estas pasadas casi siempre son un no-op.
+        [3600, () => loadCorporateProfits(container.querySelector('#widget-corporate-profits'))],
         [3600, () => loadBriefing(container.querySelector('#widget-briefing'))],
     ];
 
@@ -89,6 +93,7 @@ export function cleanup() {
     _marketChartIds = [];
     if (_spreadsChart) { try { _spreadsChart.destroy(); } catch (_) {} _spreadsChart = null; }
     if (_shillerChart) { try { _shillerChart.destroy(); } catch (_) {} _shillerChart = null; }
+    if (_profitsChart) { try { _profitsChart.destroy(); } catch (_) {} _profitsChart = null; }
 }
 
 if (!document.getElementById('market-live-css')) {
@@ -181,6 +186,14 @@ export async function render(container) {
         + '<div id="widget-shiller-cape" style="display:flex;flex-direction:column;"></div>'
         + '</div>'
 
+        // Fila 4c — Beneficios empresariales de EE.UU. (ciclo de largo plazo).
+        // Va junto al CAPE a propósito: los dos son lecturas lentas, de
+        // trimestres y años, y leerlas al lado de los widgets intradía invita a
+        // confundir su ritmo.
+        + '<div style="margin-bottom:1rem;">'
+        + '<div id="widget-corporate-profits" style="display:flex;flex-direction:column;"></div>'
+        + '</div>'
+
         // Fila 5 — full width
         + '<div style="margin-bottom:1rem;">'
         + '<div id="widget-calendar" style="display:flex;flex-direction:column;"></div>'
@@ -203,6 +216,7 @@ export async function render(container) {
     loadLiquidity(container.querySelector('#widget-liquidity'));
     loadFedMacro(container.querySelector('#widget-fed-macro'));
     loadShillerCape(container.querySelector('#widget-shiller-cape'));
+    loadCorporateProfits(container.querySelector('#widget-corporate-profits'));
     loadCalendar(container.querySelector('#widget-calendar'));
 
     _programarRefrescos(container);
@@ -1591,6 +1605,156 @@ function renderShillerChart() {
             scales: {
                 x: { ticks: { color: '#555', font: { size: 9 }, maxTicksLimit: monthly ? 15 : 10, maxRotation: monthly ? 45 : 0 }, grid: { color: 'rgba(255,255,255,0.03)' } },
                 y: { ticks: { color: '#555', font: { size: 9 } }, grid: { color: 'rgba(255,255,255,0.04)' } }
+            }
+        }
+    });
+}
+
+// ── BENEFICIOS EMPRESARIALES DE EE.UU. ────────────────────────────────────────
+//
+// Ritmo interanual de los beneficios de las empresas americanas (FRED `CP`,
+// cuentas nacionales del BEA). Dos cosas hay que dejar claras EN PANTALLA, no
+// solo aquí:
+//
+//   1. El dato llega con retraso. El BEA publica por trimestres y con meses de
+//      demora, así que lo más fresco puede tener dos trimestres. Se pinta la
+//      fecha real y los trimestres de retraso, en vez de dejar que el número
+//      parezca de hoy -- mismo criterio que la columna HOY % de Cartera.
+//   2. Mide TODAS las empresas de EE.UU., cotizadas y no cotizadas. Es una
+//      lectura del ciclo económico, no una previsión de lo que va a ganar el
+//      S&P 500.
+let _profitsData  = null;
+let _profitsChart = null;
+let _profitsRange = '20y'; // '20y' | 'all'
+
+async function loadCorporateProfits(el) {
+    if (!el) return;
+    const titulo    = 'BENEFICIOS EMPRESARIALES EE.UU. ';
+    const subtitulo = 'Ritmo interanual · cuentas nacionales (BEA) vía FRED';
+    el.innerHTML = widgetShell(titulo, subtitulo, loading());
+    try {
+        const res  = await fetch('/api/v1/market/corporate-profits', { headers: authHeader() });
+        const data = await res.json();
+        if (!data.ok) throw new Error(data.error || 'Sin datos');
+        _profitsData = data;
+
+        const signo = data.yoy >= 0 ? '+' : '';
+        const summary = '<div style="display:flex;border-bottom:1px solid var(--color-border);flex-wrap:wrap;">'
+            + '<div style="flex:1;min-width:150px;padding:0.75rem 1rem;border-right:1px solid var(--color-border);">'
+            + '<div style="color:var(--color-muted);font-size:10px;margin-bottom:4px;">CRECIMIENTO INTERANUAL</div>'
+            + '<div style="color:' + data.estado_color + ';font-size:20px;">' + signo + data.yoy.toFixed(1) + '%</div>'
+            + '<div style="margin-top:6px;display:inline-block;padding:1px 6px;border-radius:3px;background:' + data.estado_color + '22;color:' + data.estado_color + ';font-size:10px;">' + esc(data.estado) + '</div>'
+            + '</div>'
+            + '<div style="flex:1;min-width:150px;padding:0.75rem 1rem;border-right:1px solid var(--color-border);">'
+            + '<div style="color:var(--color-muted);font-size:10px;margin-bottom:4px;">MEDIA DESDE ' + esc(data.desde.slice(0, 4)) + '</div>'
+            + '<div style="color:var(--color-text);font-size:20px;">+' + data.media.toFixed(1) + '%</div>'
+            + '<div style="color:var(--color-muted);font-size:10px;margin-top:6px;">' + data.n_trimestres + ' trimestres</div>'
+            + '</div>'
+            + '<div style="flex:1;min-width:150px;padding:0.75rem 1rem;">'
+            + '<div style="color:var(--color-muted);font-size:10px;margin-bottom:4px;">SU SITIO EN LA HISTORIA</div>'
+            + '<div style="color:var(--color-text);font-size:20px;">percentil ' + data.percentil + '</div>'
+            + '<div style="color:var(--color-muted);font-size:10px;margin-top:6px;">ha crecido menos que ahora en el ' + data.percentil + '% de los trimestres</div>'
+            + '</div>'
+            + '</div>';
+
+        // El aviso del retraso NO es un detalle: sin él, un +18% de hace medio
+        // año se lee como si describiera el trimestre en curso.
+        const retraso = data.retraso_trimestres > 0
+            ? '<div style="background:rgba(255,184,0,0.07);border-bottom:1px solid #ffb80033;padding:7px 14px;color:#ffb800;font-size:11px;">'
+              + 'Dato del trimestre que empieza en ' + esc(fmtFecha(data.date)) + ', publicado con '
+              + data.retraso_trimestres + ' ' + (data.retraso_trimestres === 1 ? 'trimestre' : 'trimestres')
+              + ' de retraso: el BEA no publica cifras del trimestre en curso. Sirve para situar el ciclo, no para decidir hoy.'
+              + '</div>'
+            : '';
+
+        // Track record medido, con la base de comparación al lado. Un 54% suelto
+        // no dice nada: lo que lo hace informativo es el 17% de los trimestres
+        // en que los beneficios crecían.
+        const s = data.senal;
+        const senal = s
+            ? '<div style="padding:8px 14px;border-bottom:1px solid var(--color-border);font-size:11px;color:var(--color-muted);line-height:1.5;">'
+              + 'Cuando los beneficios caían interanualmente (' + s.n_cayendo + ' trimestres), '
+              + '<span style="color:#f23645;">el ' + s.pct_cayendo + '%</span> tenía una recesión oficial en los '
+              + s.meses_vista + ' meses siguientes. Cuando crecían (' + s.n_creciendo + '), '
+              + '<span style="color:var(--color-accent);">el ' + s.pct_creciendo + '%</span>. '
+              + 'Es contexto de ciclo medido sobre el histórico, no una señal de compra ni de venta.'
+              + '</div>'
+            : '';
+
+        const tabs = '<div style="display:flex;gap:6px;padding:8px 12px;border-bottom:1px solid var(--color-border);">'
+            + '<button class="profits-tab" data-range="20y" onclick="window.__profitsSwitch(this)" style="background:var(--color-accent);color:#000;border:none;border-radius:3px;padding:3px 10px;font-size:10px;cursor:pointer;">ÚLTIMOS 20 AÑOS</button>'
+            + '<button class="profits-tab" data-range="all" onclick="window.__profitsSwitch(this)" style="background:transparent;color:var(--color-muted);border:1px solid var(--color-border);border-radius:3px;padding:3px 10px;font-size:10px;cursor:pointer;">TODO EL HISTÓRICO (' + esc(data.desde.slice(0, 4)) + '-hoy)</button>'
+            + '</div>';
+
+        const chartHtml = '<div style="height:260px;padding:10px;"><canvas id="profits-chart"></canvas></div>';
+
+        el.innerHTML = widgetShell(titulo + tt('beneficios-empresariales'), subtitulo,
+                                   summary + retraso + senal + tabs + chartHtml, data.timestamp);
+
+        _profitsRange = '20y';
+        _loadChartJsThen(() => renderProfitsChart());
+    } catch (e) {
+        el.innerHTML = widgetShell(titulo, subtitulo, widgetError(e.message));
+    }
+}
+
+window.__profitsSwitch = function(btn) {
+    _profitsRange = btn.getAttribute('data-range');
+    renderProfitsChart();
+    btn.parentElement.querySelectorAll('.profits-tab').forEach(function(b) {
+        b.style.background = 'transparent';
+        b.style.color = 'var(--color-muted)';
+        b.style.border = '1px solid var(--color-border)';
+    });
+    btn.style.background = 'var(--color-accent)';
+    btn.style.color = '#000';
+    btn.style.border = 'none';
+};
+
+function renderProfitsChart() {
+    const ctx = document.getElementById('profits-chart');
+    if (!ctx || !_profitsData || !_profitsData.history) return;
+
+    const trimestral = _profitsRange === '20y';
+    const hist   = trimestral ? _profitsData.history.slice(-80) : _profitsData.history;
+    const labels = hist.map(function(h) {
+        const partes = h.date.split('-');
+        const anio = partes[0], mes = parseInt(partes[1], 10);
+        const q = Math.floor((mes - 1) / 3) + 1;
+        return trimestral ? ('T' + q + ' ' + anio.slice(2)) : anio;
+    });
+    const values = hist.map(function(h) { return h.yoy; });
+    const flat = function(v) { return labels.map(function() { return v; }); };
+
+    // Verde por encima de cero, rojo por debajo: la línea del cero es el único
+    // corte que está medido contra las recesiones, así que se marca de verdad.
+    const colores = values.map(function(v) { return v >= 0 ? 'var(--color-accent)' : '#f23645'; });
+
+    if (_profitsChart) { _profitsChart.destroy(); _profitsChart = null; }
+
+    _profitsChart = new Chart(ctx, {
+        type: 'bar',
+        data: {
+            labels: labels,
+            datasets: [
+                { label: 'Interanual', data: values, backgroundColor: colores, borderWidth: 0, order: 2 },
+                { label: 'Contracción (0%)', type: 'line', data: flat(0), borderColor: '#f23645', borderWidth: 1, pointRadius: 0, fill: false, order: 1 },
+                { label: 'Media histórica (+' + _profitsData.media.toFixed(1) + '%)', type: 'line', data: flat(_profitsData.media), borderColor: '#ffb800', borderWidth: 1, pointRadius: 0, borderDash: [5, 4], fill: false, order: 0 },
+            ]
+        },
+        options: {
+            responsive: true, maintainAspectRatio: false,
+            interaction: { mode: 'index', intersect: false },
+            plugins: {
+                legend: { display: true, position: 'top', labels: { color: '#888', boxWidth: 12, font: { size: 9 } } },
+                tooltip: {
+                    backgroundColor: '#111', borderColor: '#333', borderWidth: 1, titleColor: '#aaa', bodyColor: '#ccc',
+                    callbacks: { label: function(item) { return item.dataset.label + ': ' + (item.parsed.y >= 0 ? '+' : '') + item.parsed.y.toFixed(1) + '%'; } }
+                },
+            },
+            scales: {
+                x: { ticks: { color: '#555', font: { size: 9 }, maxTicksLimit: trimestral ? 14 : 10, maxRotation: trimestral ? 45 : 0 }, grid: { color: 'rgba(255,255,255,0.03)' } },
+                y: { ticks: { color: '#555', font: { size: 9 }, callback: function(v) { return v + '%'; } }, grid: { color: 'rgba(255,255,255,0.04)' } }
             }
         }
     });

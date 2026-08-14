@@ -7,7 +7,8 @@ from services.market_service import (
     get_reddit_pulse, get_nightly_briefing,
     get_credit_spreads, get_market_breadth, get_shiller_cape,
     get_fed_macro, get_vix_levels, get_crypto_prices, get_crypto_fear_greed,
-    get_liquidity, get_sector_composition, get_crypto_relative_strength
+    get_liquidity, get_sector_composition, get_crypto_relative_strength,
+    get_corporate_profits
 )
 from services.earnings_service import get_earnings_calendar, get_earnings_ticker
 
@@ -97,6 +98,10 @@ async def credit_spreads(user=Depends(verify_token)):
 @router.get("/shiller-cape")
 async def shiller_cape(user=Depends(verify_token)):
     return get_shiller_cape()
+
+@router.get("/corporate-profits")
+async def corporate_profits(user=Depends(verify_token)):
+    return get_corporate_profits()
 
 @router.get("/fed-macro")
 async def fed_macro(user=Depends(verify_token)):

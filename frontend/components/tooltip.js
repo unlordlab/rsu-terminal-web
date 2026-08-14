@@ -524,6 +524,28 @@ CÓMO USARLO PARA PLANIFICAR:
 Antes de eventos de impacto Alto, muchos traders reducen tamaño de posición, evitan abrir nuevas operaciones justo antes de la publicación, o amplían stops para evitar ser expulsados por el ruido de volatilidad puntual que suele acompañar a estos datos.`
     },
 
+    "beneficios-empresariales": {
+        title: "Beneficios empresariales de EE.UU.",
+        short: "Cuánto más (o menos) ganan las empresas americanas que hace un año. Es una foto del ciclo económico, y llega con varios meses de retraso — no sirve para decidir hoy.",
+        long: `Este panel mide el ritmo al que crecen los beneficios de las empresas de Estados Unidos, comparando cada trimestre con el MISMO trimestre del año anterior. Se compara con el año anterior, y no con el trimestre de antes, porque muchos negocios ganan más en unas épocas del año que en otras: comparar Navidad con verano mezclaría el ciclo con el calendario.
+
+QUÉ MIDE, Y QUÉ NO:
+Cubre TODAS las empresas americanas, incluidas las que no cotizan en bolsa. Eso lo hace una buena lectura de cómo va la economía en su conjunto, pero NO es una previsión de lo que va a ganar el S&P 500. Una cosa es que a las empresas del país les vaya bien y otra distinta lo que hagan las cuarenta o cincuenta que más pesan en el índice.
+
+EL RETRASO ES IMPORTANTE:
+La oficina que publica estos datos lo hace por trimestres y con meses de demora, así que la cifra más reciente puede tener medio año. Por eso el panel dice siempre de qué trimestre es el dato y cuánto retraso lleva. Sirve para situarte en el ciclo, no para decidir una entrada o una salida.
+
+CÓMO LEER EL GRÁFICO:
+▸ Barras verdes → los beneficios crecen respecto al año anterior.
+▸ Barras rojas → los beneficios caen. Es el único corte que tiene valor demostrado.
+▸ Línea amarilla → el crecimiento medio de toda la serie. Por encima, las empresas ganan más de lo habitual; por debajo, siguen creciendo pero con menos fuerza de la normal.
+
+LO QUE DICE LA HISTORIA:
+Debajo del gráfico verás dos porcentajes medidos sobre el histórico completo: cuántas veces, con los beneficios cayendo, hubo una recesión oficial en el año siguiente, y cuántas veces la hubo estando los beneficios en crecimiento. El segundo número es la clave para leer el primero: sin saber con qué frecuencia pasa "de normal", un porcentaje suelto no dice si el indicador aporta algo o no.
+
+Es contexto, no una señal. Los beneficios pueden caer sin que llegue ninguna recesión, y el mercado puede subir mientras caen.`
+    },
+
     "shiller-cape": {
         title: "CAPE de Shiller",
         short: "P/E del S&P 500 ajustado por ciclo — precio dividido entre el beneficio medio real de los últimos 10 años. Mide si el mercado está caro o barato a largo plazo, no sirve para el corto plazo.",
