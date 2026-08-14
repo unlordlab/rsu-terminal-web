@@ -151,4 +151,9 @@ export const LESSON_INDEX = {
     '30-3': { title: 'Cómo Compra: Por Peldaños', words: 307 },
     '30-4': { title: 'Cómo Vende: Tres Salidas Según Lo Honda Que Fue', words: 360 },
     '30-5': { title: 'Por Qué Interesa Una Estrategia Que Gana Cuando El Mercado Cae', words: 599 },
+    '31-1': { title: 'Qué Mide el Indicador RSU', words: 389 },
+    '31-2': { title: 'Los Colores y las Dos Franjas', words: 390 },
+    '31-3': { title: 'Cómo Se Usa: Una Estrategia Sencilla', words: 407 },
+    '31-4': { title: 'Dónde Falla y Cómo Evitarlo', words: 356 },
+    '31-5': { title: 'El Flujo con Volumen y De Dónde Viene el Indicador', words: 406 },
 };

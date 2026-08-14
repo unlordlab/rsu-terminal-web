@@ -7309,4 +7309,200 @@ export const LESSONS = {
             },
         ]
     },
+
+    // ── MÓDULO 31 · GUÍA DE LA TERMINAL — EL INDICADOR RSU ─────────────────
+    // Manual de usuario del oscilador que aparece bajo el gráfico en
+    // Research. Reproduce un indicador público conocido (L3 Banker Fund Flow
+    // Trend Oscillator, de blackcat1402, publicado en abierto en TradingView),
+    // así que quien ya lo conozca de allí encuentra aquí las mismas lecturas.
+
+    '31-1': {
+        moduleId: 31,
+        lessonIndex: 0,
+        title: 'Qué Mide el Indicador RSU',
+        duration: '5 min',
+        intro: 'Bajo el gráfico de cada valor hay un panel con barras de colores. No es un adorno ni un segundo gráfico de precio: mide otra cosa, y saber cuál es lo que hace que sirva para algo.',
+        sections: [
+            {
+                heading: 'La pregunta que responde',
+                blocks: [
+                    { type: 'text', content: 'El gráfico de arriba te dice <b>cuánto vale</b> una acción. El panel de abajo te dice <b>en qué parte de su propio rango reciente</b> está cotizando, y si esa posición está mejorando o empeorando.' },
+                    { type: 'text', content: 'Son preguntas distintas. Una acción puede estar cara en términos absolutos y en la parte baja de su rango de los últimos meses, o barata y en lo más alto del suyo. El indicador solo mira lo segundo.' },
+                    { type: 'concept', title: 'Todo sale del precio', content: 'El indicador se calcula únicamente con la apertura, el máximo, el mínimo y el cierre de cada sesión. No usa volumen, ni resultados, ni noticias. Es una lectura de comportamiento del precio, nada más.' },
+                ]
+            },
+            {
+                heading: 'Las dos líneas',
+                blocks: [
+                    { type: 'text', content: 'En el panel hay dos cosas: las <b>barras de colores</b> y una <b>línea clara</b> que las atraviesa.' },
+                    { type: 'table', headers: ['Qué es', 'Qué representa', 'Cómo se comporta'], rows: [
+                        ['Las barras', 'La lectura rápida: dónde está el precio dentro de su rango de las últimas semanas', 'Se mueve deprisa, sube y baja con fuerza'],
+                        ['La línea', 'La lectura de fondo, más lenta y suavizada', 'Se mueve despacio, marca la dirección general'],
+                    ]},
+                    { type: 'text', content: 'La relación entre las dos es lo importante. Cuando las barras van por encima de la línea, la situación reciente es mejor que el fondo. Cuando van por debajo, peor.' },
+                    { type: 'tip', title: 'Léelo como una carrera', content: 'La línea es el ritmo medio. Las barras son el ritmo de esta semana. Lo interesante no es la posición de cada una por separado, sino el momento en que una adelanta a la otra.' },
+                ]
+            },
+            {
+                heading: 'La escala',
+                blocks: [
+                    { type: 'text', content: 'Todo se mueve entre 0 y 100. El 0 sería el punto más bajo de su rango reciente y el 100 el más alto. El 50, marcado con una línea fina, es el punto medio.' },
+                    { type: 'warning', title: 'No es un porcentaje de nada', content: 'Un valor de 90 no significa que la acción haya subido un 90%, ni que sea buena. Significa que está cotizando en la parte alta de <b>su propio</b> rango reciente. Dos acciones con 90 pueden llevar recorridos completamente distintos.' },
+                ]
+            },
+        ]
+    },
+
+    '31-2': {
+        moduleId: 31,
+        lessonIndex: 1,
+        title: 'Los Colores y las Dos Franjas',
+        duration: '6 min',
+        intro: 'El panel usa seis colores y dos franjas de fondo. Cada uno significa una cosa concreta, y una vez los reconoces se lee de un vistazo sin tener que mirar números.',
+        sections: [
+            {
+                heading: 'Qué dice cada color',
+                blocks: [
+                    { type: 'table', headers: ['Color', 'Qué significa'], rows: [
+                        ['<span style="color:#ffd700;">Amarillo</span>', 'Entrada: las barras acaban de cruzar la línea hacia arriba, y venían de la zona baja'],
+                        ['<span style="color:#c77dff;">Violeta</span>', 'Salida: las barras acaban de cruzar la línea hacia abajo, viniendo de la zona alta'],
+                        ['<span style="color:#00ffad;">Verde</span>', 'Las barras van por encima de su línea'],
+                        ['<span style="color:#f23645;">Rojo</span>', 'Las barras van por debajo de su línea'],
+                        ['<span style="color:#4a9eff;">Azul</span>', 'Va por encima, pero perdiendo fuerza deprisa'],
+                        ['<span style="color:#9e9e9e;">Gris</span>', 'Va por debajo, pero ya sin caer más'],
+                    ]},
+                    { type: 'text', content: 'El amarillo y el violeta son los dos únicos que marcan un <b>momento</b>: aparecen el día del cruce y no se repiten mientras dure la situación. Los otros cuatro describen un <b>estado</b> que puede durar semanas.' },
+                    { type: 'concept', title: 'Azul y gris son avisos de agotamiento', content: 'El azul aparece cuando algo va bien pero está perdiendo fuelle rápido. El gris, cuando algo va mal pero ha dejado de empeorar. Los dos suelen aparecer antes de un cambio, no después.' },
+                ]
+            },
+            {
+                heading: 'Las dos franjas de fondo',
+                blocks: [
+                    { type: 'text', content: 'El panel tiene dos bandas pintadas de fondo que no cambian nunca: una <b>amarilla abajo, entre 10 y 20</b>, y una <b>violeta arriba, entre 80 y 90</b>.' },
+                    { type: 'text', content: 'Son zonas de referencia. Cuando las barras entran en la franja de abajo, el precio está en la parte muy baja de su rango reciente. Cuando entran en la de arriba, en la muy alta.' },
+                    { type: 'warning', title: 'Estar en una franja no es una señal', content: 'Un valor puede quedarse semanas en la franja baja y seguir cayendo. La franja dice dónde está, no lo que va a hacer. Lo que se considera señal es el <b>cruce</b>, no la permanencia.' },
+                ]
+            },
+            {
+                heading: 'Las rayas verticales',
+                blocks: [
+                    { type: 'text', content: 'De vez en cuando verás una raya de color que ocupa todo el alto del panel. Son las entradas (amarillas) y salidas (violetas), dibujadas así para que se localicen de un vistazo en un histórico largo.' },
+                    { type: 'tip', title: 'Cuenta las rayas antes de nada', content: 'Si un valor tiene tres o cuatro rayas amarillas en un año, el indicador está encontrando un patrón claro en él. Si tiene quince, está reaccionando a ruido y conviene no fiarse mucho de la siguiente.' },
+                ]
+            },
+        ]
+    },
+
+    '31-3': {
+        moduleId: 31,
+        lessonIndex: 2,
+        title: 'Cómo Se Usa: Una Estrategia Sencilla',
+        duration: '7 min',
+        intro: 'El indicador no dice qué comprar. Lo que hace bien es señalar momentos que merecen una segunda mirada. Esta lección propone una forma concreta de usarlo, con sus condiciones y sus límites.',
+        sections: [
+            {
+                heading: 'La idea de fondo',
+                blocks: [
+                    { type: 'text', content: 'La lógica del indicador es que un valor que ha estado castigado y empieza a recuperar posiciones dentro de su propio rango es más interesante que uno que lleva tiempo arriba y empieza a perderlas.' },
+                    { type: 'text', content: 'Traducido al panel: interesa el momento en que las barras <b>salen de la franja baja cruzando su línea hacia arriba</b>. Ese es el amarillo.' },
+                ]
+            },
+            {
+                heading: 'Una estrategia de cuatro pasos',
+                blocks: [
+                    { type: 'steps', items: [
+                        'Filtra primero. En la sección Scanner, activa el criterio de zona baja del indicador: te devuelve los valores que están hoy en esa franja. Suelen ser unas pocas decenas de todo el índice.',
+                        'Descarta los que van en contra de la tendencia general. Un valor en la franja baja dentro de una caída sostenida no está barato, está cayendo. El indicador no distingue entre las dos cosas: eso lo miras tú en el gráfico de arriba.',
+                        'Espera el amarillo. Estar en la franja baja no es la señal. La señal es el cruce, y puede tardar semanas en llegar o no llegar nunca. Mientras tanto, el valor se queda en tu lista de seguimiento.',
+                        'Si llega, decide con el resto de la terminal. Mira los fundamentales en Research, si hay resultados a la vuelta de la esquina, en qué fase está. El indicador te ha dicho cuándo mirar; qué hacer lo decides con todo lo demás.',
+                    ]},
+                    { type: 'concept', title: 'El indicador da el CUÁNDO, no el QUÉ', content: 'Ese es todo su papel. Usarlo para elegir qué comprar es pedirle algo que no puede saber, porque no mira ni el negocio ni el precio absoluto. Usarlo para decidir cuándo prestar atención a algo que ya te interesaba es para lo que sirve.' },
+                ]
+            },
+            {
+                heading: 'Cuándo soltar',
+                blocks: [
+                    { type: 'text', content: 'El movimiento simétrico es el violeta: las barras cruzan la línea hacia abajo viniendo de la franja alta. Es la manera que tiene el indicador de decir que lo que venía funcionando ha dejado de hacerlo.' },
+                    { type: 'warning', title: 'Un aviso no es un plan de salida', content: 'Salir solo porque aparece un violeta te sacará de movimientos que luego continúan. El aviso es útil para revisar la posición y comprobar si tu razón para tenerla sigue en pie, no como orden automática de venta.' },
+                ]
+            },
+        ]
+    },
+
+    '31-4': {
+        moduleId: 31,
+        lessonIndex: 3,
+        title: 'Dónde Falla y Cómo Evitarlo',
+        duration: '6 min',
+        intro: 'Todo indicador que se calcula solo con el precio tiene puntos ciegos previsibles. Conocerlos no lo estropea: es lo que evita usarlo donde no funciona.',
+        sections: [
+            {
+                heading: 'Va por detrás, siempre',
+                blocks: [
+                    { type: 'text', content: 'El cálculo usa medias de sesiones anteriores, así que reacciona <b>después</b> del movimiento, nunca antes. Cuando aparece un amarillo, la subida ya empezó hace unos días.' },
+                    { type: 'text', content: 'Esto no es un defecto que se pueda corregir: es el precio de suavizar. Un indicador que reaccionara al instante marcaría también todos los movimientos falsos.' },
+                ]
+            },
+            {
+                heading: 'En tendencias fuertes se queda pegado a un extremo',
+                blocks: [
+                    { type: 'text', content: 'Un valor en subida sostenida puede pasar meses por encima de 80, y uno en caída sostenida meses por debajo de 20. En esos tramos el indicador deja de aportar información: no hay cruces, o los que hay son falsas alarmas.' },
+                    { type: 'tip', title: 'Mira antes en qué situación está', content: 'El indicador rinde mejor en valores que se mueven en rango, y peor en los que están en tendencia clara. Antes de esperar un cruce, mira el gráfico de arriba y pregúntate en cuál de los dos casos estás.' },
+                ]
+            },
+            {
+                heading: 'No sabe por qué cae algo',
+                blocks: [
+                    { type: 'text', content: 'Una acción que cae porque el sector entero corrige y otra que cae porque el negocio se ha deteriorado producen exactamente la misma lectura. El indicador no puede distinguirlas, porque solo ve el precio.' },
+                    { type: 'warning', title: 'Ahí es donde entra el resto de la terminal', content: 'Ese es el motivo de que la estrategia de la lección anterior no termine en el indicador. Un valor en la franja baja con los fundamentales empeorando no es una oportunidad: es una trampa que se parece mucho a una.' },
+                ]
+            },
+            {
+                heading: 'El dato del día no está cerrado',
+                blocks: [
+                    { type: 'text', content: 'Con el mercado abierto, la última barra se calcula con el precio de ese momento y puede cambiar hasta el cierre. Un cruce que aparece a media sesión puede haber desaparecido al final del día.' },
+                    { type: 'tip', title: 'Confirma con el cierre', content: 'Si algo se decide sobre un cruce, conviene esperar a que la sesión termine. Es la diferencia entre reaccionar a un movimiento y reaccionar a un dato provisional.' },
+                ]
+            },
+        ]
+    },
+
+    '31-5': {
+        moduleId: 31,
+        lessonIndex: 4,
+        title: 'El Flujo con Volumen y De Dónde Viene el Indicador',
+        duration: '5 min',
+        intro: 'Junto al panel hay un segundo número, y el indicador tiene un origen conocido. Las dos cosas conviene saberlas para no confundir lo que estás mirando.',
+        sections: [
+            {
+                heading: 'El «Flujo con volumen» es otra cosa',
+                blocks: [
+                    { type: 'text', content: 'Arriba a la derecha del panel verás un número sobre 100 etiquetado <b>Flujo con volumen</b>. No forma parte del indicador: es una medida aparte, propia de esta terminal.' },
+                    { type: 'text', content: 'La diferencia está en el nombre. El indicador RSU no mira el volumen en ningún momento, solo el precio. Este otro número sí lo pondera, así que da más peso a los movimientos que se hicieron con mucha negociación que a los que se hicieron con poca.' },
+                    { type: 'tip', title: 'Cuándo se miran juntos', content: 'Cuando los dos apuntan igual, la lectura es más sólida: el precio se ha movido y además lo ha hecho con participación. Cuando se contradicen, suele significar que el movimiento del precio no lo acompaña mucha gente.' },
+                ]
+            },
+            {
+                heading: 'De dónde sale',
+                blocks: [
+                    { type: 'text', content: 'El indicador reproduce el <b>L3 Banker Fund Flow Trend Oscillator</b>, un indicador publicado en abierto por su autor, blackcat1402, en TradingView. Se reproduce con su fórmula original y sin modificarla.' },
+                    { type: 'text', content: 'Eso tiene una ventaja práctica: si lo has usado antes en otra plataforma, las lecturas y los colores son los mismos, y no tienes que reaprender nada.' },
+                    { type: 'concept', title: 'Por qué no se ha «mejorado»', content: 'El valor de un indicador conocido está en parte en que mucha gente lo lee igual. Cambiarle la fórmula movería las señales de sitio y dejaría de ser comparable con lo que ves en cualquier otro sitio. Si en el futuro se le añade algo, irá aparte y etiquetado como tal, igual que el flujo con volumen.' },
+                ]
+            },
+            {
+                heading: 'Resumen para tenerlo a mano',
+                blocks: [
+                    { type: 'table', headers: ['Si ves...', 'Significa', 'Qué hacer'], rows: [
+                        ['Barras en la franja amarilla', 'Está en la parte baja de su rango reciente', 'Ponerlo en seguimiento, no comprar'],
+                        ['Una raya amarilla', 'Ha cruzado su línea hacia arriba desde abajo', 'Mirarlo en serio con el resto de la terminal'],
+                        ['Verde sostenido', 'Sigue por encima de su línea', 'Nada nuevo: la situación se mantiene'],
+                        ['Azul', 'Sigue arriba pero pierde fuerza deprisa', 'Revisar, puede estar girando'],
+                        ['Una raya violeta', 'Ha cruzado hacia abajo desde la zona alta', 'Revisar si tu razón para tenerlo sigue en pie'],
+                        ['Meses en un extremo sin cruces', 'Está en tendencia clara', 'El indicador aporta poco aquí; guíate por el gráfico'],
+                    ]},
+                ]
+            },
+        ]
+    },
 };
