@@ -664,6 +664,39 @@ function renderRsuFlowChart(data) {
             wickUpColor: '#00ffad', wickDownColor: '#f23645',
         }).setData(f.velas);
 
+        // ── Las dos BANDAS del original ────────────────────────────────────
+        //
+        // Antes se pintaban dos líneas de puntos, en 25 y en 80, y eso mezclaba
+        // dos cosas distintas: 25 y 75 son los umbrales que la FÓRMULA exige
+        // para dar entrada o salida (la línea lenta por debajo de 25 / por
+        // encima de 75), mientras que lo que el indicador original DIBUJA son
+        // dos franjas rellenas — amarilla del 10 al 20 y magenta del 80 al 90.
+        // No coincidían, así que el panel se leía distinto al de TradingView
+        // aunque los números fueran los mismos.
+        //
+        // Se dibujan con histogramas de base fija (base 10 y valor 20) porque
+        // la librería no tiene relleno entre dos niveles; el resultado es una
+        // franja continua. Van ANTES que las barras para quedar por detrás.
+        const banda = (desde, hasta, color) => {
+            const s = chartO.addHistogramSeries({ base: desde, color, priceLineVisible: false, lastValueVisible: false });
+            s.setData(f.osc.map(p => ({ time: p.time, value: hasta })));
+            return s;
+        };
+        banda(10, 20, 'rgba(157,157,0,0.55)');    // zona baja  — la "amarilla"
+        banda(80, 90, 'rgba(157,0,157,0.45)');    // zona alta
+
+        // Entrada y salida como barra de altura completa (0→100), igual que el
+        // original: así se ven de un vistazo en todo el histórico sin tener que
+        // buscar una barra suelta de color entre cientos.
+        const vertical = (estado, color) => {
+            const puntos = f.osc.filter(p => p.estado === estado);
+            if (!puntos.length) return;
+            const s = chartO.addHistogramSeries({ base: 0, color, priceLineVisible: false, lastValueVisible: false });
+            s.setData(puntos.map(p => ({ time: p.time, value: 100 })));
+        };
+        vertical('entrada', 'rgba(255,215,0,0.45)');
+        vertical('salida',  'rgba(199,125,255,0.40)');
+
         const barras = chartO.addHistogramSeries({ priceLineVisible: false, base: 0 });
         barras.setData(f.osc.map(p => ({
             time: p.time, value: p.value, color: _L3_COLOR[p.estado] || '#666',
@@ -671,10 +704,8 @@ function renderRsuFlowChart(data) {
         chartO.addLineSeries({ color: 'rgba(255,255,255,0.45)', lineWidth: 1, priceLineVisible: false })
               .setData(f.linea);
 
-        // Las dos bandas de referencia del original: la baja, donde se buscan
-        // los giros, y la alta, donde se valora salir.
-        barras.createPriceLine({ price: 25, color: '#ffd700', lineWidth: 1, lineStyle: 2, title: 'zona baja' });
-        barras.createPriceLine({ price: 80, color: '#c77dff', lineWidth: 1, lineStyle: 2, title: 'zona alta' });
+        // Línea media, gris oscuro, como en el original.
+        barras.createPriceLine({ price: 50, color: 'rgba(255,255,255,0.18)', lineWidth: 1, lineStyle: 0, title: '' });
 
         // Sincronía en los dos sentidos. El rebote infinito se corta
         // comparando: si el destino ya está donde se le pide, no se le toca,

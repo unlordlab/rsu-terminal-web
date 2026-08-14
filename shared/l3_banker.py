@@ -63,8 +63,19 @@ def calcular_l3(df: pd.DataFrame) -> pd.DataFrame:
     linea = bullbear.ewm(span=13, adjust=False).mean()
 
     encima = fundtrend > linea
-    cruce_alza = encima & ~encima.shift(1).fillna(False)
-    cruce_baja = ~encima & encima.shift(1).fillna(False)
+    # `shift(1)` mete un NaN en la primera posición y eso convierte la serie a
+    # dtype `object`. Sobre object, `~` NO niega: hace inversión de bits del
+    # entero que hay debajo (~True = -2, ~False = -1), y los dos son veraces.
+    # Resultado: el "cruce" se marcaba en TODAS las barras por encima de la
+    # línea, no solo en la que cruza -- las entradas salían en racimos de tres
+    # o cuatro días seguidos donde el original pinta una sola. Detectado el
+    # 14/08/2026 comparando con el indicador de TradingView: AAPL marcaba
+    # entrada el 26, 27, 28 y 29 de enero, cuando la línea ya estaba cruzada
+    # desde el 26. `fill_value=False` evita el NaN y `astype(bool)` fuerza el
+    # dtype, así que la negación vuelve a ser lógica.
+    previa = encima.shift(1, fill_value=False).astype(bool)
+    cruce_alza = encima & ~previa
+    cruce_baja = ~encima & previa
     cae_fuerte = fundtrend < fundtrend.shift(1) * CAIDA_DEBIL
 
     estado = pd.Series("alta", index=df.index, dtype=object)
