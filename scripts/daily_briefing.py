@@ -78,6 +78,42 @@ GROQ_MIN_OUTPUT    = 1200  # por debajo de esto el briefing saldría cortado a m
 # (subestimar) cuesta quedarse sin briefing. No es simétrico.
 CHARS_POR_TOKEN    = 2.9
 
+# ── Longitud pedida al modelo: se calcula, no se escribe a mano ───────────────
+#
+# El briefing se cortaba a mitad de frase TODOS los días, y la aritmética no
+# dejaba lugar a dudas: el prompt pedía "entre 700 y 900 palabras", que en
+# castellano son ~1.570-2.020 tokens, mientras que el techo de respuesta es
+# 1.800 y un día normal solo deja 1.200 libres. No cabía ningún día.
+#
+# Cómo se coló: los topes de salida se calibraron cuando el prompt pedía
+# 500-700 palabras (~1.120-1.570 tokens), que cuadra exactamente con el
+# "briefing más largo generado: ~1.350 tokens" que quedó medido arriba. Después
+# el prompt pasó a pedir 700-900 y nadie recalibró el presupuesto.
+#
+# Además el corte no se veía: la respuesta se publicaba igual, y como el
+# briefing tiene que terminar con la línea "SESGO: ..." que se corta con él, el
+# registro de sesgo perdía el día sin decir nada.
+#
+# Se deja de escribir la cifra a mano: se deriva del hueco que de verdad queda,
+# así que los días de calendario cargado pide menos y los tranquilos más, sin
+# volver a descuadrarse cuando el prompt crezca.
+CHARS_POR_PALABRA  = 6.5   # castellano: ~5,5 letras de media + el espacio
+MARGEN_LONGITUD    = 0.85  # el modelo tiende a pasarse, y la línea del SESGO también ocupa
+PALABRAS_MINIMAS   = 350   # por debajo de esto ya no es una nota, es un titular
+MARCA_LONGITUD     = "[[LONGITUD]]"   # lo que se sustituye en el cierre del prompt
+
+
+def palabras_que_caben(max_tokens: int) -> int:
+    """Cuántas palabras entran de verdad en ese presupuesto de tokens."""
+    return max(PALABRAS_MINIMAS,
+               int(max_tokens * CHARS_POR_TOKEN / CHARS_POR_PALABRA * MARGEN_LONGITUD))
+
+
+def instruccion_longitud(max_tokens: int) -> str:
+    """La frase que sustituye a [[LONGITUD]] en el cierre del prompt."""
+    techo = palabras_que_caben(max_tokens)
+    return f"entre {int(techo * 0.8)} y {techo} palabras"
+
 
 class PromptDemasiadoGrande(Exception):
     """Groq ha devuelto 413: el prompt no cabe en el presupuesto de TPM.
@@ -1076,7 +1112,7 @@ REGLAS ANTI-ALUCINACIÓN — ESTRICTAS, SIN EXCEPCIONES. Están por encima de cu
 
 _CIERRE_V2 = """Escribe la nota de hoy siguiendo la ESTRUCTURA OBLIGATORIA de arriba (titular temático, EN DOS LÍNEAS, 2-3 bloques con encabezado propio, MI CONCLUSIÓN).
 
-LONGITUD, y esto es un techo, no una sugerencia: entre 700 y 900 palabras. Si al terminar te has pasado, recorta -- quita el bloque que menos aporte antes que resumirlo todo a medias.
+LONGITUD, y esto es un techo, no una sugerencia: [[LONGITUD]]. Si al terminar te has pasado, recorta -- quita el bloque que menos aporte antes que resumirlo todo a medias.
 
 FORMATO: prosa en primera persona con los encabezados en negrita. Sin emojis, sin tablas. Tono de trader real hablando a su comunidad, no de banco de inversión.
 
@@ -1440,9 +1476,13 @@ def _diagnostico_ratelimit(r) -> dict:
     return diag
 
 
-def generate_briefing(prompt: str) -> tuple:
+def generate_briefing(prompt: str, reintento_de_corte: bool = False) -> tuple:
     """Devuelve (texto_del_briefing, diagnóstico). El diagnóstico sale de la
-    propia respuesta de Groq -- ver _diagnostico_ratelimit."""
+    propia respuesta de Groq -- ver _diagnostico_ratelimit.
+
+    `reintento_de_corte` lo pone la propia función al volver a intentarlo
+    cuando la respuesta salió truncada: sirve para no encadenar reintentos
+    indefinidos si el segundo tampoco cabe."""
     if not GROQ_KEY:
         raise ValueError("GROQ_API_KEY no configurada")
 
@@ -1454,8 +1494,23 @@ def generate_briefing(prompt: str) -> tuple:
     prompt_tokens = estimar_tokens(prompt)
     disponible    = GROQ_TPM_LIMIT - GROQ_TPM_SAFETY - prompt_tokens
     max_salida    = min(GROQ_MAX_OUTPUT, disponible)
+
+    # La longitud que se le pide al modelo sale del hueco real, no de una cifra
+    # escrita a mano (ver palabras_que_caben). Se sustituye aquí y no en
+    # build_prompt porque es aquí donde se sabe cuánto espacio ha quedado tras
+    # el recorte progresivo de datos.
+    #
+    # La sustitución cambia el prompt en unos pocos caracteres, así que se
+    # vuelve a medir: si no, el presupuesto se calcularía sobre un texto que ya
+    # no es el que se envía.
+    if MARCA_LONGITUD in prompt:
+        prompt = prompt.replace(MARCA_LONGITUD, instruccion_longitud(max_salida))
+        prompt_tokens = estimar_tokens(prompt)
+        disponible    = GROQ_TPM_LIMIT - GROQ_TPM_SAFETY - prompt_tokens
+        max_salida    = min(GROQ_MAX_OUTPUT, disponible)
+
     print(f"🧮 Presupuesto Groq: prompt ~{prompt_tokens} tokens · respuesta hasta {max_salida} "
-          f"(límite {GROQ_TPM_LIMIT} TPM)")
+          f"(límite {GROQ_TPM_LIMIT} TPM) · se piden {instruccion_longitud(max_salida)}")
     if max_salida < GROQ_MIN_OUTPUT:
         # Llegar aquí significa que ni el nivel de recorte MÍNIMO ha bastado
         # (main() los prueba todos antes de llamar a esta función), así que ya
@@ -1538,7 +1593,46 @@ def generate_briefing(prompt: str) -> tuple:
               f"{prompt_tokens} ({desvio:+.1f}%) · CHARS_POR_TOKEN exacto de hoy: "
               f"{ideal:.2f} (vigente {CHARS_POR_TOKEN})")
 
-    return r.json()["choices"][0]["message"]["content"], diag
+    eleccion = r.json()["choices"][0]
+    texto    = eleccion["message"]["content"]
+    motivo   = eleccion.get("finish_reason")
+    diag["finish_reason"] = motivo
+
+    # `finish_reason == "length"` significa que el modelo se quedó sin espacio
+    # y la respuesta está cortada -- normalmente a mitad de frase, y siempre sin
+    # la línea "SESGO:" del final, que además hace perder el registro del día.
+    #
+    # Hasta ahora nadie miraba este campo, así que un briefing truncado se
+    # publicaba con la misma cara que uno entero. Es el mismo patrón que este
+    # proyecto lleva tiempo quitando: un resultado a medias servido como bueno.
+    if motivo == "length" and reintento_de_corte:
+        # Ya es el segundo intento: se publica lo que hay (mejor medio briefing
+        # que ninguno, que es lo que se decidió en julio) pero queda anotado.
+        print(f"⚠️  El briefing SIGUE saliendo cortado tras reintentar con menos "
+              f"longitud. Se publica igualmente, pero revisa el presupuesto: "
+              f"prompt ~{prompt_tokens} tok, respuesta {max_salida} tok.")
+        diag["truncado"] = True
+        return texto, diag
+
+    if motivo == "length":
+        # Se reintenta pidiendo bastante menos. La espera no es opcional: el
+        # límite de Groq es por MINUTO y acabamos de gastar casi todo, así que
+        # llamar de inmediato solo daría un 429.
+        recorte = int(max_salida * 0.75)
+        print(f"⚠️  Respuesta cortada por falta de espacio ({max_salida} tokens). "
+              f"Reintentando con un objetivo más corto en 65 s (el límite de Groq "
+              f"es por minuto y acabamos de agotarlo).")
+        time.sleep(65)
+        prompt_corto = prompt
+        if MARCA_LONGITUD not in prompt_corto:
+            # El prompt ya trae la longitud sustituida del intento anterior: se
+            # cambia esa frase por la nueva en vez de volver a construirlo.
+            prompt_corto = prompt_corto.replace(instruccion_longitud(max_salida),
+                                                instruccion_longitud(recorte))
+        return generate_briefing(prompt_corto, reintento_de_corte=True)
+
+    diag["truncado"] = False
+    return texto, diag
 
 
 def extract_bias_tag(text: str) -> tuple:
