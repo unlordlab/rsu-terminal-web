@@ -1338,14 +1338,40 @@ window.__carteraExportCSV = function() {
     a.click();
 };
 
-// Refrescar precios manualmente
+// Refrescar precios manualmente, y de paso comprobar si hay aperturas o
+// cierres nuevos que avisar.
+//
+// El aviso de Telegram lo dispara un bucle cada 15 minutos, así que tras
+// apuntar una operación en la hoja el mensaje podía tardar ese cuarto de hora.
+// Este botón ya existía para refrescar precios y el endpoint de comprobación
+// también, pero nadie lo llamaba: se había creado solo para probar la conexión
+// con Telegram. Pulsar «Actualizar» es exactamente el momento en que quieres
+// estar al día, así que hace las dos cosas.
+//
+// Repetirlo es inofensivo: cada aviso se registra con una clave única y solo
+// envía quien gana la inserción, de modo que pulsar diez veces no manda diez
+// mensajes. Y si la comprobación falla, el refresco de precios sigue su curso
+// -- son dos cosas independientes y la de los precios es la que se ha pedido.
 window.__carteraRefresh = async function() {
     const btn = document.querySelector('.refresh-btn');
     if (btn) btn.textContent = '⟳ Actualizando...';
+
+    const avisos = fetch('/api/v1/cartera/notificaciones/check', {
+        method: 'POST', headers: authHeader(),
+    }).then(r => r.json()).catch(() => null);
+
     try {
         const res  = await fetch('/api/v1/cartera/prices', { headers: authHeader() });
         const data = await res.json();
         if (data.ok) applyLivePrices(data.prices, _carteraData?.abiertas || []);
     } catch(_) {}
-    if (btn) btn.textContent = '⟳ Actualizar';
+
+    const n = (await avisos)?.enviadas || 0;
+    if (btn) {
+        // Solo se dice algo cuando de verdad se ha enviado: un «0 avisos» en
+        // cada pulsación sería ruido, porque lo normal es que no haya nada
+        // nuevo que contar.
+        btn.textContent = n ? '⟳ ' + n + (n === 1 ? ' aviso enviado' : ' avisos enviados') : '⟳ Actualizar';
+        if (n) setTimeout(() => { btn.textContent = '⟳ Actualizar'; }, 4000);
+    }
 };
