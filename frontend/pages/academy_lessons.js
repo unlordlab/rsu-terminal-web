@@ -72,7 +72,7 @@ export const LESSONS = {
                 heading: 'Disclaimer importante',
                 blocks: [
                     { type: 'text', content: 'Nada de lo que aparece en RSU Terminal es asesoramiento financiero. Los análisis, scores, ratings y briefings son herramientas de información, no recomendaciones de inversión. Los mercados financieros implican riesgo de pérdida de capital. Opera siempre dentro de tu tolerancia al riesgo personal.' },
-                    { type: 'warning', content: 'Los datos de yfinance, FMP y otras fuentes pueden tener retrasos, errores o inconsistencias. Contrasta siempre la información crítica con fuentes primarias (broker, SEC EDGAR, Bloomberg) antes de tomar decisiones de trading. RSU Terminal es una herramienta de apoyo, no la única fuente de verdad.' },
+                    { type: 'warning', content: 'Los datos de Yahoo Finance, FMP y otras fuentes pueden tener retrasos, errores o inconsistencias. Contrasta siempre la información crítica con fuentes primarias (broker, SEC EDGAR, Bloomberg) antes de tomar decisiones de trading. RSU Terminal es una herramienta de apoyo, no la única fuente de verdad.' },
                 ]
             },
         ]
@@ -144,20 +144,20 @@ export const LESSONS = {
         lessonIndex: 2,
         title: 'Las Herramientas',
         duration: '12 min',
-        intro: 'RSU Terminal tiene 10 módulos especializados. Cada uno tiene un propósito específico dentro del flujo de análisis. Entender qué hace cada herramienta y cuándo usarla es el primer paso para sacar partido real a la plataforma.',
+        intro: 'La terminal tiene dieciséis herramientas de análisis, y cada una responde a una pregunta distinta. Esta lección es el mapa: qué hace cada una, cuándo tocarla y en qué orden encajan. No hace falta usarlas todas, pero sí saber cuál te falta cuando te atascas.',
         sections: [
             {
                 heading: 'Análisis de mercado',
                 blocks: [
-                    { type: 'text', content: 'El primer bloque de herramientas cubre el análisis del contexto de mercado. Son las herramientas que debes revisar antes de mirar cualquier acción individual.' },
+                    { type: 'text', content: 'El primer bloque mira el contexto general. Son las herramientas que conviene revisar <b>antes</b> de mirar ninguna acción concreta: si el mercado va en contra, el mejor candidato del mundo lo tiene difícil.' },
                     { type: 'chart', id: 'tools_market_analysis' },
                     { type: 'table',
                         headers: ['Herramienta', 'Qué hace', 'Cuándo usarla'],
                         rows: [
-                            ['Market Dashboard', 'Fear & Greed, VIX, AD Line, breadth', 'Cada mañana antes de operar'],
-                            ['FED & Macro', 'Balance Fed, curva de tipos, CPI, PCE', 'Semanalmente + días de datos macro'],
-                            ['SPXL Strategy', 'Estrategia DCA en correcciones del SPX', 'Cuando el SPX corrige >15%'],
-                            ['BTC Stratum', 'Modelo de acumulación Bitcoin on-chain', 'Zonas de acumulación BTC'],
+                            ['Market', 'Miedo y codicia, VIX, amplitud, tipos, liquidez y beneficios empresariales', 'Cada mañana antes de operar'],
+                            ['RSU Algoritmo', 'Semáforo de suelos de mercado, con su historial de aciertos', 'Cuando el mercado corrige y hay que decidir si entrar'],
+                            ['SPXL', 'Estrategia de compras escalonadas en las caídas del índice', 'Solo cuando el índice ya ha corregido'],
+                            ['BTC Stratum', 'Modelo de acumulación de Bitcoin', 'Si te interesa el ciclo de Bitcoin'],
                         ]
                     },
                 ]
@@ -165,33 +165,54 @@ export const LESSONS = {
             {
                 heading: 'Selección de activos',
                 blocks: [
-                    { type: 'text', content: 'El segundo bloque identifica qué activos merecen atención. El objetivo es filtrar de 5,000+ acciones del mercado americano a una lista manejable de candidatos de alta calidad.' },
+                    { type: 'text', content: 'El segundo bloque responde a «¿dónde miro?». El objetivo es pasar de las más de quinientas acciones del índice a un puñado que merezca tu tiempo. Cada herramienta filtra por un criterio distinto, y lo interesante suele estar donde varias coinciden.' },
                     { type: 'chart', id: 'tools_stock_selection' },
                     { type: 'table',
                         headers: ['Herramienta', 'Qué hace', 'Cuándo usarla'],
                         rows: [
-                            ['CAN SLIM', 'Scanner IBD + Trend Template sobre S&P 500', 'Dominical — identificar candidatos'],
-                            ['RS/RW Scanner', 'Fortaleza/debilidad relativa vs mercado', 'Identificar líderes y rezagados'],
-                            ['Options Flow', 'Flujo de opciones institucional', 'Detectar posicionamiento institucional'],
-                            ['Research / Earnings', 'Análisis fundamental + LLM', 'Antes de entrar en un activo nuevo'],
+                            ['CANSLIM', 'Busca valores que cumplen siete condiciones de negocio y precio', 'El fin de semana, para hacer la lista'],
+                            ['Scanner', 'Filtros combinables: volumen, fuerza relativa, fase, zona del indicador', 'Cuando buscas algo concreto'],
+                            ['RS/RW', 'Quién va más fuerte y más débil que el mercado, y hacia dónde rota el dinero', 'Semanalmente'],
+                            ['Research', 'Ficha completa de un valor: fundamentales, técnico e Indicador RSU', 'Antes de entrar en algo nuevo'],
+                            ['Options Flow', 'Movimientos grandes en opciones', 'Para ver dónde se está posicionando el dinero grande'],
+                            ['Insider Flow', 'Compras y ventas de los directivos de la propia empresa', 'Como confirmación, nunca como motivo único'],
+                            ['Congress Trading', 'Operaciones declaradas por congresistas de EE. UU.', 'Como curiosidad informativa y contraste'],
                         ]
                     },
+                    { type: 'tip', title: 'Empieza por una, no por siete', content: 'Intentar usar todas a la vez es la mejor manera de no usar ninguna. Coge la que responda a tu pregunta de hoy y deja el resto para cuando te haga falta.' },
                 ]
             },
             {
                 heading: 'Seguimiento y gestión',
                 blocks: [
-                    { type: 'text', content: 'El tercer bloque gestiona las posiciones abiertas y mantiene al trader informado sin necesidad de estar pegado a la pantalla.' },
+                    { type: 'text', content: 'El tercer bloque se ocupa de lo que ya tienes y de lo que estás vigilando, para no depender de estar delante de la pantalla.' },
                     { type: 'chart', id: 'tools_management' },
                     { type: 'table',
                         headers: ['Herramienta', 'Qué hace', 'Cuándo usarla'],
                         rows: [
-                            ['Cartera', 'Seguimiento de posiciones con precios live', 'Siempre abierta durante sesión'],
-                            ['Resumen de Mercado Diario', 'Resumen macro + noticias clasificadas por IA', 'Cada noche antes de cerrar'],
-                            ['Newsfeed', 'Noticias en tiempo real por ticker', 'Ante movimientos inexplicados'],
+                            ['Cartera', 'Tus posiciones con precios en vivo, resultado y reparto de capital', 'Abierta durante la sesión'],
+                            ['Watchlist', 'Lista de seguimiento con avisos por precio, volumen o cruce de media', 'Para lo que aún no has comprado'],
+                            ['News Feed', 'Noticias de varias fuentes, ordenadas por impacto', 'Cuando algo se mueve y no sabes por qué'],
+                            ['Tesis', 'Los argumentos escritos de cada idea, para poder releerlos después', 'Al abrir una posición y al revisarla'],
+                            ['Track Record', 'El histórico de lo que las señales de la terminal han hecho de verdad', 'Antes de fiarte de cualquier indicador'],
                         ]
                     },
-                    { type: 'tip', label: 'FLUJO RECOMENDADO', content: 'Mañana: Market Dashboard → CAN SLIM/RS/RW → Cartera. Durante sesión: Cartera + Newsfeed si hay movimientos. Noche: Resumen de Mercado Diario + Research para preparar el día siguiente. Domingo: CAN SLIM scan completo + FED & Macro semanal.' },
+                    { type: 'tip', label: 'UN FLUJO POSIBLE', content: 'Mañana: Market para el contexto, luego Cartera. Durante la sesión: Cartera, y News Feed si algo se mueve sin explicación. Noche: el resumen de mercado y Research para preparar el día siguiente. Fin de semana: CANSLIM y RS/RW para rehacer la lista de candidatos. Es una sugerencia, no una obligación.' },
+                ]
+            },
+            {
+                heading: 'Cuidado con los tres «RSU»',
+                blocks: [
+                    { type: 'text', content: 'Hay tres cosas distintas en la terminal que llevan las mismas siglas, y se confunden con facilidad porque miden cosas que no tienen nada que ver.' },
+                    { type: 'table',
+                        headers: ['Nombre', 'Qué es', 'Dónde está'],
+                        rows: [
+                            ['RSU Score', 'Una nota de 0 a 100 sobre la <b>calidad del negocio</b>: crecimiento, salud financiera, valoración', 'En Research, arriba'],
+                            ['Indicador RSU', 'Un oscilador que solo mira el <b>precio</b>: dónde está dentro de su rango reciente', 'En Research, bajo el gráfico'],
+                            ['RSU Algoritmo', 'Un semáforo sobre el <b>mercado entero</b>, no sobre un valor', 'Sección propia'],
+                        ]
+                    },
+                    { type: 'warning', title: 'No se sustituyen entre sí', content: 'Un valor puede tener un RSU Score alto (buen negocio) y el Indicador RSU por los suelos (el precio lleva semanas castigado) a la vez. No se contradicen: están midiendo cosas distintas. Cada uno tiene su propio módulo en esta Academia.' },
                 ]
             },
             {
@@ -199,7 +220,7 @@ export const LESSONS = {
                 blocks: [
                     { type: 'text', content: 'La Academia es el módulo donde estás ahora. Está diseñada para que el conocimiento y las herramientas se aprendan juntos — cada lección explica un concepto y las herramientas de la terminal que lo implementan.' },
                     { type: 'chart', id: 'tools_academy' },
-                    { type: 'concept', title: 'Teoría + práctica integradas', content: 'El enfoque de la Academia es distinto al de la mayoría de cursos de trading. No hay teoría abstracta desconectada de la práctica. Cada concepto aprendido tiene una herramienta en la terminal donde puedes aplicarlo inmediatamente. Aprende el concepto → ve a la herramienta → aplícalo con datos reales.' },
+                    { type: 'concept', title: 'Teoría y práctica juntas', content: 'Cada concepto que se aprende aquí tiene una herramienta donde aplicarlo con datos reales. Y las herramientas más completas tienen además su propio manual, en la fase Guía de la Terminal del índice.' },
                 ]
             },
         ]
@@ -4979,7 +5000,7 @@ export const LESSONS = {
                         ['4–5', 'NEUTRAL'],
                         ['< 4', 'DÉBIL'],
                     ]},
-                    { type: 'warning', content: 'Cuando yfinance no reporta una línea contable concreta para un ticker (pasa sobre todo con financieras, REITs o empresas extranjeras), ese criterio se muestra con un guion gris "–" en vez de una X roja. Es una diferencia deliberada: el guion significa "no lo sabemos", la X significa "lo sabemos y no pasa el criterio". No confundas un dato ausente con una mala noticia — pero recuerda que igualmente NO suma el punto.' },
+                    { type: 'warning', content: 'Cuando la fuente de datos no reporta una línea contable concreta para un ticker (pasa sobre todo con financieras, REITs o empresas extranjeras), ese criterio se muestra con un guion gris "–" en vez de una X roja. Es una diferencia deliberada: el guion significa "no lo sabemos", la X significa "lo sabemos y no pasa el criterio". No confundas un dato ausente con una mala noticia — pero recuerda que igualmente NO suma el punto.' },
                 ]
             },
             {
@@ -5024,7 +5045,7 @@ export const LESSONS = {
             {
                 heading: 'Los límites de la comparativa',
                 blocks: [
-                    { type: 'text', content: 'La comparativa depende de una clasificación sectorial correcta (dato de yfinance) y de que existan suficientes comparables con datos completos. En sectores poco poblados o con clasificaciones ambiguas (conglomerados, empresas de nicho), la mediana puede estar calculada sobre pocos tickers y ser menos representativa.' },
+                    { type: 'text', content: 'La comparativa depende de una clasificación sectorial correcta (dato de Yahoo Finance) y de que existan suficientes comparables con datos completos. En sectores poco poblados o con clasificaciones ambiguas (conglomerados, empresas de nicho), la mediana puede estar calculada sobre pocos tickers y ser menos representativa.' },
                     { type: 'steps', items: [
                         'Mira primero el múltiplo absoluto — ¿tiene sentido para el tipo de negocio?',
                         'Después mira la comparativa sectorial — ¿está caro o barato relativo a sus pares?',

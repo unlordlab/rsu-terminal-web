@@ -12,9 +12,9 @@
 export const PALABRAS_POR_MINUTO = 200;
 
 export const LESSON_INDEX = {
-    '0-1': { title: 'Qué es RSU Terminal', words: 447 },
+    '0-1': { title: 'Qué es RSU Terminal', words: 448 },
     '0-2': { title: 'La Metodología RSU', words: 539 },
-    '0-3': { title: 'Las Herramientas', words: 417 },
+    '0-3': { title: 'Las Herramientas', words: 782 },
     '0-4': { title: 'Flujo de Trabajo Semanal', words: 453 },
     '1-1': { title: 'Gráfico Mensual — La visión macro', words: 447 },
     '1-2': { title: 'Gráfico Semanal — La tendencia media', words: 448 },
@@ -97,8 +97,8 @@ export const LESSON_INDEX = {
     '19-5': { title: 'Gaps de Precio', words: 479 },
     '19-6': { title: 'Volumen Clímax y Tendencia', words: 417 },
     '20-1': { title: 'Qué Mide el RSU Score', words: 462 },
-    '20-2': { title: 'Piotroski F-Score — Salud Financiera', words: 489 },
-    '20-3': { title: 'Comparativa Sectorial — Valorar en Contexto', words: 444 },
+    '20-2': { title: 'Piotroski F-Score — Salud Financiera', words: 492 },
+    '20-3': { title: 'Comparativa Sectorial — Valorar en Contexto', words: 445 },
     '20-4': { title: 'Cómo Leer Todo Junto', words: 404 },
     '21-1': { title: 'Ingresos, Márgenes y Beneficio', words: 364 },
     '21-2': { title: 'Rentabilidad y Eficiencia — ROE, ROA', words: 446 },
