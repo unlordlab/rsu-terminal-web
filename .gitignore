@@ -38,6 +38,8 @@ backend/*.db-wal
 # claves reales en texto plano, nunca deben ir a git.
 .env.bak.*
 backend/.env.bak.*
+# Lo escribe deploy.sh con el commit desplegado (ver /health)
+backend/VERSION
 
 # Carpeta de datos varios (backups locales, exports, etc.)
 data/

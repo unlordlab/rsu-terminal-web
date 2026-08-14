@@ -80,6 +80,18 @@ echo "=== 4/7: Comprobando si cambió algo que afecte a la imagen Docker ==="
 # así que este chequeo dijo "sin cambios" y el contenedor se recreó con la
 # imagen VIEJA, sin el binario arreglado -- el bug seguía en producción
 # aunque el despliegue "funcionara". Cualquier cambio en el propio
+# Se sella el commit que se va a desplegar en un fichero que entra en la
+# imagen, para que /health pueda decir QUE codigo esta corriendo de verdad.
+#
+# Sin esto no habia forma de saberlo, y ha costado dos rondas enteras de
+# depuracion: el "HOY %" de Cartera se reporto roto cuatro veces, y en dos de
+# ellas el codigo en main ya estaba bien -- lo que corria en el VPS era una
+# version anterior. El propio git pull de arriba avisa con un "no trajo nada
+# nuevo", pero eso no dice nada sobre lo que hay DENTRO del contenedor.
+git rev-parse --short HEAD > backend/VERSION
+date -u +"%Y-%m-%dT%H:%M:%SZ" >> backend/VERSION
+echo "  Version sellada: $(head -1 backend/VERSION)"
+
 # Dockerfile (no solo en lo que él instala) tiene que disparar rebuild.
 if git diff --name-only "$BEFORE_COMMIT" "$AFTER_COMMIT" | grep -qE "^(requirements\.txt|Dockerfile)$"; then
     echo "  requirements.txt o Dockerfile cambió — reconstruyendo la imagen (esto tarda 1-2 min)..."
@@ -153,3 +165,8 @@ fi
 
 echo ""
 echo "=== Despliegue completado: $BEFORE_COMMIT -> $AFTER_COMMIT ==="
+echo ""
+echo "Comprueba que es lo que esperas -- si este commit no coincide con el"
+echo "ultimo de 'git log', lo que corre en produccion NO es lo ultimo:"
+curl -s http://localhost/health || echo "  (no se pudo consultar /health)"
+echo ""

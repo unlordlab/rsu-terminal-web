@@ -4,6 +4,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 from contextlib import asynccontextmanager
 import asyncio
+import os
 from config import settings
 from auth import verify_token, require_tier, verify_admin_key
 from middleware.rate_limit import rate_limit
@@ -167,12 +168,41 @@ app.mount("/core",       CodigoDeLaApp(directory="../frontend/core"),   name="co
 app.mount("/components", CodigoDeLaApp(directory="../frontend/components"), name="components")
 app.mount("/pages",      CodigoDeLaApp(directory="../frontend/pages"),  name="pages")
 
+# Commit desplegado, sellado por deploy.sh en backend/VERSION justo antes de
+# construir la imagen. Se lee UNA vez al arrancar: dentro del contenedor el
+# fichero no cambia mientras el proceso vive.
+#
+# Por qué existe: hasta el 14/08/2026 no había forma de saber qué código estaba
+# corriendo en el servidor. El "HOY %" de Cartera se reportó roto cuatro veces
+# y en dos de ellas el cálculo en `main` ya era correcto -- lo que corría era
+# una versión anterior, y cada vez costó una sesión entera de depuración
+# descubrirlo. El `git pull` del despliegue avisa cuando no trae nada nuevo,
+# pero eso no dice nada sobre lo que hay DENTRO del contenedor.
+def _version_desplegada() -> dict:
+    try:
+        with open(os.path.join(os.path.dirname(__file__), "VERSION"), encoding="utf-8") as f:
+            lineas = [l.strip() for l in f if l.strip()]
+        return {"commit": lineas[0], "desplegado": lineas[1] if len(lineas) > 1 else None}
+    except Exception:
+        # Sin fichero: se está ejecutando fuera de un despliegue (desarrollo
+        # local) o la imagen se construyó sin pasar por deploy.sh. Se dice, en
+        # vez de inventar un número de versión.
+        return {"commit": "desconocida", "desplegado": None}
+
+
+_VERSION = _version_desplegada()
+
+
 @app.get("/health")
 async def health():
     # Endpoint público a propósito (lo usan Docker/uptime checks sin token).
     # No exponemos aquí el detalle de la caché para no dar información
     # interna gratis; para eso está /api/v1/cache/stats, que si pide token.
-    return {"status": "ok", "app": settings.app_name}
+    #
+    # El commit SÍ se expone: es un identificador de 7 caracteres de un
+    # repositorio privado, no da acceso a nada, y a cambio convierte "¿está
+    # desplegado el arreglo?" en una pregunta de cinco segundos.
+    return {"status": "ok", "app": settings.app_name, **_VERSION}
 
 @app.get("/api/v1/rate-limit/stats")
 async def rate_limit_stats(_=Depends(verify_admin_key)):
