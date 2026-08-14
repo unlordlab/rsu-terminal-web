@@ -156,4 +156,9 @@ export const LESSON_INDEX = {
     '31-3': { title: 'Cómo Se Usa: Una Estrategia Sencilla', words: 407 },
     '31-4': { title: 'Dónde Falla y Cómo Evitarlo', words: 356 },
     '31-5': { title: 'El Flujo con Volumen y De Dónde Viene el Indicador', words: 406 },
+    '32-1': { title: 'Qué Es Research y Cuándo Se Usa', words: 267 },
+    '32-2': { title: 'El RSU Score y de Qué Está Hecho', words: 365 },
+    '32-3': { title: 'Quién Está Comprando: Directivos, Fondos y Analistas', words: 262 },
+    '32-4': { title: 'Cómo Recorrer la Ficha Sin Perderse', words: 335 },
+    '32-5': { title: 'De Dónde Salen los Datos y Qué Falla', words: 279 },
 };

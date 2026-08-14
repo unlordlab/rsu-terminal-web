@@ -73,6 +73,7 @@ const MODULES = [
     { id:29, title:'RS/RW — La Fuerza Relativa',   icon:'📊', description:'Manual de la fuerza relativa: por qué «ha subido» no dice nada sin el mercado al lado, qué significa de verdad el percentil —y por qué siempre hay un 20% de líderes, también en un desplome—, cómo se lee cada tabla, y las tres secciones que convierten la foto del día en una película: quién entra y sale del liderazgo, hacia dónde rota el dinero entre sectores y si el mercado tira entero o solo unos pocos.' },
     { id:30, title:'SPXL — La Estrategia de Caídas', icon:'📉', description:'La única herramienta de la terminal que trabaja cuando el mercado corrige, no cuando sube. Qué cambia el triple apalancamiento, la premisa que la sostiene —el índice sube a largo plazo— y qué pasa si esa premisa falla, cómo compra por peldaños sin intentar acertar el suelo, las tres salidas según lo honda que fuera la caída, y por qué su 98% de aciertos no significa lo que parece. Con los números reales de 17,7 años, incluido lo que pierde frente a comprar y mantener.' },
     { id:31, title:'El Indicador RSU',              icon:'📶', description:'Manual del panel de barras que aparece bajo el gráfico en Research. Qué mide en realidad —dónde está el precio dentro de su propio rango reciente, no si la acción está cara o barata—, qué dice cada uno de los seis colores y las dos franjas del fondo, y una estrategia concreta de cuatro pasos para usarlo: filtrar en Scanner, descartar lo que va en contra de la tendencia, esperar el cruce y decidir con el resto de la terminal. Incluye dónde falla, por qué en tendencias fuertes deja de aportar, y en qué se diferencia del «Flujo con volumen» que aparece a su lado.' },
+    { id:32, title:'Research — La Ficha de un Valor', icon:'🔎', description:'Manual de la ficha completa de un valor: cuándo se usa (con un nombre ya en la mano, no para explorar), de qué cinco categorías está hecho el RSU Score y por qué el desglose importa más que el número, cómo leer lo que hacen directivos, fondos y analistas —y por qué comprar informa más que vender—, un recorrido de cuatro paradas para descartar pronto, y dónde falla: bancos, aseguradoras, compañías extranjeras y salidas a bolsa recientes.' },
 ];
 
 const PHASES = [
@@ -88,7 +89,7 @@ const PHASES = [
     // usan las herramientas (qué es el RSU Score, qué es el análisis
     // fundamental); esta explica CÓMO SE USA cada pantalla y qué ha hecho de
     // verdad. Se irá ampliando con un módulo por herramienta.
-    { label:'🛠️ GUÍA DE LA TERMINAL // CÓMO FUNCIONA CADA HERRAMIENTA', modules:[26,27,28,29,30,31] },
+    { label:'🛠️ GUÍA DE LA TERMINAL // CÓMO FUNCIONA CADA HERRAMIENTA', modules:[26,27,28,29,30,31,32] },
 ];
 
 // ── LECCIONES DE CADA MÓDULO ─────────────────────────────────────────────────

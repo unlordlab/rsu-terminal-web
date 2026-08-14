@@ -7534,4 +7534,222 @@ export const LESSONS = {
             },
         ]
     },
+
+    // ── MÓDULO 32 · GUÍA DE LA TERMINAL — RESEARCH ─────────────────────────
+    // Manual de la ficha de un valor. Las cinco categorías del RSU Score salen
+    // de _compute_rsu_score(); si allí cambian los pesos o se añade una
+    // categoría, hay que revisar la lección 32-2.
+
+    '32-1': {
+        moduleId: 32,
+        lessonIndex: 0,
+        title: 'Qué Es Research y Cuándo Se Usa',
+        duration: '5 min',
+        intro: 'Research es la ficha completa de un valor. No busca ideas ni filtra nada: se usa cuando ya tienes un nombre y quieres saber a qué te estás enfrentando antes de decidir.',
+        sections: [
+            {
+                heading: 'Su sitio en el flujo',
+                blocks: [
+                    { type: 'text', content: 'Las demás herramientas van de muchos a pocos: el buscador de valores, el escáner y la fuerza relativa reducen quinientas acciones a una lista corta. Research va de uno a fondo.' },
+                    { type: 'concept', title: 'Se entra con un nombre, no a explorar', content: 'Si abres Research sin un candidato en la cabeza, no sabrás qué mirar. El orden natural es: alguna herramienta te sugiere un nombre, y entonces vienes aquí a ver si aguanta un examen.' },
+                    { type: 'text', content: 'Por eso desde casi todas las tablas de la terminal se puede pinchar un valor y saltar directamente a su ficha.' },
+                ]
+            },
+            {
+                heading: 'Qué vas a encontrar',
+                blocks: [
+                    { type: 'text', content: 'La ficha mezcla cuatro tipos de información que conviene no confundir, porque responden a preguntas distintas y pueden contradecirse sin que ninguna esté equivocada.' },
+                    { type: 'table',
+                        headers: ['Tipo', 'Qué responde', 'Dónde está'],
+                        rows: [
+                            ['El negocio', '¿Gana dinero, crece, está sano?', 'RSU Score, Piotroski, cuenta de resultados'],
+                            ['El precio', '¿Cómo se está comportando?', 'Gráfico, Indicador RSU, niveles técnicos'],
+                            ['Quién compra', '¿Qué hacen los que saben más?', 'Directivos, institucionales, analistas, opciones'],
+                            ['El contexto', '¿Qué está pasando alrededor?', 'Noticias, resultados, estacionalidad'],
+                        ]
+                    },
+                    { type: 'warning', title: 'Que se contradigan es normal', content: 'Un negocio excelente con el precio castigado, o un precio en máximos con las cuentas empeorando, son situaciones reales y frecuentes. La ficha no resuelve la contradicción por ti: la enseña para que decidas con ella delante.' },
+                ]
+            },
+        ]
+    },
+
+    '32-2': {
+        moduleId: 32,
+        lessonIndex: 1,
+        title: 'El RSU Score y de Qué Está Hecho',
+        duration: '7 min',
+        intro: 'Arriba de la ficha hay un número de 0 a 100 con una etiqueta. Es lo primero que se mira y lo más fácil de malinterpretar, así que conviene saber exactamente qué resume.',
+        sections: [
+            {
+                heading: 'Cinco notas en una',
+                blocks: [
+                    { type: 'text', content: 'El RSU Score no es una opinión ni una previsión: es la media de cinco categorías, cada una con el mismo peso.' },
+                    { type: 'table',
+                        headers: ['Categoría', 'Qué mira'],
+                        rows: [
+                            ['Calidad fundamental', 'Crecimiento de ingresos, rentabilidad y margen'],
+                            ['Salud financiera', 'Si las cuentas mejoran o empeoran respecto al año pasado'],
+                            ['Valoración vs sector', 'Si está cara o barata comparada con sus iguales'],
+                            ['Sentimiento de mercado', 'Qué hacen los analistas y los directivos'],
+                            ['Fase técnica', 'En qué punto de su ciclo de precio está'],
+                        ]
+                    },
+                    { type: 'text', content: 'Debajo del número verás el desglose por categoría. <b>Esa es la parte útil</b>: un 70 formado por cinco setenta no es lo mismo que un 70 con dos categorías excelentes y tres flojas, y la decisión que tomes debería ser distinta.' },
+                ]
+            },
+            {
+                heading: 'Lo que el número no puede saber',
+                blocks: [
+                    { type: 'warning', title: 'No todas las categorías están siempre disponibles', content: 'Algunas empresas no publican todas las líneas contables que hacen falta —pasa sobre todo con bancos, aseguradoras y compañías extranjeras—. Cuando falta una categoría, la nota se reparte entre las que sí hay, y se indica. Un score con dos categorías y uno con cinco no son comparables aunque el número coincida.' },
+                    { type: 'concept', title: 'Es una foto, no una predicción', content: 'El score describe cómo está la empresa hoy con los datos publicados. No dice qué va a hacer la acción. Una empresa excelente puede caer durante meses, y una mediocre subir.' },
+                ]
+            },
+            {
+                heading: 'No confundir con los otros dos «RSU»',
+                blocks: [
+                    { type: 'table',
+                        headers: ['Nombre', 'Qué mide', 'Escala'],
+                        rows: [
+                            ['RSU Score', 'La calidad del <b>negocio</b>', '0-100, más es mejor'],
+                            ['Indicador RSU', 'Dónde está el <b>precio</b> en su rango reciente', '0-100, no es «mejor» ni «peor»'],
+                            ['RSU Algoritmo', 'El estado del <b>mercado entero</b>', 'Semáforo'],
+                        ]
+                    },
+                    { type: 'tip', title: 'La combinación interesante', content: 'Un RSU Score alto con el Indicador RSU en la parte baja significa buen negocio con el precio castigado. Es de las pocas veces en que dos herramientas distintas apuntan a la misma idea desde ángulos opuestos.' },
+                ]
+            },
+        ]
+    },
+
+    '32-3': {
+        moduleId: 32,
+        lessonIndex: 2,
+        title: 'Quién Está Comprando: Directivos, Fondos y Analistas',
+        duration: '6 min',
+        intro: 'Tres bloques de la ficha miran lo mismo desde ángulos distintos: qué está haciendo con sus propias acciones la gente que tiene más información o más dinero que tú.',
+        sections: [
+            {
+                heading: 'Los directivos',
+                blocks: [
+                    { type: 'text', content: 'Cuando alguien de la dirección compra o vende acciones de su propia empresa, está obligado a declararlo. La ficha muestra esas operaciones.' },
+                    { type: 'concept', title: 'Comprar y vender no pesan igual', content: 'Un directivo vende por muchas razones —impuestos, una casa, diversificar— y casi ninguna dice nada de la empresa. Comprar, en cambio, solo tiene una lectura. Por eso una compra fuerte informa más que diez ventas.' },
+                    { type: 'warning', title: 'Llega con retraso', content: 'La declaración tiene un plazo legal, así que lo que ves puede haber ocurrido semanas atrás. Sirve como contexto, no como señal de entrada.' },
+                ]
+            },
+            {
+                heading: 'Los fondos',
+                blocks: [
+                    { type: 'text', content: 'El porcentaje en manos de instituciones dice cuánto del capital está en fondos y gestoras en vez de en manos de particulares.' },
+                    { type: 'text', content: 'Un porcentaje muy alto significa que el valor ya está descubierto y bien seguido. Uno muy bajo puede indicar que aún no ha llamado la atención, o que hay una razón para que no lo haga.' },
+                ]
+            },
+            {
+                heading: 'Los analistas',
+                blocks: [
+                    { type: 'text', content: 'La ficha recoge el consenso de recomendaciones y los cambios recientes de valoración.' },
+                    { type: 'warning', title: 'El cambio informa más que el nivel', content: 'El consenso casi siempre es positivo: la mayoría de las acciones tienen más recomendaciones de compra que de venta en cualquier momento. Lo que aporta información no es que digan «comprar», sino que hayan <b>cambiado</b> de opinión, y en qué dirección.' },
+                ]
+            },
+        ]
+    },
+
+    '32-4': {
+        moduleId: 32,
+        lessonIndex: 3,
+        title: 'Cómo Recorrer la Ficha Sin Perderse',
+        duration: '6 min',
+        intro: 'La ficha es larga. Mirarla entera cada vez cansa y no aporta. Esta lección propone un recorrido corto que descarta pronto y profundiza solo si merece la pena.',
+        sections: [
+            {
+                heading: 'Un recorrido en cuatro paradas',
+                blocks: [
+                    { type: 'steps', items: [
+                        'Empieza por el desglose del RSU Score, no por el número. Busca si hay alguna categoría claramente hundida: eso te dice de qué va a ir el problema, si lo hay.',
+                        'Mira el gráfico y el Indicador RSU debajo. La pregunta aquí no es si está barato, sino en qué momento está: en tendencia, en rango, o cayendo.',
+                        'Comprueba quién compra. Si los directivos han comprado y los fondos están entrando, eso apoya lo que sea que hayas visto arriba. Si venden, no lo descarta, pero conviene saberlo.',
+                        'Mira lo que viene. Si hay resultados en los próximos días, cualquier conclusión que saques puede quedar sin efecto el día que publiquen.',
+                    ]},
+                    { type: 'tip', title: 'Descarta pronto', content: 'La mayoría de valores se caen en el primer o segundo paso. Es lo que se busca: dedicar el tiempo a los pocos que llegan al final, no repartirlo por igual entre todos.' },
+                ]
+            },
+            {
+                heading: 'Señales de que conviene parar',
+                blocks: [
+                    { type: 'table',
+                        headers: ['Si ves...', 'Qué suele significar'],
+                        rows: [
+                            ['Salud financiera muy baja con buen crecimiento', 'Crece pero las cuentas se deterioran: mirar la deuda'],
+                            ['Muy pocas categorías disponibles', 'No hay datos suficientes; el número dice menos de lo que parece'],
+                            ['Resultados en menos de una semana', 'Esperar suele costar menos que acertar'],
+                            ['Precio en máximos y directivos vendiendo fuerte', 'No es una prohibición, pero merece una explicación'],
+                        ]
+                    },
+                ]
+            },
+            {
+                heading: 'Lo que Research no hace',
+                blocks: [
+                    { type: 'warning', title: 'No decide, y no conoce tu cartera', content: 'La ficha no sabe cuánto tienes invertido, en qué sectores, ni cuánto riesgo llevas encima. Un valor puede ser perfecto en abstracto y una mala idea para ti si ya tienes tres parecidos.' },
+                    { type: 'text', content: 'Tampoco cubre el «cuánto». El tamaño de la posición es una decisión aparte, y se trata en los módulos de gestión de riesgo de esta misma Academia.' },
+                ]
+            },
+        ]
+    },
+
+    '32-5': {
+        moduleId: 32,
+        lessonIndex: 4,
+        title: 'De Dónde Salen los Datos y Qué Falla',
+        duration: '5 min',
+        intro: 'Una ficha llena de números invita a fiarse. Conviene saber de dónde vienen, cada cuánto se refrescan y en qué casos conocidos fallan.',
+        sections: [
+            {
+                heading: 'Fuentes y frescura',
+                blocks: [
+                    { type: 'table',
+                        headers: ['Bloque', 'Con qué frecuencia cambia'],
+                        rows: [
+                            ['Precio y gráfico', 'Durante la sesión'],
+                            ['Noticias', 'A lo largo del día'],
+                            ['Analistas y directivos', 'Cuando se publica cada operación o revisión'],
+                            ['Cuentas y RSU Score', 'Cada trimestre, cuando la empresa publica'],
+                        ]
+                    },
+                    { type: 'text', content: 'Es decir: la mayor parte de la ficha <b>no cambia de un día para otro</b>. Volver a mirarla cada mañana no aporta información nueva salvo en el precio y las noticias.' },
+                ]
+            },
+            {
+                heading: 'Dónde falla',
+                blocks: [
+                    { type: 'text', content: 'Los fallos conocidos no son aleatorios: se concentran en tipos concretos de empresa.' },
+                    { type: 'table',
+                        headers: ['Caso', 'Qué pasa'],
+                        rows: [
+                            ['Bancos y aseguradoras', 'Su balance no trae varias líneas que el análisis necesita'],
+                            ['Empresas extranjeras', 'Presentan las cuentas con otro formato'],
+                            ['Salidas a bolsa recientes', 'Sin años anteriores no se puede medir la tendencia'],
+                            ['Fondos cotizados', 'No tienen cuentas: buena parte de la ficha no aplica'],
+                        ]
+                    },
+                    { type: 'concept', title: 'Un hueco se muestra como hueco', content: 'Cuando un dato no está, aparece como no disponible en vez de rellenarse con un cero o una estimación. Un guion no es un suspenso: es un «no se sabe», y merece que lo compruebes por tu cuenta si es importante para tu decisión.' },
+                ]
+            },
+            {
+                heading: 'Para tenerlo a mano',
+                blocks: [
+                    { type: 'table',
+                        headers: ['Pregunta', 'Dónde mirar'],
+                        rows: [
+                            ['¿Es un buen negocio?', 'Desglose del RSU Score y Piotroski'],
+                            ['¿Está caro?', 'Valoración frente a su sector'],
+                            ['¿En qué momento está el precio?', 'Gráfico e Indicador RSU'],
+                            ['¿Quién está comprando?', 'Directivos, institucionales y opciones'],
+                            ['¿Hay algo a la vuelta de la esquina?', 'Resultados y noticias recientes'],
+                        ]
+                    },
+                ]
+            },
+        ]
+    },
 };
