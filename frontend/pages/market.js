@@ -1816,6 +1816,32 @@ function squeezeCelda(item) {
         + (sq.pct_float_corto != null ? sq.pct_float_corto + '% cort.' : '') + '</div></div>';
 }
 
+// Presión vendedora de la última sesión, frente a la media del propio valor.
+//
+// Se enseña el SALTO (×1,7) y no el porcentaje en crudo, y es deliberado: el
+// porcentaje suelto engaña. Un fondo del Russell 2000 negocia el 59% de su
+// volumen marcado como venta en corto un día cualquiera, y no está "59% en
+// corto" -- son creadores de mercado cubriendo operaciones que cierran el
+// mismo día. Contra su propia media, en cambio, ese mismo 59% sale por debajo
+// de lo normal. El porcentaje va debajo, en pequeño, como referencia.
+function presionCelda(item) {
+    const p = item.presion;
+    if (!p) return '<div style="color:var(--color-muted);font-size:10px;">—</div>';
+    const c = p.salto >= 1.5 ? '#f23645'
+            : p.salto >= 1.25 ? '#ffb800'
+            : p.salto <= 0.7 ? 'var(--color-accent)' : 'var(--color-muted)';
+    const lectura = p.salto >= 1.25 ? 'más presión vendedora de lo normal en este valor'
+                  : p.salto <= 0.7 ? 'menos presión vendedora de lo normal en este valor'
+                  : 'presión vendedora dentro de lo normal en este valor';
+    return '<div title="' + esc('Sesión del ' + p.fecha + ': el ' + p.hoy
+            + '% del volumen se marcó como venta en corto, frente al ' + p.media
+            + '% de media en las ' + p.sesiones + ' sesiones anteriores — ' + lectura
+            + '. No es el porcentaje de acciones vendidas en corto: buena parte son '
+            + 'creadores de mercado que cierran el mismo día.') + '">'
+        + '<div style="color:' + c + ';font-size:11px;font-weight:500;">×' + p.salto.toFixed(2) + '</div>'
+        + '<div style="color:var(--color-muted);font-size:9px;">' + p.hoy + '%</div></div>';
+}
+
 async function loadReddit(el) {
     el.innerHTML = widgetShell('REDDIT PULSE ' + tt('reddit-pulse'), 'Sentimiento social y candidatos a estrangulamiento', loading());
     try {
@@ -1829,9 +1855,11 @@ async function loadReddit(el) {
         // pasa a tener columna propia en vez de tirarse.
         // Dos columnas nuevas: SENT (reparto alcista/bajista real, no menciones)
         // y SQUEEZE (recuento de señales, desglosable al pasar el ratón).
-        const GRID = '26px 54px 72px 56px 46px 62px 74px 1fr';
+        // PRESIÓN es la única columna con dato del mismo día: todas las demás
+        // miran cosas de hace días o semanas.
+        const GRID = '24px 50px 68px 48px 40px 54px 62px 56px 1fr';
         const header  = '<div style="display:grid;grid-template-columns:' + GRID + ';gap:6px;padding:7px 12px;border-bottom:1px solid var(--color-border);font-size:10px;color:var(--color-muted);">'
-            + '<div>#</div><div>TICKER</div><div>PRECIO</div><div>BUZZ ' + tt('social-buzz') + '</div><div>VOL ' + tt('reddit-vol-relativo') + '</div><div>SENT ' + tt('sentimiento-social') + '</div><div>SQUEEZE ' + tt('squeeze-senales') + '</div><div>FUENTE</div>'
+            + '<div>#</div><div>TICKER</div><div>PRECIO</div><div>BUZZ ' + tt('social-buzz') + '</div><div>VOL ' + tt('reddit-vol-relativo') + '</div><div>SENT ' + tt('sentimiento-social') + '</div><div>SQUEEZE ' + tt('squeeze-senales') + '</div><div>PRESIÓN ' + tt('presion-vendedora') + '</div><div>FUENTE</div>'
             + '</div>';
         const rows = data.data.map((item, i) => {
             const up       = item.change >= 0;
@@ -1853,6 +1881,7 @@ async function loadReddit(el) {
                 + '<div style="color:' + volColor + ';font-size:11px;font-weight:500;">' + volStr + '</div>'
                 + sentCelda(item)
                 + squeezeCelda(item)
+                + presionCelda(item)
                 + '<div style="color:var(--color-muted);font-size:10px;">' + esc(item.fuentes || '—') + '</div>'
                 + '</div>';
         }).join('');

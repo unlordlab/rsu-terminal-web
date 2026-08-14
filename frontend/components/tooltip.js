@@ -561,6 +561,21 @@ LO QUE NO TE DICE:
 Que el precio vaya a subir. En una red financiera el sentimiento es alcista casi siempre —la gente habla de lo que ha comprado—, así que lo interesante no es que sea alto, sino que cambie o que sea inusualmente bajo.`
     },
 
+    "presion-vendedora": {
+        title: "Presión vendedora del día",
+        short: "Cuánto se vendió en corto ayer en este valor, comparado con lo normal en él. Es el único dato de la tabla que se actualiza a diario.",
+        long: `Cada día se publica qué parte del volumen negociado de una acción se marcó como venta en corto, es decir, apostando a la baja. El dato sale al cierre de la sesión, así que es lo más reciente que hay aquí: el resto de la tabla mira cosas de hace días o semanas.
+
+QUÉ SIGNIFICA EL NÚMERO:
+Se muestra una comparación, no un porcentaje suelto: ×1,70 quiere decir que ayer hubo un 70% más de venta bajista de lo habitual en ese valor concreto. Por debajo de ×1 hubo menos de lo normal. El porcentaje real va debajo, en pequeño.
+
+POR QUÉ COMPARADO Y NO EN CRUDO:
+Porque el porcentaje a secas engaña, y mucho. Hay valores en los que la mitad del volumen de cualquier día tranquilo aparece marcado como venta bajista, sin que pase nada raro. Buena parte de esas ventas son intermediarios que abren y cierran en la misma sesión para dar contrapartida, no gente apostando contra la empresa. Solo comparándolo con la costumbre de cada valor se distingue un día movido de la rutina.
+
+LO QUE NO ES:
+No es el porcentaje de acciones de la empresa que están vendidas en corto. Ese es otro dato distinto, el de la columna anterior, que se publica dos veces al mes. Este mide la actividad de un día; aquel, la posición acumulada.`,
+    },
+
     "squeeze-senales": {
         title: "Señales de estrangulamiento de cortos",
         short: "Cuántas condiciones cumple este valor de las que suelen acompañar a una subida forzada por el cierre de posiciones bajistas. Pasa el ratón para ver cuáles.",
@@ -572,6 +587,7 @@ LAS CONDICIONES QUE SE CUENTAN:
 ▸ Si hay pocas acciones en circulación: con menos papel, el mismo dinero mueve más el precio.
 ▸ Si hoy se negocia mucho más de lo habitual.
 ▸ Si los mensajes recientes son mayoritariamente alcistas.
+▸ Si la presión vendedora de la última sesión se ha disparado respecto a lo normal en ese valor.
 
 POR QUÉ ES UN RECUENTO Y NO UNA PUNTUACIÓN:
 Un "3 de 5" se puede abrir y ver qué tres. Una nota de 13 sobre 100 no se puede discutir ni comprobar. Si alguna condición no se puede evaluar —los fondos cotizados no tienen datos de posiciones prestadas— baja el total en vez de contar como incumplida, para que no parezca que suspende algo que ni siquiera se le puede medir.

@@ -1,5 +1,5 @@
 from services.gist_client import cabeceras_gist
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, date, timedelta, timezone
 import yfinance as yf
 import pandas as pd
 import requests
@@ -944,6 +944,133 @@ def _datos_squeeze(ticker: str) -> dict | None:
         return None
 
 
+# ── Presión vendedora del día (FINRA) ───────────────────────────────────────
+#
+# FINRA publica CADA DÍA, hacia las 18:00 de Nueva York, cuánto del volumen
+# negociado de cada valor se marcó como venta en corto. Es el mismo dato que
+# la industria usa para vigilar el pulso diario de los cortos, y llega el
+# mismo día -- frente al dato de posiciones cortas de `_datos_squeeze`, que
+# sale dos veces al mes y con dos semanas de retraso.
+#
+# LO QUE **NO** ES, y hay que decirlo en la pantalla: esto NO es el porcentaje
+# de acciones vendidas en corto. Buena parte de ese volumen son creadores de
+# mercado cubriendo operaciones que cierran el mismo día. Medido el 14/08/2026
+# sobre el fichero del 13: IWM salía al 58,9%, y un fondo del Russell 2000
+# evidentemente no está "59% en corto". Por eso NO se muestra el porcentaje
+# como si fuera interés corto -- lo que se mira es el SALTO contra su propia
+# media reciente, que sí distingue un día anómalo de la rutina de ese valor.
+#
+# El fichero trae los ~12.000 valores de golpe: una descarga sirve a toda la
+# tabla, no una por ticker.
+SHVOL_URL          = "https://cdn.finra.org/equity/regsho/daily/CNMSshvol{fecha}.txt"
+SHVOL_SESIONES     = 20        # sesiones de referencia para la media
+SHVOL_MINIMO_SERIE = 8         # sin al menos esto, no hay media que comparar
+SHVOL_VOL_MINIMO   = 50_000    # acciones: por debajo el cociente es ruido
+# Hoy frente a su propia media. Calibrado sobre el mercado real del
+# 13/08/2026 (5.240 valores con serie suficiente): la mediana del salto es
+# exactamente 1,00 -- el normalizado no tiene sesgo -- y 1,50 deja fuera al
+# 95% del mercado. Con el 1,25 de la primera versión disparaba uno de cada
+# seis valores, demasiado corriente para llamarlo señal.
+SHVOL_SALTO        = 1.50
+
+
+def _shvol_dia(fecha) -> dict | None:
+    """Cocientes corto/total de UNA sesión. `{}` significa "no hay fichero"
+    (fin de semana, festivo, o aún no publicado), que no es lo mismo que un
+    fallo -- por eso también se cachea, para no repreguntar en cada refresco.
+
+    Los ficheros de días pasados no cambian nunca, así que se guardan una
+    semana: en régimen normal cada vuelta descarga UN fichero, el del día."""
+    from services.cache import cache
+    clave = f"market:shvol:{fecha:%Y%m%d}"
+    cacheado = cache.get(clave)
+    if cacheado is not None:
+        return cacheado or None
+    # Un día reciente sin fichero todavía puede tenerlo en unas horas (se
+    # publica a las 18:00 ET); uno antiguo no lo tendrá nunca.
+    ttl_vacio = 3600 if (date.today() - fecha).days <= 2 else 604800
+    try:
+        r = requests.get(SHVOL_URL.format(fecha=f"{fecha:%Y%m%d}"), timeout=20)
+        if r.status_code != 200:
+            cache.set(clave, {}, ttl_vacio)
+            return None
+        ratios = {}
+        for linea in r.text.strip().split("\n")[1:]:
+            campos = linea.split("|")
+            if len(campos) < 5:
+                continue
+            try:
+                corto, total = float(campos[2]), float(campos[4])
+            except ValueError:
+                continue
+            if total < SHVOL_VOL_MINIMO or corto <= 0:
+                continue
+            ratios[campos[1]] = round(corto / total, 3)
+        if not ratios:
+            cache.set(clave, {}, ttl_vacio)
+            return None
+        cache.set(clave, ratios, 604800)
+        return ratios
+    except Exception:
+        return None
+
+
+def _presion_corto_map() -> dict:
+    """{ticker: {hoy, media, salto, fecha, sesiones}} para todo el mercado.
+
+    Se calcula una vez por hora y sirve a toda la tabla. La media EXCLUYE el
+    día que se está evaluando -- si hoy entra en su propio promedio, acerca el
+    cociente a 1 y disimula justo los días anómalos que se buscan (mismo
+    razonamiento que `_vol_ratio_desde_serie`)."""
+    from services.cache import cache
+    cacheado = cache.get("market:shvol:agregado")
+    if cacheado is not None:
+        return cacheado or {}
+    hoy  = date.today()
+    # 40 días naturales dan de sobra para 21 sesiones aun con festivos.
+    dias = [hoy - timedelta(days=i) for i in range(0, 40)]
+    sesiones = []
+    with ThreadPoolExecutor(max_workers=8) as ex:
+        for fecha, ratios in zip(dias, ex.map(_shvol_dia, dias)):
+            if ratios:
+                sesiones.append((fecha, ratios))
+    sesiones.sort(key=lambda x: x[0], reverse=True)
+    sesiones = sesiones[:SHVOL_SESIONES + 1]
+    if len(sesiones) < SHVOL_MINIMO_SERIE + 1:
+        cache.set("market:shvol:agregado", {}, 1800)
+        return {}
+
+    fecha_hoy, ratios_hoy = sesiones[0]
+    previas = [r for _, r in sesiones[1:]]
+    mapa = {}
+    for ticker, ratio in ratios_hoy.items():
+        historicos = [r[ticker] for r in previas if ticker in r]
+        if len(historicos) < SHVOL_MINIMO_SERIE:
+            continue
+        media = sum(historicos) / len(historicos)
+        if media <= 0:
+            continue
+        mapa[ticker] = {
+            "hoy":      round(ratio * 100, 1),
+            "media":    round(media * 100, 1),
+            "salto":    round(ratio / media, 2),
+            "fecha":    f"{fecha_hoy:%Y-%m-%d}",
+            "sesiones": len(historicos),
+        }
+    cache.set("market:shvol:agregado", mapa, 3600)
+
+    # Retirar los días que ya cayeron fuera de la ventana. La caché marca
+    # caducidad pero NO borra: al leer una clave vencida la ignora, y si nadie
+    # vuelve a leerla se queda indefinidamente en memoria y en el SQLite. Aquí
+    # eso importa más que en cualquier otra clave del proyecto, porque se crea
+    # una NUEVA cada día laborable (~250 al año, 80 KB cada una) que a las tres
+    # semanas no se vuelve a consultar nunca. Se limpian 20 días por vuelta:
+    # trabajo acotado, y basta para que nunca se acumulen.
+    for i in range(41, 61):
+        cache.delete(f"market:shvol:{hoy - timedelta(days=i):%Y%m%d}")
+    return mapa
+
+
 # Cortes de las señales de squeeze. No son una predicción: describen una
 # situación, y cada uno se puede señalar por separado en la pantalla.
 #
@@ -957,7 +1084,8 @@ SQUEEZE_FLOAT_PEQUENO  = 150_000_000
 SQUEEZE_VOL_RATIO      = 2.0    # volumen de hoy frente a su media
 
 
-def _senales_squeeze(squeeze: dict | None, vol_ratio, sentimiento: dict | None) -> dict:
+def _senales_squeeze(squeeze: dict | None, vol_ratio, sentimiento: dict | None,
+                     presion: dict | None = None) -> dict:
     """Cuántas de las señales cumple, y CUÁLES. Es un recuento legible, no una
     puntuación con pesos: «3 de 4» se puede desglosar y defender; un «13» no.
 
@@ -985,11 +1113,20 @@ def _senales_squeeze(squeeze: dict | None, vol_ratio, sentimiento: dict | None) 
         evaluables += 1
         if sentimiento["pct_alcista"] >= 75:
             cumplidas.append(f"{sentimiento['pct_alcista']}% de mensajes alcistas")
+    # La única señal con frescura de un día: todas las demás miran datos de
+    # hace días o semanas. Se compara contra la media del PROPIO valor, no
+    # contra un corte absoluto -- un 55% es rutina en unos valores y un
+    # sobresalto en otros (ver el comentario de SHVOL_URL).
+    if presion and presion.get("salto"):
+        evaluables += 1
+        if presion["salto"] >= SHVOL_SALTO:
+            cumplidas.append(
+                f"presión vendedora {presion['hoy']:g}% hoy vs {presion['media']:g}% de media")
     return {"cumplidas": cumplidas, "n": len(cumplidas), "de": evaluables}
 
 
 def _enrich_ticker(ticker, mention_count, max_mentions, st_tickers, vol_serie=None,
-                    reddit_tickers=None):
+                    reddit_tickers=None, presion=None):
     """El volumen ya viene descargado en lote por el llamador (una sola
     petición para los 15 tickers) -- antes cada ticker hacía aquí su propio
     history(10d), 15 peticiones por refresco de caché, y encima el resultado
@@ -1031,7 +1168,8 @@ def _enrich_ticker(ticker, mention_count, max_mentions, st_tickers, vol_serie=No
             "mentions":    mention_count,
             "sentimiento": sentimiento,
             "squeeze":     squeeze,
-            "senales":     _senales_squeeze(squeeze, vol_ratio, sentimiento),
+            "presion":     presion,
+            "senales":     _senales_squeeze(squeeze, vol_ratio, sentimiento, presion),
             "ok":          True,
         }
     except Exception:
@@ -1255,9 +1393,18 @@ def get_reddit_pulse():
     except Exception as e:
         print(f"[Reddit] Sin volumen relativo esta vuelta: {type(e).__name__}: {e}")
 
+    # Presión vendedora del día: UNA descarga (el fichero de FINRA trae los
+    # ~12.000 valores) que sirve a las quince filas, no una llamada por ticker.
+    try:
+        mapa_presion = _presion_corto_map()
+    except Exception as e:
+        print(f"[Reddit] Sin presión vendedora esta vuelta: {type(e).__name__}: {e}")
+        mapa_presion = {}
+
     results = []
     futures_map = {yf_executor.submit(_enrich_ticker, t, ticker_mentions[t], max_mentions,
-                                      st_tickers, vol_d.get(t), reddit_tickers): t for t in top}
+                                      st_tickers, vol_d.get(t), reddit_tickers,
+                                      mapa_presion.get(t)): t for t in top}
     for future in futures_map:
         results.append(future.result())
 
