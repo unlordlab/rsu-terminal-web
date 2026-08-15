@@ -1,0 +1,31 @@
+name: StockTwits Sentiment Scan
+
+on:
+  schedule:
+    # Cada 30 min de lunes a viernes, entre las 13:00 y las 21:30 UTC -- que
+    # cubre la sesión de Nueva York (9:30-16:00 ET) con un margen antes y
+    # después. Fuera de ese rango el sentimiento apenas se mueve y no compensa
+    # gastar peticiones.
+    #
+    # No va en el bloque nocturno de los otros cinco scans (22:00-23:15 UTC) a
+    # propósito: aquéllos publican datos de cierre, que solo cambian una vez al
+    # día. Esto es conversación en curso -- un sentimiento de hace doce horas no
+    # describe lo que está pasando.
+    - cron: '0,30 13-21 * * 1-5'
+  workflow_dispatch:
+
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: pip install requests
+      - name: Escanear sentimiento de StockTwits
+        env:
+          GIST_TOKEN:         ${{ secrets.GIST_TOKEN }}
+          STOCKTWITS_GIST_ID: ${{ secrets.STOCKTWITS_GIST_ID }}
+        run: python scripts/stocktwits_scan.py

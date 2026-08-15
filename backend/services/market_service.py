@@ -1,5 +1,6 @@
 from services.gist_client import cabeceras_gist
 from datetime import datetime, date, timedelta, timezone
+import json
 import yfinance as yf
 import pandas as pd
 import requests
@@ -14,6 +15,10 @@ from yf_batch import download_batch  # noqa: E402
 from vix_curve import vix_ratio, zona_curva, UMBRAL_BACKWARDATION, UMBRAL_TENSION  # noqa: E402
 from mcclellan import mcclellan_series  # noqa: E402
 from market_regime import spy_trend_snapshot  # noqa: E402
+from social_tickers import (  # noqa: E402
+    BLACKLIST as _BLACKLIST, extract_tickers, fetch_reddit_titles_via_rss,
+    fetch_sentimiento, fetch_trending, REDDIT_SUBS,
+)
 
 # ── ÍNDICES ───────────────────────────────────────────────────────────────────
 
@@ -745,29 +750,6 @@ def get_vix_term_structure():
 
 # ── REDDIT
 
-_BLACKLIST = {
-    'A','I','IT','IS','AT','BE','BY','DO','FOR','GO','HE','IF','IN','ME',
-    'MY','NO','OF','ON','OR','SO','TO','UP','US','WE','AND','ARE','BUT',
-    'CAN','DID','GET','GOT','HAS','HAD','HER','HIM','HIS','HOW','ITS',
-    'LET','MAY','NEW','NOT','NOW','OFF','OUR','OUT','OWN','PUT','RUN',
-    'SAY','SHE','THE','TOO','TWO','USE','WAS','WAY','WHO','WHY','WITH',
-    'YOU','YOLO','LMAO','FOMO','EPS','CEO','IPO','ETF','GDP','FED','ALL',
-    'GOOD','BEST','NEXT','LAST','HIGH','LOW','MORE','MUCH','JUST','LIKE',
-    'MAKE','MANY','MOST','MOVE','NEED','OVER','SOME','SUCH','THAN','THAT',
-    'THEM','THEN','THEY','THIS','WHAT','WHEN','WILL','YEAR','HOLD','SELL',
-    'BUY','LONG','SHORT','PUMP','DUMP','MOON','BEAR','BULL','CALLS','PUTS',
-    'DD','TA','OTM','ITM','ATM','WSB','RH','TD','AI','ML','API','LOL',
-    'WTF','OMG','GG','GE','F','T','X','V','D','C','K','M','R','S',
-    'PRE','POST','AH','PM','AM','EST','PST','UTC','USD','EUR','CAD',
-    'WELL','WORK','TAKE','GIVE','BACK','COME','WANT','SHOW','ONLY','VERY',
-    # Palabras corrientísimas en estos foros que ADEMÁS son tickers reales,
-    # así que el filtro por universo no las descarta: TECH (Bio-Techne),
-    # OPEN (Opendoor), CASH (Pathward), REAL (The RealReal), TRUE (TrueCar).
-    # En un hilo de bolsa, "tech" o "open" casi nunca hablan de esas
-    # empresas -- si alguien las menciona de verdad, normalmente escribe
-    # "$TECH", y el "$" sigue contando (salta el filtro, ver _extract_tickers).
-    'TECH','OPEN','CASH','REAL','TRUE',
-}
 
 _UNIVERSO_TICKERS = None
 
@@ -805,22 +787,12 @@ def _universo_tickers() -> set:
 
 
 def _extract_tickers(text: str):
-    import re as _re
-    found = {}
-    universo = _universo_tickers()
-    for m in _re.finditer(r'\$([A-Z]{1,6})\b|\b([A-Z]{2,5})\b', text):
-        con_dolar = bool(m.group(1))
-        t = (m.group(1) or m.group(2) or '').strip()
-        if not t or t in _BLACKLIST or not (2 <= len(t) <= 6):
-            continue
-        # Con "$" delante es inequívocamente un ticker (así se escriben en
-        # estos foros); sin "$", solo cuenta si es un ticker real conocido --
-        # si el universo no se pudo cargar, no se filtra nada, para no
-        # vaciar el widget por un fallo de import.
-        if not con_dolar and universo and t not in universo:
-            continue
-        found[t] = found.get(t, 0) + (2 if con_dolar else 1)
-    return sorted(found.items(), key=lambda x: -x[1])[:30]
+    """Envoltorio sobre shared/social_tickers.py: el runner de GitHub Actions
+    tiene que extraer los mismos tickers que el backend, y una segunda copia
+    del extractor acabaría divergiendo. Aquí solo se le añade el universo,
+    que aquí es más rico (S&P500 + la watchlist curada de Options Flow) que
+    el que puede montar el runner sin las dependencias del backend."""
+    return extract_tickers(text, _universo_tickers())
 
 def _vol_ratio_desde_serie(vol_serie):
     """Volumen de hoy frente a lo normal en ese ticker. None si no hay serie
@@ -850,6 +822,39 @@ def _vol_ratio_desde_serie(vol_serie):
     return round(vol_today / esperado, 2) if esperado > 0 else None
 
 
+# Gist del escaneo de StockTwits (scripts/stocktwits_scan.py, vía GitHub
+# Actions). Vacío = el backend solo puede usar la llamada directa, que desde el
+# VPS no pasa del challenge de Cloudflare -- la columna SENT saldrá con guiones,
+# igual que el 15/08/2026 antes de montar esto. Rellenar tras crear el Gist.
+STOCKTWITS_GIST_ID   = ""
+STOCKTWITS_GIST_FILE = "stocktwits_sentimiento.json"
+
+
+def _stocktwits_gist() -> dict:
+    """Lo que el runner dejó publicado: {trending, sentimiento}. `{}` si no hay
+    Gist configurado o no se pudo leer."""
+    from services.cache import cache
+    cacheado = cache.get("market:st_gist")
+    if cacheado is not None:
+        return cacheado or {}
+    if not STOCKTWITS_GIST_ID:
+        return {}
+    try:
+        r = requests.get(f"https://api.github.com/gists/{STOCKTWITS_GIST_ID}",
+                         headers=cabeceras_gist(), timeout=10)
+        if r.status_code != 200:
+            cache.set("market:st_gist", {}, 300)
+            return {}
+        contenido = r.json()["files"].get(STOCKTWITS_GIST_FILE, {}).get("content", "")
+        datos = json.loads(contenido) if contenido else {}
+        cache.set("market:st_gist", datos, 600)
+        return datos
+    except Exception as e:
+        print(f"[StockTwits] No se pudo leer el Gist: {type(e).__name__}: {e}")
+        cache.set("market:st_gist", {}, 300)
+        return {}
+
+
 def _sentimiento_stocktwits(ticker: str) -> dict | None:
     """Reparto alcista/bajista REAL de los últimos mensajes sobre ese valor.
 
@@ -866,38 +871,22 @@ def _sentimiento_stocktwits(ticker: str) -> dict | None:
     cacheado = cache.get(clave)
     if cacheado is not None:
         return cacheado or None
-    try:
-        r = requests.get(
-            f"https://api.stocktwits.com/api/2/streams/symbol/{ticker}.json",
-            headers={"User-Agent": "Mozilla/5.0 (compatible; MarketDashboard/2.0)"},
-            timeout=8,
-        )
-        if r.status_code != 200:
-            cache.set(clave, {}, 900)      # negativo corto: no reintentar en cada refresco
-            return None
-        etiquetas = [
-            ((m.get("entities") or {}).get("sentiment") or {}).get("basic")
-            for m in r.json().get("messages", [])
-        ]
-        alcistas = sum(1 for e in etiquetas if e == "Bullish")
-        bajistas = sum(1 for e in etiquetas if e == "Bearish")
-        total    = alcistas + bajistas
-        if not total:
-            cache.set(clave, {}, 900)
-            return None
-        datos = {
-            "alcistas":    alcistas,
-            "bajistas":    bajistas,
-            "mensajes":    total,
-            "pct_alcista": round(alcistas / total * 100),
-            # De cuántos mensajes sale: 3 mensajes y 30 no dicen lo mismo, y
-            # sin esto un 100% de 2 mensajes se lee como una unanimidad.
-            "muestra":     len(etiquetas),
-        }
+    # Primero la llamada directa: es la más fresca y funciona desde cualquier
+    # sitio que no esté bloqueado (desarrollo local, u otro alojamiento algún
+    # día). Desde el VPS no pasa del challenge de Cloudflare y devuelve None,
+    # así que cae al Gist del runner de GitHub Actions.
+    datos = fetch_sentimiento(ticker)
+    if datos:
         cache.set(clave, datos, 900)       # 15 min: el stream se mueve, pero no cada minuto
         return datos
-    except Exception:
-        return None
+
+    datos = (_stocktwits_gist().get("sentimiento") or {}).get(ticker)
+    if datos:
+        cache.set(clave, datos, 900)
+        return datos
+
+    cache.set(clave, {}, 900)              # negativo corto: no reintentar en cada refresco
+    return None
 
 
 def _datos_squeeze(ticker: str) -> dict | None:
@@ -1209,77 +1198,13 @@ def _get_reddit_token() -> str | None:
     except Exception:
         return None
 
-REDDIT_SUBS = ['wallstreetbets', 'stocks', 'investing', 'options', 'StockMarket',
-               # r/buzztickr publica recuentos de menciones y "market pulse"
-               # con los tickers en el propio título ("Market Pulse Aug 06
-               # $SPY $SNDK"), así que aporta símbolos limpios y muy densos.
-               #
-               # AVISO SOBRE LO QUE MIDE: sus posts son RESÚMENES de menciones
-               # de Reddit, no conversación original. Un ticker que ya está
-               # sonando en los otros subreddits vuelve a contarse aquí a
-               # través del resumen, así que refuerza lo que ya destaca en vez
-               # de aportar una señal independiente. Pesa poco —es un
-               # subreddit pequeño, 1 de cada 100 títulos en la petición
-               # combinada— pero conviene saber que no es una sexta opinión,
-               # es un eco de las otras cinco.
-               'buzztickr']
 
 
 def _fetch_reddit_titles_via_rss():
-    """Títulos de los posts "hot" de los subreddits de bolsa, vía el RSS
-    público de Reddit.
-
-    Sustituye al scraping con navegador headless (Playwright) que se montó
-    el 23/07/2026. Aquel enfoque funcionó mientras el bloqueo de Reddit era
-    un *challenge* JavaScript -- que un Chromium real resolvía. Verificado
-    en producción el 28/07/2026 que ya NO es así: old.reddit.com devuelve
-    HTTP 403 con título "Blocked" y el texto "Your request has been blocked
-    due to a network policy" ANTES de servir página alguna. Es un bloqueo de
-    RED por IP de datacenter, previo a cualquier JS, así que el navegador no
-    aporta nada -- solo ~180MB de imagen y varios segundos por petición.
-
-    El RSS, en cambio, sí responde 200 desde esa misma IP (verificado en el
-    propio VPS). Y los 5 subreddits caben en UNA sola petición usando la
-    sintaxis multi-subreddit de Reddit (`r/a+b+c`), lo que además esquiva el
-    429 que aparecía al pedirlos uno a uno seguidos.
-
-    Devuelve [] si falla -- el llamador ya trata la ausencia sin fabricar
-    nada, mismo criterio que el resto del proyecto."""
-    import time as _time
-    import xml.etree.ElementTree as ET
-    # limit=100 (el RSS sirve 25 por defecto): con solo 25 posts salían 3-4
-    # tickers con 1-2 menciones cada uno, muy poco para llenar la tabla ahora
-    # que StockTwits ya no aporta. Verificado que Reddit lo respeta y devuelve
-    # los 100 en la misma petición única.
-    url = f"https://www.reddit.com/r/{'+'.join(REDDIT_SUBS)}/hot/.rss?limit=100"
-    cabeceras = {"User-Agent": "Mozilla/5.0 (compatible; RSUTerminal/1.0)"}
-    try:
-        # Reddit limita el ritmo también en el RSS: dos peticiones seguidas
-        # devuelven 429 (verificado). Con la caché de 5 min esto no debería
-        # darse en producción, pero un reintento cubre la colisión puntual
-        # (p.ej. dos workers pidiéndolo a la vez al caducar la caché) sin
-        # insistir hasta hacerse pesado -- mismo criterio que el ritmo hacia
-        # SEC EDGAR y el backoff de GDELT.
-        r = None
-        for intento, espera in enumerate((4, 10)):
-            r = requests.get(url, headers=cabeceras, timeout=15)
-            if r.status_code != 429:
-                break
-            if intento == 0:
-                print(f"[RedditRSS] 429 (límite de ritmo) — reintento en {espera}s")
-                _time.sleep(espera)
-        if r.status_code != 200:
-            print(f"[RedditRSS] HTTP {r.status_code} al pedir {len(REDDIT_SUBS)} subreddits")
-            return []
-        root = ET.fromstring(r.content)
-        ns = {"a": "http://www.w3.org/2005/Atom"}
-        titulos = [(e.findtext("a:title", "", ns) or "").strip() for e in root.findall("a:entry", ns)]
-        titulos = [t for t in titulos if t]
-        print(f"[RedditRSS] {len(titulos)} títulos de r/{'+'.join(REDDIT_SUBS)}")
-        return titulos
-    except Exception as e:
-        print(f"[RedditRSS] Falló: {type(e).__name__}: {e}")
-        return []
+    """Ver shared/social_tickers.py -- compartido con el escaneo de StockTwits,
+    que necesita los mismos titulares para saber de qué valores pedir
+    sentimiento."""
+    return fetch_reddit_titles_via_rss()
 
 @cache.single_flight("market:reddit")
 def get_reddit_pulse():
@@ -1341,21 +1266,19 @@ def get_reddit_pulse():
             reddit_ok = True
             print(f"[Reddit] {subs_ok}/{len(REDDIT_SUBS)} subreddits leídos vía OAuth")
 
-    try:
-        r = session.get('https://api.stocktwits.com/api/2/trending/symbols.json', timeout=8)
-        if r.status_code == 200:
-            symbols = r.json().get('symbols', [])[:20]
-            for i, item in enumerate(symbols):
-                t = item.get('symbol', '').upper()
-                if t and 2 <= len(t) <= 6:
-                    st_tickers.append(t)
-                    weight = max(1, 20 - i)
-                    ticker_mentions[t] = ticker_mentions.get(t, 0) + weight
-            if st_tickers:
-                sources.append('StockTwits')
-                st_ok = True
-    except Exception:
-        pass
+    # Llamada directa primero; si el challenge de Cloudflare se la come --que
+    # es lo que pasa desde el VPS-- se usa lo que dejó publicado el runner de
+    # GitHub Actions. Sin ninguna de las dos, StockTwits simplemente no aporta
+    # y no se anuncia como fuente.
+    trending = fetch_trending()
+    if not trending:
+        trending = _stocktwits_gist().get("trending") or []
+    for i, t in enumerate(trending):
+        st_tickers.append(t)
+        ticker_mentions[t] = ticker_mentions.get(t, 0) + max(1, 20 - i)
+    if st_tickers:
+        sources.append('StockTwits')
+        st_ok = True
 
     # Sin OAuth (o si falló), el RSS público es la vía que SÍ responde desde
     # la IP del VPS -- ver _fetch_reddit_titles_via_rss para por qué se
@@ -1367,6 +1290,14 @@ def get_reddit_pulse():
             for title in titulos:
                 for ticker, count in _extract_tickers(title.upper()):
                     ticker_mentions[ticker] = ticker_mentions.get(ticker, 0) + count
+                    # Faltaba, y es la vía que de verdad corre en producción:
+                    # sin esto ninguna fila queda acreditada a Reddit, la
+                    # columna FUENTE sale entera con guiones y la cabecera
+                    # acaba anunciando "Reddit" por el respaldo de abajo. La
+                    # rama de OAuth sí lo hacía, pero esa no se ejecuta (las
+                    # credenciales nunca se aprobaron), así que el arreglo del
+                    # 14/08 se verificó sobre el único camino que NO corre.
+                    reddit_tickers.add(ticker)
 
     if not ticker_mentions:
         fallback = _reddit_fallback()
@@ -1414,8 +1345,13 @@ def get_reddit_pulse():
     # "Reddit + StockTwits" mientras las quince filas venían de StockTwits,
     # porque Reddit contestó pero no se extrajo de sus titulares ni un
     # ticker. Una fuente que no aporta nada no es una fuente.
+    # Sin respaldo a `sources`. Ese `or list(set(sources))` es lo que permitió
+    # que la cabecera dijera "Reddit" mientras las quince filas salían con
+    # guiones: enmascaraba justo el fallo que la línea de arriba arregla. Si
+    # ninguna fila se puede acreditar, la cabecera se queda vacía -- que es
+    # feo, pero es verdad, y se ve al instante en vez de tardar un día.
     aportaron = {f for r in results[:15] for f in (r.get("fuentes") or "").split(" + ") if f}
-    result = {"data": results[:15], "sources": sorted(aportaron) or list(set(sources)),
+    result = {"data": results[:15], "sources": sorted(aportaron),
               "timestamp": get_timestamp(), "ok": True}
     cache.set("market:reddit", result, TTL["reddit"])
     return result
