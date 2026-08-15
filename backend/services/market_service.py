@@ -823,10 +823,12 @@ def _vol_ratio_desde_serie(vol_serie):
 
 
 # Gist del escaneo de StockTwits (scripts/stocktwits_scan.py, vía GitHub
-# Actions). Vacío = el backend solo puede usar la llamada directa, que desde el
-# VPS no pasa del challenge de Cloudflare -- la columna SENT saldrá con guiones,
-# igual que el 15/08/2026 antes de montar esto. Rellenar tras crear el Gist.
-STOCKTWITS_GIST_ID   = ""
+# Actions). Va escrito aquí, como CANSLIM_GIST_ID y CONGRESS_GIST_ID: el Gist
+# es público, así que leerlo no necesita credencial, y el backend del VPS no
+# tiene acceso a los secrets de GitHub (esos son del runner, que es quien
+# ESCRIBE). Vacío = solo quedaría la llamada directa, que desde el VPS no pasa
+# del challenge de Cloudflare y deja la columna SENT con guiones.
+STOCKTWITS_GIST_ID   = "c0c1da280af7de17ab3cf766d685423e"
 STOCKTWITS_GIST_FILE = "stocktwits_sentimiento.json"
 
 
