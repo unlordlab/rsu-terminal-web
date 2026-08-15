@@ -10,6 +10,17 @@ router = APIRouter(prefix="/api/v1/scanner", tags=["scanner"])
 async def scanner_universe(user=Depends(verify_token)):
     return get_scanner_data()
 
+@router.get("/transiciones")
+async def scanner_transiciones(
+    sesiones: int = Query(5, ge=1, le=60),
+    user=Depends(verify_token),
+):
+    """Quién ha entrado y salido de la fase de avance. Sale del histórico que
+    snapshots.db ya venía guardando; no cuesta ninguna descarga."""
+    from services.snapshots_service import transiciones_de_fase
+    return transiciones_de_fase(sesiones=sesiones)
+
+
 @router.get("/filter")
 async def scanner_filter(
     rvol_min: Optional[float] = Query(None, ge=0),

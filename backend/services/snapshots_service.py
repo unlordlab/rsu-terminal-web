@@ -435,6 +435,77 @@ def persistencia_por_cesta(umbral: float = UMBRAL_LIDERAZGO) -> dict:
     return salida
 
 
+# La fase que interesa vigilar. En Weinstein el momento accionable no es
+# "estar en fase 2", es ENTRAR: un valor que lleva meses en avance ya ha hecho
+# buena parte del recorrido.
+FASE_AVANCE = 2
+FASE_NOMBRES = {1: "Acumulación", 2: "Avance", 3: "Distribución", 4: "Declive"}
+
+
+def transiciones_de_fase(sesiones: int = 5) -> dict:
+    """Quién ha ENTRADO y quién ha SALIDO de la fase de avance en las últimas
+    N sesiones.
+
+    La tabla del Scanner es una foto: un valor en fase 2 se ve igual lleve seis
+    meses ahí o haya entrado ayer, y en Weinstein esa diferencia es casi todo.
+
+    Solo se miran fases CONFIRMADAS (el debounce de 3 sesiones que ya aplica el
+    scan nocturno). Sin ese filtro, un valor que baila entre dos fases en días
+    consecutivos aparecería entrando y saliendo cada semana, y la lista se
+    llenaría de ruido en vez de cambios reales.
+
+    Devuelve `{ok: False, ...}` con la razón cuando no hay histórico bastante,
+    en vez de una lista vacía -- que se leería como "no ha cambiado nada".
+    """
+    conn = _conn()
+    try:
+        fechas = [r["fecha"] for r in conn.execute(
+            "SELECT DISTINCT fecha FROM snapshot_ticker ORDER BY fecha DESC "
+            "LIMIT ?", (sesiones + 1,)).fetchall()]
+        if len(fechas) < 2:
+            return {"ok": False, "error": "Hacen falta al menos dos sesiones guardadas.",
+                    "sesiones": len(fechas)}
+        hoy, antes = fechas[0], fechas[-1]
+
+        def _fases(fecha):
+            return {r["ticker"]: (r["phase"], r["sector"], r["rs_pct"], r["precio"])
+                    for r in conn.execute(
+                        "SELECT ticker, sector, phase, rs_pct, precio FROM snapshot_ticker "
+                        "WHERE fecha = ? AND phase_confirmed = 1 AND phase IS NOT NULL",
+                        (fecha,)).fetchall()}
+        f_hoy, f_antes = _fases(hoy), _fases(antes)
+    finally:
+        conn.close()
+
+    entradas, salidas = [], []
+    for ticker, (fase, sector, rs, precio) in f_hoy.items():
+        previo = f_antes.get(ticker)
+        if previo is None or previo[0] == fase:
+            continue
+        fila = {"ticker": ticker, "sector": sector, "rs_pct": rs, "precio": precio,
+                "desde": previo[0], "hasta": fase,
+                "desde_label": FASE_NOMBRES.get(previo[0]),
+                "hasta_label": FASE_NOMBRES.get(fase)}
+        if fase == FASE_AVANCE:
+            entradas.append(fila)
+        elif previo[0] == FASE_AVANCE:
+            salidas.append(fila)
+
+    # Por fuerza relativa: entre varias entradas a la vez, la que ya lidera es
+    # la que más dice.
+    entradas.sort(key=lambda r: -(r["rs_pct"] or 0))
+    salidas.sort(key=lambda r: -(r["rs_pct"] or 0))
+    return {
+        "ok": True, "entradas": entradas, "salidas": salidas,
+        "desde_fecha": antes, "hasta_fecha": hoy,
+        # La ventana REAL, no la pedida: con el histórico a medio llenar,
+        # anunciar "5 sesiones" cuando solo hay 3 sería mentir sobre el periodo.
+        "sesiones": len(fechas) - 1,
+        "sesiones_pedidas": sesiones,
+        "comparables": len(set(f_hoy) & set(f_antes)),
+    }
+
+
 def fechas_snapshot_ticker(limite: int = 60) -> list:
     """Fechas de sesión con datos, de la más reciente a la más antigua."""
     conn = _conn()

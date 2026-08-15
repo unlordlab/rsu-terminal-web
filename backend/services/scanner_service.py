@@ -227,6 +227,14 @@ def run_filter(
                 "rs_pct":        row.get("rs_pct"),
                 "phase":         row.get("phase"),
                 "phase_label":   row.get("phase_label"),
+                # La fase SEMANAL ya la calcula el scan nocturno y viaja en el
+                # Gist desde siempre -- solo faltaba pasarla. La diaria se
+                # voltea con ruido; la semanal es la escala en la que Weinstein
+                # trabajaba, así que cuando las dos discrepan es información,
+                # no un error: normalmente significa que el giro diario aún no
+                # se ha consolidado.
+                "phase_weekly":       row.get("phase_weekly"),
+                "phase_weekly_label": row.get("phase_weekly_label"),
                 "trend":         row.get("trend"),
                 "score_tecnico": row.get("score_tecnico"),
                 "new_high":      bool(row.get("new_high")),

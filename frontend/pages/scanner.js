@@ -46,11 +46,89 @@ export async function render(container) {
     container.innerHTML = pageHeader()
         + criteriaPanel()
         + '<div id="scanner-meta" style="color:var(--color-muted);font-size:11px;margin-bottom:0.75rem;"></div>'
-        + '<div id="scanner-result"></div>';
+        + '<div id="scanner-result"></div>'
+        + '<div id="scanner-transiciones" style="margin-top:1.5rem;"></div>';
 
     setupPanel(container);
     await loadUniverseMeta(container);
     runFilter(container); // primera carga sin filtros = universo completo ordenado por score
+    loadTransiciones(container);
+}
+
+// Quién ACABA de entrar en fase de avance, no quién está en ella.
+//
+// La tabla de arriba es una foto: un valor en fase 2 se ve igual lleve seis
+// meses ahí o haya entrado ayer, y en Weinstein esa diferencia es casi todo --
+// el recorrido grande está al principio del avance. Sale del histórico que
+// snapshots.db ya venía guardando desde el 27/07/2026, así que no cuesta
+// ninguna descarga.
+async function loadTransiciones(container) {
+    const el = container.querySelector('#scanner-transiciones');
+    if (!el) return;
+    try {
+        const res  = await fetch('/api/v1/scanner/transiciones?sesiones=5', { headers: authHeader() });
+        const data = await res.json();
+        if (!data.ok) {
+            el.innerHTML = shellTrans('Sin histórico suficiente todavía',
+                '<div style="padding:0.9rem 1rem;color:var(--color-muted);font-size:12px;">'
+                + esc(data.error || 'Hacen falta al menos dos sesiones guardadas.')
+                + ' Se va acumulando solo, una fila por sesión.</div>');
+            return;
+        }
+        el.innerHTML = renderTransiciones(data);
+    } catch (e) {
+        el.innerHTML = shellTrans('Cambios de fase', errorMessage(e.message));
+    }
+}
+
+function shellTrans(titulo, cuerpo) {
+    return '<div style="background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius);overflow:hidden;">'
+        + '<div style="padding:10px 14px;border-bottom:1px solid var(--color-border);color:var(--color-accent);font-size:12px;letter-spacing:0.08em;">'
+        + esc(titulo) + ' ' + tt('cambios-de-fase') + '</div>' + cuerpo + '</div>';
+}
+
+function renderTransiciones(d) {
+    const bloque = (titulo, filas, color, vacio) => {
+        if (!filas.length) return '<div style="flex:1;min-width:260px;padding:0.9rem 1rem;">'
+            + '<div style="color:' + color + ';font-size:11px;letter-spacing:0.06em;margin-bottom:0.5rem;">' + titulo + '</div>'
+            + '<div style="color:var(--color-muted);font-size:11px;">' + vacio + '</div></div>';
+        return '<div style="flex:1;min-width:260px;padding:0.9rem 1rem;">'
+            + '<div style="color:' + color + ';font-size:11px;letter-spacing:0.06em;margin-bottom:0.5rem;">' + titulo + ' (' + filas.length + ')</div>'
+            + filas.slice(0, 10).map(r =>
+                '<div style="display:grid;grid-template-columns:64px 1fr 46px;gap:8px;align-items:center;padding:4px 0;border-bottom:1px solid var(--color-border);font-size:11px;">'
+                + '<span onclick="goToResearch(\'' + esc(r.ticker) + '\')" class="ticker-link" style="color:var(--color-accent);">' + esc(r.ticker) + '</span>'
+                + '<span style="color:var(--color-muted);font-size:10px;">' + esc(r.desde_label || '—') + ' → ' + esc(r.hasta_label || '—') + '</span>'
+                + '<span style="color:var(--color-text);text-align:right;" title="Percentil de fuerza relativa">' + (r.rs_pct != null ? r.rs_pct : '—') + '</span>'
+                + '</div>').join('')
+            + '</div>';
+    };
+    // La ventana REAL, no la pedida: con el histórico a medio llenar, anunciar
+    // "5 sesiones" cuando solo hay 3 sería mentir sobre el periodo mirado.
+    const pie = '<div style="padding:7px 14px;border-top:1px solid var(--color-border);font-size:10px;color:var(--color-muted);">'
+        + 'Comparando ' + esc(d.desde_fecha) + ' con ' + esc(d.hasta_fecha) + ' · ' + d.sesiones + ' '
+        + (d.sesiones === 1 ? 'sesión' : 'sesiones') + ' · ' + d.comparables + ' valores con fase confirmada en las dos fechas'
+        + (d.sesiones < d.sesiones_pedidas ? ' · el histórico todavía se está llenando' : '')
+        + '</div>';
+    return shellTrans('CAMBIOS DE FASE',
+        '<div style="display:flex;flex-wrap:wrap;">'
+        + bloque('ENTRAN EN AVANCE', d.entradas, 'var(--color-accent)', 'Ninguno en esta ventana.')
+        + bloque('SALEN DE AVANCE', d.salidas, '#f23645', 'Ninguno en esta ventana.')
+        + '</div>' + pie);
+}
+
+// La fase SEMANAL, que el scan nocturno ya calculaba y nadie pintaba.
+//
+// La diaria se voltea con ruido; la semanal es la escala en la que Weinstein
+// trabajaba de verdad. Cuando COINCIDEN no se dice nada -- sería repetir el
+// mismo dato en dos sitios. Solo se marca la DISCREPANCIA, que es lo
+// informativo: normalmente significa que el giro diario aún no se ha
+// consolidado en el marco largo.
+function fasesemanal(r) {
+    if (r.phase_weekly == null || r.phase_weekly === r.phase) return '';
+    return '<span style="color:var(--color-muted);font-size:9px;" title="'
+         + esc('En gráfico semanal sigue en ' + (r.phase_weekly_label || 'otra fase')
+               + ' — el giro diario aún no se ha consolidado')
+         + '"> · sem. ' + esc(r.phase_weekly) + '</span>';
 }
 
 function pageHeader() {
@@ -329,7 +407,7 @@ function renderResults(el, data) {
             + '<div style="color:' + scoreClr + ';font-weight:500;">' + (r.score_tecnico != null ? r.score_tecnico.toFixed(0) : '—') + '</div>'
             + '<div style="color:' + absorcClr + ';font-weight:500;">' + esc(r.dias_absorcion || 0) + '/10</div>'
             + '<div style="color:' + l3Clr + ';font-weight:500;" title="' + esc(r.l3_estado || 'sin lectura') + '">' + (l3 != null ? l3.toFixed(0) : '—') + '</div>'
-            + '<div style="color:' + phaseClr + ';font-size:10px;">' + esc(r.phase_label || '—') + '</div>'
+            + '<div style="color:' + phaseClr + ';font-size:10px;">' + esc(r.phase_label || '—') + fasesemanal(r) + '</div>'
             + '<div style="color:var(--color-muted);font-size:10px;">' + esc(r.sector || '—') + '</div>'
             + '<div style="text-align:center;"><button onclick="window.__quickAddWatchlist(\'' + esc(r.ticker || '') + '\', this)" title="Añadir a watchlist" style="background:transparent;border:1px solid var(--color-border);color:var(--color-muted);border-radius:3px;padding:2px 6px;font-size:11px;cursor:pointer;">＋</button></div>'
             + '</div>';

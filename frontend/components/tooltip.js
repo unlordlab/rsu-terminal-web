@@ -2431,6 +2431,23 @@ Combinar 21/63/126 días en vez de usar una sola ventana es, en esencia, una for
 Esto NO es garantía de nada — es una tendencia estadística observada en datos históricos de mercados desarrollados, no una ley física. Trátalo como una probabilidad a favor, no como una certeza.`
     },
 
+    "cambios-de-fase": {
+        title: "Quién acaba de cambiar de fase",
+        short: "Valores que han entrado o salido de la fase de avance en los últimos días. La tabla de arriba dice quién está; esto dice quién acaba de llegar.",
+        long: `El método de fases divide la vida de una acción en cuatro etapas: acumulación, avance, distribución y declive. La tabla de arriba te dice en cuál está cada valor hoy.
+
+Lo que no te dice es desde cuándo. Y ahí está casi todo: un valor que lleva seis meses en avance ya ha hecho buena parte del recorrido, mientras que uno que acaba de entrar está donde suele estar el tramo grande.
+
+QUÉ MIRA:
+▸ ENTRAN EN AVANCE — pasaron a fase de avance en la ventana. Ordenados por fuerza relativa: entre varios que entran a la vez, el que además ya lidera es el que más dice.
+▸ SALEN DE AVANCE — dejaron la fase de avance. Si tienes alguno en cartera, esto es un aviso.
+
+SOLO CUENTAN LOS CAMBIOS CONFIRMADOS:
+Un valor que baila entre dos fases en días consecutivos aparecería entrando y saliendo cada semana. Solo se cuenta cuando la fase se ha mantenido lo bastante como para no ser un vaivén de un día.
+
+Al pie verás sobre qué fechas se ha comparado y cuántos valores tenían fase confirmada en las dos, para que sepas de qué tamaño es la foto. Y si el registro todavía se está llenando, lo dice.`,
+    },
+
     "racha-liderazgo": {
         title: "Cuánto lleva el tema en cabeza",
         short: "Sesiones seguidas entre los temas líderes, y en cuántas de las últimas 30 lo estuvo. Distingue una tendencia de un pico.",
