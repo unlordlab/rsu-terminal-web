@@ -81,9 +81,25 @@ def get_thematic_composition() -> dict:
     # Formato de salida idéntico al que ya consume el frontend (market.js),
     # solo renombramos timestamp para reflejar que es el momento del scan,
     # no el momento de esta petición.
+    # Variación contra el histórico propio. Va FUERA de la caché de arriba a
+    # propósito: el scan temático es diario, pero el histórico crece cada
+    # sesión y no tiene por qué esperar al TTL de esta respuesta.
+    try:
+        from services.snapshots_service import variacion_por_cesta
+        variaciones = variacion_por_cesta()
+    except Exception as e:
+        print(f"[Thematic] Sin variación histórica esta vuelta: {type(e).__name__}: {e}")
+        variaciones = {}
+
+    sectores = []
+    for s in data["sectors"]:
+        fila = _normalizar(s)
+        fila.update(variaciones.get(fila["sector"], {"d5": None, "d20": None}))
+        sectores.append(fila)
+
     result = {
         "ok":              True,
-        "sectors":         [_normalizar(s) for s in data["sectors"]],
+        "sectors":         sectores,
         "strongest":       data.get("strongest"),
         "weakest":         data.get("weakest"),
         "sectors_tracked": data.get("sectors_tracked", 0),

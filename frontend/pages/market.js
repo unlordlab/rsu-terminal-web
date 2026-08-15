@@ -780,8 +780,21 @@ async function loadSectorComposition(el) {
             };
         };
 
+        // Cuánto ha cambiado el score de la cesta respecto a hace N sesiones.
+        // Es lo que separa "esta cesta está arriba" de "esta cesta está
+        // SUBIENDO": la primera ya pasó, la segunda es una rotación en curso.
+        // Un guion significa que todavía no hay histórico suficiente -- no se
+        // compara contra la fila más antigua que haya, que daría una variación
+        // inventada. El histórico empieza a contar desde el despliegue.
+        const varCelda = (v) => {
+            if (v == null) return '<td style="padding:6px 10px;color:var(--color-muted);font-size:11px;" title="Aún sin histórico suficiente para esta ventana">—</td>';
+            const c = v >= 5 ? 'var(--color-accent)' : v <= -5 ? '#f23645' : 'var(--color-muted)';
+            return '<td style="padding:6px 10px;color:' + c + ';font-size:11px;white-space:nowrap;">'
+                 + (v > 0 ? '+' : '') + v + '</td>';
+        };
+
         // ── Tabla principal ──────────────────────────────────────────────────
-        const heads = ['#', 'SECTOR', 'N', 'EN TOP 20%', 'AVG SCORE', 'ACELERANDO'];
+        const heads = ['#', 'SECTOR', 'N', 'EN TOP 20%', 'AVG SCORE', '5 SES.', '20 SES.', 'ACELERANDO'];
         const th = heads.map(h =>
             '<th style="color:var(--color-muted);font-size:10px;letter-spacing:0.08em;padding:7px 10px;border-bottom:1px solid var(--color-border);text-align:left;white-space:nowrap;">' + h + '</th>'
         ).join('');
@@ -811,6 +824,8 @@ async function loadSectorComposition(el) {
                 + '</div>'
                 + '<span style="color:' + scoreColor + ';font-size:11px;width:30px;text-align:right;">' + (noData ? '—' : r.avg_score) + '</span>'
                 + '</div></td>'
+                + varCelda(r.d5)
+                + varCelda(r.d20)
                 + '<td style="padding:6px 10px;color:' + momColor + ';font-size:11px;">' + momTxt + '</td>'
                 + '</tr>';
         }).join('');
@@ -842,7 +857,7 @@ async function loadSectorComposition(el) {
             + '</div>';
 
         const note = '<div style="padding:8px 14px;font-size:10px;color:var(--color-muted);border-top:1px solid var(--color-border);margin-top:0.75rem;">'
-            + 'N = valores de la cesta con datos (⚠ = alguno ya no cotiza) · EN TOP 20% = cuántos tienen RS Percentile ≥ 80 sobre el universo temático combinado · ACELERANDO = qué porcentaje de la cesta va más rápido a corto que a medio plazo (RS 21d > RS 63d) · Scan independiente, no limitado al S&P 500 · Actualizado: ' + data.timestamp
+            + 'N = valores de la cesta con datos (⚠ = alguno ya no cotiza) · EN TOP 20% = cuántos tienen RS Percentile ≥ 80 sobre el universo temático combinado · 5 SES. y 20 SES. = cuánto ha cambiado el score desde entonces, para ver qué temas están rotando y no solo cuáles están arriba · ACELERANDO = qué porcentaje de la cesta va más rápido a corto que a medio plazo (RS 21d > RS 63d) · Scan independiente, no limitado al S&P 500 · Actualizado: ' + data.timestamp
             + '</div>';
 
         const shell = '<div style="background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius);padding:1.25rem;">'

@@ -86,6 +86,17 @@ def init_db():
             n_posiciones        INTEGER
         )
     ''')
+    conn.execute('''
+        CREATE TABLE IF NOT EXISTS snapshot_tematico (
+            fecha         TEXT NOT NULL,   -- sesión real, no de ejecución
+            cesta         TEXT NOT NULL,
+            avg_score     REAL,            -- percentil RS medio de la cesta
+            avg_momentum  REAL,            -- % de la cesta acelerando
+            basket        INTEGER,         -- valores con dato ese día
+            PRIMARY KEY (fecha, cesta)
+        )
+    ''')
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_tematico_cesta ON snapshot_tematico(cesta, fecha)")
     # rs_score se añade el 02/08/2026 (RS/RW #16). Va por ALTER y no dentro
     # del CREATE de arriba porque las bases que ya existen en producción no
     # se recrean: el CREATE TABLE IF NOT EXISTS las deja intactas y la
@@ -115,6 +126,7 @@ def maybe_write_daily_snapshot():
         _maybe_write_mercado(conn, fecha, ultimo)
         _maybe_write_ticker(conn, fecha)
         _maybe_write_cartera(conn, fecha)
+        _maybe_write_tematico(conn, fecha)
     finally:
         conn.close()
 
@@ -240,6 +252,100 @@ def _maybe_write_cartera(conn, fecha):
 # Hasta el 01/08/2026 este módulo era solo de ESCRITURA: guardaba cada noche
 # sin que nadie leyera nunca. Estas dos funciones abren la puerta de lectura
 # para RS/RW #20 (histórico del percentil RS). El escritor no se toca.
+
+# Cuánto histórico se conserva por cesta. Medido el 15/08/2026 antes de
+# elegirlo: son 29 filas al día -- una por cesta, no 500 como snapshot_ticker --
+# así que 30 días ocupan 91 KB, un año 768 KB y veinte años 15 MB. El espacio no
+# es la restricción aquí; lo que decide es para qué sirve el dato. Con 400 días
+# se puede comparar una cesta contra el mismo mes del año anterior, que es la
+# pregunta interesante, por unos 840 KB.
+TEMATICO_RETENCION_DIAS = 400
+
+
+def _maybe_write_tematico(conn, fecha):
+    """Score y aceleración de cada cesta temática, un registro por sesión.
+
+    El Gist del scan temático SE SOBRESCRIBE cada noche, así que sin esto el
+    módulo solo puede decir cómo está una cesta hoy, nunca si viene subiendo.
+    Es el mismo problema que resolvieron las otras tres tablas de este fichero,
+    aplicado al único scan que faltaba.
+
+    No se puede reconstruir hacia atrás: empieza a contar desde el despliegue.
+    """
+    if conn.execute("SELECT 1 FROM snapshot_tematico WHERE fecha = ? LIMIT 1", (fecha,)).fetchone():
+        return
+    try:
+        from services.thematic_service import get_thematic_composition
+        datos = get_thematic_composition()
+        if not datos.get("ok") or not datos.get("sectors"):
+            return   # sin scan válido todavía -- se reintenta, no se escribe a medias
+        filas = [
+            (fecha, s["sector"], s.get("avg_score"), s.get("avg_momentum"), s.get("basket"))
+            for s in datos["sectors"] if s.get("avg_score") is not None
+        ]
+    except Exception as e:
+        print(f"[Snapshots] snapshot_tematico de {fecha} incompleto, se reintenta: {type(e).__name__}: {e}")
+        return
+    if not filas:
+        return
+    conn.executemany(
+        "INSERT OR IGNORE INTO snapshot_tematico (fecha, cesta, avg_score, avg_momentum, basket) "
+        "VALUES (?, ?, ?, ?, ?)", filas)
+    borradas = _purgar_tematico(conn, fecha)
+    conn.commit()
+    print(f"[Snapshots] snapshot_tematico guardado para {fecha} ({len(filas)} cestas"
+          + (f", {borradas} filas viejas purgadas)" if borradas else ")"))
+
+
+def _purgar_tematico(conn, fecha_actual: str) -> int:
+    """Retira lo que cae fuera de la ventana. Se cuenta desde la fecha de
+    SESIÓN, no desde el reloj del proceso: así la purga no depende de cuándo se
+    reinició el contenedor, mismo criterio que el resto del fichero."""
+    from datetime import datetime, timedelta
+    try:
+        corte = (datetime.strptime(fecha_actual, "%Y-%m-%d")
+                 - timedelta(days=TEMATICO_RETENCION_DIAS)).strftime("%Y-%m-%d")
+    except ValueError:
+        return 0
+    cur = conn.execute("DELETE FROM snapshot_tematico WHERE fecha < ?", (corte,))
+    return cur.rowcount or 0
+
+
+def variacion_por_cesta(ventanas=(5, 20)) -> dict:
+    """{cesta: {"d5": +18.2, "d20": -3.1}} -- cuánto ha cambiado el score de
+    cada cesta respecto a hace N sesiones.
+
+    Es lo que distingue "esta cesta está arriba" de "esta cesta está SUBIENDO".
+    Una que ya lleva meses arriba no es una oportunidad; una que gana 18 puntos
+    en cinco sesiones es una rotación en curso.
+
+    Solo se compara contra sesiones que existen de verdad: si aún no hay
+    histórico suficiente, esa ventana sale a None en vez de compararse contra
+    la fila más antigua que haya, que daría una variación inventada."""
+    conn = _conn()
+    try:
+        fechas = [r["fecha"] for r in conn.execute(
+            "SELECT DISTINCT fecha FROM snapshot_tematico ORDER BY fecha DESC").fetchall()]
+        if not fechas:
+            return {}
+        hoy = {r["cesta"]: r["avg_score"] for r in conn.execute(
+            "SELECT cesta, avg_score FROM snapshot_tematico WHERE fecha = ?", (fechas[0],)).fetchall()}
+        salida = {c: {} for c in hoy}
+        for n in ventanas:
+            clave = f"d{n}"
+            if len(fechas) <= n:
+                for c in salida:
+                    salida[c][clave] = None
+                continue
+            antes = {r["cesta"]: r["avg_score"] for r in conn.execute(
+                "SELECT cesta, avg_score FROM snapshot_tematico WHERE fecha = ?", (fechas[n],)).fetchall()}
+            for c, v in hoy.items():
+                previo = antes.get(c)
+                salida[c][clave] = round(v - previo, 1) if (previo is not None and v is not None) else None
+        return salida
+    finally:
+        conn.close()
+
 
 def fechas_snapshot_ticker(limite: int = 60) -> list:
     """Fechas de sesión con datos, de la más reciente a la más antigua."""
