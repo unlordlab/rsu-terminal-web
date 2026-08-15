@@ -212,3 +212,28 @@ def test_el_empate_en_amplitud_lo_rompe_la_media():
         {"sector": "SOLIDA", "avg_score": 65.0, "breadth": 30.0},
     ])
     assert [c["sector"] for c in scored] == ["SOLIDA", "FLOJA"]
+
+
+def test_los_tickers_tienen_formato_de_ticker():
+    """Un pegado en mal estado (minúsculas, espacios, notación con punto que
+    yfinance no acepta) se caería en silencio y encogería la cesta -- que es
+    exactamente como llevaba NPTN cuatro años dentro del fichero."""
+    malos = {n: [t for t in v if not t.isalpha() or not t.isupper() or not (1 <= len(t) <= 5)]
+             for n, v in THEMATIC_SECTORS.items()}
+    malos = {n: v for n, v in malos.items() if v}
+    assert not malos, f"formato sospechoso: {malos}"
+
+
+def test_el_universo_no_encoge_por_accidente():
+    """Los percentiles se calculan sobre este universo, así que encogerlo
+    cambia TODOS los números de la tabla sin que nadie lo pida.
+
+    Dos guardas con alcances distintos, comprobadas con sabotaje el
+    15/08/2026: el conteo de cestas salta al perder una entera (es el que de
+    verdad muerde), y el suelo de tickers cubre el caso de una edición que se
+    lleve por delante buena parte del fichero sin borrar ninguna cesta. El
+    suelo es holgado a propósito -- 380 sobre 435 -- para no saltar cada vez
+    que se retire un nombre que ha dejado de cotizar."""
+    unicos = {t for v in THEMATIC_SECTORS.values() for t in v}
+    assert len(unicos) >= 380, f"solo {len(unicos)} tickers únicos"
+    assert len(THEMATIC_SECTORS) >= 29

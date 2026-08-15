@@ -94,109 +94,121 @@ THEMATIC_SECTORS = {
     "BIOTECH": [
         "MRNA","BNTX","REGN","VRTX","GILD","AMGN","BIIB","ALNY","SRPT","BMRN",
         "INCY","IONS","EXEL","NBIX","RARE","CRSP","EDIT","NTLA","BEAM","ARWR",
-        "IOVA","RYTM","ACAD","HALO","PCRX","UTHR",
+        "IOVA","RYTM","ACAD","HALO","PCRX","UTHR","ALKS","NVAX","JAZZ","NTRA",
+        "TWST","RVMD","KRYS",
     ],
     "GLP-1": [
         "LLY","NVO","VKTX","AMGN","PFE","AZN","MDGL","ALT","RXRX","CRNX",
-        "ZLAB",
+        "ZLAB","HIMS","CORT","SNY","GPCR","ROIV","LXRX",
     ],
     "MEMORY": [
-        "MU","WDC","STX","SIMO","FORM","UCTT","AEIS","ENTG","COHU",
+        "MU","WDC","STX","SIMO","FORM","UCTT","AEIS","ENTG","COHU","SNDK",
+        "AMKR","ONTO","CAMT","ACLS","KLIC",
     ],
     "CYBER": [
         "CRWD","PANW","ZS","FTNT","OKTA","S","NET","QLYS","RPD","VRNS",
-        "TENB","FFIV","CHKP","GEN",
+        "TENB","FFIV","CHKP","GEN","AKAM","SAIL","BB",
     ],
     "FINTECH": [
         "XYZ","PYPL","SOFI","AFRM","UPST","COIN","HOOD","FOUR","GPN","MA",
-        "V","AXP","NU","PAGS","STNE","TOST","FUTU",
+        "V","AXP","NU","PAGS","STNE","TOST","FUTU","FIS","JKHY","WEX",
+        "RELY","DLO",
     ],
     "BOOMER": [
         "KO","PEP","PG","JNJ","MO","PM","VZ","T","MMM","CL",
-        "KMB","GIS","CAG","CLX",
+        "KMB","GIS","CAG","CLX","SYY","HSY","STZ","KHC","CPB","SJM",
     ],
     "SEMIS": [
         "NVDA","AMD","INTC","TSM","AVGO","QCOM","TXN","MU","ASML","AMAT",
         "LRCX","KLAC","ON","MCHP","MRVL","SWKS","QRVO","ADI","NXPI","MPWR",
-        "ARM","SMCI","WOLF","COHR","LSCC",
+        "ARM","SMCI","WOLF","COHR","LSCC","GFS","TER","AMKR","POWI","SITM",
     ],
     "GAMING": [
         "RBLX","EA","TTWO","U","DKNG","PENN","SE","NTES","PLTK","BILI",
-        "HUYA",
+        "HUYA","CRSR","GRVY","GDEV","MYPS","RSI",
     ],
     "INVERSE BETA": [
         "KO","PG","JNJ","WMT","MCD","VZ","T","SO","DUK","NEE",
-        "PEP","CL","KMB","MO",
+        "PEP","CL","KMB","MO","ED","AEP","D","XEL","WEC","CHD",
     ],
     "DATA CENTER": [
         "EQIX","DLR","VRT","NVDA","SMCI","DELL","HPE","ANET","MOD","ETN",
-        "PWR","NTAP","CSCO",
+        "PWR","NTAP","CSCO","IRM","CIEN","CRWV","NBIS","APLD","GDS",
     ],
     "CRYPTO": [
         "COIN","MSTR","MARA","RIOT","CLSK","HUT","CIFR","BTBT","WULF","IREN",
-        "CORZ","BTDR",
+        "CORZ","BTDR","GLXY","HOOD","BKKT","CAN","HIVE",
     ],
     "PHOTONICS": [
         "COHR","LITE","VIAV","AAOI","FN","CIEN","POET","MRVL","ALAB","CRDO",
+        "NVTS","LWLG","MTSI","AOSL",
     ],
     "AI INFRA": [
         "NVDA","AMD","SMCI","DELL","ANET","AVGO","MRVL","VRT","ETN","MU",
-        "ASML","AMZN","MSFT","GOOGL",
+        "ASML","AMZN","MSFT","GOOGL","CRWV","NBIS","APLD","CLS","FLEX","JBL",
     ],
     "ROBOTICS": [
         "ISRG","ROK","TER","ZBRA","NVDA","PATH","EMR","SYM","SERV","RR",
+        "CGNX","HON","OMCL","NNDM",
     ],
     "QUANTUM": [
         "IBM","IONQ","RGTI","QUBT","ARQQ","GOOGL","HON","QBTS","MSFT","LAES",
+        "NVDA","AMZN","HPE","AMAT",
     ],
     "DEFENSE": [
         "LMT","RTX","NOC","GD","BA","LHX","HII","TXT","KTOS","AVAV",
-        "LDOS","BWXT","HEI",
+        "LDOS","BWXT","HEI","CW","TDG","HWM","ATRO",
     ],
     "STREAMING": [
         "NFLX","DIS","WBD","PARA","ROKU","SPOT","FUBO","TME","IQ","LYV",
+        "CURI","AMCX","MSGS","SIRI","WMG",
     ],
     "NUCLEAR": [
         "CEG","VST","NRG","BWXT","LEU","CCJ","UEC","UUUU","SMR","OKLO",
-        "NNE","DNN",
+        "NNE","DNN","ASPI","LTBR","TLN","PEG","EXC",
     ],
     "STORAGE": [
         "WDC","STX","NTAP","DBX","BOX","SNDK","NTNX","CVLT","BLZE","QMCO",
+        "HPE","DELL","IBM","SMCI",
     ],
     "ENERGY": [
         "XOM","CVX","COP","EOG","SLB","OXY","MPC","PSX","VLO","KMI",
-        "WMB","HAL","BKR",
+        "WMB","HAL","BKR","DVN","FANG","APA","TRGP","OKE",
     ],
     "SOFTWARE": [
         "MSFT","ORCL","CRM","ADBE","NOW","INTU","SNOW","PLTR","WDAY","DDOG",
-        "TEAM","HUBS","PANW","ZS",
+        "TEAM","HUBS","PANW","ZS","MDB","ZM","TWLO","ESTC","GTLB","APP",
     ],
     "EV / AUTONOMY": [
         "TSLA","RIVN","LCID","NIO","XPEV","LI","F","GM","APTV","MBLY",
-        "QS","CHPT",
+        "QS","CHPT","OUST","INDI","BLNK","EVGO",
     ],
     "CHINA": [
         "BABA","PDD","JD","NIO","XPEV","LI","BIDU","NTES","TCOM","BILI",
-        "TME","YUMC",
+        "TME","YUMC","BEKE","ZTO","VIPS","HTHT","ATHM","LU",
     ],
     "DRONES": [
         "AVAV","KTOS","UMAC","RCAT","ONDS","DPRO","EH","ACHR","JOBY","UAVS",
+        "EVTL","AIRO","TATT","CODA",
     ],
     "MATERIALS": [
         "LIN","APD","SHW","ECL","NEM","FCX","DOW","DD","ALB","MOS",
+        "PPG","LYB","CE","EMN","IFF","VMC","MLM",
     ],
     "METALS": [
         "FCX","NEM","GOLD","AA","CLF","STLD","NUE","SCCO","MP","AEM",
+        "RS","CMC","HL","AG","PAAS","KGC",
     ],
     "MAG7": [
         "AAPL","MSFT","GOOGL","AMZN","META","NVDA","TSLA",
     ],
     "SPACE": [
         "RKLB","ASTS","LUNR","RDW","IRDM","GSAT","PL","SPCE","BKSY","VSAT",
+        "MNTS","SPIR","KVHI","CMTL","GILT",
     ],
     "SOLAR": [
         "ENPH","SEDG","FSLR","RUN","NXT","CSIQ","JKS","ARRY","SHLS","FLNC",
-        "SPWR",
+        "SPWR","DQ",
     ],
 }
 
