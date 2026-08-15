@@ -1,7 +1,7 @@
 import { authHeader } from '/core/api.js';
 import { tt } from '/components/tooltip.js';
 import { onMarketUpdate } from '/core/websocket.js';
-import { fmtFecha, esc } from '/core/ui.js';
+import { fmtFecha, esc, panel } from '/core/ui.js';
 
 // IDs de canvas de los gráficos Chart.js creados por esta página cuyo
 // destroy() no está ya cubierto por una variable propia (_spreadsChart,
@@ -2409,15 +2409,12 @@ function wsRow(ticker, name, price, change, color) {
         + '</div>';
 }
 
-function widgetShell(title, subtitle, content, timestamp) {
-    return '<div style="background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius);overflow:hidden;height:100%;display:flex;flex-direction:column;">'
-        + '<div style="display:flex;justify-content:space-between;align-items:center;padding:10px 14px;border-bottom:1px solid var(--color-border);flex-shrink:0;">'
-        + '<div style="color:var(--color-accent);font-size:13px;letter-spacing:0.08em;text-shadow:var(--glow-text);">' + title + '</div>'
-        + '<div style="color:var(--color-muted);font-size:11px;">' + subtitle + '</div>'
-        + '</div>'
-        + '<div style="flex:1;overflow-y:auto;">' + content + '</div>'
-        + (timestamp ? '<div style="padding:6px 14px;font-size:10px;color:var(--color-muted);border-top:1px solid var(--color-border);flex-shrink:0;">Actualizado: ' + timestamp + '</div>' : '')
-        + '</div>';
+// El cuerpo vive en core/ui.js::panel() -- estaba duplicado en cinco páginas.
+// Se mantiene esta firma posicional porque la usan 53 llamadas de este fichero.
+// `avisos` es opcional y va al final, así que ninguna de ellas cambia.
+function widgetShell(title, subtitle, content, timestamp, avisos) {
+    return panel({ titulo: title, subtitulo: subtitle, contenido: content,
+                   timestamp, avisos, variante: 'panel', escapar: false });
 }
 
 

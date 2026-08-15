@@ -91,6 +91,84 @@ export function safeUrl(url) {
     return /^https?:\/\//i.test(url || '') ? url : '#';
 }
 
+/* ── El envoltorio de widget, y la banda de avisos ────────────────────────────
+ *
+ * POR QUÉ ESTÁ AQUÍ. Había CINCO copias del mismo envoltorio: `widgetShell`
+ * dentro de market.js (53 usos, y solo servía a market.js) y un `shell()`
+ * propio en insider.js, watchlist.js, congress.js y community.js -- los tres
+ * primeros idénticos byte a byte, el cuarto igual salvo que no escapaba. Mismo
+ * patrón ya resuelto cuatro veces en el backend (rsrw_engine, mcclellan,
+ * weinstein_phases, time_utils): el duplicado se promueve, no se mantiene.
+ *
+ * PARA QUÉ SIRVE TENERLO EN UN SITIO. Sin un envoltorio común no existe ningún
+ * punto donde pintar los avisos de "este dato no es lo que aparenta", así que
+ * cada módulo se lo inventaba -- y a veces se le olvidaba. El caso que lo
+ * destapó: insider_service.py, cuando la SEC no responde, sirve el histórico
+ * guardado y devuelve el aviso ya redactado ("puede faltar lo más reciente").
+ * El frontend nunca lo leía, así que el usuario veía una pantalla que parecía
+ * completa. Con el envoltorio compartido, avisar es lo que pasa por defecto y
+ * hay que esforzarse para NO hacerlo.
+ */
+
+const AVISO_ESTILOS = {
+    // El dato es correcto pero no es de ahora (cortos de hace dos semanas,
+    // beneficios de hace dos trimestres). Línea fina, sin alarmismo.
+    antiguo: { fondo: 'transparent',            borde: 'var(--color-border)', color: 'var(--color-muted)', marca: '' },
+    // El dato está incompleto o viene de un respaldo. Tiene que verse.
+    parcial: { fondo: 'rgba(255,184,0,0.07)',   borde: '#ffb80033',           color: '#ffb800',            marca: '⚠ ' },
+};
+
+/**
+ * Banda de avisos: `[{ tipo, mensaje }]`. Un `tipo` desconocido se pinta como
+ * `parcial` a propósito -- ante la duda, un aviso se ve de más antes que
+ * desaparecer sin que nadie se entere, que es justo el fallo que originó esto.
+ */
+export function avisosBanda(avisos) {
+    if (!Array.isArray(avisos) || !avisos.length) return '';
+    return avisos.filter(a => a && a.mensaje).map(a => {
+        const e = AVISO_ESTILOS[a.tipo] || AVISO_ESTILOS.parcial;
+        return '<div style="background:' + e.fondo + ';border-bottom:1px solid ' + e.borde
+            + ';padding:7px 14px;color:' + e.color + ';font-size:11px;line-height:1.45;flex-shrink:0;">'
+            + e.marca + esc(a.mensaje) + '</div>';
+    }).join('');
+}
+
+/**
+ * Envoltorio de widget. Dos variantes, que son las dos que ya existían:
+ *
+ *   'panel'   — market.js: ocupa el alto de su celda de rejilla, contenido con
+ *               scroll propio y pie de "Actualizado:". No escapa el título,
+ *               porque le llega HTML (el icono de tooltip de tt()).
+ *   'tarjeta' — el resto: se apila con margen inferior, sin scroll ni pie.
+ *
+ * `avisos` se pinta entre la cabecera y el contenido, fuera del área con
+ * scroll: en el camino de los ojos hacia el dato, no escondido en un tooltip
+ * ni en un pie que nadie lee.
+ */
+export function panel({ titulo = '', subtitulo = '', contenido = '', timestamp = null,
+                        avisos = null, variante = 'tarjeta', escapar = true } = {}) {
+    const esPanel = variante === 'panel';
+    const t = escapar ? esc(titulo)    : titulo;
+    const s = escapar ? esc(subtitulo) : subtitulo;
+    const caja = esPanel
+        ? 'height:100%;display:flex;flex-direction:column;'
+        : 'margin-bottom:1rem;';
+    const sub = esPanel
+        ? '<div style="color:var(--color-muted);font-size:11px;">' + s + '</div>'
+        : (subtitulo ? '<div style="color:var(--color-muted);font-size:10px;">' + s + '</div>' : '');
+    return '<div style="background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius);overflow:hidden;' + caja + '">'
+        + '<div style="display:flex;justify-content:space-between;align-items:center;padding:10px 14px;border-bottom:1px solid var(--color-border);' + (esPanel ? 'flex-shrink:0;' : '') + '">'
+        + '<div style="color:var(--color-accent);font-size:' + (esPanel ? '13' : '12') + 'px;letter-spacing:0.08em;text-shadow:var(--glow-text);">' + t + '</div>'
+        + sub
+        + '</div>'
+        + avisosBanda(avisos)
+        + (esPanel ? '<div style="flex:1;overflow-y:auto;">' + contenido + '</div>' : contenido)
+        + (esPanel && timestamp
+            ? '<div style="padding:6px 14px;font-size:10px;color:var(--color-muted);border-top:1px solid var(--color-border);flex-shrink:0;">Actualizado: ' + timestamp + '</div>'
+            : '')
+        + '</div>';
+}
+
 /**
  * Añade un ticker a la Watchlist del usuario. Compartido entre Research y
  * Scanner (y cualquier otra página que quiera un botón "＋ Watchlist" rápido)

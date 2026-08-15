@@ -1,6 +1,6 @@
 import { authHeader } from '/core/api.js';
 import { tt } from '/components/tooltip.js';
-import { errorMessage, esc, fmtFecha } from '/core/ui.js';
+import { errorMessage, esc, fmtFecha, panel } from '/core/ui.js';
 
 export async function render(container) {
     container.innerHTML = pageShell();
@@ -200,14 +200,12 @@ function renderTickerResult(ticker, data) {
 
 // ── HELPERS ───────────────────────────────────────────────────────────────────
 
-function shell(title, content, subtitle) {
-    return '<div style="background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius);overflow:hidden;margin-bottom:1rem;">'
-        + '<div style="display:flex;justify-content:space-between;align-items:center;padding:10px 14px;border-bottom:1px solid var(--color-border);">'
-        + '<div style="color:var(--color-accent);font-size:12px;letter-spacing:0.08em;text-shadow:var(--glow-text);">' + esc(title) + '</div>'
-        + (subtitle ? '<div style="color:var(--color-muted);font-size:10px;">' + esc(subtitle) + '</div>' : '')
-        + '</div>'
-        + content
-        + '</div>';
+// El cuerpo vive en core/ui.js::panel() -- este mismo envoltorio estaba
+// copiado en cinco paginas. `avisos` es opcional: las llamadas de siempre no
+// cambian.
+function shell(title, content, subtitle, avisos) {
+    return panel({ titulo: title, contenido: content, subtitulo: subtitle,
+                   avisos, escapar: true });
 }
 
 function fmtVal(val) {

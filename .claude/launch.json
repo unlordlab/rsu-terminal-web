@@ -1,0 +1,12 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "rsu-backend",
+      "runtimeExecutable": "../venv/Scripts/python.exe",
+      "runtimeArgs": ["-m", "uvicorn", "main:app", "--port", "8099"],
+      "cwd": "backend",
+      "port": 8099
+    }
+  ]
+}
