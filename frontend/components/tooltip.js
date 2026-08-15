@@ -2431,6 +2431,22 @@ Combinar 21/63/126 días en vez de usar una sola ventana es, en esencia, una for
 Esto NO es garantía de nada — es una tendencia estadística observada en datos históricos de mercados desarrollados, no una ley física. Trátalo como una probabilidad a favor, no como una certeza.`
     },
 
+    "racha-liderazgo": {
+        title: "Cuánto lleva el tema en cabeza",
+        short: "Sesiones seguidas entre los temas líderes, y en cuántas de las últimas 30 lo estuvo. Distingue una tendencia de un pico.",
+        long: `Las columnas de la izquierda dicen cómo está un tema HOY y cuánto ha cambiado esta semana. Estas dicen cuánto lleva así, que no es lo mismo.
+
+Dos temas pueden subir exactamente igual esta semana y ser cosas muy distintas: uno que lleva once sesiones seguidas arriba está en una rotación asentada, y otro que llegó ayer puede desaparecer mañana.
+
+QUÉ ES CADA COLUMNA:
+▸ RACHA — sesiones consecutivas por encima del listón de liderazgo. Un punto significa que ahora mismo no está.
+▸ DE 30 — en cuántas de las últimas treinta sesiones estuvo arriba. Una racha corta con un número alto aquí es un tema que domina desde hace tiempo y ha tenido un respiro; una racha corta con un número bajo es un recién llegado.
+▸ TENDENCIA — la forma del movimiento. Una subida sostenida y un salto repentino pueden acabar en el mismo sitio y no significan lo mismo.
+
+POR QUÉ AL PRINCIPIO SALEN VACÍAS:
+Esto necesita ir guardando cada día cómo estaba cada tema, y ese registro empieza el día que se activa. No se puede reconstruir hacia atrás. La racha empieza a decir algo en un par de semanas, y la columna de 30 sesiones cuando haya treinta. Mientras tanto verás guiones, o el total real sobre el que se ha podido mirar — nunca un número inventado.`,
+    },
+
     "amplitud-liderazgo": {
         title: "Amplitud de liderazgo",
         short: "Cuántos valores de la cesta están de verdad entre los que mejor se comportan del mercado. Es lo que ordena esta tabla.",

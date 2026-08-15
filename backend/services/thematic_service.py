@@ -85,16 +85,20 @@ def get_thematic_composition() -> dict:
     # propósito: el scan temático es diario, pero el histórico crece cada
     # sesión y no tiene por qué esperar al TTL de esta respuesta.
     try:
-        from services.snapshots_service import variacion_por_cesta
-        variaciones = variacion_por_cesta()
+        from services.snapshots_service import variacion_por_cesta, persistencia_por_cesta
+        variaciones  = variacion_por_cesta()
+        persistencia = persistencia_por_cesta()
     except Exception as e:
         print(f"[Thematic] Sin variación histórica esta vuelta: {type(e).__name__}: {e}")
-        variaciones = {}
+        variaciones, persistencia = {}, {}
 
+    SIN_PERSISTENCIA = {"racha": None, "en_ventana": None,
+                        "ventana_real": None, "serie": None}
     sectores = []
     for s in data["sectors"]:
         fila = _normalizar(s)
         fila.update(variaciones.get(fila["sector"], {"d5": None, "d20": None}))
+        fila.update(persistencia.get(fila["sector"], SIN_PERSISTENCIA))
         sectores.append(fila)
 
     result = {

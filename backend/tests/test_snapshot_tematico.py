@@ -206,3 +206,86 @@ def test_una_cesta_nueva_no_arrastra_la_variacion_de_otra(db):
 
 def test_sin_datos_devuelve_vacio_sin_excepcion(db):
     assert S.variacion_por_cesta() == {}
+
+
+# ── 4. Persistencia: cuanto LLEVA en cabeza ─────────────────────────────────
+
+def _sembrar_serie(conn, cesta, amplitudes):
+    """amplitudes[0] es la sesión MÁS RECIENTE."""
+    base = date(2026, 8, 14)
+    for i, a in enumerate(amplitudes):
+        if a is None:
+            continue
+        f = (base - timedelta(days=i)).strftime("%Y-%m-%d")
+        conn.execute("INSERT OR REPLACE INTO snapshot_tematico "
+                     "(fecha,cesta,avg_score,avg_momentum,basket,breadth) VALUES (?,?,?,?,?,?)",
+                     (f, cesta, 50.0, 40, 10, a))
+    conn.commit()
+
+
+def test_la_racha_cuenta_sesiones_seguidas_desde_hoy(db):
+    conn = S._conn()
+    # 4 seguidas por encima de 40, y antes por debajo
+    _sembrar_serie(conn, "C0", [70, 65, 60, 55, 20, 80, 90])
+    conn.close()
+    assert S.persistencia_por_cesta()["C0"]["racha"] == 4
+
+
+def test_una_cesta_que_no_esta_en_cabeza_tiene_racha_cero(db):
+    conn = S._conn()
+    _sembrar_serie(conn, "C0", [10, 70, 70, 70, 70, 70])
+    conn.close()
+    p = S.persistencia_por_cesta()["C0"]
+    assert p["racha"] == 0, "hoy no está: la racha se rompió"
+    assert p["en_ventana"] == 5, "pero sí estuvo en cinco de las seis"
+
+
+def test_sin_historico_suficiente_no_se_inventa_una_racha(db):
+    """Una racha de 2 sobre 2 sesiones no dice nada, y enseñar «2» invitaría a
+    leerla como si dijera algo."""
+    conn = S._conn()
+    _sembrar_serie(conn, "C0", [70, 70])
+    conn.close()
+    assert S.persistencia_por_cesta()["C0"]["racha"] is None
+
+
+def test_un_hueco_rompe_la_racha_no_la_encadena(db):
+    """Se recorre la lista de SESIONES, no las filas de la cesta. Si se
+    recorrieran las filas, una cesta que faltó un día se saltaría esa sesión y
+    encadenaría una racha que en realidad se rompió."""
+    conn = S._conn()
+    _sembrar_serie(conn, "OTRA", [50, 50, 50, 50, 50, 50])   # marca las 6 sesiones
+    _sembrar_serie(conn, "C0",   [70, 70, None, 70, 70, 70])  # falta la 3ª
+    conn.close()
+    assert S.persistencia_por_cesta()["C0"]["racha"] == 2
+
+
+def test_la_ventana_dice_sobre_cuantas_sesiones_se_ha_mirado(db):
+    """Mientras el histórico se llena, un «8» a secas se leería como 8 de 30
+    cuando puede ser 8 de 10."""
+    conn = S._conn()
+    _sembrar_serie(conn, "C0", [70, 70, 10, 70, 10, 70, 70, 10])
+    conn.close()
+    p = S.persistencia_por_cesta()["C0"]
+    assert p["en_ventana"] == 5
+    assert p["ventana_real"] == 8, "8 sesiones de histórico, no 30"
+
+
+def test_la_serie_va_de_la_mas_antigua_a_la_mas_reciente(db):
+    """La minigráfica se dibuja de izquierda a derecha: invertido, mostraría la
+    tendencia al revés -- una caída se vería como una subida."""
+    conn = S._conn()
+    _sembrar_serie(conn, "C0", [90, 60, 30])   # hoy 90, antes 60, antes 30
+    conn.close()
+    assert S.persistencia_por_cesta()["C0"]["serie"] == [30.0, 60.0, 90.0]
+
+
+def test_una_serie_demasiado_corta_no_se_dibuja(db):
+    conn = S._conn()
+    _sembrar_serie(conn, "C0", [90, 60])
+    conn.close()
+    assert S.persistencia_por_cesta()["C0"]["serie"] is None
+
+
+def test_sin_datos_devuelve_vacio(db):
+    assert S.persistencia_por_cesta() == {}

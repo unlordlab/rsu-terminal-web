@@ -796,8 +796,50 @@ async function loadSectorComposition(el) {
                  + (v > 0 ? '+' : '') + v + '</td>';
         };
 
+        // Cuánto LLEVA la cesta en cabeza, no si está hoy. Dos cestas pueden
+        // subir lo mismo esta semana y ser cosas distintas: once sesiones
+        // seguidas arriba es una rotación asentada, una es ruido.
+        //
+        // Las tres columnas salen vacías al principio y se van llenando solas:
+        // el histórico empezó a acumularse el 15/08/2026 y no se puede
+        // reconstruir, porque el Gist del scan se sobrescribe cada noche.
+        const rachaCelda = (r) => {
+            if (r.racha == null) return '<td style="padding:6px 10px;color:var(--color-muted);font-size:11px;" title="Hacen falta unas cuantas sesiones de histórico para que una racha signifique algo">—</td>';
+            if (r.racha === 0)   return '<td style="padding:6px 10px;color:var(--color-muted);font-size:11px;" title="No está en cabeza ahora mismo">·</td>';
+            const c = r.racha >= 10 ? '#f23645' : r.racha >= 4 ? '#ffb800' : 'var(--color-muted)';
+            return '<td style="padding:6px 10px;color:' + c + ';font-size:11px;white-space:nowrap;" title="'
+                 + esc(r.racha + ' sesiones seguidas en cabeza') + '">' + r.racha + '</td>';
+        };
+
+        // Se enseña el denominador REAL mientras el histórico se llena: un "8"
+        // a secas se leería como 8 de 30 cuando puede ser 8 de 10.
+        const ventanaCelda = (r) => {
+            if (r.en_ventana == null || !r.ventana_real) return '<td style="padding:6px 10px;color:var(--color-muted);font-size:11px;">—</td>';
+            const parcial = r.ventana_real < 30;
+            return '<td style="padding:6px 10px;font-size:11px;white-space:nowrap;color:'
+                 + (r.en_ventana >= 20 ? 'var(--color-accent)' : 'var(--color-muted)') + ';" title="'
+                 + esc('En ' + r.en_ventana + ' de las últimas ' + r.ventana_real + ' sesiones estuvo en cabeza'
+                       + (parcial ? ' — todavía no hay 30 de histórico' : '')) + '">'
+                 + r.en_ventana + (parcial ? '/' + r.ventana_real : '') + '</td>';
+        };
+
+        // Minigráfica de la amplitud. Es lo que revela la FORMA del movimiento,
+        // que ningún número da: subida sostenida, meseta, o un salto vertical.
+        const chispa = (serie) => {
+            if (!serie || serie.length < 3) return '<span style="color:var(--color-muted);font-size:10px;">—</span>';
+            const max = Math.max(...serie), min = Math.min(...serie);
+            const rango = (max - min) || 1;
+            const W = 64, H = 18;
+            const pts = serie.map((v, i) =>
+                (i / (serie.length - 1) * W).toFixed(1) + ',' + (H - (v - min) / rango * H).toFixed(1)).join(' ');
+            const sube = serie[serie.length - 1] >= serie[0];
+            return '<svg width="' + W + '" height="' + H + '" viewBox="0 0 ' + W + ' ' + H + '" aria-hidden="true">'
+                 + '<polyline points="' + pts + '" fill="none" stroke="'
+                 + (sube ? 'var(--color-accent)' : '#f23645') + '" stroke-width="1.2"/></svg>';
+        };
+
         // ── Tabla principal ──────────────────────────────────────────────────
-        const heads = ['#', 'SECTOR', 'N', 'EN TOP 20%', 'AMPLITUD ' + tt('amplitud-liderazgo'), 'MEDIA', '5 SES.', '20 SES.', 'ACELERANDO'];
+        const heads = ['#', 'SECTOR', 'N', 'EN TOP 20%', 'AMPLITUD ' + tt('amplitud-liderazgo'), 'MEDIA', '5 SES.', '20 SES.', 'RACHA ' + tt('racha-liderazgo'), 'DE 30', 'TENDENCIA', 'ACELERANDO'];
         const th = heads.map(h =>
             '<th style="color:var(--color-muted);font-size:10px;letter-spacing:0.08em;padding:7px 10px;border-bottom:1px solid var(--color-border);text-align:left;white-space:nowrap;">' + h + '</th>'
         ).join('');
@@ -831,6 +873,9 @@ async function loadSectorComposition(el) {
                 + '<td style="padding:6px 10px;color:var(--color-muted);font-size:11px;">' + (noData ? '—' : r.avg_score) + '</td>'
                 + varCelda(r.d5)
                 + varCelda(r.d20)
+                + rachaCelda(r)
+                + ventanaCelda(r)
+                + '<td style="padding:6px 10px;">' + chispa(r.serie) + '</td>'
                 + '<td style="padding:6px 10px;color:' + momColor + ';font-size:11px;">' + momTxt + '</td>'
                 + '</tr>';
         }).join('');
@@ -862,7 +907,7 @@ async function loadSectorComposition(el) {
             + '</div>';
 
         const note = '<div style="padding:8px 14px;font-size:10px;color:var(--color-muted);border-top:1px solid var(--color-border);margin-top:0.75rem;">'
-            + 'La tabla se ordena por AMPLITUD, no por la media · N = valores de la cesta con datos (⚠ = alguno ya no cotiza) · EN TOP 20% = cuántos tienen RS Percentile ≥ 80 · 5 SES. y 20 SES. = cuánto ha cambiado la amplitud desde entonces, para ver qué temas están ganando liderazgo · ACELERANDO = qué porcentaje de la cesta va más rápido a corto que a medio plazo (RS 21d > RS 63d) · Scan independiente, no limitado al S&P 500 · Actualizado: ' + data.timestamp
+            + 'La tabla se ordena por AMPLITUD, no por la media · N = valores de la cesta con datos (⚠ = alguno ya no cotiza) · EN TOP 20% = cuántos tienen RS Percentile ≥ 80 · 5 SES. y 20 SES. = cuánto ha cambiado la amplitud desde entonces · RACHA, DE 30 y TENDENCIA miran cuánto LLEVA la cesta en cabeza, y se van llenando a medida que se acumula histórico · ACELERANDO = qué porcentaje de la cesta va más rápido a corto que a medio plazo (RS 21d > RS 63d) · Scan independiente, no limitado al S&P 500 · Actualizado: ' + data.timestamp
             + '</div>';
 
         const shell = '<div style="background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius);padding:1.25rem;">'

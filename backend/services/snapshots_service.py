@@ -359,6 +359,82 @@ def variacion_por_cesta(ventanas=(5, 20)) -> dict:
         conn.close()
 
 
+# Qué cuenta como "estar en cabeza". Por UMBRAL y no por puesto: con un top 5
+# siempre habría cinco cestas en cabeza, incluso en un mercado sin ningún
+# liderazgo -- y eso también es información. Mismo criterio que hace que una
+# cesta sin líderes marque 0 en vez de "la menos mala".
+# Calibrado sobre el scan real del 15/08/2026: con 40 quedan dentro 5 de las 29
+# cestas (CYBER 74,5 · STORAGE 73,8 · PHOTONICS 45,2 · SOFTWARE 43,3 ·
+# MEMORY 42,2), que es un grupo de cabeza reconocible y no media tabla.
+UMBRAL_LIDERAZGO = 40.0
+VENTANA_PERSISTENCIA = 30   # sesiones que mira la columna "de 30"
+MINIMO_RACHA = 5            # por debajo, una racha no significa nada
+MINIMO_SERIE = 3            # puntos mínimos para que una minigráfica se lea
+
+
+def persistencia_por_cesta(umbral: float = UMBRAL_LIDERAZGO) -> dict:
+    """{cesta: {racha, en_ventana, ventana_real, serie}} -- cuánto LLEVA cada
+    cesta en cabeza, no si está hoy.
+
+    Es la diferencia entre una tendencia y un pico. Dos cestas pueden subir lo
+    mismo esta semana y ser cosas distintas: una que lleva once sesiones
+    seguidas arriba es una rotación asentada; una que llegó ayer, ruido.
+
+    - `racha`: sesiones consecutivas, contando desde la más reciente, con la
+      amplitud por encima del umbral. None con menos de MINIMO_RACHA sesiones
+      de histórico -- una racha de 2 sobre 2 sesiones no dice nada.
+    - `en_ventana` / `ventana_real`: en cuántas de las últimas 30 estuvo por
+      encima, y sobre cuántas se ha podido mirar de verdad. Las dos juntas,
+      porque mientras el histórico se llena "8" a secas se leería como 8 de 30
+      cuando puede ser 8 de 10.
+    - `serie`: amplitudes de la ventana, de la más antigua a la más reciente,
+      para la minigráfica. None con menos de MINIMO_SERIE puntos.
+    """
+    conn = _conn()
+    try:
+        fechas = [r["fecha"] for r in conn.execute(
+            "SELECT DISTINCT fecha FROM snapshot_tematico ORDER BY fecha DESC "
+            "LIMIT ?", (VENTANA_PERSISTENCIA,)).fetchall()]
+        if not fechas:
+            return {}
+        filas = conn.execute(
+            "SELECT fecha, cesta, breadth FROM snapshot_tematico WHERE fecha >= ? "
+            "ORDER BY fecha DESC", (fechas[-1],)).fetchall()
+    finally:
+        conn.close()
+
+    # {cesta: [amplitud de la más reciente a la más antigua]}
+    por_cesta = {}
+    for r in filas:
+        por_cesta.setdefault(r["cesta"], {})[r["fecha"]] = r["breadth"]
+
+    salida = {}
+    for cesta, por_fecha in por_cesta.items():
+        # Se recorre la lista de fechas, no las claves del dict: una cesta que
+        # falte un día no debe "saltarse" esa sesión y encadenar una racha que
+        # en realidad se rompió.
+        serie_desc = [por_fecha.get(f) for f in fechas]
+
+        racha = None
+        if len(fechas) >= MINIMO_RACHA:
+            racha = 0
+            for v in serie_desc:
+                if v is not None and v >= umbral:
+                    racha += 1
+                else:
+                    break
+
+        medidas = [v for v in serie_desc if v is not None]
+        serie_asc = [v for v in reversed(serie_desc) if v is not None]
+        salida[cesta] = {
+            "racha":        racha,
+            "en_ventana":   sum(1 for v in medidas if v >= umbral),
+            "ventana_real": len(medidas),
+            "serie":        serie_asc if len(serie_asc) >= MINIMO_SERIE else None,
+        }
+    return salida
+
+
 def fechas_snapshot_ticker(limite: int = 60) -> list:
     """Fechas de sesión con datos, de la más reciente a la más antigua."""
     conn = _conn()
