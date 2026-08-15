@@ -172,8 +172,16 @@ function renderClusters(clusters) {
 }
 
 function renderTickerResult(ticker, data) {
+    // El subtítulo NO puede estar clavado a "SEC EDGAR Form 4": cuando la SEC
+    // no responde, el backend sirve el histórico guardado en disco, y esa
+    // etiqueta afirmaba un origen que no era el suyo. Ahora dice de dónde
+    // salió de verdad, y el aviso que el backend ya redactaba se pinta como
+    // banda sobre la tabla en vez de quedarse en el JSON sin que nadie lo lea.
+    const origen = data.parcial ? 'Histórico guardado en la terminal · Últimos 6 meses'
+                                : 'SEC EDGAR Form 4 · Últimos 6 meses';
+
     if (!data.transactions || !data.transactions.length) {
-        return shell('INSIDER · ' + ticker, '<div style="padding:1rem;color:var(--color-muted);font-size:12px;">Sin transacciones recientes (últimos 6 meses)</div>');
+        return shell('INSIDER · ' + ticker, '<div style="padding:1rem;color:var(--color-muted);font-size:12px;">Sin transacciones recientes (últimos 6 meses)</div>', undefined, data.avisos);
     }
 
     const summary = '<div style="display:flex;gap:2rem;padding:10px 14px;border-bottom:1px solid var(--color-border);font-size:11px;align-items:center;">'
@@ -199,7 +207,7 @@ function renderTickerResult(ticker, data) {
             + '</div>';
     }).join('');
 
-    return shell('INSIDER TRANSACTIONS · ' + ticker, summary + header + '<div style="overflow-y:auto;max-height:400px;">' + rows + '</div>', 'SEC EDGAR Form 4 · Últimos 6 meses');
+    return shell('INSIDER TRANSACTIONS · ' + ticker, summary + header + '<div style="overflow-y:auto;max-height:400px;">' + rows + '</div>', origen, data.avisos);
 }
 
 function renderDiagnostic(log) {

@@ -988,6 +988,17 @@ def get_insider_ticker(ticker: str) -> dict:
             "timestamp":    get_timestamp(),
             "source":       "Histórico guardado en la terminal — SEC EDGAR no respondió, puede faltar lo más reciente",
             "parcial":      True,
+            # El aviso, en el formato que pinta el envoltorio compartido
+            # (frontend/core/ui.js::panel). Antes esto se quedaba aquí: el
+            # backend redactaba la advertencia y la pantalla no la leía nunca,
+            # así que durante una caída de la SEC el usuario veía una tabla que
+            # parecía completa Y con el subtítulo «SEC EDGAR Form 4» encima,
+            # afirmando un origen que no era el suyo.
+            "avisos": [{
+                "tipo":    "parcial",
+                "mensaje": "La SEC no respondió. Esto es el histórico ya guardado "
+                           "en la terminal, así que puede faltar lo más reciente.",
+            }],
         }
 
 # ── CONFLUENCIA CON OPTIONS FLOW ─────────────────────────────────────────────
