@@ -759,8 +759,29 @@ async function loadSectorComposition(el) {
             + statCard('UNIVERSO', data.universe_size, 'Tickers con score', 'var(--color-text)')
             + '</div>';
 
+        // Una cesta con pocos nombres no es una lectura sectorial: promediar
+        // tres percentiles tiene una varianza enorme, así que las cestas
+        // diminutas ocupan los extremos del ranking por aritmética, no por
+        // fuerza real. El número va a la vista, y si además faltan nombres
+        // respecto a los definidos se dice, en vez de encoger en silencio.
+        const nCesta = (r) => {
+            const faltan = r.faltan || 0;
+            const pocos  = r.basket > 0 && r.basket < 8;
+            return {
+                color:  pocos ? '#ffb800' : 'var(--color-muted)',
+                aviso:  faltan > 0
+                    ? '<span style="color:#ffb800;"> ⚠</span>'
+                    : '',
+                titulo: faltan > 0
+                    ? faltan + ' de los ' + r.definidos + ' valores de esta cesta no cotizan ya; '
+                      + 'el resultado sale de los ' + r.basket + ' que quedan'
+                    : (pocos ? 'Cesta pequeña: con ' + r.basket + ' valores la media se mueve mucho por poco'
+                             : r.basket + ' valores con datos'),
+            };
+        };
+
         // ── Tabla principal ──────────────────────────────────────────────────
-        const heads = ['#', 'SECTOR', 'CESTA', 'EN TOP 20%', 'AVG SCORE', 'MOMENTUM'];
+        const heads = ['#', 'SECTOR', 'N', 'EN TOP 20%', 'AVG SCORE', 'ACELERANDO'];
         const th = heads.map(h =>
             '<th style="color:var(--color-muted);font-size:10px;letter-spacing:0.08em;padding:7px 10px;border-bottom:1px solid var(--color-border);text-align:left;white-space:nowrap;">' + h + '</th>'
         ).join('');
@@ -769,12 +790,19 @@ async function loadSectorComposition(el) {
             const noData = r.avg_score == null;
             const scoreColor = noData ? 'var(--color-muted)' : (r.avg_score >= 60 ? 'var(--color-accent)' : r.avg_score >= 45 ? '#ffb800' : '#f23645');
             const w = (!noData && maxScore > 0) ? (r.avg_score / maxScore * 100) : 0;
-            const momTxt = r.avg_momentum == null ? '—' : (r.avg_momentum >= 0 ? '+' : '') + r.avg_momentum;
-            const momColor = r.avg_momentum == null ? 'var(--color-muted)' : r.avg_momentum >= 0 ? 'var(--color-accent)' : '#f23645';
+            // Es la fracción de la cesta acelerando, en %. Sin el "+" delante:
+            // un "+43" se lee como una subida del 43%, y es "43 de cada 100
+            // nombres van más rápido a corto que a medio plazo".
+            const momTxt = r.avg_momentum == null ? '—' : r.avg_momentum + '%';
+            const momColor = r.avg_momentum == null ? 'var(--color-muted)'
+                           : r.avg_momentum >= 60 ? 'var(--color-accent)'
+                           : r.avg_momentum >= 40 ? '#ffb800' : '#f23645';
             return '<tr style="border-bottom:1px solid var(--color-border);' + (noData ? 'opacity:0.5;' : '') + '">'
                 + '<td style="padding:6px 10px;color:var(--color-muted);font-size:11px;">' + (r.rank || '—') + '</td>'
                 + '<td style="padding:6px 10px;color:var(--color-text);font-size:11px;white-space:nowrap;">' + r.sector + '</td>'
-                + '<td style="padding:6px 10px;color:var(--color-muted);font-size:11px;">' + r.basket + '</td>'
+                + '<td style="padding:6px 10px;font-size:11px;white-space:nowrap;" title="' + esc(nCesta(r).titulo) + '">'
+                +   '<span style="color:' + nCesta(r).color + ';">' + r.basket + '</span>'
+                +   (nCesta(r).aviso || '') + '</td>'
                 + '<td style="padding:6px 10px;color:var(--color-muted);font-size:11px;white-space:nowrap;">' + (noData ? 'Sin datos' : (r.leaders + '/' + r.basket + ' · ' + r.leaders_pct + '%')) + '</td>'
                 + '<td style="padding:6px 10px;min-width:90px;">'
                 + '<div style="display:flex;align-items:center;gap:6px;">'
@@ -814,13 +842,13 @@ async function loadSectorComposition(el) {
             + '</div>';
 
         const note = '<div style="padding:8px 14px;font-size:10px;color:var(--color-muted);border-top:1px solid var(--color-border);margin-top:0.75rem;">'
-            + 'EN TOP 20% = nº de nombres de la cesta con RS Percentile ≥ 80 sobre el universo temático combinado (~290 tickers) · MOMENTUM = fracción de la cesta acelerando (RS 21d > RS 63d) · Scan independiente, no limitado al S&P 500 · Actualizado: ' + data.timestamp
+            + 'N = valores de la cesta con datos (⚠ = alguno ya no cotiza) · EN TOP 20% = cuántos tienen RS Percentile ≥ 80 sobre el universo temático combinado · ACELERANDO = qué porcentaje de la cesta va más rápido a corto que a medio plazo (RS 21d > RS 63d) · Scan independiente, no limitado al S&P 500 · Actualizado: ' + data.timestamp
             + '</div>';
 
         const shell = '<div style="background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius);padding:1.25rem;">'
             + '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem;">'
             + '<div style="color:var(--color-accent);font-size:13px;letter-spacing:0.08em;">COMPOSICIÓN SECTORIAL ' + tt('sector-composition') + '</div>'
-            + '<div style="color:var(--color-muted);font-size:11px;">29 cestas temáticas</div>'
+            + '<div style="color:var(--color-muted);font-size:11px;">' + s.length + ' cestas temáticas</div>'
             + '</div>'
             + stats
             + table

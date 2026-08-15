@@ -43,6 +43,28 @@ def _load_gist() -> dict | None:
         return None
 
 
+def _normalizar(fila: dict) -> dict:
+    """Puente entre el Gist que hay AHORA y el que publicará el próximo scan.
+
+    El scan pasa a mandar `avg_momentum` en porcentaje (43) en vez de en
+    fracción (0.43), y añade `definidos`/`faltan` para poder decir cuántos
+    valores de la cesta han dejado de cotizar. Pero el Gist solo se reescribe
+    una vez al día: entre el despliegue y ese scan, el backend leería el
+    formato viejo y la pantalla mostraría "0%" en todas las cestas.
+
+    Una fracción nunca pasa de 1 y un porcentaje útil casi nunca baja de ahí,
+    así que el corte distingue los dos formatos sin ambigüedad. Se puede
+    quitar en cuanto haya corrido un scan (ver `generated_at` del Gist).
+    """
+    fila = dict(fila)
+    m = fila.get("avg_momentum")
+    if m is not None and m <= 1:
+        fila["avg_momentum"] = round(m * 100)
+    fila.setdefault("definidos", fila.get("basket", 0))
+    fila.setdefault("faltan", 0)
+    return fila
+
+
 def get_thematic_composition() -> dict:
     cached = cache.get(CACHE_KEY)
     if cached:
@@ -61,7 +83,7 @@ def get_thematic_composition() -> dict:
     # no el momento de esta petición.
     result = {
         "ok":              True,
-        "sectors":         data["sectors"],
+        "sectors":         [_normalizar(s) for s in data["sectors"]],
         "strongest":       data.get("strongest"),
         "weakest":         data.get("weakest"),
         "sectors_tracked": data.get("sectors_tracked", 0),

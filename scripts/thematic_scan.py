@@ -43,25 +43,27 @@ BATCH_SLEEP = 1.5
 THEMATIC_SECTORS = {
     "BIOTECH": [
         "MRNA","BNTX","REGN","VRTX","GILD","AMGN","BIIB","ALNY","SRPT","BMRN",
-        "INCY","IONS","EXEL","NBIX","RARE","FOLD","BLUE","CRSP","EDIT","NTLA",
-        "BEAM","VERV","ARWR","IOVA","RYTM","ACAD","HALO","PCRX","UTHR",
+        "INCY","IONS","EXEL","NBIX","RARE","CRSP","EDIT","NTLA","BEAM","ARWR",
+        "IOVA","RYTM","ACAD","HALO","PCRX","UTHR",
     ],
     "GLP-1": [
-        "LLY","NVO","VKTX","AMGN","PFE","AZN","MDGL","ALT","TERN","RXRX","CRNX","ZLAB",
+        "LLY","NVO","VKTX","AMGN","PFE","AZN","MDGL","ALT","RXRX","CRNX",
+        "ZLAB",
     ],
     "MEMORY": [
         "MU","WDC","STX","SIMO","FORM","UCTT","AEIS","ENTG","COHU",
     ],
     "CYBER": [
-        "CRWD","PANW","ZS","FTNT","OKTA","CYBR","S","NET","QLYS","RPD",
-        "VRNS","TENB","FFIV","CHKP","GEN",
+        "CRWD","PANW","ZS","FTNT","OKTA","S","NET","QLYS","RPD","VRNS",
+        "TENB","FFIV","CHKP","GEN",
     ],
     "FINTECH": [
-        "XYZ","PYPL","SOFI","AFRM","UPST","COIN","HOOD","FOUR","GPN","FI",
-        "MA","V","AXP","NU","PAGS","STNE","TOST","FUTU",
+        "XYZ","PYPL","SOFI","AFRM","UPST","COIN","HOOD","FOUR","GPN","MA",
+        "V","AXP","NU","PAGS","STNE","TOST","FUTU",
     ],
     "BOOMER": [
-        "KO","PEP","PG","JNJ","MO","PM","VZ","T","MMM","CL","KMB","GIS","K","CAG","CLX",
+        "KO","PEP","PG","JNJ","MO","PM","VZ","T","MMM","CL",
+        "KMB","GIS","CAG","CLX",
     ],
     "SEMIS": [
         "NVDA","AMD","INTC","TSM","AVGO","QCOM","TXN","MU","ASML","AMAT",
@@ -69,74 +71,82 @@ THEMATIC_SECTORS = {
         "ARM","SMCI","WOLF","COHR","LSCC",
     ],
     "GAMING": [
-        "RBLX","EA","TTWO","U","DKNG","PENN","SE","NTES",
+        "RBLX","EA","TTWO","U","DKNG","PENN","SE","NTES","PLTK","BILI",
+        "HUYA",
     ],
     "INVERSE BETA": [
-        "KO","PG","JNJ","WMT","MCD","VZ","T","SO","DUK","NEE","PEP","CL","KMB","MO",
+        "KO","PG","JNJ","WMT","MCD","VZ","T","SO","DUK","NEE",
+        "PEP","CL","KMB","MO",
     ],
     "DATA CENTER": [
         "EQIX","DLR","VRT","NVDA","SMCI","DELL","HPE","ANET","MOD","ETN",
         "PWR","NTAP","CSCO",
     ],
     "CRYPTO": [
-        "COIN","MSTR","MARA","RIOT","CLSK","HUT","BITF","CIFR","BTBT","WULF",
+        "COIN","MSTR","MARA","RIOT","CLSK","HUT","CIFR","BTBT","WULF","IREN",
+        "CORZ","BTDR",
     ],
     "PHOTONICS": [
-        "COHR","LITE","VIAV","AAOI","INFN","NPTN",
+        "COHR","LITE","VIAV","AAOI","FN","CIEN","POET","MRVL","ALAB","CRDO",
     ],
     "AI INFRA": [
         "NVDA","AMD","SMCI","DELL","ANET","AVGO","MRVL","VRT","ETN","MU",
         "ASML","AMZN","MSFT","GOOGL",
     ],
     "ROBOTICS": [
-        "ISRG","ROK","IRBT","TER","ZBRA","NVDA","PATH","EMR",
+        "ISRG","ROK","TER","ZBRA","NVDA","PATH","EMR","SYM","SERV","RR",
     ],
     "QUANTUM": [
-        "IBM","IONQ","RGTI","QUBT","ARQQ","GOOGL","HON",
+        "IBM","IONQ","RGTI","QUBT","ARQQ","GOOGL","HON","QBTS","MSFT","LAES",
     ],
     "DEFENSE": [
         "LMT","RTX","NOC","GD","BA","LHX","HII","TXT","KTOS","AVAV",
         "LDOS","BWXT","HEI",
     ],
     "STREAMING": [
-        "NFLX","DIS","WBD","PARA","ROKU","SPOT","FUBO",
+        "NFLX","DIS","WBD","PARA","ROKU","SPOT","FUBO","TME","IQ","LYV",
     ],
     "NUCLEAR": [
-        "CEG","VST","NRG","BWXT","LEU","CCJ","UEC","UUUU","SMR","OKLO","NNE","DNN",
+        "CEG","VST","NRG","BWXT","LEU","CCJ","UEC","UUUU","SMR","OKLO",
+        "NNE","DNN",
     ],
     "STORAGE": [
-        "WDC","STX","NTAP","PSTG","DBX",
+        "WDC","STX","NTAP","DBX","BOX","SNDK","NTNX","CVLT","BLZE","QMCO",
     ],
     "ENERGY": [
-        "XOM","CVX","COP","EOG","SLB","OXY","MPC","PSX","VLO","KMI","WMB","HAL","BKR",
+        "XOM","CVX","COP","EOG","SLB","OXY","MPC","PSX","VLO","KMI",
+        "WMB","HAL","BKR",
     ],
     "SOFTWARE": [
         "MSFT","ORCL","CRM","ADBE","NOW","INTU","SNOW","PLTR","WDAY","DDOG",
         "TEAM","HUBS","PANW","ZS",
     ],
     "EV / AUTONOMY": [
-        "TSLA","RIVN","LCID","NIO","XPEV","LI","F","GM","APTV","MBLY","QS","CHPT",
+        "TSLA","RIVN","LCID","NIO","XPEV","LI","F","GM","APTV","MBLY",
+        "QS","CHPT",
     ],
     "CHINA": [
-        "BABA","PDD","JD","NIO","XPEV","LI","BIDU","NTES","TCOM","BILI","TME","YUMC",
+        "BABA","PDD","JD","NIO","XPEV","LI","BIDU","NTES","TCOM","BILI",
+        "TME","YUMC",
     ],
     "DRONES": [
-        "AVAV","KTOS","UMAC","RCAT","ONDS","DPRO",
+        "AVAV","KTOS","UMAC","RCAT","ONDS","DPRO","EH","ACHR","JOBY","UAVS",
     ],
     "MATERIALS": [
         "LIN","APD","SHW","ECL","NEM","FCX","DOW","DD","ALB","MOS",
     ],
     "METALS": [
-        "FCX","NEM","GOLD","AA","X","CLF","STLD","NUE","SCCO","MP",
+        "FCX","NEM","GOLD","AA","CLF","STLD","NUE","SCCO","MP","AEM",
     ],
     "MAG7": [
         "AAPL","MSFT","GOOGL","AMZN","META","NVDA","TSLA",
     ],
     "SPACE": [
-        "RKLB","ASTS","LUNR","RDW","IRDM","GSAT","PL",
+        "RKLB","ASTS","LUNR","RDW","IRDM","GSAT","PL","SPCE","BKSY","VSAT",
     ],
     "SOLAR": [
-        "ENPH","SEDG","FSLR","RUN","NXT","CSIQ","JKS","ARRY","SHLS",
+        "ENPH","SEDG","FSLR","RUN","NXT","CSIQ","JKS","ARRY","SHLS","FLNC",
+        "SPWR",
     ],
 }
 
@@ -194,9 +204,18 @@ def run_scan() -> dict:
     for theme, tickers in THEMATIC_SECTORS.items():
         sub = df[df.index.isin(tickers)]
         basket = len(sub)
+        # Cuántos nombres tiene la cesta EN EL FICHERO frente a cuántos han
+        # traído dato. Sin este par, una cesta que pierde nombres encoge en
+        # silencio: el 15/08/2026 STORAGE definía 5, le quedaban 3 (PSTG llevaba
+        # tiempo sin cotizar) y aun así encabezaba el ranking con un 91,9 --
+        # porque promediar tres números tiene una varianza enorme y las cestas
+        # diminutas ocupan los extremos por pura aritmética, no por fuerza real.
+        definidos = len(tickers)
+        faltan    = definidos - basket
         if basket == 0:
             grouped.append({
-                "sector": theme, "basket": 0, "leaders": 0,
+                "sector": theme, "basket": 0, "definidos": definidos,
+                "faltan": faltan, "leaders": 0,
                 "leaders_pct": 0, "avg_score": None, "avg_momentum": None,
             })
             continue
@@ -204,10 +223,15 @@ def run_scan() -> dict:
         grouped.append({
             "sector":       theme,
             "basket":       basket,
+            "definidos":    definidos,
+            "faltan":       faltan,
             "leaders":      leaders,
             "leaders_pct":  round(leaders / basket * 100, 0),
             "avg_score":    round(float(sub["rs_pct"].mean()), 1),
-            "avg_momentum": round(float(sub["rs_mom"].mean()), 2),
+            # Fracción de la cesta acelerando, ya en PORCENTAJE. Antes viajaba
+            # como 0-1 y la pantalla lo pintaba con un "+" delante ("+0.14"),
+            # que se lee como una variación de precio.
+            "avg_momentum": round(float(sub["rs_mom"].mean()) * 100),
         })
 
     scored = [g for g in grouped if g["avg_score"] is not None]
