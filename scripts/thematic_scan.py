@@ -40,6 +40,56 @@ BATCH_SLEEP = 1.5
 
 # Si editas las cestas, edita SOLO aquí — este script es la única fuente de
 # verdad para el scan (el backend solo lee el resultado ya calculado del Gist).
+# Escalones de liderazgo, sobre el percentil RS dentro del universo temático.
+# Un nombre en el 10% superior pesa el triple que uno que solo llega al 30%.
+TIER_LIDER  = 90   # top 10%
+TIER_FUERTE = 80   # top 20%
+TIER_SOLIDO = 70   # top 30%
+
+
+def _ordenar_por_amplitud(grouped: list):
+    """Reparte en (con datos, sin datos) y numera por AMPLITUD, no por media.
+
+    Es una función aparte para poder probar la ORDENACIÓN, no solo la fórmula:
+    con la métrica correcta pero ordenando por media, la tabla seguiría
+    mintiendo igual, y un test sobre _amplitud_ponderada no lo detectaría.
+    Lo destapó el sabotaje el 15/08/2026.
+
+    Desempate por media: dos cestas pueden alcanzar la misma proporción de
+    liderazgo y no ser igual de fuertes por debajo.
+    """
+    scored = [g for g in grouped if g.get("avg_score") is not None]
+    empty  = [g for g in grouped if g.get("avg_score") is None]
+    scored.sort(key=lambda r: (r.get("breadth") or 0, r["avg_score"]), reverse=True)
+    for i, r in enumerate(scored):
+        r["rank"] = i + 1
+    for r in empty:
+        r["rank"] = None
+    return scored, empty
+
+
+def _amplitud_ponderada(rs_pct) -> float:
+    """Cuántos nombres de la cesta están entre los líderes del mercado, no qué
+    media saca la cesta.
+
+    LA MEDIA ENGAÑA CON CESTAS PEQUEÑAS: el 15/08/2026, STORAGE encabezaba el
+    ranking con un 91,9 y tres valores, porque promediar tres percentiles tiene
+    una varianza enorme. La amplitud pregunta otra cosa -- cuántos de sus
+    nombres son líderes -- y una cesta sin ninguno saca 0 tenga la media que
+    tenga, que es la respuesta correcta a "¿dónde está el liderazgo?".
+
+    0 = ningún nombre llega al 30% superior. 100 = todos están en el 10%.
+    """
+    if rs_pct is None or len(rs_pct) == 0:
+        return None
+    puntos = (
+        (rs_pct >= TIER_LIDER).sum() * 3
+        + ((rs_pct >= TIER_FUERTE) & (rs_pct < TIER_LIDER)).sum() * 2
+        + ((rs_pct >= TIER_SOLIDO) & (rs_pct < TIER_FUERTE)).sum() * 1
+    )
+    return round(float(puntos) / (len(rs_pct) * 3) * 100, 1)
+
+
 THEMATIC_SECTORS = {
     "BIOTECH": [
         "MRNA","BNTX","REGN","VRTX","GILD","AMGN","BIIB","ALNY","SRPT","BMRN",
@@ -215,11 +265,12 @@ def run_scan() -> dict:
         if basket == 0:
             grouped.append({
                 "sector": theme, "basket": 0, "definidos": definidos,
-                "faltan": faltan, "leaders": 0,
-                "leaders_pct": 0, "avg_score": None, "avg_momentum": None,
+                "faltan": faltan, "leaders": 0, "leaders_pct": 0,
+                "lideres_10": 0, "lideres_30": 0, "breadth": None,
+                "avg_score": None, "avg_momentum": None,
             })
             continue
-        leaders = int((sub["rs_pct"] >= 80).sum())
+        leaders = int((sub["rs_pct"] >= TIER_FUERTE).sum())
         grouped.append({
             "sector":       theme,
             "basket":       basket,
@@ -227,6 +278,9 @@ def run_scan() -> dict:
             "faltan":       faltan,
             "leaders":      leaders,
             "leaders_pct":  round(leaders / basket * 100, 0),
+            "lideres_10":   int((sub["rs_pct"] >= TIER_LIDER).sum()),
+            "lideres_30":   int((sub["rs_pct"] >= TIER_SOLIDO).sum()),
+            "breadth":      _amplitud_ponderada(sub["rs_pct"]),
             "avg_score":    round(float(sub["rs_pct"].mean()), 1),
             # Fracción de la cesta acelerando, ya en PORCENTAJE. Antes viajaba
             # como 0-1 y la pantalla lo pintaba con un "+" delante ("+0.14"),
@@ -234,13 +288,7 @@ def run_scan() -> dict:
             "avg_momentum": round(float(sub["rs_mom"].mean()) * 100),
         })
 
-    scored = [g for g in grouped if g["avg_score"] is not None]
-    empty  = [g for g in grouped if g["avg_score"] is None]
-    scored.sort(key=lambda r: r["avg_score"], reverse=True)
-    for i, r in enumerate(scored):
-        r["rank"] = i + 1
-    for r in empty:
-        r["rank"] = None
+    scored, empty = _ordenar_por_amplitud(grouped)
 
     # Desempate: cuando varios sectores empatan en avg_momentum (frecuente en
     # el extremo +1/0, ya que es la fracción de la cesta acelerando — varios

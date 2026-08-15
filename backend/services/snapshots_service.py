@@ -106,6 +106,12 @@ def init_db():
         conn.execute("ALTER TABLE snapshot_ticker ADD COLUMN rs_score REAL")
     except sqlite3.OperationalError:
         pass
+    # breadth pasa a ser la métrica que ordena el módulo (15/08/2026), así que
+    # es la que hay que seguir en el tiempo. Por ALTER, mismo motivo.
+    try:
+        conn.execute("ALTER TABLE snapshot_tematico ADD COLUMN breadth REAL")
+    except sqlite3.OperationalError:
+        pass
     conn.commit()
     conn.close()
 
@@ -280,7 +286,8 @@ def _maybe_write_tematico(conn, fecha):
         if not datos.get("ok") or not datos.get("sectors"):
             return   # sin scan válido todavía -- se reintenta, no se escribe a medias
         filas = [
-            (fecha, s["sector"], s.get("avg_score"), s.get("avg_momentum"), s.get("basket"))
+            (fecha, s["sector"], s.get("avg_score"), s.get("avg_momentum"),
+             s.get("basket"), s.get("breadth"))
             for s in datos["sectors"] if s.get("avg_score") is not None
         ]
     except Exception as e:
@@ -289,8 +296,8 @@ def _maybe_write_tematico(conn, fecha):
     if not filas:
         return
     conn.executemany(
-        "INSERT OR IGNORE INTO snapshot_tematico (fecha, cesta, avg_score, avg_momentum, basket) "
-        "VALUES (?, ?, ?, ?, ?)", filas)
+        "INSERT OR IGNORE INTO snapshot_tematico (fecha, cesta, avg_score, avg_momentum, basket, breadth) "
+        "VALUES (?, ?, ?, ?, ?, ?)", filas)
     borradas = _purgar_tematico(conn, fecha)
     conn.commit()
     print(f"[Snapshots] snapshot_tematico guardado para {fecha} ({len(filas)} cestas"
@@ -312,8 +319,13 @@ def _purgar_tematico(conn, fecha_actual: str) -> int:
 
 
 def variacion_por_cesta(ventanas=(5, 20)) -> dict:
-    """{cesta: {"d5": +18.2, "d20": -3.1}} -- cuánto ha cambiado el score de
+    """{cesta: {"d5": +18.2, "d20": -3.1}} -- cuánto ha cambiado la AMPLITUD de
     cada cesta respecto a hace N sesiones.
+
+    Sobre la amplitud y no sobre la media, porque es la métrica que ordena el
+    módulo: la pregunta es qué cestas están GANANDO liderazgo, no cuáles suben
+    de nota. Las filas anteriores al 15/08/2026 no tienen amplitud guardada y
+    esas ventanas salen a None, igual que si faltara histórico.
 
     Es lo que distingue "esta cesta está arriba" de "esta cesta está SUBIENDO".
     Una que ya lleva meses arriba no es una oportunidad; una que gana 18 puntos
@@ -328,8 +340,8 @@ def variacion_por_cesta(ventanas=(5, 20)) -> dict:
             "SELECT DISTINCT fecha FROM snapshot_tematico ORDER BY fecha DESC").fetchall()]
         if not fechas:
             return {}
-        hoy = {r["cesta"]: r["avg_score"] for r in conn.execute(
-            "SELECT cesta, avg_score FROM snapshot_tematico WHERE fecha = ?", (fechas[0],)).fetchall()}
+        hoy = {r["cesta"]: r["breadth"] for r in conn.execute(
+            "SELECT cesta, breadth FROM snapshot_tematico WHERE fecha = ?", (fechas[0],)).fetchall()}
         salida = {c: {} for c in hoy}
         for n in ventanas:
             clave = f"d{n}"
@@ -337,8 +349,8 @@ def variacion_por_cesta(ventanas=(5, 20)) -> dict:
                 for c in salida:
                     salida[c][clave] = None
                 continue
-            antes = {r["cesta"]: r["avg_score"] for r in conn.execute(
-                "SELECT cesta, avg_score FROM snapshot_tematico WHERE fecha = ?", (fechas[n],)).fetchall()}
+            antes = {r["cesta"]: r["breadth"] for r in conn.execute(
+                "SELECT cesta, breadth FROM snapshot_tematico WHERE fecha = ?", (fechas[n],)).fetchall()}
             for c, v in hoy.items():
                 previo = antes.get(c)
                 salida[c][clave] = round(v - previo, 1) if (previo is not None and v is not None) else None

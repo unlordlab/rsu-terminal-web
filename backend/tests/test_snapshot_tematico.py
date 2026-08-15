@@ -19,6 +19,7 @@ LO QUE FIJA ESTE FICHERO:
 1. La purga cuenta desde la fecha de SESIÓN, no desde el reloj del proceso.
 2. Sin histórico suficiente para una ventana se devuelve None, NO se compara
    contra la fila más antigua que haya -- eso daría una variación inventada.
+   Lo que se sigue es la AMPLITUD, que es la métrica que ordena el módulo.
 3. Escribir dos veces el mismo día no duplica ni altera nada.
 
 Uso:
@@ -47,7 +48,8 @@ def db(tmp_path, monkeypatch):
 
 def _cestas(n=3, base=50.0):
     return {"ok": True, "sectors": [
-        {"sector": f"C{i}", "avg_score": base + i * 10, "avg_momentum": 40, "basket": 10}
+        {"sector": f"C{i}", "avg_score": base + i * 10, "avg_momentum": 40,
+         "basket": 10, "breadth": base + i * 10}
         for i in range(n)]}
 
 
@@ -98,8 +100,8 @@ def test_el_dia_ya_escrito_ni_siquiera_relee_el_scan(db):
 def test_una_cesta_sin_score_no_se_guarda(db):
     """Guardar un None dejaría un hueco que luego se compara mal."""
     datos = {"ok": True, "sectors": [
-        {"sector": "BUENA", "avg_score": 60.0, "avg_momentum": 40, "basket": 10},
-        {"sector": "VACIA", "avg_score": None, "avg_momentum": None, "basket": 0}]}
+        {"sector": "BUENA", "avg_score": 60.0, "avg_momentum": 40, "basket": 10, "breadth": 60.0},
+        {"sector": "VACIA", "avg_score": None, "avg_momentum": None, "basket": 0, "breadth": None}]}
     _escribir("2026-08-14", datos)
     conn = S._conn()
     cestas = [r[0] for r in conn.execute("SELECT cesta FROM snapshot_tematico")]
@@ -125,7 +127,7 @@ def test_la_purga_retira_lo_que_cae_fuera_de_la_ventana(db):
     dentro = (hoy - timedelta(days=S.TEMATICO_RETENCION_DIAS - 10)).strftime("%Y-%m-%d")
     conn = S._conn()
     for f in (vieja, dentro):
-        conn.execute("INSERT INTO snapshot_tematico VALUES (?,?,?,?,?)", (f, "C0", 50.0, 40, 10))
+        conn.execute("INSERT INTO snapshot_tematico (fecha,cesta,avg_score,avg_momentum,basket,breadth) VALUES (?,?,?,?,?,?)", (f, "C0", 50.0, 40, 10, 50.0))
     conn.commit(); conn.close()
 
     _escribir(hoy.strftime("%Y-%m-%d"), _cestas(1))
@@ -141,7 +143,7 @@ def test_la_purga_cuenta_desde_la_sesion_no_desde_el_reloj(db):
     reinició el contenedor -- el mismo error que ya se corrigió una vez en
     Options Flow con un bucle de 24h."""
     conn = S._conn()
-    conn.execute("INSERT INTO snapshot_tematico VALUES ('2020-01-01','C0',50.0,40,10)")
+    conn.execute("INSERT INTO snapshot_tematico (fecha,cesta,avg_score,avg_momentum,basket,breadth) VALUES ('2020-01-01','C0',50.0,40,10,50.0)")
     conn.commit()
     # Sesión antigua: contra ella, 2020-01-01 está DENTRO de la ventana
     borradas = S._purgar_tematico(conn, "2020-06-01")
@@ -153,7 +155,7 @@ def test_la_purga_cuenta_desde_la_sesion_no_desde_el_reloj(db):
 
 def test_una_fecha_corrupta_no_borra_nada(db):
     conn = S._conn()
-    conn.execute("INSERT INTO snapshot_tematico VALUES ('2026-08-14','C0',50.0,40,10)")
+    conn.execute("INSERT INTO snapshot_tematico (fecha,cesta,avg_score,avg_momentum,basket,breadth) VALUES ('2026-08-14','C0',50.0,40,10,50.0)")
     conn.commit()
     assert S._purgar_tematico(conn, "no-es-una-fecha") == 0
     assert conn.execute("SELECT COUNT(*) FROM snapshot_tematico").fetchone()[0] == 1
@@ -166,8 +168,8 @@ def _sembrar(conn, dias, score_por_dia):
     base = date(2026, 8, 14)
     for i in range(dias):
         f = (base - timedelta(days=i)).strftime("%Y-%m-%d")
-        conn.execute("INSERT INTO snapshot_tematico VALUES (?,?,?,?,?)",
-                     (f, "C0", score_por_dia(i), 40, 10))
+        conn.execute("INSERT INTO snapshot_tematico (fecha,cesta,avg_score,avg_momentum,basket,breadth) VALUES (?,?,?,?,?,?)",
+                     (f, "C0", score_por_dia(i), 40, 10, score_por_dia(i)))
     conn.commit()
 
 
@@ -197,7 +199,7 @@ def test_una_cesta_nueva_no_arrastra_la_variacion_de_otra(db):
     conn = S._conn()
     _sembrar(conn, 10, lambda i: 60.0)
     # Una cesta que solo existe hoy
-    conn.execute("INSERT INTO snapshot_tematico VALUES ('2026-08-14','NUEVA',80.0,40,10)")
+    conn.execute("INSERT INTO snapshot_tematico (fecha,cesta,avg_score,avg_momentum,basket,breadth) VALUES ('2026-08-14','NUEVA',80.0,40,10,80.0)")
     conn.commit(); conn.close()
     assert S.variacion_por_cesta()["NUEVA"]["d5"] is None
 

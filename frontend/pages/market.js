@@ -742,7 +742,10 @@ async function loadSectorComposition(el) {
 
         const s = data.sectors;
         const scoredOnly = s.filter(r => r.avg_score != null);
-        const maxScore = Math.max(...scoredOnly.map(r => r.avg_score), 1);
+        // La barra mide la AMPLITUD, que es lo que ordena la tabla. Antes medía
+        // la media, así que el primero de la lista podía tener la barra más
+        // corta que el tercero -- confuso de leer.
+        const maxScore = Math.max(...scoredOnly.map(r => r.breadth != null ? r.breadth : 0), 1);
 
         // ── 4 tarjetas resumen ───────────────────────────────────────────────
         const statCard = (label, value, sub, color) =>
@@ -753,8 +756,8 @@ async function loadSectorComposition(el) {
             + '</div>';
 
         const stats = '<div class="rsu-grid-cards" style="gap:0.75rem;margin-bottom:1rem;">'
-            + statCard('SECTOR MÁS FUERTE', data.strongest ? data.strongest.sector : '—', data.strongest ? 'Avg score ' + data.strongest.avg_score : '', 'var(--color-accent)')
-            + statCard('SECTOR MÁS DÉBIL', data.weakest ? data.weakest.sector : '—', data.weakest ? 'Avg score ' + data.weakest.avg_score : '', '#f23645')
+            + statCard('SECTOR MÁS FUERTE', data.strongest ? data.strongest.sector : '—', data.strongest ? 'Amplitud ' + (data.strongest.breadth != null ? data.strongest.breadth : '—') : '', 'var(--color-accent)')
+            + statCard('SECTOR MÁS DÉBIL', data.weakest ? data.weakest.sector : '—', data.weakest ? 'Amplitud ' + (data.weakest.breadth != null ? data.weakest.breadth : '—') : '', '#f23645')
             + statCard('SECTORES MONITORIZADOS', data.sectors_tracked, (data.sectors_empty ? data.sectors_empty + ' sin datos suficientes' : 'Todas con datos'), 'var(--color-secondary)')
             + statCard('UNIVERSO', data.universe_size, 'Tickers con score', 'var(--color-text)')
             + '</div>';
@@ -794,15 +797,16 @@ async function loadSectorComposition(el) {
         };
 
         // ── Tabla principal ──────────────────────────────────────────────────
-        const heads = ['#', 'SECTOR', 'N', 'EN TOP 20%', 'AVG SCORE', '5 SES.', '20 SES.', 'ACELERANDO'];
+        const heads = ['#', 'SECTOR', 'N', 'EN TOP 20%', 'AMPLITUD ' + tt('amplitud-liderazgo'), 'MEDIA', '5 SES.', '20 SES.', 'ACELERANDO'];
         const th = heads.map(h =>
             '<th style="color:var(--color-muted);font-size:10px;letter-spacing:0.08em;padding:7px 10px;border-bottom:1px solid var(--color-border);text-align:left;white-space:nowrap;">' + h + '</th>'
         ).join('');
 
         const trs = s.map(r => {
             const noData = r.avg_score == null;
-            const scoreColor = noData ? 'var(--color-muted)' : (r.avg_score >= 60 ? 'var(--color-accent)' : r.avg_score >= 45 ? '#ffb800' : '#f23645');
-            const w = (!noData && maxScore > 0) ? (r.avg_score / maxScore * 100) : 0;
+            const amp = r.breadth;
+            const scoreColor = amp == null ? 'var(--color-muted)' : (amp >= 40 ? 'var(--color-accent)' : amp >= 15 ? '#ffb800' : '#f23645');
+            const w = (amp != null && maxScore > 0) ? (amp / maxScore * 100) : 0;
             // Es la fracción de la cesta acelerando, en %. Sin el "+" delante:
             // un "+43" se lee como una subida del 43%, y es "43 de cada 100
             // nombres van más rápido a corto que a medio plazo".
@@ -822,8 +826,9 @@ async function loadSectorComposition(el) {
                 + '<div style="flex:1;background:var(--color-surface2);border-radius:2px;height:5px;overflow:hidden;min-width:50px;">'
                 + '<div style="height:100%;width:' + w.toFixed(1) + '%;background:' + scoreColor + ';border-radius:2px;"></div>'
                 + '</div>'
-                + '<span style="color:' + scoreColor + ';font-size:11px;width:30px;text-align:right;">' + (noData ? '—' : r.avg_score) + '</span>'
+                + '<span style="color:' + scoreColor + ';font-size:11px;width:34px;text-align:right;">' + (amp == null ? '—' : amp) + '</span>'
                 + '</div></td>'
+                + '<td style="padding:6px 10px;color:var(--color-muted);font-size:11px;">' + (noData ? '—' : r.avg_score) + '</td>'
                 + varCelda(r.d5)
                 + varCelda(r.d20)
                 + '<td style="padding:6px 10px;color:' + momColor + ';font-size:11px;">' + momTxt + '</td>'
@@ -845,7 +850,7 @@ async function loadSectorComposition(el) {
                     const mc = r.avg_momentum >= 0 ? 'var(--color-accent)' : '#f23645';
                     return '<div style="display:flex;justify-content:space-between;align-items:center;padding:5px 0;border-bottom:1px solid var(--color-border);font-size:11px;">'
                         + '<span style="color:var(--color-text);">' + r.sector + '</span>'
-                        + '<span style="color:' + mc + ';">' + (r.avg_momentum >= 0 ? '+' : '') + r.avg_momentum + '</span>'
+                        + '<span style="color:' + mc + ';">' + r.avg_momentum + '%</span>'
                         + '</div>';
                 }).join('')
                 + '</div>';
@@ -857,7 +862,7 @@ async function loadSectorComposition(el) {
             + '</div>';
 
         const note = '<div style="padding:8px 14px;font-size:10px;color:var(--color-muted);border-top:1px solid var(--color-border);margin-top:0.75rem;">'
-            + 'N = valores de la cesta con datos (⚠ = alguno ya no cotiza) · EN TOP 20% = cuántos tienen RS Percentile ≥ 80 sobre el universo temático combinado · 5 SES. y 20 SES. = cuánto ha cambiado el score desde entonces, para ver qué temas están rotando y no solo cuáles están arriba · ACELERANDO = qué porcentaje de la cesta va más rápido a corto que a medio plazo (RS 21d > RS 63d) · Scan independiente, no limitado al S&P 500 · Actualizado: ' + data.timestamp
+            + 'La tabla se ordena por AMPLITUD, no por la media · N = valores de la cesta con datos (⚠ = alguno ya no cotiza) · EN TOP 20% = cuántos tienen RS Percentile ≥ 80 · 5 SES. y 20 SES. = cuánto ha cambiado la amplitud desde entonces, para ver qué temas están ganando liderazgo · ACELERANDO = qué porcentaje de la cesta va más rápido a corto que a medio plazo (RS 21d > RS 63d) · Scan independiente, no limitado al S&P 500 · Actualizado: ' + data.timestamp
             + '</div>';
 
         const shell = '<div style="background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius);padding:1.25rem;">'

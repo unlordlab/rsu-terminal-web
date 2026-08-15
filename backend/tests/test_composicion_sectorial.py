@@ -105,3 +105,110 @@ def test_el_gist_nuevo_conserva_lo_que_trae():
     f = _normalizar({"sector": "STORAGE", "basket": 8, "definidos": 10,
                      "faltan": 2, "avg_momentum": 50})
     assert (f["definidos"], f["faltan"], f["avg_momentum"]) == (10, 2, 50)
+
+
+# ── La amplitud de liderazgo ────────────────────────────────────────────────
+
+from thematic_scan import _amplitud_ponderada  # noqa: E402
+
+
+def _serie(valores):
+    import pandas as pd
+    return pd.Series(valores, dtype=float)
+
+
+def test_una_cesta_sin_ningun_lider_marca_cero():
+    """Es la diferencia entera con la media. MAG7 medía 48,4 -- por encima de
+    la mitad de la tabla -- con CERO nombres en el 20% superior. Preguntando
+    «¿dónde está el liderazgo?», la respuesta correcta es cero."""
+    assert _amplitud_ponderada(_serie([69, 60, 55, 40])) == 0.0
+
+
+def test_todos_en_el_diez_por_ciento_superior_es_cien():
+    assert _amplitud_ponderada(_serie([95, 92, 99, 90])) == 100.0
+
+
+def test_los_escalones_pesan_distinto():
+    """Un nombre en el 10% superior vale el triple que uno que solo llega al
+    30%: si pesaran igual, la métrica no distinguiría liderar de acompañar."""
+    arriba = _amplitud_ponderada(_serie([95, 95, 95, 95]))
+    medio  = _amplitud_ponderada(_serie([85, 85, 85, 85]))
+    abajo  = _amplitud_ponderada(_serie([75, 75, 75, 75]))
+    assert arriba > medio > abajo > 0
+    assert (arriba, medio, abajo) == (100.0, 66.7, 33.3)
+
+
+def test_la_amplitud_es_una_proporcion_y_por_tanto_ciega_al_tamano():
+    """LÍMITE CONOCIDO DE LA MÉTRICA, y está aquí escrito a propósito.
+
+    Dos estrellas de tres nombres empatan exactamente con diez nombres todos
+    en el 20% superior: los dos casos alcanzan dos tercios del liderazgo
+    posible. La amplitud mide QUÉ PROPORCIÓN del liderazgo posible alcanza la
+    cesta, no cuánta evidencia hay detrás.
+
+    Se deja así a propósito -- es lo que la hace explicable ("de 0 a 100, cuánto
+    del liderazgo posible alcanza") -- y quien protege del caso degenerado es el
+    mínimo de nombres por cesta, que tiene su propio test arriba: con 9 valores
+    como suelo, el caso «tres nombres, dos disparados» no puede darse.
+
+    Lo destapó el sabotaje al escribir este fichero, comprobando que
+    _amplitud_ponderada([99,98,20]) == _amplitud_ponderada([85]*10) == 66,7."""
+    pequena = _serie([99, 98, 20])
+    grande  = _serie([85] * 10)
+    assert _amplitud_ponderada(pequena) == _amplitud_ponderada(grande) == 66.7
+
+
+def test_lo_que_si_resuelve_la_amplitud_frente_a_la_media():
+    """El caso real que la motivó. Una cesta con media alta pero sin ningún
+    líder pierde contra una de media más baja y liderazgo repartido -- con la
+    media pasaba justo al revés."""
+    sin_lideres = _serie([69, 68, 67, 66, 65, 64, 63, 62, 61])   # media 65,0
+    con_lideres = _serie([95, 92, 30, 25, 20, 88, 15, 10, 12])   # media 43,0
+    assert _amplitud_ponderada(sin_lideres) == 0.0
+    assert _amplitud_ponderada(con_lideres) > 0
+    import statistics
+    assert statistics.mean([69, 68, 67, 66, 65, 64, 63, 62, 61]) > \
+           statistics.mean([95, 92, 30, 25, 20, 88, 15, 10, 12]), \
+        "la media las ordenaba al revés: ese es el punto"
+
+
+def test_un_solo_rezagado_no_borra_el_liderazgo_del_resto():
+    """No es un todo-o-nada: la métrica es proporcional, no un umbral."""
+    a = _amplitud_ponderada(_serie([95] * 9 + [10]))
+    assert 80 < a < 100
+
+
+def test_sin_datos_no_devuelve_cero(  ):
+    """Un 0 significa «ninguno es líder», que es una afirmación. Sin datos no
+    se puede afirmar eso."""
+    assert _amplitud_ponderada(_serie([])) is None
+    assert _amplitud_ponderada(None) is None
+
+
+def test_la_tabla_se_ordena_por_amplitud_no_por_media():
+    """Con la fórmula correcta pero ordenando por media, la tabla seguiría
+    mintiendo igual -- y ningún test sobre _amplitud_ponderada lo detectaría.
+    Lo echó en falta el sabotaje, y por eso la ordenación es una función
+    aparte que se puede probar."""
+    from thematic_scan import _ordenar_por_amplitud
+    cestas = [
+        {"sector": "MEDIA_ALTA_SIN_LIDERES", "avg_score": 67.0, "breadth": 2.4},
+        {"sector": "MEDIA_BAJA_CON_LIDERES", "avg_score": 42.2, "breadth": 20.0},
+        {"sector": "SIN_DATOS",              "avg_score": None, "breadth": None},
+    ]
+    scored, empty = _ordenar_por_amplitud(cestas)
+    assert [c["sector"] for c in scored] == ["MEDIA_BAJA_CON_LIDERES", "MEDIA_ALTA_SIN_LIDERES"]
+    assert scored[0]["rank"] == 1 and scored[1]["rank"] == 2
+    assert [c["sector"] for c in empty] == ["SIN_DATOS"]
+    assert empty[0]["rank"] is None, "sin datos no se le pone puesto"
+
+
+def test_el_empate_en_amplitud_lo_rompe_la_media():
+    """Dos cestas pueden alcanzar la misma proporción de liderazgo sin ser
+    igual de fuertes por debajo."""
+    from thematic_scan import _ordenar_por_amplitud
+    scored, _ = _ordenar_por_amplitud([
+        {"sector": "FLOJA", "avg_score": 40.0, "breadth": 30.0},
+        {"sector": "SOLIDA", "avg_score": 65.0, "breadth": 30.0},
+    ])
+    assert [c["sector"] for c in scored] == ["SOLIDA", "FLOJA"]

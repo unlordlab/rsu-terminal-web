@@ -2431,6 +2431,19 @@ Combinar 21/63/126 días en vez de usar una sola ventana es, en esencia, una for
 Esto NO es garantía de nada — es una tendencia estadística observada en datos históricos de mercados desarrollados, no una ley física. Trátalo como una probabilidad a favor, no como una certeza.`
     },
 
+    "amplitud-liderazgo": {
+        title: "Amplitud de liderazgo",
+        short: "Cuántos valores de la cesta están de verdad entre los que mejor se comportan del mercado. Es lo que ordena esta tabla.",
+        long: `Cada valor se compara con todos los demás y se le da un puesto. Los que están en el 10% superior son los que mejor lo están haciendo; luego viene el 20%, luego el 30%.
+
+Esta columna cuenta cuántos nombres de la cesta llegan a esos escalones, dando más peso a los que están más arriba. Va de 0 a 100: un 0 significa que ni uno solo entra en el 30% superior, y un 100 que todos están en el 10%.
+
+POR QUÉ NO SE USA LA MEDIA:
+Una media alta puede salir de muy pocos valores. Un tema con tres empresas, dos de ellas disparadas, saca una nota estupenda que no dice nada sobre el tema: dice algo sobre esas dos empresas. La amplitud pregunta otra cosa — cuántos de sus nombres están arriba — y por eso una cesta sin ningún líder marca cero, saque la media que saque.
+
+La media sigue en la columna de al lado, por si quieres compararlas. Cuando las dos van juntas, el tema se mueve entero; cuando la media es alta y la amplitud baja, el movimiento son unos pocos nombres tirando del resto.`,
+    },
+
     "sector-composition": {
         title: "Composición Sectorial — Breadth por Sector",
         short: "Cuántos nombres de cada sector lideran el mercado ahora mismo, sobre el universo S&P 500 del módulo RS/RW.",
