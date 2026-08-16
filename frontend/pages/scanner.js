@@ -628,17 +628,55 @@ async function runFilter(container) {
     }
 }
 
+// Etiqueta en cristiano de un criterio, a partir del nombre que usa el
+// backend. Sale de CRITERIOS, así que no hay una tercera lista de nombres.
+function etiquetaCriterio(param) {
+    const c = CRITERIOS.find(x => x.param === param);
+    return c ? c.etiqueta.replace(/ ≥$/, '') : param;
+}
+
+// Cuántos valores deja pasar cada criterio POR SEPARADO.
+//
+// Una lista vacía no distinguía dos situaciones muy distintas: «no hay nada
+// así ahora mismo» y «tus filtros se contradicen». En vez de inventar reglas
+// de incompatibilidad, se cuenta: el criterio que más estrecha va primero, y
+// se ve de un vistazo cuál conviene relajar.
+function renderEmbudo(data) {
+    const filas = data.embudo || [];
+    if (!filas.length) return '';
+    const max = Math.max(...filas.map(f => f.pasan), 1);
+    const cuerpo = filas.map(f => {
+        const c = f.pasan === 0 ? '#f23645' : f.pct < 10 ? '#ffb800' : 'var(--color-muted)';
+        const valor = f.valor === true ? '' : ' ' + esc(f.valor);
+        return '<div style="display:grid;grid-template-columns:1fr 90px 46px;gap:8px;align-items:center;padding:3px 0;font-size:11px;">'
+            + '<span style="color:var(--color-muted);">' + esc(etiquetaCriterio(f.criterio)) + valor + '</span>'
+            + '<div style="background:var(--color-surface2);border-radius:2px;height:5px;">'
+            + '<div style="height:100%;width:' + (f.pasan / max * 100).toFixed(1) + '%;background:' + c + ';border-radius:2px;"></div></div>'
+            + '<span style="color:' + c + ';text-align:right;">' + f.pasan + '</span></div>';
+    }).join('');
+    const aviso = data.diagnostico
+        ? '<div style="color:#ffb800;font-size:11px;line-height:1.45;margin-bottom:8px;">' + esc(data.diagnostico) + '</div>'
+        : '';
+    return '<div style="background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius);padding:0.8rem 1rem;margin-bottom:0.75rem;">'
+        + aviso
+        + '<div style="color:var(--color-muted);font-size:10px;letter-spacing:0.06em;margin-bottom:6px;">'
+        + 'CUÁNTOS PASA CADA CRITERIO POR SEPARADO, DE ' + esc(data.universe_size) + '</div>'
+        + cuerpo + '</div>';
+}
+
 function renderResults(el, data) {
     _scannerData = data;
-    const activeLabels = Object.entries(data.active_criteria || {}).map(([k, v]) => k + '=' + esc(v));
+    const activeLabels = Object.entries(data.active_criteria || {})
+        .map(([k, v]) => etiquetaCriterio(k) + (v === true ? '' : ' ' + v));
     const criteriaLine = activeLabels.length
-        ? activeLabels.join(' · ')
+        ? esc(activeLabels.join(' · '))
         : 'Sin criterios activos — mostrando universo completo ordenado por Score Técnico';
 
     const header = '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.5rem;">'
         + '<div style="color:var(--color-accent);font-size:13px;">' + esc(data.matched) + ' / ' + esc(data.universe_size) + ' tickers cumplen</div>'
         + '<div style="color:var(--color-muted);font-size:11px;">' + criteriaLine + '</div>'
-        + '</div>';
+        + '</div>'
+        + renderEmbudo(data);
 
     const cols = [
         { label: 'TICKER', key: 'ticker' },

@@ -80,6 +80,53 @@ def _freshness(generated_at: str) -> str:
 L3_ZONA_BAJA = (10.0, 20.0)
 
 
+def _embudo(stocks: dict, active_criteria: dict) -> list:
+    """Cuántos valores del universo cumple CADA criterio por separado.
+
+    Una lista vacía no distingue hoy dos situaciones muy distintas: «no hay
+    ningún valor así ahora mismo» y «tus filtros se contradicen». En vez de
+    inventar reglas de incompatibilidad --que envejecen mal y acaban molestando
+    cuando el mercado hace algo que la regla no preveía-- se cuenta y ya: si un
+    criterio solo deja pasar 3 de 501, se ve dónde se estrecha el embudo.
+
+    Reutiliza `_passes_filters` con UN criterio cada vez. Contar aparte, con su
+    propia comparación, sería una segunda implementación de las mismas reglas
+    -- y acabaría dando números que no cuadran con la tabla.
+    """
+    total = len(stocks)
+    filas = []
+    for clave, valor in active_criteria.items():
+        pasan = sum(1 for row in stocks.values() if _passes_filters(row, {clave: valor}))
+        filas.append({
+            "criterio": clave,
+            "valor":    valor,
+            "pasan":    pasan,
+            "de":       total,
+            "pct":      round(pasan / total * 100, 1) if total else 0.0,
+        })
+    # El más restrictivo primero: es el que explica el resultado.
+    filas.sort(key=lambda f: f["pasan"])
+    return filas
+
+
+def _diagnostico(embudo: list, encontrados: int) -> str | None:
+    """Por qué la lista está vacía, dicho sin adivinar.
+
+    Con resultados no se dice nada: el embudo ya está ahí para quien quiera
+    mirarlo, y un mensaje permanente se convierte en ruido."""
+    if encontrados > 0 or not embudo:
+        return None
+    # Con UN solo criterio activo, «los que pasan» y «los encontrados» son el
+    # mismo número, así que si no hay resultados este primer caso siempre se
+    # cumple. Aquí había una tercera rama para «un solo criterio» que era
+    # inalcanzable por eso mismo -- la destapó el sabotaje al no poder tumbarla.
+    if any(f["pasan"] == 0 for f in embudo):
+        return ("Ningún valor del universo cumple este criterio hoy, ni siquiera por "
+                "separado. Prueba a relajarlo.")
+    return ("Cada criterio por separado sí tiene resultados, pero ninguno los cumple "
+            "todos a la vez. La combinación es la que se queda sin nada.")
+
+
 def _passes_filters(row: dict, criteria: dict) -> bool:
     """AND estricto: si un criterio está activo (no None), el ticker debe
     cumplirlo para pasar."""
@@ -326,6 +373,7 @@ def run_filter(
             })
 
     matches.sort(key=lambda r: r.get("score_tecnico") or 0, reverse=True)
+    embudo = _embudo(stocks, active_criteria)
 
     return {
         "ok":               True,
@@ -333,6 +381,8 @@ def run_filter(
         "universe_size":    data.get("universe_size", len(stocks)),
         "matched":          len(matches),
         "active_criteria":  active_criteria,
+        "embudo":           embudo,
+        "diagnostico":      _diagnostico(embudo, len(matches)),
         "results":          matches[:limit],
         "timestamp":        get_timestamp(),
     }

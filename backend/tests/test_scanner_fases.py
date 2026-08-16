@@ -326,3 +326,106 @@ def test_lo_que_se_publica_son_dos_universos_distintos():
     assert g[-1]["pct_above_sma50"] == 100.0, "las grandes van todas arriba"
     assert p[-1]["pct_above_sma50"] == 0.0,   "las pequeñas, todas abajo"
     assert g[-1]["pct_above_sma50"] != p[-1]["pct_above_sma50"]
+
+
+# ── Hallazgo #10: por qué la lista está vacía ───────────────────────────────
+#
+# Antes, una lista vacía no distinguía dos situaciones muy distintas: «no hay
+# ningún valor así ahora mismo» y «tus filtros se contradicen». En vez de
+# inventar reglas de incompatibilidad -- que envejecen mal y molestan cuando el
+# mercado hace algo que la regla no preveía -- se cuenta cuántos deja pasar
+# cada criterio POR SEPARADO.
+
+from services.scanner_service import _embudo, _diagnostico, _passes_filters  # noqa: E402
+
+
+def _universo():
+    return {
+        "AAA": {"rs_pct": 95, "phase": 2, "rvol": 1.2, "new_high": True,  "dias_absorcion": 0},
+        "BBB": {"rs_pct": 85, "phase": 2, "rvol": 0.8, "new_high": False, "dias_absorcion": 2},
+        "CCC": {"rs_pct": 40, "phase": 4, "rvol": 3.0, "new_high": False, "dias_absorcion": 1},
+        "DDD": {"rs_pct": 10, "phase": 4, "rvol": 0.5, "new_high": False, "dias_absorcion": 0},
+    }
+
+
+def test_cuenta_cada_criterio_por_separado():
+    e = _embudo(_universo(), {"rs_min": 80, "phase": 2})
+    por = {f["criterio"]: f["pasan"] for f in e}
+    assert por["rs_min"] == 2      # AAA y BBB
+    assert por["phase"] == 2       # AAA y BBB
+    assert all(f["de"] == 4 for f in e)
+
+
+def test_el_mas_restrictivo_va_primero():
+    """Es el que explica el resultado, así que es el que hay que ver antes."""
+    e = _embudo(_universo(), {"rs_min": 90, "phase": 2})
+    assert e[0]["criterio"] == "rs_min" and e[0]["pasan"] == 1
+
+
+def test_el_conteo_usa_EL_MISMO_predicado_que_la_tabla():
+    """Contar con una comparación propia sería una segunda implementación de
+    las mismas reglas, y acabaría dando números que no cuadran con la lista de
+    resultados. Se comprueba criterio a criterio contra `_passes_filters`."""
+    universo = _universo()
+    for criterio, valor in [("rs_min", 80), ("phase", 2), ("rvol_min", 1.0),
+                            ("new_high_only", True), ("absorcion_min", 1)]:
+        e = _embudo(universo, {criterio: valor})
+        a_mano = sum(1 for r in universo.values() if _passes_filters(r, {criterio: valor}))
+        assert e[0]["pasan"] == a_mano, criterio
+
+
+# ── El diagnóstico ──────────────────────────────────────────────────────────
+
+def test_con_resultados_no_se_dice_nada():
+    """Un mensaje permanente se convierte en ruido y deja de leerse."""
+    e = _embudo(_universo(), {"rs_min": 80})
+    assert _diagnostico(e, encontrados=2) is None
+
+
+def test_si_un_criterio_no_lo_cumple_nadie_se_senala():
+    e = _embudo(_universo(), {"rvol_min": 9, "rs_min": 80})
+    d = _diagnostico(e, encontrados=0)
+    assert d and "ni siquiera por separado" in d
+
+
+def test_si_todos_tienen_resultados_pero_la_combinacion_no_se_dice_asi():
+    """El caso que la lista vacía escondía: cada filtro funciona, es juntarlos
+    lo que no deja nada."""
+    e = _embudo(_universo(), {"phase": 4, "new_high_only": True})
+    assert all(f["pasan"] > 0 for f in e)
+    d = _diagnostico(e, encontrados=0)
+    assert d and "todos a la vez" in d
+
+
+def test_con_un_solo_criterio_nunca_se_habla_de_combinacion():
+    """Decir «la combinación es la que se queda sin nada» con UN criterio sería
+    absurdo. Y no puede pasar: con un solo criterio, los que pasan y los
+    encontrados son el mismo número, así que sin resultados siempre entra por
+    la rama de «no lo cumple nadie». Aquí había una tercera rama escrita para
+    este caso que era INALCANZABLE, y el sabotaje la destapó al no poder
+    tumbarla -- se ha quitado."""
+    for valor, pasan in [(99, 0), (50, 0)]:
+        d = _diagnostico([{"criterio": "rs_min", "valor": valor, "pasan": pasan,
+                           "de": 4, "pct": 0.0}], encontrados=0)
+        assert "combinación" not in d
+        assert "ni siquiera por separado" in d
+
+
+def test_sin_criterios_activos_no_hay_embudo_ni_diagnostico():
+    assert _embudo(_universo(), {}) == []
+    assert _diagnostico([], encontrados=4) is None
+
+
+def test_sin_criterios_run_filter_devuelve_embudo_vacio():
+    """El test de arriba prueba la función; este prueba lo que SALE por el
+    endpoint, que es lo que consume la pantalla. El sabotaje echó en falta
+    justo esta distinción."""
+    from unittest.mock import patch
+    from services import scanner_service as SS
+    gist = {"stocks": {"AAA": {"rs_pct": 90, "phase": 2, "score_tecnico": 70}},
+            "universe_size": 1, "generated_at": "2026-08-14T22:15:00Z"}
+    with patch.object(SS, "_load_gist", return_value=gist),          patch("services.cartera_service.get_cartera_tickers", return_value=set()),          patch.object(SS.cache, "get", return_value=None), patch.object(SS.cache, "set"):
+        r = SS.run_filter()
+    assert r["embudo"] == []
+    assert r["diagnostico"] is None
+    assert r["matched"] == 1
