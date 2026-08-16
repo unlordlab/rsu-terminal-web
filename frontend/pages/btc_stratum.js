@@ -166,9 +166,10 @@ function headerSection(data) {
         + '</div>';
 
     return '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:1rem;margin-bottom:1rem;">'
-        + panel({ titulo: 'PRECIO DE BITCOIN', contenido: precio, avisos: data.avisos })
+        + panel({ titulo: 'PRECIO DE BITCOIN ' + tt('btc-precio'), contenido: precio,
+                 avisos: data.avisos, escapar: false })
         + panel({ titulo: '¿CARO O BARATO? ' + tt('rsu-btc-score'), contenido: score, escapar: false })
-        + panel({ titulo: 'EN QUÉ ZONA ESTAMOS', contenido: zona })
+        + panel({ titulo: 'EN QUÉ ZONA ESTAMOS ' + tt('btc-zona'), contenido: zona, escapar: false })
         + '</div>';
 }
 
@@ -179,7 +180,8 @@ function alertsSection(data) {
         + '<span style="font-size:15px;flex-shrink:0;">' + esc(a.icon) + '</span>'
         + '<span style="color:' + a.color + ';">' + esc(a.msg) + '</span>'
         + '</div>').join('');
-    return panel({ titulo: '⚡ LO QUE HAY QUE SABER HOY', contenido: filas });
+    return panel({ titulo: '⚡ LO QUE HAY QUE SABER HOY ' + tt('btc-alertas'),
+                   contenido: filas, escapar: false });
 }
 
 /*
@@ -259,7 +261,7 @@ function contextoSection(data) {
             c.puell < 0.5 ? C.ok : c.puell < 1 ? C.warn : C.text));
     }
     if (c.hashrate_ehs != null) {
-        tarjetas.push(kpiCard('POTENCIA DE LA RED', c.hashrate_ehs + ' EH/s',
+        tarjetas.push(kpiCard('POTENCIA DE LA RED ' + tt('hashrate'), c.hashrate_ehs + ' EH/s',
             c.hash_ribbon != null
                 ? 'Frente a su media de 30 días: ' + c.hash_ribbon + (c.hash_ribbon < 1 ? ' · hay mineros apagando máquinas' : ' · la red sigue creciendo')
                 : 'Cuánta potencia dedican los mineros a sostener bitcoin',
@@ -271,7 +273,7 @@ function contextoSection(data) {
         .map(([k, v]) => esc(NOMBRE_FUENTE[k] || k) + ': ' + esc(v)).join(' · ');
 
     return panel({
-        titulo:    'CÓMO VA LA RED DE BITCOIN',
+        titulo:    'CÓMO VA LA RED DE BITCOIN ' + tt('btc-red'),
         subtitulo: 'no afecta al número de arriba',
         contenido: '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:1rem;padding:1.25rem;">'
             + tarjetas.join('') + '</div>'
@@ -282,9 +284,10 @@ function contextoSection(data) {
 
 function chartSection() {
     return panel({
-        titulo:    'EL PRECIO Y LAS ZONAS, ESTOS 3 AÑOS',
+        titulo:    'EL PRECIO Y LAS ZONAS, ESTOS 3 AÑOS ' + tt('btc-grafico'),
         subtitulo: 'Semanal',
         contenido: '<div style="padding:16px;"><canvas id="btc-chart" height="200"></canvas></div>',
+        escapar:   false,
     });
 }
 
@@ -335,14 +338,15 @@ function macroSection(data) {
 
     const anios = hay && m.liquidez_base ? (m.liquidez_base / 252).toFixed(0) : null;
     const cuerpo = '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:1rem;padding:1.25rem;">'
-        + kpiCard('EL DÓLAR', hay ? m.dxy : 'N/D',
+        + kpiCard('EL DÓLAR ' + tt('btc-dolar'), hay ? m.dxy : 'N/D',
                   'Cuando el dólar se fortalece, bitcoin suele sufrir',
                   hay ? (m.dxy_score < 50 ? C.ok : C.bad) : C.muted)
-        + kpiCard('¿HAY DINERO BARATO?', hay ? m.liquidity_score + '/100' : 'N/D',
+        + kpiCard('¿HAY DINERO BARATO? ' + tt('btc-liquidez'), hay ? m.liquidity_score + '/100' : 'N/D',
                   hay ? ('0 = dinero caro y escaso, 100 = dinero barato y abundante. Frente a los últimos ' + anios + ' años') : 'Sin datos ahora mismo',
                   hay ? statusColor : C.muted)
         + '</div>';
-    return panel({ titulo: 'EL CONTEXTO ECONÓMICO', contenido: cuerpo });
+    return panel({ titulo: 'EL CONTEXTO ECONÓMICO ' + tt('btc-macro'),
+                   contenido: cuerpo, escapar: false });
 }
 
 /*
@@ -358,9 +362,11 @@ function levelsSection(data) {
     const zonaColor = {
         'ACUMULACIÓN': alpha(C.ok, 70), 'PRECAUCIÓN': C.warn, 'RIESGO ALTO': C.bad,
     };
-    const rows = [{ label: 'LO QUE VALE DE MEDIA (4 AÑOS)', value: data.ma200, color: C.info }]
+    const rows = [{ label: 'LO QUE VALE DE MEDIA (4 AÑOS) ' + tt('ma200w'), value: data.ma200, color: C.info }]
         .concat(((data.score_detalle || {}).fronteras || []).map(f => ({
-            label: 'PASA A ' + f.zona,
+            // La fila pinta `label` sin escapar, porque ahora puede llevar el
+            // icono de ayuda (que es HTML). Lo que viene de datos sí se escapa.
+            label: 'PASA A ' + esc(f.zona),
             value: f.precio,
             color: zonaColor[f.zona] || C.muted,
         })))
@@ -380,7 +386,8 @@ function levelsSection(data) {
                 + Math.abs(dist).toFixed(1) + '% ' + (dist >= 0 ? 'por encima' : 'por debajo') + '</div>' : '')
             + '</div></div>';
     }).join('');
-    return panel({ titulo: 'A QUÉ PRECIO CAMBIA DE ZONA', contenido: filas });
+    return panel({ titulo: 'A QUÉ PRECIO CAMBIA DE ZONA ' + tt('btc-niveles'),
+                   contenido: filas, escapar: false });
 }
 
 function stressSection(data) {
@@ -496,7 +503,8 @@ function renderBacktest(data) {
     });
 
     const grafico = panel({
-        titulo:    'CÓMO SE HA MOVIDO EL NÚMERO ESTOS AÑOS',
+        titulo:    'CÓMO SE HA MOVIDO EL NÚMERO ESTOS AÑOS ' + tt('btc-grafico-score'),
+        escapar:   false,
         contenido: '<div style="padding:16px;"><canvas id="backtest-chart" height="200"></canvas></div>',
     });
 
@@ -505,7 +513,9 @@ function renderBacktest(data) {
     const tabla  = trades.length ? panel({
         // Sin esc() aquí: panel() ya escapa el título por defecto, y hacerlo
         // dos veces convertía el "<" del umbral en un "&lt;" visible.
-        titulo:    'LAS ÚLTIMAS COMPRAS Y VENTAS · ' + ((results[1] || {}).label || ''),
+        titulo:    'LAS ÚLTIMAS COMPRAS Y VENTAS ' + tt('btc-operaciones')
+                   + ' · ' + esc((results[1] || {}).label || ''),
+        escapar:   false,
         contenido: '<div style="display:grid;' + cols + 'gap:8px;padding:6px 14px;border-bottom:1px solid var(--color-border);font-size:10px;color:' + C.muted + ';">'
             + '<div>FECHA</div><div>TIPO</div><div>PRECIO</div><div>RSU</div></div>'
             + trades.map(t => '<div style="display:grid;' + cols + 'gap:8px;padding:8px 14px;border-bottom:1px solid var(--color-border);font-size:11px;align-items:center;">'

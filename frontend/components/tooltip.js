@@ -2906,6 +2906,153 @@ Para acciones de crecimiento tipo CAN SLIM, el P/E absoluto importa menos que el
     },
 
     // ── BTC STRATUM ───────────────────────────────────────────────────────────
+    "btc-precio": {
+        title: "El precio de bitcoin",
+        short: "Cuánto vale un bitcoin ahora mismo, cuánto se ha movido hoy y cuánto le falta para volver a su máximo.",
+        long: `El precio actual de un bitcoin en dólares, y cuánto ha subido o bajado en las últimas 24 horas.
+
+QUÉ ES EL MÁXIMO DEL PERIODO
+El precio más alto al que ha llegado bitcoin dentro del histórico que manejamos, y cuánto está hoy por debajo de ese pico. Ojo: es el máximo desde la fecha que aparece en el aviso, no necesariamente el máximo de toda la historia de bitcoin.
+
+POR QUÉ IMPORTA LA CAÍDA DESDE MÁXIMOS
+Bitcoin ha caído más de un 80% desde su pico en varias ocasiones, y luego se ha recuperado. Ver esa cifra ayuda a entender de qué tamaño son las caídas normales aquí, que no se parecen a las de la bolsa.
+
+Debajo del precio verás de dónde sale cada dato que usa la herramienta.`
+    },
+    "btc-zona": {
+        title: "En qué zona estamos",
+        short: "Traduce el número del 0 al 100 a una de cuatro zonas, y te dice qué pasó cuando el precio estuvo ahí antes.",
+        long: `El número del 0 al 100 se agrupa en cuatro zonas para que sea más fácil de leer:
+
+· OPORTUNIDAD (por debajo de 50) — bitcoin cotiza cerca o por debajo de su media de cuatro años.
+· ACUMULACIÓN (50 a 80) — precios normales, ni ganga ni exageración.
+· PRECAUCIÓN (80 a 90) — el precio se ha alejado bastante hacia arriba.
+· RIESGO ALTO (más de 90) — muy caro comparado con su propia historia.
+
+QUÉ SIGNIFICA EL PORCENTAJE
+Es lo que este modelo sugiere tener invertido, del dinero que hayas decidido dedicar a bitcoin. No dice qué parte de tu patrimonio total deberías poner: esa decisión es tuya y depende de tu situación.
+
+LA LÍNEA DE ABAJO
+Dice qué pasó de verdad cuando el precio estuvo en esta misma zona: cuánto subió de media al cabo de un año y cuántas veces se acabó perdiendo dinero. Son datos medidos, no una previsión.`
+    },
+    "btc-alertas": {
+        title: "Lo que hay que saber hoy",
+        short: "Avisos que solo aparecen cuando pasa algo que merece la pena mirar. Si no hay ninguno, no hay nada raro.",
+        long: `Aquí solo salen avisos cuando ocurre algo concreto. Si esta sección está vacía es que no hay nada destacable, y eso también es información.
+
+QUÉ TIPO DE AVISOS APARECEN
+· Que el precio está cerca de cambiar de zona, y a qué precio exacto cambiaría.
+· Que bitcoin está muy barato o muy caro comparado con su historia.
+· Que quien ya tiene bitcoins está de media en pérdidas.
+· Que los mineros están ingresando mucho menos de lo normal.
+· Que hay mineros apagando máquinas.
+
+Ninguno es una orden de compra o de venta. Son cosas que están pasando ahora mismo y que conviene saber antes de decidir nada.`
+    },
+    "btc-red": {
+        title: "Cómo va la red de bitcoin",
+        short: "Datos reales de la cadena de bloques. Dan contexto, pero no cambian el número de arriba.",
+        long: `Bitcoin no es solo un precio: es una red con gente que la usa y máquinas que la sostienen. Estos datos vienen directamente de esa red.
+
+POR QUÉ NO ENTRAN EN EL NÚMERO
+Se comprobó, con casi ocho años de datos, si añadirlos al número principal ayudaba a distinguir los momentos buenos de los malos. No ayudaban: unos no aportaban nada y otros incluso empeoraban el resultado.
+
+Así que se quedan al lado, dando contexto. Cuando el precio está barato Y además los mineros lo están pasando mal Y quien tiene bitcoins está en pérdidas, es una foto más completa que mirar solo el precio.
+
+Son datos públicos y gratuitos. Debajo se indica de dónde sale cada uno.`
+    },
+    "hashrate": {
+        title: "La potencia de la red",
+        short: "Cuánta potencia de cálculo hay conectada sosteniendo bitcoin. Si baja, hay mineros apagando máquinas.",
+        long: `Miles de ordenadores especializados por todo el mundo hacen cálculos sin parar para validar las transacciones de bitcoin y protegerlas. La suma de toda esa potencia es lo que se mide aquí.
+
+CÓMO LEERLO
+Se compara la potencia de hoy con la media del último mes:
+· Por encima de 1 → sigue entrando potencia, la red crece.
+· Por debajo de 1 → hay mineros apagando máquinas, normalmente porque no les sale a cuenta la factura de la luz.
+
+POR QUÉ INTERESA
+Cuando los mineros empiezan a apagar en masa suele ser porque el precio lleva tiempo bajo. Históricamente, el momento en que dejan de apagar y la potencia vuelve a subir ha coincidido con suelos de mercado. No es infalible, pero es una señal que no depende del precio.`
+    },
+    "btc-grafico": {
+        title: "El precio y las zonas",
+        short: "El precio de los últimos tres años, con la media de cuatro años y las líneas que separan cada zona.",
+        long: `El gráfico muestra el precio de bitcoin de los últimos tres años junto con las referencias que usa la herramienta:
+
+· La línea naranja es el precio.
+· La otra línea continua es la media de cuatro años, la referencia de largo plazo.
+· Las tres líneas de puntos marcan dónde cambia de zona.
+
+Fíjate en que las líneas de las zonas se mueven con el tiempo: no son precios fijos. Suben cuando sube la media de cuatro años, así que lo que hoy es caro puede no serlo dentro de un año aunque el precio sea el mismo.
+
+Son las mismas líneas que aparecen en la tabla de precios de más abajo.`
+    },
+    "btc-macro": {
+        title: "El contexto económico",
+        short: "Dos indicadores de fuera del mundo cripto que suelen influir en bitcoin.",
+        long: `Bitcoin no se mueve en el vacío: le afecta lo que pasa en la economía en general, y sobre todo el precio del dinero.
+
+QUÉ SE MIRA AQUÍ
+· El dólar: cuando se fortalece frente a otras monedas, los activos de riesgo como bitcoin suelen sufrir.
+· Si hay dinero barato: cuando prestar dinero sale barato entra más inversión en cosas arriesgadas; cuando sale caro, el dinero se retira hacia lo seguro.
+
+Son contexto, no señales. No entran en el número principal y no conviene tomarlos como razón para comprar o vender por sí solos.`
+    },
+    "btc-dolar": {
+        title: "El dólar",
+        short: "Mide la fuerza del dólar frente a otras monedas importantes. Un dólar fuerte suele ir en contra de bitcoin.",
+        long: `Este índice compara el dólar con una cesta de monedas importantes: el euro, el yen, la libra y algunas más.
+
+CÓMO LEERLO
+· Sube → el dólar se fortalece. Suele coincidir con épocas en que los inversores buscan seguridad, y eso quita dinero de los activos arriesgados.
+· Baja → el dólar pierde fuerza. Históricamente ha acompañado a las subidas de bitcoin.
+
+CUIDADO
+La relación existe pero no es automática: ha habido periodos largos en que los dos subieron a la vez. Es una pieza más del contexto, no una regla.`
+    },
+    "btc-liquidez": {
+        title: "¿Hay dinero barato?",
+        short: "Del 0 al 100: cuánto cuesta hoy conseguir dinero prestado, comparado con los últimos cinco años.",
+        long: `Cuando el dinero es barato y abundante, parte de él acaba en cosas arriesgadas: empresas que aún no ganan dinero, cripto, activos especulativos. Cuando es caro y escaso, ese dinero se retira a lo seguro.
+
+CÓMO SE MIDE
+Se usa el precio de los bonos del Estado de Estados Unidos a largo plazo, que sube cuando se espera dinero más barato y baja cuando se espera lo contrario. Se compara con su propio rango de los últimos cinco años y se traduce a una escala del 0 al 100.
+
+· Cerca de 0 → dinero caro y escaso. Ambiente difícil para los activos de riesgo.
+· Cerca de 100 → dinero barato y abundante. Ambiente favorable.
+
+Se compara contra sí mismo, y no contra un valor fijo, para que la lectura siga teniendo sentido según pasan los años y cambia el rango de precios.`
+    },
+    "btc-niveles": {
+        title: "A qué precio cambia de zona",
+        short: "El número del 0 al 100, traducido a precios concretos de bitcoin.",
+        long: `Un número del 0 al 100 no se puede usar para decidir nada. Un precio, sí. Esta tabla traduce cada frontera entre zonas al precio de bitcoin al que ocurriría.
+
+CÓMO USARLA
+Si quieres comprar cuando bitcoin entre en zona de acumulación, aquí tienes el precio exacto al que eso pasaría hoy. Puedes ponerte un aviso en tu plataforma con ese número.
+
+UNA ADVERTENCIA IMPORTANTE
+Estos precios NO son fijos: se recalculan cada día, porque dependen de la media de cuatro años, que va cambiando. Si bitcoin sube durante meses, la media sube detrás y estos niveles suben con ella. Conviene volver a mirarlos de vez en cuando en vez de apuntarlos una vez y olvidarse.`
+    },
+    "btc-grafico-score": {
+        title: "Cómo se ha movido el número",
+        short: "El recorrido del número del 0 al 100 durante los años simulados, con los límites de compra y venta marcados.",
+        long: `Muestra cómo ha ido subiendo y bajando el número a lo largo de los años que cubre la simulación.
+
+Las líneas de puntos marcan los límites que usa la simulación para comprar y para vender. Viendo el gráfico se entiende de un vistazo por qué hay tan pocas operaciones: el número cruza esos límites muy de tarde en tarde, porque se mueve despacio.
+
+Esa lentitud es intencionada. Una herramienta pensada para decidir si acumular a lo largo de años no debería dar señales cada semana.`
+    },
+    "btc-operaciones": {
+        title: "Las últimas compras y ventas",
+        short: "Las operaciones concretas que habría hecho la simulación: cuándo, a qué precio y con qué número.",
+        long: `Cada línea es una compra o una venta que la simulación habría hecho, con la fecha, el precio de bitcoin ese día y el número que tenía la herramienta en ese momento.
+
+PARA QUÉ SIRVE MIRARLAS
+Los resultados de una simulación son fáciles de creerse cuando salen bien. Ver las operaciones una a una permite comprobar si tienen sentido: si compró cerca de los suelos, si vendió cerca de los techos, y sobre todo cuántas veces operó.
+
+Si hay muy pocas operaciones en varios años, el resultado depende casi por completo de haber acertado en esas pocas fechas, y eso es mucho más frágil de lo que sugiere el porcentaje final.`
+    },
     "btc-stratum": {
         title: "BTC Stratum",
         short: "Te dice si bitcoin está caro o barato ahora mismo, comparándolo con lo que ha valido de media los últimos cuatro años.",
