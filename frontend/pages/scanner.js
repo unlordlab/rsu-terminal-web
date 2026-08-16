@@ -10,6 +10,38 @@ const PHASE_OPTIONS = [
     { value: '4', label: 'Fase 4 · Declive' },
 ];
 
+// LOS CRITERIOS, DECLARADOS UNA SOLA VEZ.
+//
+// Antes había CUATRO listas paralelas que había que mantener a mano: la del
+// panel, la del cableado de clics, la que construía la consulta y la que
+// leía los valores. Se desincronizaron, y el resultado es que `absorcion` y
+// `l3zona` estaban en el panel pero NO en el cableado: sus tarjetas no hacían
+// absolutamente nada al pulsarlas.
+//
+// `l3zona` es además el filtro que el usuario pidió el 14/08 (la zona baja del
+// indicador RSU). Se verificó el backend de punta a punta y nunca se comprobó
+// que el botón se pudiera pulsar, así que llegó a producción inservible.
+//
+// Con una sola lista, añadir un criterio y olvidarse de cablearlo deja de ser
+// posible: el panel y el cableado salen de aquí.
+const CRITERIOS = [
+    { id: 'rvol',      tipo: 'numero', param: 'rvol_min',      etiqueta: 'RVOL ≥',              tip: 'rvol',              ph: '1.5', paso: '0.1', min: '0' },
+    { id: 'rs',        tipo: 'numero', param: 'rs_min',        etiqueta: 'RS Percentile ≥',     tip: 'rs-rating',         ph: '70',  paso: '1',   min: '0', max: '100' },
+    { id: 'score',     tipo: 'numero', param: 'score_min',     etiqueta: 'Score Técnico ≥',     tip: 'score-tecnico',     ph: '60',  paso: '1',   min: '0', max: '100' },
+    // Máximo 10 por construcción (la ventana son 10 sesiones), pero en 6.012
+    // observaciones reales el máximo visto es 7 y solo una vez: pedir 8 o más
+    // devuelve lista vacía siempre. El apunte de debajo lo dice para que un
+    // resultado vacío no se confunda con un módulo roto.
+    { id: 'absorcion', tipo: 'numero', param: 'absorcion_min', etiqueta: 'Días de Absorción ≥', tip: 'scanner-absorcion', ph: '3',   paso: '1',   min: '0', max: '10',
+      nota: 'De 0 a 10; en la práctica casi nada pasa de 5' },
+    { id: 'phase',     tipo: 'select', param: 'phase',         etiqueta: 'FASE WEINSTEIN',      tip: 'market-phase',
+      opciones: () => PHASE_OPTIONS.map(o => '<option value="' + o.value + '">' + o.label + '</option>').join('') },
+    { id: 'sector',    tipo: 'select', param: 'sector',        etiqueta: 'SECTOR',
+      opciones: () => '<option value="">Cargando sectores...</option>' },
+    { id: 'newhigh',   tipo: 'toggle', param: 'new_high_only', etiqueta: '🔥 MÁXIMOS 52 SEMANAS', tip: 'new-high-52w',    nota: 'Aprox. a ATH' },
+    { id: 'l3zona',    tipo: 'toggle', param: 'l3_zona_baja',  etiqueta: 'ZONA BAJA DEL INDICADOR RSU', tip: 'rsu-flow',  nota: 'Entre 10 y 20' },
+];
+
 let _scannerData = null;
 let _scannerSort = { key: 'score_tecnico', dir: -1 };
 
@@ -50,9 +82,18 @@ export async function render(container) {
         + '<div id="scanner-divergencia" style="margin-top:1.5rem;"></div>'
         + '<div id="scanner-transiciones" style="margin-top:1.5rem;"></div>';
 
+    // Los filtros de la URL se LEEN AQUÍ, antes de cualquier await. Se APLICAN
+    // después de cargar el universo, porque un ?sector=... necesita que sus
+    // opciones existan ya. Leerlos después del await es frágil: cualquier
+    // navegación que ocurra mientras tanto -- un redirect a /login si la
+    // sesión ha caducado, por ejemplo -- reescribe la URL y se los lleva por
+    // delante. Detectado al probarlo en el navegador, que hizo exactamente eso.
+    const filtrosUrl = new URLSearchParams(window.location.search);
+
     setupPanel(container);
     await loadUniverseMeta(container);
-    runFilter(container); // primera carga sin filtros = universo completo ordenado por score
+    aplicarUrl(container, filtrosUrl);
+    runFilter(container); // sin criterios = universo completo ordenado por score
     loadTransiciones(container);
     loadDivergencia(container);
 }
@@ -208,15 +249,12 @@ function criteriaPanel() {
         + '<div style="color:var(--color-accent);font-size:13px;letter-spacing:0.08em;margin-bottom:1rem;">CRITERIOS (activa los que quieras combinar)</div>'
         + '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:1rem;margin-bottom:1rem;">'
 
-        + criterionBlock('rvol', 'RVOL ≥ ' + tt('rvol'), 'number', '1.5', '0.1')
-        + criterionBlock('rs', 'RS Percentile ≥ ' + tt('rs-rating'), 'number', '70', '1')
-        + criterionBlock('score', 'Score Técnico ≥ ' + tt('score-tecnico'), 'number', '60', '1')
-        + criterionBlock('absorcion', 'Días de Absorción ≥ ' + tt('scanner-absorcion'), 'number', '3', '1')
-
-        + selectCriterionBlock('phase', 'FASE WEINSTEIN ' + tt('market-phase'), PHASE_OPTIONS.map(o => '<option value="' + o.value + '">' + o.label + '</option>').join(''))
-        + selectCriterionBlock('sector', 'SECTOR', '<option value="">Cargando sectores...</option>')
-        + toggleCriterionBlock('newhigh', '🔥 MÁXIMOS 52 SEMANAS ' + tt('new-high-52w'), 'Aprox. a ATH')
-        + toggleCriterionBlock('l3zona', 'ZONA BAJA DEL INDICADOR RSU ' + tt('rsu-flow'), 'Entre 10 y 20')
+        + CRITERIOS.map(c => {
+            const etq = c.etiqueta + (c.tip ? ' ' + tt(c.tip) : '');
+            if (c.tipo === 'toggle') return toggleCriterionBlock(c.id, etq, c.nota);
+            if (c.tipo === 'select') return selectCriterionBlock(c.id, etq, c.opciones());
+            return criterionBlock(c.id, etq, 'number', c.ph, c.paso, c);
+        }).join('')
 
         + '</div>'
         + '<div style="display:flex;justify-content:space-between;align-items:center;">'
@@ -226,7 +264,17 @@ function criteriaPanel() {
         + '</div>';
 }
 
-function criterionBlock(id, label, type, placeholder, step) {
+function criterionBlock(id, label, type, placeholder, step, cfg) {
+    cfg = cfg || {};
+    const limites = (cfg.min != null ? ' min="' + cfg.min + '"' : '')
+                  + (cfg.max != null ? ' max="' + cfg.max + '"' : '');
+    const nota = cfg.nota
+        ? '<div style="color:var(--color-muted);font-size:9px;margin-top:5px;">' + esc(cfg.nota) + '</div>'
+        : '';
+    return _criterionBlockHtml(id, label, type, placeholder, step, limites, nota);
+}
+
+function _criterionBlockHtml(id, label, type, placeholder, step, limites, nota) {
     return '<div id="scanner-' + id + '-card" class="scanner-crit-card" data-active="false" '
         + 'style="border:1px solid var(--color-border);border-radius:var(--radius);padding:10px;cursor:pointer;transition:border-color .15s,background .15s;">'
         + '<div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">'
@@ -234,8 +282,9 @@ function criterionBlock(id, label, type, placeholder, step) {
         + '<span style="color:var(--color-text);font-size:12px;letter-spacing:0.03em;">' + label + '</span>'
         + '<input type="checkbox" id="scanner-' + id + '-toggle" style="display:none;">'
         + '</div>'
-        + '<input type="' + type + '" id="scanner-' + id + '-value" step="' + step + '" placeholder="' + placeholder + '" disabled '
+        + '<input type="' + type + '" id="scanner-' + id + '-value" step="' + step + '"' + (limites || '') + ' placeholder="' + placeholder + '" disabled '
         + 'style="width:100%;background:var(--color-bg,#0a0a0a);border:1px solid var(--color-border);border-radius:var(--radius);padding:6px 8px;color:var(--color-text);font-family:var(--font-mono);font-size:12px;box-sizing:border-box;cursor:not-allowed;">'
+        + (nota || '')
         + '</div>';
 }
 
@@ -268,6 +317,21 @@ function toggleCriterionBlock(id, label, sublabel) {
         + '</div>';
 }
 
+// Los booleanos no tienen `#scanner-<id>-value`, así que setActive() -- que lo
+// exige y se sale si falta -- no les vale. Misma apariencia, sin campo.
+function setActiveToggle(container, id, active) {
+    const card   = container.querySelector('#scanner-' + id + '-card');
+    const dot    = container.querySelector('#scanner-' + id + '-dot');
+    const toggle = container.querySelector('#scanner-' + id + '-toggle');
+    if (!card || !dot || !toggle) return;
+    toggle.checked = active;
+    card.dataset.active    = String(active);
+    card.style.borderColor = active ? 'var(--color-accent)' : 'var(--color-border)';
+    card.style.background  = active ? 'var(--color-accent)11' : 'transparent';
+    dot.style.background   = active ? 'var(--color-accent)' : 'transparent';
+    dot.style.borderColor  = active ? 'var(--color-accent)' : 'var(--color-muted)';
+}
+
 function setActive(container, id, active) {
     const card  = container.querySelector('#scanner-' + id + '-card');
     const dot   = container.querySelector('#scanner-' + id + '-dot');
@@ -288,7 +352,9 @@ function setActive(container, id, active) {
 }
 
 function setupPanel(container) {
-    ['rvol', 'rs', 'score', 'phase', 'sector'].forEach(id => {
+    // Los criterios con valor salen de CRITERIOS, no de una lista aparte: es
+    // lo que impide volver a dejar una tarjeta sin cablear.
+    CRITERIOS.filter(c => c.tipo !== 'toggle').forEach(({ id }) => {
         const card  = container.querySelector('#scanner-' + id + '-card');
         const value = container.querySelector('#scanner-' + id + '-value');
         if (!card || !value) return;
@@ -305,23 +371,18 @@ function setupPanel(container) {
         value.addEventListener('click', (e) => e.stopPropagation());
     });
 
-    // Criterio booleano (máximos 52 semanas) — no tiene campo de valor, así
-    // que el propio click en la card ya alterna el estado directamente.
-    const newHighCard = container.querySelector('#scanner-newhigh-card');
-    if (newHighCard) {
-        newHighCard.addEventListener('click', (e) => {
+    // Criterios booleanos: no tienen campo de valor, así que el propio clic en
+    // la tarjeta ya alterna el estado. Antes esto estaba escrito a mano SOLO
+    // para «máximos 52 semanas», y por eso «zona baja del indicador RSU» nació
+    // sin cablear.
+    CRITERIOS.filter(c => c.tipo === 'toggle').forEach(({ id }) => {
+        const card = container.querySelector('#scanner-' + id + '-card');
+        if (!card) return;
+        card.addEventListener('click', (e) => {
             if (e.target.closest('.tt-trigger')) return;
-            const isActive = newHighCard.dataset.active === 'true';
-            const toggle = container.querySelector('#scanner-newhigh-toggle');
-            const dot    = container.querySelector('#scanner-newhigh-dot');
-            toggle.checked = !isActive;
-            newHighCard.dataset.active = String(!isActive);
-            newHighCard.style.borderColor = !isActive ? 'var(--color-accent)' : 'var(--color-border)';
-            newHighCard.style.background  = !isActive ? 'var(--color-accent)11' : 'transparent';
-            dot.style.background  = !isActive ? 'var(--color-accent)' : 'transparent';
-            dot.style.borderColor = !isActive ? 'var(--color-accent)' : 'var(--color-muted)';
+            setActiveToggle(container, id, card.dataset.active !== 'true');
         });
-    }
+    });
 
     const btn = container.querySelector('#scanner-run-btn');
     btn.addEventListener('click', () => runFilter(container));
@@ -350,48 +411,57 @@ async function loadUniverseMeta(container) {
 }
 
 function buildQuery(container) {
+    // Sale de CRITERIOS, igual que el panel y el cableado. Antes era una
+    // tercera lista escrita a mano.
     const params = new URLSearchParams();
-    const rvolOn  = container.querySelector('#scanner-rvol-toggle').checked;
-    const rsOn    = container.querySelector('#scanner-rs-toggle').checked;
-    const scoreOn = container.querySelector('#scanner-score-toggle').checked;
-    const phaseOn = container.querySelector('#scanner-phase-toggle').checked;
-    const sectorOn = container.querySelector('#scanner-sector-toggle').checked;
-
-    if (rvolOn) {
-        const v = container.querySelector('#scanner-rvol-value').value;
-        if (v !== '') params.set('rvol_min', v);
-    }
-    if (rsOn) {
-        const v = container.querySelector('#scanner-rs-value').value;
-        if (v !== '') params.set('rs_min', v);
-    }
-    if (scoreOn) {
-        const v = container.querySelector('#scanner-score-value').value;
-        if (v !== '') params.set('score_min', v);
-    }
-    const absorcionOn = container.querySelector('#scanner-absorcion-toggle').checked;
-    if (absorcionOn) {
-        const v = container.querySelector('#scanner-absorcion-value').value;
-        if (v !== '') params.set('absorcion_min', v);
-    }
-    if (phaseOn) {
-        const v = container.querySelector('#scanner-phase-value').value;
-        if (v !== '') params.set('phase', v);
-    }
-    if (sectorOn) {
-        const v = container.querySelector('#scanner-sector-value').value;
-        if (v !== '') params.set('sector', v);
-    }
-    const newHighOn = container.querySelector('#scanner-newhigh-toggle').checked;
-    if (newHighOn) {
-        params.set('new_high_only', 'true');
-    }
-    const l3ZonaOn = container.querySelector('#scanner-l3zona-toggle').checked;
-    if (l3ZonaOn) {
-        params.set('l3_zona_baja', 'true');
-    }
+    CRITERIOS.forEach(c => {
+        const toggle = container.querySelector('#scanner-' + c.id + '-toggle');
+        if (!toggle || !toggle.checked) return;
+        if (c.tipo === 'toggle') { params.set(c.param, 'true'); return; }
+        const el = container.querySelector('#scanner-' + c.id + '-value');
+        if (el && el.value !== '') params.set(c.param, el.value);
+    });
     params.set('limit', '200');
     return params.toString();
+}
+
+// ── Deep-link: el estado de los filtros vive en la URL ──────────────────────
+//
+// Un scan con seis criterios puestos no se podía compartir ni guardar: la URL
+// era siempre la misma. Ahora se escribe al escanear y se lee al entrar, así
+// que un enlace reproduce exactamente la misma búsqueda.
+//
+// Se usa replaceState y no pushState a propósito: cada escaneo no debería
+// añadir una entrada al historial, o volver atrás obligaría a deshacer filtro
+// a filtro.
+function guardarEnUrl(qs) {
+    try {
+        const p = new URLSearchParams(qs);
+        p.delete('limit');                       // detalle interno, no del usuario
+        const url = window.location.pathname + (p.toString() ? '?' + p.toString() : '');
+        window.history.replaceState(null, '', url);
+    } catch (_) { /* si el navegador no deja, el scan funciona igual */ }
+}
+
+function aplicarUrl(container, p) {
+    p = p || new URLSearchParams(window.location.search);
+    let alguno = false;
+    CRITERIOS.forEach(c => {
+        if (!p.has(c.param)) return;
+        const valor = p.get(c.param);
+        if (c.tipo === 'toggle') {
+            if (valor === 'true') { setActiveToggle(container, c.id, true); alguno = true; }
+            return;
+        }
+        const el = container.querySelector('#scanner-' + c.id + '-value');
+        if (!el) return;
+        // El valor se pone ANTES de activar: setActive() hace focus() al final,
+        // y escribir después dejaría el campo con el cursor pero vacío.
+        el.value = valor;
+        setActive(container, c.id, true);
+        alguno = true;
+    });
+    return alguno;
 }
 
 async function runFilter(container) {
@@ -402,6 +472,7 @@ async function runFilter(container) {
 
     try {
         const qs    = buildQuery(container);
+        guardarEnUrl(qs);
         const res   = await fetch('/api/v1/scanner/filter?' + qs, { headers: authHeader() });
         const data  = await res.json();
         if (!data.ok) throw new Error(data.error || 'Error en el scan');
