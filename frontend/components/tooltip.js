@@ -2446,7 +2446,12 @@ QUÉ SIGNIFICA CADA CASO:
 CUÁNDO ES NOTABLE:
 Solo a partir de diez puntos de diferencia. Medido sobre las últimas sesenta sesiones, eso pasa en una de cada sesenta, así que cuando aparece merece la pena mirarlo. Por debajo, los dos grupos se mueven prácticamente igual.
 
-La gráfica de abajo es esa diferencia a lo largo del tiempo, con la línea del cero marcada.`,
+La gráfica de abajo es esa diferencia a lo largo del tiempo, con la línea del cero marcada.
+
+SOBRE LA ESCALA:
+Normalmente se mueve entre 0 y 100, y las dos franjas de referencia estan ahi dentro. Pero puede asomarse un poco por fuera —hemos visto de -4 a 102 en un dia cualquiera, en un 2% de los valores— y no es un error de la terminal.
+
+Pasa porque el indicador combina una lectura rapida y otra lenta de forma que se adelanta a proposito cuando el precio empuja con fuerza contra el techo o el suelo de su rango reciente. Ese adelanto es lo que hace que gire antes, y el precio de tenerlo es que a veces se sale un poco de la escala. Se deja tal cual, sin recortarlo a 100, porque recortarlo moveria las barras de sitio y dejarian de coincidir con las del indicador original en el que se basa.`,
     },
 
     "cambios-de-fase": {
