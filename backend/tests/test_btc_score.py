@@ -186,12 +186,12 @@ def test_el_hash_ribbon_sale_del_hashrate_real_o_no_sale():
 def test_el_aviso_de_proximidad_usa_las_mismas_fronteras_que_la_tarjeta_de_zona():
     """Si el aviso dijera una frontera y la tarjeta otra, el usuario vería dos
     números incompatibles para el mismo concepto."""
-    precio = B._score_a_precio(52, MA)          # justo por encima del corte de 50
-    msgs = [a["msg"] for a in B._calc_alerts(precio, MA, 52.0)]
+    precio   = B._score_a_precio(52, MA)        # justo por encima del corte de 50
+    msgs     = [a["msg"] for a in B._calc_alerts(precio, MA, 52.0)]
     objetivo = B._score_a_precio(50, MA)
-    assert any(f"{objetivo:,.0f}".replace(",", ".") in m for m in msgs), msgs
+    assert any(f"{objetivo:,.0f}".replace(",", ".") in m for m in msgs),         f"el aviso deberia citar el precio exacto de la frontera ({objetivo}); salio {msgs}"
 
 
 def test_no_se_avisa_de_una_frontera_ya_cruzada():
-    msgs = [a["msg"] for a in B._calc_alerts(B._score_a_precio(30, MA), MA, 30.0)]
-    assert not any("de entrar en zona" in m for m in msgs), msgs
+    alertas = B._calc_alerts(B._score_a_precio(30, MA), MA, 30.0)
+    assert not [a for a in alertas if a["icon"] == "🔥"],         [a["msg"] for a in alertas]

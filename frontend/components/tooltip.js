@@ -2907,209 +2907,106 @@ Para acciones de crecimiento tipo CAN SLIM, el P/E absoluto importa menos que el
 
     // ── BTC STRATUM ───────────────────────────────────────────────────────────
     "btc-stratum": {
-        title: "BTC Stratum — Modelo de Acumulación",
-        short: "Modelo de acumulación BTC basado en MA200W, MVRV Z-Score, Puell Multiple y AHR999. Genera señales de compra ponderadas.",
-        long: `El BTC Stratum es un modelo propio RSU que combina 4 indicadores on-chain (aproximados) para detectar zonas históricas de acumulación en Bitcoin.
+        title: "BTC Stratum",
+        short: "Te dice si bitcoin está caro o barato ahora mismo, comparándolo con lo que ha valido de media los últimos cuatro años.",
+        long: `Esta herramienta responde a una sola pregunta: ¿está bitcoin caro o barato en este momento?
 
-IMPORTANTE: Los indicadores son proxies basados en precio/MA200W. Los valores reales requieren datos on-chain de Glassnode.
+Para saberlo compara el precio de hoy con lo que bitcoin ha valido de media durante los últimos cuatro años, y resume esa comparación en un número del 0 al 100. Cuanto más bajo el número, más barato está respecto a su propia historia.
 
-COMPONENTES:
-- MA200W (40%): Soporte histórico más importante de BTC
-- MVRV Z-Score (30%): Proxy de valor de mercado vs valor realizado
-- Puell Multiple (20%): Proxy de ingresos de mineros
-- AHR999 (10%): Índice de acumulación específico
+¿POR QUÉ CUATRO AÑOS?
+Bitcoin se mueve en ciclos largos de unos cuatro años, marcados por el halving. Una media tan larga suaviza los sustos del día a día y deja ver si el precio se ha ido mucho por encima o por debajo de lo habitual.
 
-RSU SCORE BTC 0-100:
-- < 20 → Oportunidad extrema → 25% asignación
-- 20-40 → Acumulación fuerte → 20% asignación
-- 40-60 → Acumulación moderada → 10% asignación
-- 60-80 → Neutral/espera → 0% asignación
-- > 80 → Sobrecompra/riesgo → 0% asignación
-
-No es asesoramiento financiero. Bitcoin es un activo de alto riesgo.`
+QUÉ NO HACE
+No predice el futuro ni sabe qué va a pasar mañana. Que algo esté barato no impide que se ponga más barato todavía. Es una referencia para no comprar en el peor momento por impulso, nada más.`
     },
-
     "ma200w": {
-        title: "MA200W — Media Móvil 200 Semanas",
-        short: "El soporte histórico más importante de Bitcoin. Precios bajo esta línea han sido oportunidades históricas de compra.",
-        long: `La Media Móvil de 200 Semanas (MA200W) equivale a ~1400 días de precio de cierre promedio. Es el indicador técnico de largo plazo más respetado en Bitcoin.
+        title: "La media de cuatro años",
+        short: "El precio medio de bitcoin durante las últimas 200 semanas, que son unos cuatro años.",
+        long: `Es el precio medio al que ha cotizado bitcoin durante las últimas 200 semanas: unos cuatro años, más o menos un ciclo completo.
 
-HISTORIAL:
-Desde 2013, el precio de BTC NUNCA ha cerrado una semana por debajo de la MA200W durante más de unos pocos meses. Cada vez que ha tocado o caído bajo esta línea, ha representado una zona de acumulación histórica.
+¿PARA QUÉ SIRVE?
+El precio de bitcoin sube y baja con mucha violencia. Esta media larga hace de línea de referencia: cuando el precio se aleja mucho hacia arriba, suele estar caro; cuando cae por debajo, históricamente han sido buenos momentos para comprar.
 
-ZONAS BASADAS EN MA200W:
-- Precio < MA200W × 0.5 → Oportunidad máxima (capitulación total)
-- Precio < MA200W × 0.75 → Compra agresiva
-- Precio < MA200W → Compra fuerte
-- Precio < MA200W × 1.25 → Buena compra
-- Precio < MA200W × 1.5 → Zona DCA
-- Precio > MA200W × 1.5 → Esperar
-
-CURVATURA:
-La pendiente y aceleración de la MA200W revelan la salud de la tendencia de largo plazo. Pendiente positiva + acelerando = bull market confirmado.`
+Es una de las referencias más seguidas por la gente que invierte en bitcoin a largo plazo, precisamente porque no se deja llevar por el ruido de las noticias.`
     },
-
     "mvrv-z": {
-        title: "MVRV Z-Score (Proxy)",
-        short: "Market Value to Realized Value Z-Score — mide si BTC está sobrevalorado o infravalorado. <0 = zona de acumulación extrema.",
-        long: `El MVRV Z-Score compara el valor de mercado total de BTC con el "valor realizado" (el precio al que cada BTC cambió de manos por última vez).
+        title: "¿Gana dinero quien ya tiene bitcoin?",
+        short: "Compara el precio de hoy con lo que pagó de media la gente que ya tiene bitcoins.",
+        long: `Cada bitcoin que existe cambió de manos por última vez a un precio concreto. Sumando todos, se puede saber cuánto pagó de media la gente que hoy tiene bitcoins.
 
-IMPORTANTE: aquí no se está midiendo eso. El valor realizado exige un histórico de capitalización que hoy es de pago, así que este número se estima a partir de la distancia del precio a su media de 200 semanas. La tarjeta del indicador dice cuál de los dos cálculos se ha usado hoy.
+CÓMO LEERLO
+Este número compara el precio actual con ese precio medio de compra:
+· Por debajo de 0 → la mayoría de los que tienen bitcoin están perdiendo dinero. Suele coincidir con suelos de mercado.
+· Muy por encima de 3 → casi todo el mundo va ganando mucho, y eso tienta a vender.
 
-Los cortes de abajo son los del MVRV DE VERDAD, y no se trasladan tal cual a la estimación: comparten el signo (por debajo de cero sigue señalando zona de suelo) pero no la escala, así que no esperes ver un 7 en la estimación aunque el mercado esté eufórico.
-
-INTERPRETACIÓN DEL MVRV REAL:
-- Z-Score < 0 → Valor realizado > Valor mercado → Inversores en pérdidas → Zona de suelo histórica
-- Z-Score 0-2 → Zona neutra
-- Z-Score 2-7 → Zona de distribución
-- Z-Score > 7 → Zona de techo histórica (euforia extrema)
-
-SEÑALES HISTÓRICAS:
-- Noviembre 2018: MVRV < 0 → Suelo en $3,200
-- Marzo 2020: MVRV < 0 → Suelo en $3,800
-- Noviembre 2022: MVRV < 0 → Suelo en $15,500
-
-Para datos reales: glassnode.com (requiere suscripción)`
+Es un dato real de la cadena de bloques, no una estimación. Aparece aquí para dar contexto: no afecta al número principal de la herramienta.`
     },
-
     "puell-multiple": {
-        title: "Puell Multiple",
-        short: "Ratio entre ingresos diarios de mineros y su media anual. <0.5 indica mineros en stress, históricamente zona de suelo.",
-        long: `El Puell Multiple mide los ingresos de los mineros de Bitcoin en relación con su media histórica anual.
+        title: "¿Cómo les va a los mineros?",
+        short: "Compara lo que ingresan hoy los mineros con lo que ingresan en un año normal.",
+        long: `Los mineros son quienes ponen los ordenadores que sostienen la red de bitcoin. A cambio reciben bitcoins recién creados, que suelen vender para pagar la luz y las máquinas.
 
-Normalmente es un dato REAL, no una estimación: los ingresos diarios de los mineros se leen de la propia cadena de bloques (vía Blockchain.com) y se dividen entre su media de los últimos 365 días. Si ese dato no llega, se cae a una estimación con el precio frente a su media anual — y entonces la tarjeta del indicador lo dice en ámbar.
+CÓMO LEERLO
+Compara lo que ingresan hoy con su media del último año:
+· Por debajo de 0,5 → están ingresando la mitad de lo normal. Muchos apagan máquinas y los que aguantan tienen menos que vender, lo que quita presión al precio. Históricamente ha coincidido con suelos.
+· Por encima de 2 → ganan mucho más de lo normal y tienden a vender más.
 
-FÓRMULA:
-Puell = Ingresos de los mineros hoy / media de los últimos 365 días
-
-INTERPRETACIÓN:
-- Puell < 0.5 → Mineros en stress severo. Históricamente zona de suelo.
-- Puell 0.5-1.0 → Mineros bajo presión moderada
-- Puell 1.0-4.0 → Zona normal
-- Puell > 4.0 → Mineros muy rentables → Zona de distribución
-
-POR QUÉ IMPORTA:
-Cuando los mineros están en pérdidas, venden BTC para sobrevivir, creando presión bajista. Pero también reduce la oferta disponible. Los suelos históricos coinciden con Puell < 0.5.
-
-Los mineros son los "productores" de BTC — cuando sufren, el mercado suele estar en capitulación.`
+Es un dato real: sale de los ingresos que la red paga cada día.`
     },
-
-    "ahr999": {
-        title: "AHR999 (Proxy)",
-        short: "Índice de acumulación específico de BTC. <0.45 señala zona de compra fuerte según datos históricos.",
-        long: `El AHR999 es un índice desarrollado por el usuario "ahr999" de la comunidad china de Bitcoin, diseñado específicamente para identificar zonas de DCA (Dollar Cost Averaging).
-
-IMPORTANTE: Este módulo usa una APROXIMACIÓN. El AHR999 real combina precio actual, MA200 y coste de minería.
-
-FÓRMULA APROXIMADA:
-AHR999 ≈ (Precio / MA200W) / log(MA200W)
-
-ZONAS HISTÓRICAS:
-- AHR999 < 0.45 → Zona de compra agresiva (DCA fuerte)
-- AHR999 0.45-1.2 → Zona de DCA normal
-- AHR999 > 1.2 → Esperar mejor oportunidad
-
-COMPLEMENTARIEDAD:
-El AHR999 es útil porque penaliza las compras cuando tanto el precio como la MA200W son muy altas, evitando comprar en topping de ciclo aunque el precio parezca "normal" vs la MA.`
-    },
-
     "halving-cycle": {
-        title: "Ciclo de Halving — Bitcoin",
-        short: "Bitcoin reduce a la mitad su emisión cada ~4 años. Los precios históricamente siguen patrones cíclicos alrededor de estos eventos.",
-        long: `El Halving de Bitcoin es un evento programado en el código que reduce a la mitad la recompensa que reciben los mineros por cada bloque minado.
+        title: "El ciclo del halving",
+        short: "Cada cuatro años, bitcoin reduce a la mitad los bitcoins nuevos que se crean. El precio ha tendido a moverse en ciclos alrededor de esa fecha.",
+        long: `Cada 210.000 bloques —unos cuatro años— la cantidad de bitcoins nuevos que se crean se reduce a la mitad. Está escrito en el código desde el principio y no lo puede cambiar nadie.
 
-HALVINGS HISTÓRICOS:
-- Nov 2012: 50 → 25 BTC/bloque. Precio pasó de $12 a $1,100 en 12 meses.
-- Jul 2016: 25 → 12.5 BTC/bloque. Precio pasó de $650 a $20,000 en 18 meses.
-- May 2020: 12.5 → 6.25 BTC/bloque. Precio pasó de $8,700 a $69,000 en 18 meses.
-- Abr 2024: 6.25 → 3.125 BTC/bloque. Ciclo actual en desarrollo.
+POR QUÉ IMPORTA
+Si cada vez entran menos bitcoins nuevos y la demanda se mantiene, el precio tiende a subir. Históricamente ha habido un patrón: subidas fuertes en el año o año y medio siguientes al halving, y caídas duras después.
 
-FASES DEL CICLO (~4 años):
-1. ACUMULACIÓN (0-20% del ciclo): Precio bajo, inversores acumulan
-2. BULL TEMPRANO (20-40%): Rally inicial, euforia moderada
-3. BULL AVANZADO (40-60%): Máximos históricos, euforia alta
-4. DISTRIBUCIÓN (60-80%): Techos, institucionales distribuyendo
-5. MERCADO BAJISTA (80-100%): Corrección severa, reset
+CUIDADO CON ESTO
+Solo han ocurrido cuatro halvings. Cuatro casos son muy pocos para dar nada por seguro, y cada ciclo ha sido más suave que el anterior. Tómalo como contexto, no como un calendario.
 
-ADVERTENCIA:
-Los patrones históricos son informativos pero no garantizan repetición. "Esta vez podría ser diferente" — aunque hasta ahora no lo ha sido.`
+La fecha del próximo es una estimación: depende del ritmo al que se minen los bloques que faltan.`
     },
-
     "rsu-btc-score": {
-        title: "RSU BTC Score — Score de Acumulación",
-        short: "Score compuesto 0-100: MA200W (40%) + MVRV (30%) + Puell (20%) + AHR999 (10%). Menor score = mayor oportunidad de acumulación.",
-        long: `El RSU BTC Score es un indicador compuesto que combina 4 proxies de indicadores on-chain para generar una señal de acumulación en Bitcoin.
+        title: "El número, del 0 al 100",
+        short: "0 = bitcoin está muy barato para lo que suele valer. 100 = muy caro. Sale de comparar el precio con su media de cuatro años.",
+        long: `Resume en un solo número lo lejos que está el precio de bitcoin de su media de los últimos cuatro años.
 
-PONDERACIONES:
-- MA200W (40%): El indicador más importante. Desviación del precio vs media de largo plazo.
-- MVRV Z-Score (30%): Valoración relativa al valor realizado.
-- Puell Multiple (20%): Stress de mineros como proxy de capitulación.
-- AHR999 (10%): Índice específico de oportunidad de DCA.
+CÓMO LEERLO
+· Por debajo de 50 → barato. El precio está cerca o por debajo de su media.
+· Entre 50 y 80 → precios normales, ni ganga ni exageración.
+· Entre 80 y 90 → caro. El precio se ha alejado bastante hacia arriba.
+· Por encima de 90 → muy caro. Históricamente, comprar aquí ha salido mal más veces que bien.
 
-INTERPRETACIÓN (INVERTIDO — menor = mejor oportunidad):
-- Score 0-20 → OPORTUNIDAD EXTREMA → Todos los indicadores en zona de suelo
-- Score 20-40 → ACUMULACIÓN FUERTE → Mayoría en zona de oportunidad
-- Score 40-60 → ACUMULACIÓN MODERADA → Mix de señales
-- Score 60-80 → NEUTRAL/ESPERA → Sin señal clara de oportunidad
-- Score 80-100 → SOBRECOMPRA/RIESGO → Mercado caro, evitar entradas
+Debajo del número verás a qué precio concreto se pasa de una zona a otra, que es lo que de verdad se puede usar.
 
-ASIGNACIÓN SUGERIDA:
-Varía según score y perfil de riesgo. Los porcentajes mostrados son orientativos para un inversor con tolerancia al riesgo media-alta.
-
-DISCLAIMER: Estos son proxies, no los indicadores on-chain reales. Para análisis más preciso usar Glassnode.`
+UNA ADVERTENCIA
+Las zonas salen de mirar qué pasó entre 2018 y 2025. Son unos dos ciclos: suficiente para orientarse, insuficiente para tener certezas.`
     },
-
     "btc-backtest": {
-        title: "Backtest Histórico — BTC Stratum",
-        short: "Simulación histórica de la estrategia: qué habría pasado si hubieras comprado cada vez que el RSU Score cruzó umbrales clave.",
-        long: `El backtest simula la estrategia RSU BTC Stratum sobre datos históricos de los últimos 10 años para evaluar su efectividad histórica.
+        title: "Qué habría pasado",
+        short: "Simula qué habría ocurrido siguiendo este modelo con dinero real en los últimos años.",
+        long: `Coge los datos de los últimos años y simula lo que habría pasado si alguien hubiera comprado cada vez que el número bajaba de cierto límite, y vendido cuando lo superaba.
 
-METODOLOGÍA:
-- Capital inicial: $10,000
-- Señal de compra: RSU Score cae por debajo del umbral (20, 40 o 60)
-- Acción: Invertir 50% del capital disponible en BTC
-- Señal de venta: RSU Score supera 80
-- Datos: Cierre diario BTC/USD desde yfinance
+POR QUÉ NO HAY QUE TOMÁRSELO AL PIE DE LA LETRA
+La simulación es optimista por diseño: no cobra comisiones, no tiene en cuenta que el precio se mueve mientras compras, y da por hecho que se acierta el momento exacto del cierre. En la vida real el resultado sería peor.
 
-MÉTRICAS:
-- Retorno total: % de ganancia sobre capital inicial
-- Capital final: valor en $ al final del período
-- Alpha: diferencia vs Buy & Hold puro de BTC
-- Operaciones: número de compras y ventas ejecutadas
-
-LIMITACIONES IMPORTANTES:
-1. Sin costes de transacción ni slippage
-2. Ejecución perfecta al precio de cierre (imposible en la práctica)
-3. Sin considerar impuestos
-4. Datos históricos no garantizan resultados futuros
-5. El backtest usa proxies, no indicadores on-chain reales
-
-USE CASE:
-El backtest sirve para validar conceptualmente la estrategia. Los resultados reales diferirán significativamente. Es una herramienta educativa, no una garantía de rentabilidad.`
+Además compara contra algo muy difícil de batir: comprar bitcoin y no tocar nada durante años. Si el modelo pierde contra eso, es información valiosa y por eso se enseña tal cual.`
     },
-
     "stress-test": {
-        title: "Stress Test — Escenarios Adversos",
-        short: "Escenarios adversos extremos para gestión de expectativas. Las probabilidades son estimaciones subjetivas, no predicciones.",
-        long: `El Stress Test simula escenarios extremos adversos para que el inversor pueda prepararse mentalmente y definir su estrategia de gestión de riesgo.
+        title: "Qué pasaría si sale mal",
+        short: "Cuatro cosas malas que podrían ocurrir, y a qué precio dejarían bitcoin.",
+        long: `Cuatro escenarios adversos, del más probable al más improbable, con el precio al que dejarían bitcoin si ocurrieran.
 
-ESCENARIOS INCLUIDOS:
-1. Colapso de Exchange (FTX 2.0): -50% en precio. Pánico sistémico temporal.
-2. Ban Regulatorio G7: -35%. Prohibición coordinada en economías desarrolladas.
-3. Estanflación 5+ años: -60%. Macro muy adverso prolongado.
-4. Ruptura Criptográfica: -90%. Vulnerabilidad SHA256 o ataque cuántico.
+No son predicciones ni llevan probabilidades: nadie sabe si van a pasar. Están aquí para una cosa concreta: que veas el número antes de necesitarlo.
 
-IMPORTANTE SOBRE LAS PROBABILIDADES:
-Las probabilidades son ESTIMACIONES SUBJETIVAS del equipo RSU. No tienen base estadística rigurosa. Son aproximaciones para dar contexto, no predicciones científicas.
+CÓMO USARLO
+1. Mira el peor precio de la lista.
+2. Pregúntate si aguantarías tener esa cantidad de dinero invertida a ese precio.
+3. Si la respuesta es no, invierte menos.
 
-CÓMO USAR ESTA INFORMACIÓN:
-1. Define tu pérdida máxima tolerable ANTES de invertir
-2. Asegúrate de que tu posición sobrevive el peor escenario
-3. Ten un plan para cada escenario (¿compro más? ¿vendo? ¿hold?)
-4. Nunca inviertas más de lo que puedes permitirte perder completamente
-
-El objetivo no es asustar sino preparar. Un inversor con plan sobrevive las crisis. Uno sin plan entra en pánico y vende en el peor momento.`
+Bitcoin ha caído más de un 80% en varias ocasiones y luego se ha recuperado. Quien tenía un plan aguantó; quien no lo tenía vendió en el peor momento. La idea no es asustar, es que decidas con la cabeza fría lo que harías, antes de que pase.`
     },
+
 };
 
 // ── ENGINE ────────────────────────────────────────────────────────────────────

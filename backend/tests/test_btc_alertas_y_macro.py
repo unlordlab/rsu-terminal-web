@@ -49,6 +49,18 @@ def _msgs(price, ma200=MA200):
     return [a["msg"] for a in _calc_alerts(price, ma200, _calc_rsu_score(price, ma200))]
 
 
+# El aviso de proximidad se identifica por su icono, no por su redacción: lo que
+# el test protege es CUÁNDO se emite, y atarlo al texto lo hacía fallar cada vez
+# que se reescribía el mensaje para que se entendiera mejor.
+PROXIMIDAD = "🔥"
+
+
+def _proximidad(price, ma200=MA200):
+    from services.btc_stratum_service import _calc_rsu_score
+    return [a for a in _calc_alerts(price, ma200, _calc_rsu_score(price, ma200))
+            if a["icon"] == PROXIMIDAD]
+
+
 def _hay(msgs, trozo):
     return any(trozo in m for m in msgs)
 
@@ -64,31 +76,31 @@ def test_avisa_mientras_te_acercas_a_la_siguiente_frontera():
     """Score 52: un pelo por encima del corte de 50, falta poca caída. Éste es
     EL caso que la versión anterior no cubría -- su fórmula daba negativo
     mientras te acercabas y solo hablaba cuando ya habías llegado."""
-    msgs = _msgs(_precio_de(52))
-    assert _hay(msgs, "de entrar en zona"), f"deberia avisar acercandose a la frontera; salio {msgs}"
+    avisos = _proximidad(_precio_de(52))
+    assert avisos, f"deberia avisar acercandose a la frontera; salio {_msgs(_precio_de(52))}"
+    assert "OPORTUNIDAD" in avisos[0]["msg"], avisos[0]["msg"]
 
 
 def test_no_avisa_de_una_frontera_que_ya_se_ha_rebasado():
     """Con el score en 30 ya se está dentro de OPORTUNIDAD: no queda nada que
     anunciar. Es justo el único caso en el que la versión anterior sí hablaba."""
-    msgs = _msgs(_precio_de(30))
-    assert not _hay(msgs, "de entrar en zona"), f"anuncia una frontera ya cruzada; salio {msgs}"
+    assert not _proximidad(_precio_de(30)), "anuncia una frontera ya cruzada"
 
 
 def test_no_avisa_cuando_la_frontera_esta_lejisimos():
     """Con el score en 95 falta muchísima caída para el corte de 90:
     anunciarlo sería ruido permanente."""
-    assert not _hay(_msgs(_precio_de(95)), "de entrar en zona")
+    assert not _proximidad(_precio_de(95))
 
 
 def test_ningun_aviso_promete_una_zona_en_la_que_ya_se_esta():
     """El texto viejo decía «A X% de entrar en COMPRA FUERTE» estando ya dentro."""
     from services.btc_stratum_service import _get_zone
     for s in (20, 40, 60, 85, 95):
-        msgs   = _msgs(_precio_de(s))
         actual = _get_zone(s)["zone"]
-        assert not _hay(msgs, "de entrar en zona " + actual), \
-            f"con score {s} promete entrar en {actual}, donde ya se esta"
+        for a in _proximidad(_precio_de(s)):
+            assert actual not in a["msg"], \
+                f"con score {s} promete entrar en {actual}, donde ya se esta: {a['msg']}"
 
 
 # ── #8: liquidez como percentil, no como recta con constantes mágicas ────────

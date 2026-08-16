@@ -81,11 +81,11 @@ function pageShell() {
 
     return '<div style="margin-bottom:1.5rem;">'
         + '<div style="color:var(--color-accent);font-size:18px;letter-spacing:0.1em;text-shadow:var(--glow-text);margin-bottom:4px;">₿ BTC STRATUM ' + tt('btc-stratum') + '</div>'
-        + '<div style="color:' + C.muted + ';font-size:12px;">Modelo de acumulación RSU · Precio frente a su media de 200 semanas</div>'
+        + '<div style="color:' + C.muted + ';font-size:12px;">¿Está bitcoin caro o barato ahora mismo? Comparado con lo que ha valido de media los últimos cuatro años</div>'
         + '</div>'
         + '<div style="display:flex;gap:8px;margin-bottom:1.5rem;">'
-        + boton('btn-dashboard', '📊 DASHBOARD', true)
-        + boton('btn-backtest',  '📈 BACKTEST',  false)
+        + boton('btn-dashboard', '📊 AHORA MISMO', true)
+        + boton('btn-backtest',  '📈 QUÉ HABRÍA PASADO',  false)
         + '</div>'
         + '<div id="btc-result"></div>';
 }
@@ -111,7 +111,6 @@ function renderDashboard(data) {
         + alertsSection(data)
         + scoreSection(data)
         + contextoSection(data)
-        + curvaturaSection(data)
         + chartSection(data)
         + halvingSection(data)
         + macroSection(data)
@@ -154,22 +153,22 @@ function headerSection(data) {
     const ev = z.evidencia;
     const zona = '<div style="padding:1rem 1.25rem;">'
         + '<div style="color:' + z.color + ';font-size:18px;font-weight:500;margin-bottom:8px;">' + esc(z.zone) + '</div>'
-        + '<div style="color:' + C.muted + ';font-size:11px;">Asignación del modelo: <span style="color:' + z.color + ';font-size:16px;font-weight:500;">' + z.allocation + '%</span></div>'
-        + '<div style="color:' + C.muted + ';font-size:11px;margin-top:4px;">vs MA200W: <span style="color:' + devColor + ';">' + (data.deviation >= 0 ? '+' : '') + data.deviation + '%</span></div>'
+        + '<div style="color:' + C.muted + ';font-size:11px;">Del dinero que dediques a bitcoin, sugiere tener puesto un <span style="color:' + z.color + ';font-size:16px;font-weight:500;">' + z.allocation + '%</span></div>'
+        + '<div style="color:' + C.muted + ';font-size:11px;margin-top:4px;">Frente a su media de 4 años: <span style="color:' + devColor + ';">' + (data.deviation >= 0 ? '+' : '') + data.deviation + '%</span></div>'
         // En qué se apoya el consejo, al lado del consejo. Los seis tramos
         // anteriores no ordenaban el retorno futuro; estos cuatro sí, y
         // aguantan al partir la muestra en dos -- así que el dato se enseña.
         + (ev ? '<div style="color:' + C.muted + ';font-size:10px;margin-top:8px;padding-top:8px;border-top:1px solid var(--color-border);line-height:1.5;">'
-            + 'Históricamente, en esta zona: <span style="color:' + C.text + ';">'
-            + (ev.retorno_1a >= 0 ? '+' : '') + ev.retorno_1a + '%</span> de media a un año, con un '
+            + 'Cuando el precio ha estado aquí antes: <span style="color:' + C.text + ';">'
+            + (ev.retorno_1a >= 0 ? '+' : '') + ev.retorno_1a + '%</span> de media al cabo de un año, y se perdía dinero el '
             + '<span style="color:' + (ev.pct_perdidas > 50 ? C.bad : ev.pct_perdidas > 20 ? C.warn : C.ok) + ';">'
-            + ev.pct_perdidas + '%</span> de casos en pérdidas (' + ev.n + ' sesiones)</div>' : '')
+            + ev.pct_perdidas + '%</span> de las veces (' + ev.n + ' días medidos)</div>' : '')
         + '</div>';
 
     return '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:1rem;margin-bottom:1rem;">'
-        + panel({ titulo: 'BITCOIN · BTC/USD', contenido: precio, avisos: data.avisos })
-        + panel({ titulo: 'RSU SCORE ' + tt('rsu-btc-score'), contenido: score, escapar: false })
-        + panel({ titulo: 'ZONA ACTUAL · URGENCIA', contenido: zona })
+        + panel({ titulo: 'PRECIO DE BITCOIN', contenido: precio, avisos: data.avisos })
+        + panel({ titulo: '¿CARO O BARATO? ' + tt('rsu-btc-score'), contenido: score, escapar: false })
+        + panel({ titulo: 'EN QUÉ ZONA ESTAMOS', contenido: zona })
         + '</div>';
 }
 
@@ -180,7 +179,7 @@ function alertsSection(data) {
         + '<span style="font-size:15px;flex-shrink:0;">' + esc(a.icon) + '</span>'
         + '<span style="color:' + a.color + ';">' + esc(a.msg) + '</span>'
         + '</div>').join('');
-    return panel({ titulo: '⚡ ALERTAS ACTIVAS', contenido: filas });
+    return panel({ titulo: '⚡ LO QUE HAY QUE SABER HOY', contenido: filas });
 }
 
 /*
@@ -204,23 +203,31 @@ function scoreSection(data) {
         + '<span>0 · más barato</span><span>50</span><span>80</span><span>90</span><span>100 · más caro</span>'
         + '</div></div>';
 
-    const fronteras = (d.fronteras || []).map(f =>
-        '<div style="display:flex;justify-content:space-between;padding:8px 14px;border-bottom:1px solid var(--color-border);font-size:11px;">'
-        + '<span style="color:' + C.muted + ';">Entra en <span style="color:' + C.text + ';">' + esc(f.zona) + '</span> (score ' + f.score + ')</span>'
-        + '<span style="color:' + C.text + ';">' + (f.precio ? usd(f.precio) : 'N/D') + '</span>'
-        + '</div>').join('');
+    // Solo la SIGUIENTE frontera. Las tres completas viven en su propia tabla
+    // ("A qué precio cambia de zona"); repetirlas aquí era pintar dos veces lo
+    // mismo en la misma pantalla.
+    const siguiente = (d.fronteras || []).find(f => f.score > data.rsu_score);
+    const fronteras = siguiente
+        ? '<div style="display:flex;justify-content:space-between;padding:8px 14px;border-top:1px solid var(--color-border);font-size:11px;">'
+          + '<span style="color:' + C.muted + ';">Siguiente zona: <span style="color:' + C.text + ';">' + esc(siguiente.zona) + '</span></span>'
+          + '<span style="color:' + C.text + ';">a partir de ' + (siguiente.precio ? usd(siguiente.precio) : 'N/D') + '</span>'
+          + '</div>'
+        : '';
 
-    const explica = '<div style="padding:0 1.25rem 1rem;font-size:11px;color:' + C.muted + ';line-height:1.6;">'
-        + 'Mide una sola cosa: lo lejos que está el precio de su media de 200 semanas ('
-        + usd(d.ma200) + '). Ahora mismo, un <span style="color:' + C.text + ';">'
-        + (d.desviacion >= 0 ? '+' : '') + d.desviacion + '%</span>.'
-        + (ev ? ' En este tramo, de ' + esc(d.muestra) + ', el precio estaba más alto un año después en el '
-            + (100 - ev.pct_perdidas).toFixed(1) + '% de los casos (media: '
-            + (ev.retorno_1a >= 0 ? '+' : '') + ev.retorno_1a + '%, sobre ' + ev.n + ' sesiones).' : '')
+    const explica = '<div style="padding:0 1.25rem 1rem;font-size:11px;color:' + C.muted + ';line-height:1.7;">'
+        + 'Este número compara <strong style="color:' + C.text + ';">el precio de hoy</strong> con '
+        + '<strong style="color:' + C.text + ';">lo que bitcoin ha valido de media los últimos cuatro años</strong> ('
+        + usd(d.ma200) + '). Ahora mismo está un <span style="color:' + C.text + ';">'
+        + (d.desviacion >= 0 ? '+' : '') + d.desviacion + '%</span> respecto a esa media.<br>'
+        + 'Cuanto más bajo, más barato está bitcoin comparado con su propia historia. Nada más. '
+        + 'No predice nada ni sabe lo que va a pasar mañana.'
+        + (ev ? '<br><br>Mirando ' + esc(d.muestra) + ': cuando el número ha estado como hoy, '
+            + 'un año después el precio era más alto en <span style="color:' + C.text + ';">'
+            + (100 - ev.pct_perdidas).toFixed(1).replace('.', ',') + ' de cada 100 veces</span>.' : '')
         + '</div>';
 
     return panel({
-        titulo:    'QUÉ MIDE EL RSU SCORE ' + tt('rsu-btc-score'),
+        titulo:    'DE DÓNDE SALE ESTE NÚMERO ' + tt('rsu-btc-score'),
         subtitulo: data.rsu_score + '/100',
         contenido: barra + explica + fronteras,
         escapar:   false,
@@ -241,31 +248,31 @@ function contextoSection(data) {
     const tarjetas = [];
 
     if (c.mvrv_z != null) {
-        tarjetas.push(kpiCard('MVRV Z-SCORE ' + tt('mvrv-z'), c.mvrv_z.toFixed(2),
-            'Por debajo de 0, el poseedor medio está en pérdidas'
-            + (c.precio_realizado ? ' · Precio medio de compra: ' + usd(c.precio_realizado) : ''),
+        tarjetas.push(kpiCard('¿GANA DINERO QUIEN YA TIENE BITCOIN? ' + tt('mvrv-z'), c.mvrv_z.toFixed(2),
+            'Compara el precio de hoy con lo que pagó de media quien ya tiene bitcoins. Por debajo de 0, la mayoría pierde dinero'
+            + (c.precio_realizado ? ' · Pagaron de media: ' + usd(c.precio_realizado) : ''),
             c.mvrv_z < 0 ? C.ok : c.mvrv_z > 3 ? C.bad : C.text));
     }
     if (c.puell != null) {
-        tarjetas.push(kpiCard('PUELL MULTIPLE ' + tt('puell-multiple'), c.puell,
-            'Ingresos de mineros: $' + c.puell_ingresos + 'M frente a su media anual de $' + c.puell_media + 'M',
+        tarjetas.push(kpiCard('¿CÓMO LES VA A LOS MINEROS? ' + tt('puell-multiple'), c.puell,
+            'Ingresan $' + c.puell_ingresos + 'M al día, frente a los $' + c.puell_media + 'M de un año normal. Por debajo de 0,5 lo están pasando mal',
             c.puell < 0.5 ? C.ok : c.puell < 1 ? C.warn : C.text));
     }
     if (c.hashrate_ehs != null) {
-        tarjetas.push(kpiCard('HASHRATE', c.hashrate_ehs + ' EH/s',
+        tarjetas.push(kpiCard('POTENCIA DE LA RED', c.hashrate_ehs + ' EH/s',
             c.hash_ribbon != null
-                ? 'Frente a su media de 30 días: ' + c.hash_ribbon + (c.hash_ribbon < 1 ? ' · hay mineros apagando' : ' · red creciendo')
-                : 'Potencia de cálculo de la red',
+                ? 'Frente a su media de 30 días: ' + c.hash_ribbon + (c.hash_ribbon < 1 ? ' · hay mineros apagando máquinas' : ' · la red sigue creciendo')
+                : 'Cuánta potencia dedican los mineros a sostener bitcoin',
             c.hash_ribbon != null && c.hash_ribbon < 0.97 ? C.warn : C.text));
     }
     if (!tarjetas.length) return '';
 
     const fuentes = Object.entries(c.fuentes || {}).filter(([, v]) => v)
-        .map(([k, v]) => esc(k.toUpperCase()) + ': ' + esc(v)).join(' · ');
+        .map(([k, v]) => esc(NOMBRE_FUENTE[k] || k) + ': ' + esc(v)).join(' · ');
 
     return panel({
-        titulo:    'CONTEXTO ON-CHAIN',
-        subtitulo: 'no entra en el score',
+        titulo:    'CÓMO VA LA RED DE BITCOIN',
+        subtitulo: 'no afecta al número de arriba',
         contenido: '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:1rem;padding:1.25rem;">'
             + tarjetas.join('') + '</div>'
             + (fuentes ? '<div style="padding:0 1.25rem 1rem;font-size:10px;color:' + C.muted + ';">' + fuentes + '</div>' : ''),
@@ -273,22 +280,9 @@ function contextoSection(data) {
     });
 }
 
-function curvaturaSection(data) {
-    const curv  = data.curvature;
-    const color = curv.slope > 0.2 ? C.ok : curv.slope < -0.2 ? C.bad : C.warn;
-    const dato  = (k, v, col) => '<div><span style="color:' + C.muted + ';">' + k + ': </span><span style="color:' + (col || C.text) + ';">' + v + '</span></div>';
-    const cuerpo = '<div style="display:flex;gap:2rem;flex-wrap:wrap;font-size:12px;padding:1.25rem;">'
-        + dato('MA200W', usd(curv.ma_value))
-        + dato('Pendiente', curv.slope + '% (30d)', color)
-        + dato('Tendencia', esc(curv.trend), color)
-        + dato('Aceleración', esc(curv.acceleration), curv.acceleration === 'ACELERANDO' ? C.ok : C.warn)
-        + '</div>';
-    return panel({ titulo: 'CURVATURA MA200W', contenido: cuerpo });
-}
-
 function chartSection() {
     return panel({
-        titulo:    'PRECIO BTC · MA200W · ZONAS (3 AÑOS)',
+        titulo:    'EL PRECIO Y LAS ZONAS, ESTOS 3 AÑOS',
         subtitulo: 'Semanal',
         contenido: '<div style="padding:16px;"><canvas id="btc-chart" height="200"></canvas></div>',
     });
@@ -305,9 +299,9 @@ function halvingSection(data) {
     const cuerpo = '<div style="display:flex;gap:2rem;flex-wrap:wrap;align-items:center;padding:1.25rem;">'
         + '<div style="flex:1;min-width:200px;">'
         + '<div style="color:' + phaseColor + ';font-size:18px;font-weight:500;margin-bottom:4px;">' + esc(h.phase) + '</div>'
-        + '<div style="color:' + C.muted + ';font-size:11px;">Progreso del ciclo: <span style="color:' + C.text + ';">' + h.progress_pct + '%</span></div>'
-        + '<div style="color:' + C.muted + ';font-size:11px;">Días desde el halving: <span style="color:' + C.text + ';">' + h.days_since + '</span></div>'
-        + '<div style="color:' + C.muted + ';font-size:11px;">Días hasta el próximo: <span style="color:' + C.warn + ';">' + h.days_to_next + '</span> (' + esc(h.next_halving) + ')</div>'
+        + '<div style="color:' + C.muted + ';font-size:11px;">Llevamos recorrido: <span style="color:' + C.text + ';">' + h.progress_pct + '%</span></div>'
+        + '<div style="color:' + C.muted + ';font-size:11px;">Días desde el último halving: <span style="color:' + C.text + ';">' + h.days_since + '</span></div>'
+        + '<div style="color:' + C.muted + ';font-size:11px;">Días para el siguiente: <span style="color:' + C.warn + ';">' + h.days_to_next + '</span> (' + esc(h.next_halving) + ')</div>'
         + '</div>'
         + '<div style="flex:2;min-width:220px;">'
         + '<div style="background:' + C.fondo + ';border-radius:4px;height:8px;overflow:hidden;">'
@@ -326,7 +320,7 @@ function halvingSection(data) {
         ? [{ tipo: 'antiguo', mensaje: 'La fecha del próximo halving es una estimación: ' + h.fuente + '.' }]
         : null;
 
-    return panel({ titulo: 'CICLO HALVING ' + tt('halving-cycle'), contenido: cuerpo, avisos, escapar: false });
+    return panel({ titulo: 'EN QUÉ PUNTO DEL CICLO ESTAMOS ' + tt('halving-cycle'), contenido: cuerpo, avisos, escapar: false });
 }
 
 function macroSection(data) {
@@ -341,17 +335,14 @@ function macroSection(data) {
 
     const anios = hay && m.liquidez_base ? (m.liquidez_base / 252).toFixed(0) : null;
     const cuerpo = '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:1rem;padding:1.25rem;">'
-        + kpiCard('DÓLAR (DXY)', hay ? m.dxy : 'N/D',
-                  'Un dólar fuerte suele ir en contra de bitcoin',
+        + kpiCard('EL DÓLAR', hay ? m.dxy : 'N/D',
+                  'Cuando el dólar se fortalece, bitcoin suele sufrir',
                   hay ? (m.dxy_score < 50 ? C.ok : C.bad) : C.muted)
-        + kpiCard('LIQUIDEZ', hay ? m.liquidity_score + '/100' : 'N/D',
-                  hay ? ('Percentil del bono largo (TLT) frente a sus últimos ' + anios + ' años') : 'Sin datos ahora mismo',
+        + kpiCard('¿HAY DINERO BARATO?', hay ? m.liquidity_score + '/100' : 'N/D',
+                  hay ? ('0 = dinero caro y escaso, 100 = dinero barato y abundante. Frente a los últimos ' + anios + ' años') : 'Sin datos ahora mismo',
                   hay ? statusColor : C.muted)
-        + kpiCard('ENTORNO', hay ? esc(m.status) : 'Sin datos',
-                  'Lectura combinada de las condiciones de financiación',
-                  statusColor)
         + '</div>';
-    return panel({ titulo: 'CONDICIONES MACRO', contenido: cuerpo });
+    return panel({ titulo: 'EL CONTEXTO ECONÓMICO', contenido: cuerpo });
 }
 
 /*
@@ -367,9 +358,9 @@ function levelsSection(data) {
     const zonaColor = {
         'ACUMULACIÓN': alpha(C.ok, 70), 'PRECAUCIÓN': C.warn, 'RIESGO ALTO': C.bad,
     };
-    const rows = [{ label: 'MEDIA DE 200 SEMANAS', value: data.ma200, color: C.info }]
+    const rows = [{ label: 'LO QUE VALE DE MEDIA (4 AÑOS)', value: data.ma200, color: C.info }]
         .concat(((data.score_detalle || {}).fronteras || []).map(f => ({
-            label: 'ENTRA EN ' + f.zona + ' (score ' + f.score + ')',
+            label: 'PASA A ' + f.zona,
             value: f.precio,
             color: zonaColor[f.zona] || C.muted,
         })))
@@ -385,7 +376,7 @@ function levelsSection(data) {
             + '<div style="color:' + C.text + ';font-size:13px;font-weight:500;">' + usd(r.value) + '</div>'
             // Se dice en qué dirección, no solo el signo: "+96,8%" a secas
             // sobre un nivel que está POR DEBAJO del precio se lee al revés.
-            + (dist != null ? '<div style="color:' + (dist >= 0 ? C.bad : C.ok) + ';font-size:10px;">El precio está un '
+            + (dist != null ? '<div style="color:' + (dist >= 0 ? C.bad : C.ok) + ';font-size:10px;">Ahora está un '
                 + Math.abs(dist).toFixed(1) + '% ' + (dist >= 0 ? 'por encima' : 'por debajo') + '</div>' : '')
             + '</div></div>';
     }).join('');
@@ -396,37 +387,53 @@ function stressSection(data) {
     const filas = (data.stress || []).map(sc => {
         const sev = sc.severity === 'extreme' ? C.bad : sc.severity === 'high' ? C.warn : alpha(C.warn, 70);
         return '<div style="padding:12px 14px;border-bottom:1px solid var(--color-border);">'
-            + '<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:1rem;margin-bottom:6px;">'
-            + '<div style="color:' + sev + ';font-size:12px;font-weight:500;">' + esc(sc.name) + '</div>'
-            + '<div style="color:' + C.muted + ';font-size:10px;text-align:right;flex-shrink:0;">' + esc(sc.probability) + '</div>'
-            + '</div>'
+            + '<div style="color:' + sev + ';font-size:12px;font-weight:500;margin-bottom:6px;">' + esc(sc.name) + '</div>'
             + '<div style="color:' + C.muted + ';font-size:11px;margin-bottom:4px;">' + esc(sc.description) + '</div>'
             + '<div style="display:flex;gap:1.5rem;flex-wrap:wrap;font-size:11px;">'
-            + '<span style="color:' + C.muted + ';">Precio resultante: <span style="color:' + sev + ';">' + usd(sc.target) + '</span></span>'
+            + '<span style="color:' + C.muted + ';">El precio se iría a: <span style="color:' + sev + ';">' + usd(sc.target) + '</span></span>'
             + '<span style="color:' + C.muted + ';">Caída: <span style="color:' + sev + ';">−' + sc.drop_pct + '%</span></span>'
             + '</div>'
             + '<div style="color:' + C.muted + ';font-size:10px;margin-top:4px;">💡 ' + esc(sc.hedge) + '</div>'
             + '</div>';
     }).join('');
     return panel({
-        titulo:    'STRESS TEST · ESCENARIOS ADVERSOS ' + tt('stress-test'),
+        titulo:    'QUÉ PASARÍA SI SALE MAL ' + tt('stress-test'),
         contenido: filas,
         escapar:   false,
-        avisos: [{ tipo: 'parcial', mensaje:
-            'Las probabilidades de esta tabla son estimaciones subjetivas escritas a mano, no el resultado '
-            + 'de ningún cálculo. Sirven para pensar en la gestión del riesgo, no como pronóstico.' }],
+        avisos: [{ tipo: 'antiguo', mensaje:
+            'Estos escenarios son un ejercicio de «qué pasaría si», no un pronóstico: nadie sabe si van a '
+            + 'ocurrir ni con qué probabilidad. Sirven para dimensionar el riesgo antes de que haga falta.' }],
     });
 }
 
 function methodologySection() {
-    const cuerpo = '<div style="color:' + C.muted + ';font-size:11px;line-height:1.8;padding:1.25rem;">'
-        + '<strong style="color:' + C.text + ';">Qué mide.</strong> El RSU Score responde a una sola pregunta: ¿está bitcoin caro o barato frente a su media de 200 semanas? Esa media es su referencia de largo plazo más seguida, y la distancia a ella se convierte en una escala de 0 a 100 donde 0 es lo más barato que se ha visto y 100 lo más caro.<br><br>'
-        + '<strong style="color:' + C.text + ';">Por qué un solo indicador y no cuatro.</strong> Hasta agosto de 2026 el score mezclaba cuatro medidas con pesos (media de 200 semanas, MVRV, Puell y AHR999). Al comprobarlo con casi ocho años de datos aparecieron dos cosas: el MVRV que se estaba usando no era un dato de la cadena de bloques, sino la misma distancia a la media multiplicada por una constante, y el AHR999 valía cero en el 97% de los días. Ordenar cuatro medidas de las que dos eran la misma daba un resultado <em>peor</em> que usar una sola bien construida. Se probaron además el Puell real, el hashrate y la posición en el ciclo de halving: ninguno mejoraba el resultado.<br><br>'
-        + '<strong style="color:' + C.text + ';">Qué pasó con los otros indicadores.</strong> Siguen en la página, en «Contexto on-chain», pero fuera del número. Informan de cosas reales —si los mineros están bajo presión, a qué precio medio se movieron las monedas por última vez— y ahora el MVRV es un dato de cadena de verdad, no una estimación a partir del precio.<br><br>'
-        + '<strong style="color:' + C.text + ';">Los tramos.</strong> Las cuatro zonas no son números redondos elegidos a ojo: salen de mirar qué pasó después, en 2.588 sesiones entre julio de 2018 y agosto de 2025. Para comprobar que no era casualidad, se partió la muestra por la mitad y se repitió el cálculo en cada trozo: el orden se mantiene en los dos. Aun así son unos dos ciclos de halving, que es poca historia para un activo que se mueve en ciclos: tómalos como una referencia, no como una regla.<br><br>'
-        + '<strong style="color:' + C.bad + ';">Esto no es asesoramiento financiero. Bitcoin es un activo de alto riesgo: invierte solo lo que puedas permitirte perder.</strong>'
+    const p = (titulo, texto) => '<p style="margin:0 0 1rem;"><strong style="color:' + C.text + ';">'
+        + titulo + '</strong> ' + texto + '</p>';
+    const cuerpo = '<div style="color:' + C.muted + ';font-size:12px;line-height:1.75;padding:1.25rem;">'
+        + p('Qué hace esta herramienta.',
+            'Responde a una sola pregunta: ¿está bitcoin caro o barato ahora mismo? Para saberlo compara el '
+            + 'precio de hoy con lo que ha valido de media durante los últimos cuatro años, y lo resume en un '
+            + 'número del 0 al 100. Cuanto más bajo, más barato.')
+        + p('Por qué cuatro años.',
+            'Bitcoin se mueve en ciclos largos, de unos cuatro años, marcados por el halving (el momento en '
+            + 'que se reduce a la mitad la cantidad de bitcoins nuevos que se crean). Una media de cuatro años '
+            + 'suaviza los vaivenes y deja ver si el precio se ha alejado mucho de lo normal.')
+        + p('De dónde salen las cuatro zonas.',
+            'No son números elegidos a ojo: salen de mirar qué pasó después, día a día, entre julio de 2018 y '
+            + 'agosto de 2025. Para asegurarnos de que no era casualidad, partimos ese periodo por la mitad y '
+            + 'repetimos el cálculo en cada trozo: el orden se mantiene en los dos.')
+        + p('Lo que esto NO es.',
+            'No es una bola de cristal. Son unos ocho años de datos, que para un activo tan joven es poco: '
+            + 'da para orientarse, no para tener certezas. Y que algo esté barato no significa que no pueda '
+            + 'ponerse más barato todavía.')
+        + p('Los datos de la red.',
+            'Debajo del número verás cómo va la red de bitcoin: si quien ya tiene bitcoins gana o pierde '
+            + 'dinero, cómo les va a los mineros y cuánta potencia hay conectada. Son datos reales de la '
+            + 'cadena de bloques, y están ahí para dar contexto: no cambian el número de arriba.')
+        + '<p style="margin:0;color:' + C.bad + ';"><strong>Esto no es asesoramiento financiero.</strong> '
+        + 'Bitcoin puede caer un 80% y ha pasado varias veces. Invierte solo lo que puedas permitirte perder.</p>'
         + '</div>';
-    return panel({ titulo: 'METODOLOGÍA RSU', contenido: cuerpo });
+    return panel({ titulo: 'CÓMO FUNCIONA ESTA HERRAMIENTA', contenido: cuerpo });
 }
 
 // ── BACKTEST ──────────────────────────────────────────────────────────────────
@@ -457,39 +464,39 @@ function renderBacktest(data) {
             + '<div style="color:' + C.muted + ';font-size:10px;margin-bottom:6px;">' + esc(r.label) + '</div>'
             + '<div style="color:' + color + ';font-size:22px;font-weight:500;">' + (r.total_return >= 0 ? '+' : '') + r.total_return + '%</div>'
             + '<div style="color:' + C.muted + ';font-size:11px;margin-top:4px;">Capital final: <span style="color:' + C.text + ';">' + usd(r.final_value) + '</span></div>'
-            + '<div style="color:' + C.muted + ';font-size:11px;">Frente a comprar y mantener: <span style="color:' + alphaColor + ';">' + (r.alpha > 0 ? '+' : '') + r.alpha + '%</span></div>'
+            + '<div style="color:' + C.muted + ';font-size:11px;">Frente a comprar y no tocar nada: <span style="color:' + alphaColor + ';">' + (r.alpha > 0 ? '+' : '') + r.alpha + '%</span></div>'
             + '<div style="color:' + C.muted + ';font-size:11px;">Operaciones: ' + r.n_buys + ' compras · ' + r.n_sells + ' ventas</div>'
             + '</div>';
     }).join('');
 
     const cuerpo = '<div style="padding:1.25rem;">'
-        + '<div style="color:' + C.muted + ';font-size:11px;margin-bottom:1rem;">Capital inicial: $10.000 · Estrategia: invertir la mitad del capital disponible cuando el RSU Score baje del umbral, y vender cuando supere ' + (data.venta_umbral || 90) + '</div>'
+        + '<div style="color:' + C.muted + ';font-size:11px;margin-bottom:1rem;">Se empieza con $10.000. Cada vez que el número baja del límite se invierte la mitad del dinero que queda, y se vende todo cuando supera ' + (data.venta_umbral || 90) + '</div>'
         + '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:1rem;">' + tarjetas + '</div>'
         + '<div style="margin-top:1rem;padding-top:1rem;border-top:1px solid var(--color-border);font-size:11px;color:' + C.muted + ';">'
-        + 'Comprar y mantener bitcoin en el mismo periodo: <span style="color:' + C.text + ';">' + (bh >= 0 ? '+' : '') + bh + '%</span></div>'
+        + 'Comprar bitcoin y no tocar nada en el mismo periodo: <span style="color:' + C.text + ';">' + (bh >= 0 ? '+' : '') + bh + '%</span></div>'
         + '</div>';
 
     const avisos = [
         { tipo: 'parcial', mensaje:
-            'El backtest supone ejecución perfecta: sin comisiones, sin deslizamiento de precio y operando '
-            + 'siempre al cierre del día. En la práctica los resultados serían peores.' },
+            'Esta simulación es optimista a propósito: no cuenta comisiones, ni que el precio se mueve mientras '
+            + 'compras, y da por hecho que se acierta el momento exacto. En la vida real habría salido peor.' },
     ];
     if (data.period_start) {
         avisos.push({ tipo: 'antiguo', mensaje:
-            'Periodo evaluado: desde ' + data.period_start + (anios ? ' (' + anios.toFixed(1) + ' años' : '')
-            + (anios ? ', apenas dos ciclos de halving completos)' : '')
-            + '. Antes de esa fecha la media de 200 semanas todavía no tenía histórico suficiente.' });
+            'Se ha simulado desde ' + data.period_start + (anios ? ', unos ' + anios.toFixed(0) + ' años' : '')
+            + '. No se puede ir más atrás porque antes de esa fecha aún no había cuatro años de precios '
+            + 'con los que calcular la media.' });
     }
 
     const resumen = panel({
-        titulo:    'BACKTEST HISTÓRICO · RSU STRATUM ' + tt('btc-backtest'),
+        titulo:    'QUÉ HABRÍA PASADO SIGUIENDO ESTE MODELO ' + tt('btc-backtest'),
         contenido: cuerpo,
         avisos,
         escapar:   false,
     });
 
     const grafico = panel({
-        titulo:    'RSU SCORE HISTÓRICO · SEÑALES DE COMPRA Y VENTA',
+        titulo:    'CÓMO SE HA MOVIDO EL NÚMERO ESTOS AÑOS',
         contenido: '<div style="padding:16px;"><canvas id="backtest-chart" height="200"></canvas></div>',
     });
 
@@ -498,7 +505,7 @@ function renderBacktest(data) {
     const tabla  = trades.length ? panel({
         // Sin esc() aquí: panel() ya escapa el título por defecto, y hacerlo
         // dos veces convertía el "<" del umbral en un "&lt;" visible.
-        titulo:    'ÚLTIMAS OPERACIONES · ' + ((results[1] || {}).label || ''),
+        titulo:    'LAS ÚLTIMAS COMPRAS Y VENTAS · ' + ((results[1] || {}).label || ''),
         contenido: '<div style="display:grid;' + cols + 'gap:8px;padding:6px 14px;border-bottom:1px solid var(--color-border);font-size:10px;color:' + C.muted + ';">'
             + '<div>FECHA</div><div>TIPO</div><div>PRECIO</div><div>RSU</div></div>'
             + trades.map(t => '<div style="display:grid;' + cols + 'gap:8px;padding:8px 14px;border-bottom:1px solid var(--color-border);font-size:11px;align-items:center;">'
@@ -544,12 +551,16 @@ function renderChart(data) {
             type: 'line',
             data: {
                 labels: d.map(x => x.date),
+                // Las bandas son las fronteras de zona reales, las mismas que
+                // enseñan las tablas. Antes eran ±25%/±50% de la media: unos
+                // múltiplos redondos que ya no marcaban ninguna frontera, así
+                // que el gráfico dibujaba unas líneas y las tablas otras.
                 datasets: [
-                    linea('BTC/USD', 'price',   BTC_NARANJA, 2),
-                    linea('MA200W',  'ma200',   acento,      2),
-                    linea('−25% MA', 'minus25', alpha(acento, 65), 1,   [4, 4]),
-                    linea('−50% MA', 'minus50', alpha(acento, 40), 1.5, [2, 4]),
-                    linea('+25% MA', 'plus25',  aviso,       1,   [4, 4]),
+                    linea('BTC/USD', 'price', BTC_NARANJA, 2),
+                    linea('Media de 4 años', 'ma200', acento, 2),
+                    linea('Acumulación (50)', 'z50', alpha(acento, 60), 1,   [4, 4]),
+                    linea('Precaución (80)',  'z80', aviso,             1,   [4, 4]),
+                    linea('Riesgo alto (90)', 'z90', cssVar('--color-danger', '#f23645'), 1, [2, 4]),
                 ],
             },
             options: {
@@ -614,13 +625,23 @@ function loadChartJs(cb) {
 
 // ── AUXILIARES ────────────────────────────────────────────────────────────────
 
+// De dónde sale cada dato, dicho como lo diría una persona. Antes se pintaba
+// la clave interna en mayúsculas ("PUELL", "MVRV"), que no significa nada para
+// quien entra a mirar el precio de bitcoin.
+const NOMBRE_FUENTE = {
+    price:    'Precio',
+    mvrv:     'Datos de la cadena',
+    puell:    'Ingresos de mineros',
+    hashrate: 'Potencia de la red',
+};
+
 function sourcesBar(sources) {
     if (!sources) return '';
     return '<div style="display:flex;gap:6px;margin-top:10px;flex-wrap:wrap;">'
         + Object.entries(sources).map(([k, v]) =>
             '<span style="font-size:9px;background:' + alpha(C.info, 8) + ';border:1px solid ' + alpha(C.info, 20)
             + ';border-radius:3px;padding:1px 6px;color:' + C.muted + ';">'
-            + esc(k.toUpperCase()) + ': ' + esc(v) + '</span>').join('')
+            + esc(NOMBRE_FUENTE[k] || k) + ': ' + esc(v) + '</span>').join('')
         + '</div>';
 }
 

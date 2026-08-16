@@ -242,7 +242,7 @@ def _get_contexto_onchain(puell_data: dict, hash_data: dict) -> dict:
     return {
         "mvrv_z":           mvrv_z,
         "mvrv_fecha":       mvrv_fecha,
-        "precio_realizado": precio_realizado,
+        "precio_realizado": round(precio_realizado) if precio_realizado else None,
         "puell":            (puell_data or {}).get("puell"),
         "puell_ingresos":   (puell_data or {}).get("daily_revenue"),
         "puell_media":      (puell_data or {}).get("sma365_revenue"),
@@ -358,7 +358,8 @@ ZONAS = [
     (90, 101, "RIESGO ALTO",  "var(--color-danger)",   0, "ESPERAR",
      {"n": 906, "retorno_1a": -6.4,  "pct_perdidas": 67.8}),
 ]
-ZONAS_MUESTRA = "2.588 sesiones (jul 2018 – ago 2025, unos dos ciclos de halving)"
+CORTES_ZONA = [desde for desde, *_ in ZONAS if desde > 0]
+ZONAS_MUESTRA = "lo que pasó cada día entre julio de 2018 y agosto de 2025"
 
 
 def _get_zone(rsu: float) -> dict:
@@ -373,11 +374,11 @@ def _get_zone(rsu: float) -> dict:
 
 
 def _get_signal_label(rsu: float) -> dict:
-    if rsu < 30:   return {"label": "MUY POR DEBAJO DE SU MEDIA LARGA", "color": "var(--color-accent)"}
-    elif rsu < 50: return {"label": "POR DEBAJO DE SU MEDIA LARGA",     "color": "var(--color-accent)"}
-    elif rsu < 80: return {"label": "POR ENCIMA, SIN EXTREMOS",         "color": _mezcla(40)}
-    elif rsu < 90: return {"label": "CARO FRENTE A SU MEDIA LARGA",     "color": "var(--color-warning)"}
-    else:          return {"label": "MUY CARO FRENTE A SU MEDIA LARGA", "color": "var(--color-danger)"}
+    if rsu < 30:   return {"label": "MUY BARATO PARA LO QUE SUELE VALER", "color": "var(--color-accent)"}
+    elif rsu < 50: return {"label": "BARATO PARA LO QUE SUELE VALER",     "color": "var(--color-accent)"}
+    elif rsu < 80: return {"label": "EN PRECIOS NORMALES",               "color": _mezcla(40)}
+    elif rsu < 90: return {"label": "CARO PARA LO QUE SUELE VALER",      "color": "var(--color-warning)"}
+    else:          return {"label": "MUY CARO PARA LO QUE SUELE VALER",  "color": "var(--color-danger)"}
 
 HALVING_BLOQUES = 210_000
 HALVING_MIN_POR_BLOQUE = 10  # objetivo del protocolo; el ritmo real oscila ±5%
@@ -434,11 +435,11 @@ def _get_halving_cycle() -> dict:
     days_total   = max(1, (next_halving - last_halving).days)
     progress     = min(1.0, days_since / days_total)
 
-    if progress < 0.2:   phase = "ACUMULACIÓN"
-    elif progress < 0.4: phase = "BULL TEMPRANO"
-    elif progress < 0.6: phase = "BULL AVANZADO"
-    elif progress < 0.8: phase = "DISTRIBUCIÓN"
-    else:                phase = "MERCADO BAJISTA"
+    if progress < 0.2:   phase = "RECIÉN EMPEZADO"
+    elif progress < 0.4: phase = "SUBIDA TEMPRANA"
+    elif progress < 0.6: phase = "SUBIDA AVANZADA"
+    elif progress < 0.8: phase = "TRAMO FINAL"
+    else:                phase = "ESPERANDO EL SIGUIENTE"
 
     return {
         "phase":        phase,
@@ -515,59 +516,56 @@ def _calc_alerts(price: float, ma200: float, rsu: float, contexto: dict = None) 
                 caida = (price - objetivo) / price * 100
                 if caida <= 15:
                     alerts.append({"icon": "🔥", "color": "var(--color-accent)",
-                                   "msg": f"A un {caida:.1f}% de caída de entrar en zona {nombre} "
-                                          f"(${objetivo:,.0f})".replace(",", ".")})
+                                   "msg": f"Si bitcoin baja un {caida:.1f}% (hasta ${objetivo:,.0f}) pasa a zona {nombre}".replace(",", ".")})
                 break
 
     if rsu < 50:
         alerts.append({"icon": "🚨", "color": "var(--color-accent)",
-                       "msg": f"RSU Score en {rsu:.1f}: el precio está en la parte baja de su rango histórico "
-                              f"frente a la media de 200 semanas"})
+                       "msg": "Bitcoin cotiza barato para lo que ha valido de media estos últimos cuatro años"})
     elif rsu >= 90:
         alerts.append({"icon": "⚠️", "color": "var(--color-danger)",
-                       "msg": f"RSU Score en {rsu:.1f}: en este tramo, el 67,8% de las sesiones históricas "
-                              f"acabaron con el precio más bajo un año después"})
+                       "msg": "Bitcoin está caro: cuando ha estado así de caro, un año después el precio era más bajo en 68 de cada 100 casos"})
 
     # Contexto on-chain: informa, pero NO entra en el score (ver EL SCORE).
     # Cada aviso dice de dónde sale su número; ninguno se estima desde el precio.
     mvrv = contexto.get("mvrv_z")
     if mvrv is not None and mvrv < 0:
         alerts.append({"icon": "💎", "color": "var(--color-secondary)",
-                       "msg": f"MVRV Z-Score en {mvrv:.2f} (dato on-chain): de media, quien tiene bitcoins "
-                              f"los compró más caros de lo que valen ahora"})
+                       "msg": "De media, quien ya tiene bitcoins los compró más caros de lo que valen ahora"})
 
     puell = contexto.get("puell")
     if puell is not None and puell < 0.6:
+        # El porcentaje sale del propio dato: decir "la mitad" con un Puell de
+        # 0,40 sería redondear a la baja una cifra que ya tenemos exacta.
         alerts.append({"icon": "⛏️", "color": "var(--color-warning)",
-                       "msg": f"Puell Multiple en {puell:.2f} (ingresos reales de mineros): los mineros ingresan "
-                              f"muy por debajo de su media anual"})
+                       "msg": f"Los mineros están ingresando un {puell * 100:.0f}% de lo que ingresan "
+                              f"en un año normal: muchos apagan máquinas y les queda menos que vender"})
 
     ribbon = contexto.get("hash_ribbon")
     if ribbon is not None and ribbon < 0.97:
         alerts.append({"icon": "🔌", "color": "var(--color-warning)",
-                       "msg": f"El hashrate cae frente a su media de 30 días ({ribbon:.3f}): hay mineros "
-                              f"apagando máquinas"})
+                       "msg": "Hay mineros apagando máquinas: la potencia de la red baja frente a su media del último mes"})
 
     return alerts
 
 def _run_stress_tests(price: float, allocation: float) -> list:
     return [
-        {"name": "COLAPSO EXCHANGE (FTX 2.0)", "description": "Pánico sistémico temporal",
+        {"name": "Quiebra de una plataforma grande", "description": "Como pasó con FTX en 2022: una casa de cambio importante cae y arrastra al mercado durante meses",
          "drop_pct": 50, "target": round(price * 0.5, 0),
-         "probability": "~15% (estimación subjetiva)", "severity": "high",
-         "hedge": "Mantener 70%+ en cold wallet, limitar exposición por exchange"},
-        {"name": "BAN REGULATORIO G7", "description": "Prohibición coordinada en economías desarrolladas",
+         "severity": "high",
+         "hedge": "Guardar la mayor parte en una cartera propia, no en la plataforma donde compras"},
+        {"name": "Prohibición en los países ricos", "description": "Estados Unidos, Europa y Japón se ponen de acuerdo para prohibirlo",
          "drop_pct": 35, "target": round(price * 0.65, 0),
-         "probability": "~10% (estimación subjetiva)", "severity": "high",
-         "hedge": "Diversificación geográfica, auto-custodia"},
-        {"name": "ESTANFLACIÓN 5+ AÑOS", "description": "DXY >120, tasas >10%, recesión global",
+         "severity": "high",
+         "hedge": "No tenerlo todo en plataformas de un solo país, y guardarlo tú mismo"},
+        {"name": "Crisis económica larga", "description": "Años de inflación alta con la economía parada: el dinero se va a refugios más tradicionales",
          "drop_pct": 60, "target": round(price * 0.4, 0),
-         "probability": "~20% (estimación subjetiva)", "severity": "moderate",
-         "hedge": "Oro, bienes raíces, reducir exposición risk-on"},
-        {"name": "RUPTURA CRIPTOGRÁFICA", "description": "Vulnerabilidad SHA256 o ataque cuántico",
+         "severity": "moderate",
+         "hedge": "Tener también cosas que aguantan mejor la inflación, como oro o vivienda"},
+        {"name": "Se rompe el cifrado que lo protege", "description": "Alguien encuentra la forma de falsificar transacciones. Es lo único de esta lista que acabaría con bitcoin",
          "drop_pct": 90, "target": round(price * 0.1, 0),
-         "probability": "~2% (estimación subjetiva)", "severity": "extreme",
-         "hedge": "Imposible hedgear — riesgo existencial aceptado"},
+         "severity": "extreme",
+         "hedge": "No hay forma de protegerse: es el riesgo que se asume al tener bitcoin"},
     ]
 
 # ── BACKTEST ──────────────────────────────────────────────────────────────────
@@ -756,27 +754,6 @@ def get_btc_dashboard() -> dict:
         alerts   = _calc_alerts(price, ma_val, rsu, contexto)
         stress   = _run_stress_tests(price, zone["allocation"])
 
-        # MA curvatura
-        slope     = ma200.diff(30)
-        curv      = slope.diff(30)
-        slope_pct = round(float(slope.iloc[-1]) / ma_val * 100, 3) if ma_val > 0 else 0
-        curvature = {
-            "slope":        slope_pct,
-            "curvature":    round(float(curv.iloc[-1]), 6),
-            "trend":        "ALCISTA FUERTE" if slope_pct > 1 else "ALCISTA" if slope_pct > 0.2 else "LATERAL" if slope_pct > -0.2 else "BAJISTA",
-            "acceleration": "ACELERANDO" if float(curv.iloc[-1]) > 0 else "DESACELERANDO",
-            "ma_value":     round(ma_val, 0),
-        }
-
-        # Niveles
-        levels = {
-            "ma200":    round(ma_val, 0),
-            "minus_25": round(ma_val * 0.75, 0),
-            "minus_50": round(ma_val * 0.50, 0),
-            "plus_25":  round(ma_val * 1.25, 0),
-            "plus_50":  round(ma_val * 1.50, 0),
-        }
-
         # Chart data (3 años, semanal)
         cutoff   = datetime.now() - timedelta(days=3*365)
         mask     = close.index >= cutoff
@@ -787,15 +764,19 @@ def get_btc_dashboard() -> dict:
         for i in range(0, len(close_3y), step):
             mv = ma_3y.iloc[i]
             if pd.isna(mv): continue
-            chart_data.append({
-                "date":    close_3y.index[i].strftime("%Y-%m-%d"),
-                "price":   round(float(close_3y.iloc[i]), 0),
-                "ma200":   round(float(mv), 0),
-                "minus25": round(float(mv * 0.75), 0),
-                "minus50": round(float(mv * 0.50), 0),
-                "plus25":  round(float(mv * 1.25), 0),
-                "plus50":  round(float(mv * 1.50), 0),
-            })
+            # Las bandas son las FRONTERAS DE ZONA, recalculadas sobre la
+            # MA200W de cada día. Antes eran ±25% y ±50% de la media: unos
+            # múltiplos redondos que, tras calibrar las zonas, ya no marcaban
+            # ninguna frontera -- el gráfico dibujaba un juego de líneas y las
+            # tablas de al lado otro distinto.
+            punto = {
+                "date":  close_3y.index[i].strftime("%Y-%m-%d"),
+                "price": round(float(close_3y.iloc[i]), 0),
+                "ma200": round(float(mv), 0),
+            }
+            for corte in CORTES_ZONA:
+                punto[f"z{corte}"] = _score_a_precio(corte, float(mv))
+            chart_data.append(punto)
 
         # `close.max()` es el máximo de la VENTANA descargada, no el máximo
         # histórico de bitcoin. Con la ventana actual acierta por casualidad
@@ -823,8 +804,8 @@ def get_btc_dashboard() -> dict:
                 "Sin datos macro en este momento (dólar y liquidez): las tarjetas de entorno aparecen vacías "
                 "en vez de con un valor supuesto."})
         avisos.append({"tipo": "antiguo", "mensaje":
-            f"El máximo histórico y la caída desde máximos se miden sobre el histórico disponible "
-            f"(desde {ath_desde}), no sobre toda la vida de bitcoin."})
+            f"El máximo que se muestra es el más alto desde {ath_desde}, que es hasta donde llegan los datos "
+            f"que usamos. No es necesariamente el máximo de toda la historia de bitcoin."})
 
         sources = {
             "price":    cg_price.get("source", "yfinance"),
@@ -865,10 +846,8 @@ def get_btc_dashboard() -> dict:
                 "muestra":    ZONAS_MUESTRA,
             },
             "contexto":    contexto,
-            "curvature":   curvature,
             "halving":     halving,
             "macro":       macro_data,
-            "levels":      levels,
             "alerts":      alerts,
             "stress":      stress,
             "chart_data":  chart_data,
