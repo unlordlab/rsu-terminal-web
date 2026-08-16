@@ -10,6 +10,13 @@ router = APIRouter(prefix="/api/v1/scanner", tags=["scanner"])
 async def scanner_universe(user=Depends(verify_token)):
     return get_scanner_data()
 
+@router.get("/divergencia")
+async def scanner_divergencia(user=Depends(verify_token)):
+    """Amplitud del S&P 500 frente a la del Russell 2000, por separado."""
+    from services.scanner_service import get_divergencia_universos
+    return get_divergencia_universos()
+
+
 @router.get("/transiciones")
 async def scanner_transiciones(
     sesiones: int = Query(5, ge=1, le=60),

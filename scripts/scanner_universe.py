@@ -368,6 +368,20 @@ def _technical_score(rs_pct: float, phase: int, rvol: float) -> float:
     return round(rs_pts + phase_pts + _rvol_pts(rvol), 1)
 
 
+def _amplitudes_separadas(close_d: dict, tickers_sp500: list):
+    """Las dos amplitudes, cada una sobre SU universo.
+
+    Función aparte para poder probar QUÉ SE PUBLICA, no solo que el cálculo
+    sepa separar. Con `_compute_breadth_history` correcta pero llamada dos
+    veces con el universo combinado, las dos series saldrían idénticas y la
+    brecha sería cero para siempre -- y un test sobre la función no lo vería.
+    Lo destapó el sabotaje el 15/08/2026, igual que con la ordenación de las
+    cestas temáticas ese mismo día.
+    """
+    return (_compute_breadth_history(close_d, tickers_sp500, lookback_days=60),
+            _compute_breadth_history(close_d, RUSSELL2000_TICKERS, lookback_days=60))
+
+
 def _compute_breadth_history(close_d: dict, tickers: list, lookback_days: int = 150) -> list:
     """Amplitud de mercado REAL derivada del propio universo S&P 500 que este
     script ya descarga cada noche (500 tickers x 2 años de histórico) — en vez de
@@ -411,7 +425,23 @@ def _compute_breadth_history(close_d: dict, tickers: list, lookback_days: int = 
 
     sma50     = df.rolling(50, min_periods=50).mean()
     above     = df > sma50
-    valid_cnt = df.notna().sum(axis=1)
+    # EL DENOMINADOR SON LOS QUE TIENEN SMA50 CALCULABLE, no los que tienen
+    # precio. Parece un matiz y es un fallo grande, encontrado el 15/08/2026 al
+    # separar los dos universos:
+    #
+    # `rolling(50, min_periods=50)` exige 50 sesiones SIN huecos. Un solo día en
+    # el que la descarga no traiga a parte del universo deja a esos valores sin
+    # SMA50 durante las 50 sesiones siguientes. Siguen teniendo precio, así que
+    # entraban en el denominador; pero `NaN > NaN` es False, así que no entraban
+    # nunca en el numerador. El porcentaje se hundía sin que hubiera pasado nada
+    # en el mercado.
+    #
+    # Medido sobre 386 valores del Russell: el 11/08 faltaron 149, y del 12 al
+    # 14 el "% sobre SMA50" marcaba 38,6 / 39,1 / 40,4 cuando lo real era
+    # 62,9 / 63,7 / 65,8 -- mientras el índice SUBÍA los tres días. No es un
+    # detalle de esta sección: este número alimenta el widget de amplitud de
+    # Market, `snapshot_mercado` y el factor Breadth del RSU Algoritmo.
+    valid_cnt = (df.notna() & sma50.notna()).sum(axis=1)
     pct_above = (above.sum(axis=1) / valid_cnt.replace(0, np.nan) * 100)
 
     # shift(1) antes del rolling: la ventana de referencia de cada día
@@ -581,6 +611,19 @@ def run_scan() -> dict:
         raise ValueError("Sin filas calculadas")
 
     breadth_history = _compute_breadth_history(close_d, breadth_universe)
+    # Y ahora los dos universos POR SEPARADO. El combinado de arriba no se
+    # toca: alimenta el McClellan de Market, snapshot_mercado y el RSU
+    # Algoritmo, y cambiarlo movería esos números sin que nadie lo pida.
+    #
+    # Separarlos responde la pregunta que el combinado esconde por
+    # construcción: cuando las grandes hacen máximos y las pequeñas no, el
+    # liderazgo se está estrechando. Mezclados, una mitad tapa a la otra.
+    #
+    # 60 sesiones y no 150: la divergencia es una lectura de semanas, no de
+    # meses, y son dos series más en el mismo Gist.
+    breadth_sp500, breadth_russell = _amplitudes_separadas(close_d, tickers)
+    print(f"📊 Amplitud separada: S&P 500 {len(breadth_sp500)} sesiones · "
+          f"Russell 2000 {len(breadth_russell)} sesiones")
     print(f"📊 Amplitud histórica calculada: {len(breadth_history)} sesiones (universo: {len(breadth_universe)} tickers)")
 
     df = pd.DataFrame(rows).set_index("ticker")
@@ -634,6 +677,8 @@ def run_scan() -> dict:
         "ok":            True,
         "stocks":        stocks,
         "breadth_history": breadth_history,
+        "breadth_sp500":   breadth_sp500,
+        "breadth_russell": breadth_russell,
         "universe_size": len(df),
         "generated_at":  datetime.now(timezone.utc).isoformat(),
         "meta": {

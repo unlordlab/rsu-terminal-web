@@ -231,3 +231,98 @@ def test_sin_serie_suficiente_se_devuelve_normal():
 def test_una_media_de_cero_no_revienta():
     vols = pd.Series([0.0] * RVOL_WINDOW + [500.0])
     assert _rvol(vols) == 1.0
+
+
+# ── Hallazgo #20: grandes contra pequeñas ───────────────────────────────────
+#
+# Y el fallo GRANDE que salió al construirlo, que no estaba en la auditoría:
+# el denominador de `pct_above_sma50` contaba los valores con PRECIO, no los
+# que tienen SMA50 calculable. `rolling(50, min_periods=50)` exige 50 sesiones
+# sin huecos, así que un solo día en el que la descarga no traiga a parte del
+# universo deja a esos valores sin SMA50 durante las 50 sesiones siguientes:
+# siguen contando abajo y nunca arriba, porque `NaN > NaN` es False.
+#
+# Medido el 15/08/2026 sobre el universo combinado: la amplitud marcaba
+# 51,2 / 53,3 / 54,7 cuando lo real era 64,0 / 66,6 / 68,4 -- casi catorce
+# puntos de menos, con el índice SUBIENDO los tres días. Ese número alimenta el
+# widget de amplitud de Market, snapshot_mercado y el factor Breadth del RSU
+# Algoritmo, así que no era un detalle de esta sección.
+
+from scanner_universe import _compute_breadth_history  # noqa: E402
+
+
+def _serie(dias=80, huecos_en=None, huecos_tickers=0, n=100):
+    """dias de precios crecientes para n tickers; opcionalmente se borra el
+    precio de `huecos_tickers` de ellos en la sesión `huecos_en` (contada
+    desde el final)."""
+    fechas = pd.bdate_range("2026-01-01", periods=dias)
+    datos = {f"T{i:03d}": pd.Series(range(100, 100 + dias), index=fechas, dtype=float)
+             for i in range(n)}
+    if huecos_en is not None:
+        for i in range(huecos_tickers):
+            datos[f"T{i:03d}"].iloc[-huecos_en] = float("nan")
+    return {t: s for t, s in datos.items()}
+
+
+def test_un_hueco_de_un_dia_no_hunde_la_amplitud_50_sesiones():
+    """EL FALLO. Con precios estrictamente crecientes, todos los valores están
+    siempre por encima de su SMA50: la amplitud tiene que ser 100% todos los
+    días, con hueco o sin él."""
+    close = _serie(dias=80, huecos_en=3, huecos_tickers=40, n=100)
+    hist = _compute_breadth_history(close, list(close), lookback_days=5)
+    pcts = [d["pct_above_sma50"] for d in hist if d["pct_above_sma50"] is not None]
+    assert pcts, "debería haber sesiones con dato"
+    assert all(p == 100.0 for p in pcts), f"un hueco de datos ha hundido la amplitud: {pcts}"
+
+
+def test_sin_huecos_el_resultado_no_cambia():
+    """El arreglo no puede mover el caso normal, que es la inmensa mayoría."""
+    close = _serie(dias=80, n=100)
+    hist = _compute_breadth_history(close, list(close), lookback_days=5)
+    assert all(d["pct_above_sma50"] == 100.0 for d in hist)
+
+
+def test_la_amplitud_distingue_de_verdad_arriba_y_abajo():
+    """Comprobación de que la métrica sigue midiendo algo: la mitad subiendo y
+    la mitad bajando tiene que dar ~50%."""
+    fechas = pd.bdate_range("2026-01-01", periods=80)
+    close = {}
+    for i in range(50):
+        close[f"UP{i:02d}"]   = pd.Series(range(100, 180), index=fechas, dtype=float)
+        close[f"DOWN{i:02d}"] = pd.Series(range(180, 100, -1), index=fechas, dtype=float)
+    hist = _compute_breadth_history(close, list(close), lookback_days=3)
+    assert all(d["pct_above_sma50"] == 50.0 for d in hist)
+
+
+def test_los_dos_universos_se_calculan_por_separado():
+    """Es el hallazgo #20: mezclados, una mitad tapa a la otra. La misma
+    función con dos listas distintas tiene que dar dos lecturas distintas."""
+    fechas = pd.bdate_range("2026-01-01", periods=80)
+    grandes  = {f"G{i:02d}": pd.Series(range(100, 180), index=fechas, dtype=float) for i in range(60)}
+    pequenas = {f"P{i:02d}": pd.Series(range(180, 100, -1), index=fechas, dtype=float) for i in range(60)}
+    close = {**grandes, **pequenas}
+    hg = _compute_breadth_history(close, list(grandes),  lookback_days=3)
+    hp = _compute_breadth_history(close, list(pequenas), lookback_days=3)
+    hc = _compute_breadth_history(close, list(close),    lookback_days=3)
+    assert hg[-1]["pct_above_sma50"] == 100.0
+    assert hp[-1]["pct_above_sma50"] == 0.0
+    assert hc[-1]["pct_above_sma50"] == 50.0, "el combinado promedia y esconde las dos lecturas"
+
+
+def test_lo_que_se_publica_son_dos_universos_distintos():
+    """No basta con que el cálculo sepa separar: hay que comprobar QUÉ SE
+    PUBLICA. Con la función correcta pero llamada dos veces con el universo
+    combinado, las dos series saldrían idénticas y la brecha sería cero para
+    siempre. Lo echó en falta el sabotaje."""
+    from scanner_universe import _amplitudes_separadas, RUSSELL2000_TICKERS
+    fechas = pd.bdate_range("2026-01-01", periods=80)
+    grandes = [f"G{i:02d}" for i in range(60)]
+    close = {t: pd.Series(range(100, 180), index=fechas, dtype=float) for t in grandes}
+    # Los pequeños, cayendo: si se mezclaran, la brecha se diluiría
+    for t in RUSSELL2000_TICKERS[:60]:
+        close[t] = pd.Series(range(180, 100, -1), index=fechas, dtype=float)
+
+    g, p = _amplitudes_separadas(close, grandes)
+    assert g[-1]["pct_above_sma50"] == 100.0, "las grandes van todas arriba"
+    assert p[-1]["pct_above_sma50"] == 0.0,   "las pequeñas, todas abajo"
+    assert g[-1]["pct_above_sma50"] != p[-1]["pct_above_sma50"]

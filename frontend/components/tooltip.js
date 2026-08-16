@@ -2431,6 +2431,24 @@ Combinar 21/63/126 días en vez de usar una sola ventana es, en esencia, una for
 Esto NO es garantía de nada — es una tendencia estadística observada en datos históricos de mercados desarrollados, no una ley física. Trátalo como una probabilidad a favor, no como una certeza.`
     },
 
+    "divergencia-universos": {
+        title: "Grandes contra pequeñas",
+        short: "Qué parte de las 500 grandes está por encima de su media, frente a qué parte de las pequeñas. Cuando se separan, el liderazgo se está estrechando.",
+        long: `Se mira lo mismo en dos grupos de empresas: cuántas están por encima de su media de 50 sesiones — una forma sencilla de decir cuántas van bien. Un grupo son las 500 grandes; el otro, unas dos mil pequeñas.
+
+Normalmente los dos números van juntos: si el mercado sube, sube todo. Lo interesante es cuando se separan.
+
+QUÉ SIGNIFICA CADA CASO:
+▸ Las grandes muy por encima — el índice sube apoyado en pocos nombres muy grandes mientras el resto se queda atrás. La foto parece buena y por debajo no lo es tanto.
+▸ Las pequeñas por encima — suele acompañar a subidas más repartidas, con más apetito por el riesgo.
+▸ Juntas — no hay nada que leer, y es lo más frecuente.
+
+CUÁNDO ES NOTABLE:
+Solo a partir de diez puntos de diferencia. Medido sobre las últimas sesenta sesiones, eso pasa en una de cada sesenta, así que cuando aparece merece la pena mirarlo. Por debajo, los dos grupos se mueven prácticamente igual.
+
+La gráfica de abajo es esa diferencia a lo largo del tiempo, con la línea del cero marcada.`,
+    },
+
     "cambios-de-fase": {
         title: "Quién acaba de cambiar de fase",
         short: "Valores que han entrado o salido de la fase de avance en los últimos días. La tabla de arriba dice quién está; esto dice quién acaba de llegar.",

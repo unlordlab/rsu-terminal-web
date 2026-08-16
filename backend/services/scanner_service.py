@@ -134,6 +134,85 @@ def get_breadth_history() -> list:
     return data.get("breadth_history", [])
 
 
+# Cuánto tiene que abrirse la brecha para llamarla divergencia. Es un
+# porcentaje contra otro porcentaje (qué parte de cada universo está sobre su
+# SMA50), así que 10 puntos ya es una diferencia clara de salud entre grandes y
+# pequeñas, y por debajo de eso los dos índices se mueven prácticamente juntos.
+DIVERGENCIA_UMBRAL = 10.0
+
+
+def get_divergencia_universos() -> dict:
+    """Grandes contra pequeñas: la amplitud del S&P 500 frente a la del Russell
+    2000, por separado.
+
+    El scan ya calculaba amplitud, pero sobre el universo COMBINADO -- y ahí una
+    mitad tapa a la otra por construcción. Separadas, aparece la lectura
+    clásica: cuando las grandes siguen fuertes y las pequeñas se deterioran, el
+    liderazgo se está estrechando.
+
+    Devuelve `ok: False` si el scan todavía no publica las dos series (un Gist
+    anterior a este cambio) -- así la pantalla lo dice en vez de enseñar una
+    brecha calculada contra la nada.
+    """
+    cached = cache.get(CACHE_KEY)
+    data = cached or _load_gist()
+    if not data:
+        return {"ok": False, "error": "Sin datos del scan nocturno todavía."}
+    if not cached:
+        cache.set(CACHE_KEY, data, CACHE_TTL)
+
+    grandes  = data.get("breadth_sp500") or []
+    pequenas = data.get("breadth_russell") or []
+    if not grandes or not pequenas:
+        return {"ok": False, "error": "El scan todavía no publica las dos amplitudes por separado — "
+                                      "aparecerá tras el próximo escaneo nocturno."}
+
+    # Solo fechas presentes en LAS DOS series: comparar el último dato de una
+    # contra el de la otra sin cuadrar fechas restaría días distintos si un
+    # universo se quedó sin datos una sesión.
+    por_fecha_g = {d["date"]: d for d in grandes}
+    por_fecha_p = {d["date"]: d for d in pequenas}
+    fechas = sorted(set(por_fecha_g) & set(por_fecha_p))
+    if not fechas:
+        return {"ok": False, "error": "Las dos amplitudes no comparten ninguna sesión."}
+
+    serie = []
+    for f in fechas:
+        g, p = por_fecha_g[f], por_fecha_p[f]
+        if g.get("pct_above_sma50") is None or p.get("pct_above_sma50") is None:
+            continue
+        serie.append({
+            "date":     f,
+            "sp500":    g["pct_above_sma50"],
+            "russell":  p["pct_above_sma50"],
+            "brecha":   round(g["pct_above_sma50"] - p["pct_above_sma50"], 1),
+            "nh_nl_sp500":   g.get("new_highs", 0) - g.get("new_lows", 0),
+            "nh_nl_russell": p.get("new_highs", 0) - p.get("new_lows", 0),
+        })
+    if not serie:
+        return {"ok": False, "error": "Ninguna sesión tiene el % sobre SMA50 en los dos universos."}
+
+    hoy = serie[-1]
+    brecha = hoy["brecha"]
+    if brecha >= DIVERGENCIA_UMBRAL:
+        estado, lectura = "GRANDES", ("Las grandes aguantan mejor que las pequeñas. Liderazgo "
+                                      "estrecho: el índice puede subir sostenido por pocos nombres.")
+    elif brecha <= -DIVERGENCIA_UMBRAL:
+        estado, lectura = "PEQUEÑAS", ("Las pequeñas aguantan mejor que las grandes. Suele ser "
+                                       "señal de apetito por riesgo y de subida más repartida.")
+    else:
+        estado, lectura = "JUNTAS", ("Los dos universos se mueven a la par: no hay divergencia "
+                                     "que leer ahora mismo.")
+    return {
+        "ok": True, "serie": serie[-60:], "hoy": hoy,
+        "estado": estado, "lectura": lectura,
+        "umbral": DIVERGENCIA_UMBRAL,
+        "sesiones": len(serie),
+        "timestamp": get_timestamp(),
+        "freshness": _freshness(data.get("generated_at", "")),
+    }
+
+
 def get_universe_stocks() -> dict:
     """Devuelve el dict completo {ticker: {...}} del último scan nocturno,
     reutilizando el mismo caché que get_scanner_data(). Pensado para consumo

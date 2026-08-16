@@ -47,12 +47,74 @@ export async function render(container) {
         + criteriaPanel()
         + '<div id="scanner-meta" style="color:var(--color-muted);font-size:11px;margin-bottom:0.75rem;"></div>'
         + '<div id="scanner-result"></div>'
+        + '<div id="scanner-divergencia" style="margin-top:1.5rem;"></div>'
         + '<div id="scanner-transiciones" style="margin-top:1.5rem;"></div>';
 
     setupPanel(container);
     await loadUniverseMeta(container);
     runFilter(container); // primera carga sin filtros = universo completo ordenado por score
     loadTransiciones(container);
+    loadDivergencia(container);
+}
+
+// Grandes contra pequeñas.
+//
+// El scan ya calculaba amplitud, pero sobre el universo COMBINADO -- y ahí una
+// mitad tapa a la otra por construcción. Separadas aparece la lectura clásica:
+// cuando las grandes siguen fuertes y las pequeñas se deterioran, el liderazgo
+// se está estrechando.
+async function loadDivergencia(container) {
+    const el = container.querySelector('#scanner-divergencia');
+    if (!el) return;
+    try {
+        const res  = await fetch('/api/v1/scanner/divergencia', { headers: authHeader() });
+        const data = await res.json();
+        el.innerHTML = data.ok
+            ? renderDivergencia(data)
+            : shellTrans('Grandes contra pequeñas',
+                '<div style="padding:0.9rem 1rem;color:var(--color-muted);font-size:12px;">'
+                + esc(data.error || 'Sin datos.') + '</div>', 'divergencia-universos');
+    } catch (e) {
+        el.innerHTML = shellTrans('Grandes contra pequeñas', errorMessage(e.message), 'divergencia-universos');
+    }
+}
+
+function renderDivergencia(d) {
+    const h = d.hoy;
+    const color = d.estado === 'GRANDES' ? '#ffb800'
+                : d.estado === 'PEQUEÑAS' ? 'var(--color-accent)' : 'var(--color-muted)';
+    const tarjeta = (etq, val, sub) =>
+        '<div style="flex:1;min-width:150px;padding:0.9rem 1rem;border-right:1px solid var(--color-border);">'
+        + '<div style="color:var(--color-muted);font-size:10px;letter-spacing:0.06em;margin-bottom:5px;">' + etq + '</div>'
+        + '<div style="color:var(--color-text);font-size:19px;">' + val + '</div>'
+        + '<div style="color:var(--color-muted);font-size:10px;margin-top:2px;">' + sub + '</div></div>';
+
+    // La brecha con su signo: positiva = las grandes aguantan mejor.
+    const signo = h.brecha > 0 ? '+' : '';
+    const serie = d.serie.map(x => x.brecha);
+    const max = Math.max(...serie.map(Math.abs), d.umbral);
+    const W = 260, H = 40;
+    const pts = serie.map((v, i) =>
+        (i / Math.max(serie.length - 1, 1) * W).toFixed(1) + ',' + (H / 2 - v / max * (H / 2)).toFixed(1)).join(' ');
+    const grafico = '<div style="padding:0.9rem 1rem;">'
+        + '<div style="color:var(--color-muted);font-size:10px;letter-spacing:0.06em;margin-bottom:6px;">BRECHA, ÚLTIMAS ' + serie.length + ' SESIONES</div>'
+        + '<svg width="' + W + '" height="' + H + '" viewBox="0 0 ' + W + ' ' + H + '" style="max-width:100%;" aria-hidden="true">'
+        + '<line x1="0" y1="' + (H / 2) + '" x2="' + W + '" y2="' + (H / 2) + '" stroke="var(--color-border)" stroke-width="1"/>'
+        + '<polyline points="' + pts + '" fill="none" stroke="' + color + '" stroke-width="1.4"/></svg></div>';
+
+    return shellTrans('GRANDES CONTRA PEQUEÑAS',
+        '<div style="display:flex;flex-wrap:wrap;border-bottom:1px solid var(--color-border);">'
+        + tarjeta('S&amp;P 500 SOBRE SU SMA50', h.sp500 + '%', 'las 500 grandes')
+        + tarjeta('RUSSELL 2000 SOBRE SU SMA50', h.russell + '%', 'las pequeñas')
+        + tarjeta('BRECHA', '<span style="color:' + color + ';">' + signo + h.brecha + '</span>',
+                  'notable a partir de ' + d.umbral)
+        + '</div>'
+        + '<div style="padding:0.8rem 1rem;color:' + color + ';font-size:11px;line-height:1.5;border-bottom:1px solid var(--color-border);">'
+        + esc(d.lectura) + '</div>'
+        + grafico
+        + '<div style="padding:7px 14px;border-top:1px solid var(--color-border);font-size:10px;color:var(--color-muted);">'
+        + 'Sesión del ' + esc(h.date) + ' · ' + d.sesiones + ' sesiones comparadas · ' + esc(d.freshness || '') + '</div>',
+        'divergencia-universos');
 }
 
 // Quién ACABA de entrar en fase de avance, no quién está en ella.
@@ -72,19 +134,22 @@ async function loadTransiciones(container) {
             el.innerHTML = shellTrans('Sin histórico suficiente todavía',
                 '<div style="padding:0.9rem 1rem;color:var(--color-muted);font-size:12px;">'
                 + esc(data.error || 'Hacen falta al menos dos sesiones guardadas.')
-                + ' Se va acumulando solo, una fila por sesión.</div>');
+                + ' Se va acumulando solo, una fila por sesión.</div>', 'cambios-de-fase');
             return;
         }
         el.innerHTML = renderTransiciones(data);
     } catch (e) {
-        el.innerHTML = shellTrans('Cambios de fase', errorMessage(e.message));
+        el.innerHTML = shellTrans('Cambios de fase', errorMessage(e.message), 'cambios-de-fase');
     }
 }
 
-function shellTrans(titulo, cuerpo) {
+// Envoltorio de las dos secciones nuevas. La clave del tooltip va como
+// parámetro: clavarla haría que la sección de divergencia mostrara la ayuda de
+// los cambios de fase, que es peor que no tener ayuda.
+function shellTrans(titulo, cuerpo, claveTooltip) {
     return '<div style="background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius);overflow:hidden;">'
         + '<div style="padding:10px 14px;border-bottom:1px solid var(--color-border);color:var(--color-accent);font-size:12px;letter-spacing:0.08em;">'
-        + esc(titulo) + ' ' + tt('cambios-de-fase') + '</div>' + cuerpo + '</div>';
+        + esc(titulo) + (claveTooltip ? ' ' + tt(claveTooltip) : '') + '</div>' + cuerpo + '</div>';
 }
 
 function renderTransiciones(d) {
@@ -113,7 +178,7 @@ function renderTransiciones(d) {
         '<div style="display:flex;flex-wrap:wrap;">'
         + bloque('ENTRAN EN AVANCE', d.entradas, 'var(--color-accent)', 'Ninguno en esta ventana.')
         + bloque('SALEN DE AVANCE', d.salidas, '#f23645', 'Ninguno en esta ventana.')
-        + '</div>' + pie);
+        + '</div>' + pie, 'cambios-de-fase');
 }
 
 // La fase SEMANAL, que el scan nocturno ya calculaba y nadie pintaba.
