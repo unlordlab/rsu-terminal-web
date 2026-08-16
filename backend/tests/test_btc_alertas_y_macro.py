@@ -38,13 +38,15 @@ from services.btc_stratum_service import (  # noqa: E402
     _calc_alerts, _get_macro_data, _get_halving_cycle,
 )
 
-MA200 = 64_000.0          # el nivel de OPORTUNIDAD MÁXIMA cae en 32.000
-NEUTRO = dict(rsu=50.0, mvrv_z=0.0, puell=1.0)
+MA200 = 64_000.0
 
-
-def _msgs(price, ma200=MA200, **kw):
-    d = {**NEUTRO, **kw}
-    return [a["msg"] for a in _calc_alerts(price, ma200, d["rsu"], d["mvrv_z"], d["puell"])]
+# Desde el rediseño del score (16/08/2026) los avisos de proximidad se anclan a
+# las fronteras de ZONA, no a niveles sueltos, así que el score que se pasa
+# tiene que ser el que de verdad corresponde a ese precio -- si no, se estaría
+# probando una combinación imposible.
+def _msgs(price, ma200=MA200):
+    from services.btc_stratum_service import _calc_rsu_score
+    return [a["msg"] for a in _calc_alerts(price, ma200, _calc_rsu_score(price, ma200))]
 
 
 def _hay(msgs, trozo):
@@ -53,38 +55,40 @@ def _hay(msgs, trozo):
 
 # ── #6: la alerta de proximidad al nivel −50% ────────────────────────────────
 
-def test_avisa_mientras_te_acercas_al_nivel_de_oportunidad_maxima():
-    """33.000 con el nivel en 32.000: falta un 3% de caída. Este es EL caso que
-    la versión anterior no cubría -- su fórmula daba negativo aquí y callaba."""
-    msgs = _msgs(33_000)
-    assert _hay(msgs, "OPORTUNIDAD MÁXIMA"), f"deberia avisar acercandose al nivel; salio {msgs}"
+def _precio_de(score, ma200=MA200):
+    from services.btc_stratum_service import _score_a_precio
+    return _score_a_precio(score, ma200)
 
 
-def test_no_avisa_de_que_falta_para_un_nivel_que_ya_se_ha_rebasado():
-    """31.000 está POR DEBAJO de 32.000: ya se ha llegado, no queda nada que
+def test_avisa_mientras_te_acercas_a_la_siguiente_frontera():
+    """Score 52: un pelo por encima del corte de 50, falta poca caída. Éste es
+    EL caso que la versión anterior no cubría -- su fórmula daba negativo
+    mientras te acercabas y solo hablaba cuando ya habías llegado."""
+    msgs = _msgs(_precio_de(52))
+    assert _hay(msgs, "de entrar en zona"), f"deberia avisar acercandose a la frontera; salio {msgs}"
+
+
+def test_no_avisa_de_una_frontera_que_ya_se_ha_rebasado():
+    """Con el score en 30 ya se está dentro de OPORTUNIDAD: no queda nada que
     anunciar. Es justo el único caso en el que la versión anterior sí hablaba."""
-    msgs = _msgs(31_000)
-    assert not _hay(msgs, "OPORTUNIDAD MÁXIMA"), f"no deberia decir que falta para un nivel ya rebasado; salio {msgs}"
+    msgs = _msgs(_precio_de(30))
+    assert not _hay(msgs, "de entrar en zona"), f"anuncia una frontera ya cruzada; salio {msgs}"
 
 
-def test_no_avisa_cuando_el_nivel_esta_lejisimos():
-    """A 80.000 falta un 60% de caída: anunciarlo sería ruido permanente."""
-    assert not _hay(_msgs(80_000), "OPORTUNIDAD MÁXIMA")
+def test_no_avisa_cuando_la_frontera_esta_lejisimos():
+    """Con el score en 95 falta muchísima caída para el corte de 90:
+    anunciarlo sería ruido permanente."""
+    assert not _hay(_msgs(_precio_de(95)), "de entrar en zona")
 
 
-# ── #6: la alerta de proximidad a la propia MA200W ───────────────────────────
-
-def test_avisa_al_acercarse_a_la_ma200w_desde_arriba():
-    msgs = _msgs(66_000)   # un 3% por encima de la MA200W
-    assert _hay(msgs, "MA200W"), f"deberia avisar de la cercania a la MA200W; salio {msgs}"
-
-
-def test_no_promete_entrar_en_una_zona_en_la_que_ya_se_esta():
-    """El texto viejo decía «A X% de entrar en COMPRA FUERTE» estando ya dentro.
-    Ninguna alerta debe prometer la entrada a una zona por proximidad."""
-    for precio in (62_000, 66_000, 70_000):
-        assert not _hay(_msgs(precio), "de entrar en COMPRA FUERTE"), \
-            f"con precio {precio} se vuelve a prometer una zona en la que ya se esta"
+def test_ningun_aviso_promete_una_zona_en_la_que_ya_se_esta():
+    """El texto viejo decía «A X% de entrar en COMPRA FUERTE» estando ya dentro."""
+    from services.btc_stratum_service import _get_zone
+    for s in (20, 40, 60, 85, 95):
+        msgs   = _msgs(_precio_de(s))
+        actual = _get_zone(s)["zone"]
+        assert not _hay(msgs, "de entrar en zona " + actual), \
+            f"con score {s} promete entrar en {actual}, donde ya se esta"
 
 
 # ── #8: liquidez como percentil, no como recta con constantes mágicas ────────

@@ -1,3 +1,4 @@
+import math
 import numpy as np
 import pandas as pd
 import yfinance as yf
@@ -65,13 +66,12 @@ def _get_btc_history_coingecko(days: int = 3650) -> pd.DataFrame:
             # Se LOGUEA, no se traga en silencio. Comprobado el 11/08/2026:
             # este endpoint devuelve 401 -- CoinGecko movió el histórico
             # (`/market_chart`) detrás de una API key, mientras que el precio
-            # actual (`/simple/price`) sigue siendo libre. El efecto no era
-            # visible: la serie cae al respaldo de yfinance y el módulo sigue
-            # pintando números, pero SIN market cap histórico, que es lo único
-            # con lo que se puede construir el MVRV bueno. Ese fallo mudo es lo
-            # que dejó el MVRV en su proxy sin que nadie se enterara.
+            # actual (`/simple/price`) sigue siendo libre. La serie de precios
+            # cae al respaldo de yfinance, que es equivalente para lo que se
+            # usa aquí. (Desde el 16/08/2026 esto ya no afecta al MVRV: se lee
+            # de bitcoin-data.com, que sí lo publica gratis y de verdad.)
             print(f"[BTCStratum] CoinGecko /market_chart devolvió {r.status_code} — "
-                  f"sin market cap histórico, el MVRV usará su proxy de precio")
+                  f"se usa yfinance para la serie de precios")
             return pd.DataFrame()
         data = r.json()
         prices     = data.get("prices", [])
@@ -193,122 +193,132 @@ def _calc_ma200w(close: pd.Series) -> pd.Series:
     # fabricados", 22/07/2026, mismo patrón que DXY/Yield2Y/RS CANSLIM).
     return close.rolling(window=1400, min_periods=1400).mean()
 
-# Origen de cada indicador, tal cual lo lee el usuario bajo su tarjeta. Viven
-# aquí y no incrustados en el dict de respuesta por dos motivos: el frontend
-# pinta en ámbar los que empiezan por "Aproximado" (así que ese prefijo es un
-# contrato, no una florritura), y un test puede comprobarlo sin salir a la red.
-ORIGEN_MA200      = "Precio vs media de 200 semanas"
-ORIGEN_MVRV_REAL  = "Capitalización de mercado vs su media anual"
-ORIGEN_MVRV_PROXY = "Aproximado: precio vs media de 200 semanas (sin dato on-chain)"
-ORIGEN_PUELL_REAL = "Ingresos reales de mineros (Blockchain.com)"
-ORIGEN_PUELL_PROXY = "Aproximado: precio vs su media de 365 días"
-ORIGEN_AHR999     = "Precio vs media de 200 semanas"
+ORIGEN_MA200 = "Precio vs media de 200 semanas"
+
+# bitcoin-data.com publica métricas on-chain reales sin clave de API
+# (verificado el 16/08/2026: MVRV Z-Score, precio realizado y Puell, con unos
+# 4 años de histórico diario). Es la pieza que faltaba desde que CoinGecko dejó
+# la capitalización histórica detrás de una API key: hasta hoy, el MVRV que
+# veía el usuario NUNCA era on-chain, era la distancia del precio a su media de
+# 200 semanas multiplicada por 3,5 -- el mismo dato que ya tenía delante.
+BITCOIN_DATA_URL = "https://bitcoin-data.com/v1/{metrica}/last"
 
 
-def _calc_mvrv_z_improved(df: pd.DataFrame) -> dict:
+def _bitcoin_data(metrica: str, campo: str):
+    """Último valor de una métrica on-chain. None si la fuente no responde --
+    nunca se sustituye por una estimación de precio: es exactamente el error
+    que se está corrigiendo aquí."""
+    try:
+        r = requests.get(BITCOIN_DATA_URL.format(metrica=metrica), timeout=8,
+                         headers={"Accept": "application/json"})
+        if r.status_code != 200:
+            return None, None
+        d = r.json()
+        v = d.get(campo)
+        return (round(float(v), 4) if v is not None else None), d.get("d")
+    except Exception:
+        return None, None
+
+
+def _get_contexto_onchain(puell_data: dict, hash_data: dict) -> dict:
+    """Datos on-chain REALES, al lado del score pero fuera de él.
+
+    Antes iban dentro, con pesos (MVRV 30%, Puell 20%, AHR999 10%). Medido el
+    16/08/2026, ninguno mejoraba la capacidad del score para ordenar el retorno
+    futuro, y dos de ellos la empeoraban -- ver el bloque de EL SCORE. Siguen
+    aquí porque informan (¿están los mineros bajo presión?, ¿cuánto se aleja el
+    precio del coste medio al que se movieron las monedas?), pero un dato que
+    informa no tiene por qué entrar en la fórmula.
     """
-    MVRV Z-Score mejorado usando market cap real de CoinGecko.
-    Aproximamos Realized Cap como EMA larga del market cap.
-    """
-    try:
-        if "market_cap" not in df.columns or df["market_cap"].isna().all():
-            return {"mvrv": None, "source": "proxy"}
+    mvrv_z, mvrv_fecha = _bitcoin_data("mvrv-zscore", "mvrvZscore")
+    precio_realizado, _ = _bitcoin_data("realized-price", "realizedPrice")
 
-        market_cap    = df["market_cap"].dropna()
-        # Realized cap proxy: EMA 365 días del market cap
-        realized_cap  = market_cap.ewm(span=365).mean()
-        mvrv_ratio    = market_cap / realized_cap
-        # Z-Score estandarizado
-        mvrv_mean     = mvrv_ratio.rolling(365).mean()
-        mvrv_std      = mvrv_ratio.rolling(365).std()
-        mvrv_z        = (mvrv_ratio - mvrv_mean) / mvrv_std
-
-        current_mvrv  = float(mvrv_ratio.iloc[-1])
-        current_z     = float(mvrv_z.iloc[-1])
-
-        # Historia para gráfico
-        history = []
-        step    = max(1, len(mvrv_z) // 100)
-        for i in range(-min(365, len(mvrv_z)), 0, step):
-            if pd.isna(mvrv_z.iloc[i]): continue
-            history.append({
-                "date":  mvrv_z.index[i].strftime("%Y-%m-%d"),
-                "value": round(float(mvrv_z.iloc[i]), 3),
-            })
-
-        return {
-            "mvrv_ratio": round(current_mvrv, 3),
-            "mvrv_z":     round(current_z, 3),
-            "history":    history,
-            "source":     "CoinGecko market cap + EMA proxy",
-        }
-    except Exception:
-        return {"mvrv": None, "source": "error"}
-
-def _calc_ahr999_improved(close: pd.Series, ma200: pd.Series) -> dict:
-    """AHR999 mejorado"""
-    try:
-        ma_safe = ma200.replace(0, np.nan)
-        ahr     = (close / ma_safe) / np.log(ma_safe)
-        current = float(ahr.iloc[-1])
-
-        history = []
-        step    = max(1, len(ahr) // 100)
-        for i in range(-min(365, len(ahr)), 0, step):
-            if pd.isna(ahr.iloc[i]): continue
-            history.append({
-                "date":  ahr.index[i].strftime("%Y-%m-%d"),
-                "value": round(float(ahr.iloc[i]), 4),
-            })
-
-        return {
-            "ahr999":  round(current, 4),
-            "history": history,
-            "source":  "Precio + MA200W",
-        }
-    except Exception:
-        return {"ahr999": None, "source": "error"}
-
-def _calc_puell_from_series(close: pd.Series) -> float:
-    """Puell proxy desde precio si Blockchain.com falla"""
-    try:
-        sma365 = close.rolling(365).mean()
-        return float(close.iloc[-1] / sma365.iloc[-1])
-    except Exception:
-        return 1.0
-
-def _calc_rsu_score_improved(
-    price: float, ma200: float,
-    mvrv_z: float, puell: float, ahr999: float
-) -> dict:
-    """RSU Score con datos mejorados"""
-    # MA200W score
-    if ma200 > 0:
-        dev      = (price - ma200) / ma200
-        ma_score = max(0, min(100, ((dev + 0.5) / 1.0) * 100))
-    else:
-        ma_score = 50.0
-
-    # MVRV Z-Score score (Z real, no proxy)
-    # Z < -1 = extremo, Z > 3 = sobrecomprado
-    mvrv_score = max(0, min(100, ((mvrv_z + 1.5) / 5.0) * 100))
-
-    # Puell score
-    puell_score = max(0, min(100, ((puell - 0.5) / 3.5) * 100))
-
-    # AHR999 score
-    ahr_score = max(0, min(100, ((ahr999 - 0.5) / 4.5) * 100))
-
-    total = (ma_score * 0.40 + mvrv_score * 0.30 +
-             puell_score * 0.20 + ahr_score * 0.10)
+    ribbon = None
+    if hash_data and hash_data.get("hashrate_ehs") and hash_data.get("avg30_ehs"):
+        # Hash Ribbon: el hashrate reciente frente a su media. Por debajo de 1
+        # indica mineros apagando máquinas (capitulación).
+        ribbon = round(hash_data["hashrate_ehs"] / hash_data["avg30_ehs"], 3)
 
     return {
-        "total":  round(total, 1),
-        "ma200":  round(ma_score, 1),
-        "mvrv":   round(mvrv_score, 1),
-        "puell":  round(puell_score, 1),
-        "ahr999": round(ahr_score, 1),
+        "mvrv_z":           mvrv_z,
+        "mvrv_fecha":       mvrv_fecha,
+        "precio_realizado": precio_realizado,
+        "puell":            (puell_data or {}).get("puell"),
+        "puell_ingresos":   (puell_data or {}).get("daily_revenue"),
+        "puell_media":      (puell_data or {}).get("sma365_revenue"),
+        "hashrate_ehs":     (hash_data or {}).get("hashrate_ehs"),
+        "hash_ribbon":      ribbon,
+        "fuentes": {
+            "mvrv":     "bitcoin-data.com" if mvrv_z is not None else None,
+            "puell":    (puell_data or {}).get("source"),
+            "hashrate": (hash_data or {}).get("source"),
+        },
     }
+
+# ── EL SCORE ──────────────────────────────────────────────────────────────────
+#
+# Hasta el 16/08/2026 esto era una media ponderada de cuatro sub-scores
+# (MA200W 40%, MVRV 30%, Puell 20%, AHR999 10%), cada uno una rampa lineal
+# recortada a [0,100]. Medido sobre 2.953 sesiones de BTC-USD con MA200W madura
+# (desde 2018-07), aquel diseño tenía tres defectos que se anulaban entre sí:
+#
+#   1. NO ERAN CUATRO FACTORES. Con el MVRV en su rama de respaldo (la única
+#      que corre en producción, porque la capitalización histórica dejó de ser
+#      gratuita), `mvrv_z = 3,5·(x−1)` y `ma_score = 100·(x−1)+50` con
+#      `x = precio/MA200W`, de donde `mvrv_score = 0,7·ma_score − 5` EXACTO.
+#      El 70% del peso era una sola variable escalada dos veces.
+#   2. EL AHR999 ERA UNA CONSTANTE. Valía 0 en 2.864 de 2.953 sesiones (97%):
+#      su fórmula solo puntúa si el precio supera 5,6 veces su MA200W.
+#   3. EL RECORTE TIRABA LA MITAD DE LA INFORMACIÓN. El sub-score de la MA200W
+#      quedaba pegado a 0 o a 100 en el 63% de los días, con mediana 100.
+#
+# La prueba que zanjó el rediseño: ordenar el retorno futuro. El compuesto de
+# cuatro factores daba una correlación de rango de −0,576 a un año; la simple
+# distancia a la MA200W, a secas, daba −0,646. Es decir, montar el compuesto
+# EMPEORABA el resultado respecto a usar solo su propio ingrediente dominante.
+# Se probaron además, uno a uno, todos los candidatos a factor independiente:
+# el AHR999 bien implementado (+0,939 de correlación con la distancia a la
+# MA200W: redundante), el Puell real (señal propia −0,047 a un año: ninguna),
+# el Hash Ribbon (−0,043) y la posición en el ciclo de halving (+0,092).
+# Ninguno mejoraba la mezcla; el Puell al 25% la bajaba de −0,792 a −0,721.
+#
+# Así que el score es UN factor, bien transformado. Los datos on-chain reales
+# (MVRV, Puell, hashrate) siguen mostrándose, pero como contexto aparte, sin
+# fundirse en el número con pesos inventados.
+
+# Logística en vez de rampa recortada: es estrictamente monótona, así que
+# conserva ÍNTEGRO el orden del factor (la correlación de rango es idéntica a
+# la del dato crudo), y acotada a 0-100 sin llegar nunca a saturar.
+# K y C solo deciden cómo se reparte la escala en pantalla -- al ser monótona,
+# no pueden alterar el poder de ordenación. Se eligieron para que los dos
+# cortes que sí salen de los datos (ver ZONAS) caigan en 80 y 90 redondos.
+VAL_K = 4.15
+VAL_C = 0.231
+
+
+def _calc_rsu_score(price: float, ma200: float) -> float:
+    """RSU Score: lo lejos que está bitcoin de su media de 200 semanas, en una
+    escala 0-100 donde 0 es lo más barato. Devuelve None si no hay MA200W."""
+    if not price or not ma200 or price <= 0 or ma200 <= 0:
+        return None
+    x = math.log(price / ma200)
+    s = 100 / (1 + math.exp(-VAL_K * (x - VAL_C)))
+    # La logística nunca alcanza 0 ni 100, pero redondear a un decimal sí los
+    # alcanza, y publicar un 0,0 o un 100,0 exactos volvería a decir «se ha
+    # tocado el extremo» cuando no se ha tocado -- justo la mentira que contaba
+    # la rampa recortada anterior. Los topes corresponden a un precio 4,2 veces
+    # por debajo o 6,6 veces por encima de la media de 200 semanas: fuera de
+    # todo lo que bitcoin ha hecho nunca, así que en la práctica no se rozan.
+    return round(min(99.9, max(0.1, s)), 1)
+
+
+def _score_a_precio(score: float, ma200: float) -> float:
+    """La inversa: a qué precio corresponde un score. Sirve para traducir los
+    cortes de zona a niveles de precio concretos, que es como se entienden."""
+    if not (0 < score < 100) or not ma200:
+        return None
+    x = math.log(score / (100 - score)) / VAL_K + VAL_C
+    return round(ma200 * math.exp(x), 0)
 
 # Los colores viajan como expresiones CSS con tokens del tema, no como hex.
 # Antes esta escalera inventaba seis verdes propios (#006b1b, #009627, #28a745,
@@ -320,26 +330,54 @@ def _calc_rsu_score_improved(
 def _mezcla(pct_accent: int) -> str:
     return f"color-mix(in srgb, var(--color-accent) {pct_accent}%, var(--color-warning))"
 
+# Las zonas eran seis, con cortes en 20/40/60/70/85 heredados sin respaldo.
+# Medido el 16/08/2026, esos seis tramos NO ordenaban el retorno futuro: el de
+# «BUENA COMPRA» rendía más a tres meses (+30,5%) que el de «OPORTUNIDAD
+# MÁXIMA» (+28,1%). Estas cuatro sí, y además aguantan la prueba de partir la
+# muestra por la mitad y repetirla en cada trozo por separado:
+#
+#   tramo    precio vs MA200W    n     +1 año   % en pérdidas   1ª mitad   2ª mitad
+#   <50      hasta +26%         675   +143,6%       0,1%         +276,3%    +103,4%
+#   50-80    +26% a +76%        580   +183,8%       7,8%         +273,0%     +84,9%
+#   80-90    +76% a +114%       427    +69,5%      34,9%         +163,7%      +8,4%
+#   >=90     más de +114%       906     −6,4%      67,8%           +0,3%     −24,6%
+#
+# El orden se mantiene entero en las dos mitades, y el porcentaje de casos que
+# acaban en pérdidas crece de forma monótona en ambas. Muestra: 2.588 sesiones
+# de 2018-07 a 2025-08 con retorno a un año disponible -- unos dos ciclos de
+# halving, que es poco en lo que de verdad cuenta. Los números viajan con la
+# zona (`evidencia`) para que la página pueda enseñar en qué se apoya cada
+# consejo en vez de darlo por bueno.
+ZONAS = [
+    (0,  50,  "OPORTUNIDAD",  "var(--color-accent)",  25, "ALTA",
+     {"n": 675, "retorno_1a": 143.6, "pct_perdidas": 0.1}),
+    (50, 80,  "ACUMULACIÓN",  _mezcla(60),            15, "MEDIA",
+     {"n": 580, "retorno_1a": 183.8, "pct_perdidas": 7.8}),
+    (80, 90,  "PRECAUCIÓN",   "var(--color-warning)",  5, "BAJA",
+     {"n": 427, "retorno_1a": 69.5,  "pct_perdidas": 34.9}),
+    (90, 101, "RIESGO ALTO",  "var(--color-danger)",   0, "ESPERAR",
+     {"n": 906, "retorno_1a": -6.4,  "pct_perdidas": 67.8}),
+]
+ZONAS_MUESTRA = "2.588 sesiones (jul 2018 – ago 2025, unos dos ciclos de halving)"
+
+
 def _get_zone(rsu: float) -> dict:
-    if rsu < 20:
-        return {"zone": "OPORTUNIDAD MÁXIMA", "color": "var(--color-accent)", "allocation": 25, "urgency": "CRÍTICA"}
-    elif rsu < 40:
-        return {"zone": "COMPRA AGRESIVA",    "color": _mezcla(80), "allocation": 20, "urgency": "ALTA"}
-    elif rsu < 60:
-        return {"zone": "COMPRA FUERTE",      "color": _mezcla(60), "allocation": 15, "urgency": "MEDIA-ALTA"}
-    elif rsu < 70:
-        return {"zone": "BUENA COMPRA",       "color": _mezcla(35), "allocation": 10, "urgency": "MEDIA"}
-    elif rsu < 85:
-        return {"zone": "ZONA DCA",           "color": "var(--color-warning)", "allocation": 5,  "urgency": "BAJA"}
-    else:
-        return {"zone": "ESPERAR",            "color": "var(--color-muted)",   "allocation": 0,  "urgency": "ESPERAR"}
+    for desde, hasta, nombre, color, alloc, urgencia, ev in ZONAS:
+        if desde <= rsu < hasta:
+            return {"zone": nombre, "color": color, "allocation": alloc,
+                    "urgency": urgencia, "desde": desde, "hasta": hasta,
+                    "evidencia": ev, "muestra": ZONAS_MUESTRA}
+    return {"zone": "RIESGO ALTO", "color": "var(--color-danger)", "allocation": 0,
+            "urgency": "ESPERAR", "desde": 90, "hasta": 101,
+            "evidencia": ZONAS[-1][6], "muestra": ZONAS_MUESTRA}
+
 
 def _get_signal_label(rsu: float) -> dict:
-    if rsu < 20:   return {"label": "OPORTUNIDAD EXTREMA",  "color": "var(--color-accent)"}
-    elif rsu < 40: return {"label": "ACUMULACIÓN FUERTE",   "color": "var(--color-secondary)"}
-    elif rsu < 60: return {"label": "ACUMULACIÓN MODERADA", "color": _mezcla(40)}
-    elif rsu < 80: return {"label": "NEUTRAL / ESPERA",     "color": "var(--color-warning)"}
-    else:          return {"label": "SOBRECOMPRA / RIESGO", "color": "var(--color-danger)"}
+    if rsu < 30:   return {"label": "MUY POR DEBAJO DE SU MEDIA LARGA", "color": "var(--color-accent)"}
+    elif rsu < 50: return {"label": "POR DEBAJO DE SU MEDIA LARGA",     "color": "var(--color-accent)"}
+    elif rsu < 80: return {"label": "POR ENCIMA, SIN EXTREMOS",         "color": _mezcla(40)}
+    elif rsu < 90: return {"label": "CARO FRENTE A SU MEDIA LARGA",     "color": "var(--color-warning)"}
+    else:          return {"label": "MUY CARO FRENTE A SU MEDIA LARGA", "color": "var(--color-danger)"}
 
 HALVING_BLOQUES = 210_000
 HALVING_MIN_POR_BLOQUE = 10  # objetivo del protocolo; el ritmo real oscila ±5%
@@ -457,55 +495,58 @@ def _get_macro_data() -> dict:
         return {"dxy": None, "dxy_score": None, "liquidity_score": None,
                 "liquidez_base": None, "status": None}
 
-def _calc_alerts(price: float, ma200: float, rsu: float,
-                 mvrv_z: float, puell: float, mvrv_metodo: str = "proxy") -> list:
-    alerts = []
+def _calc_alerts(price: float, ma200: float, rsu: float, contexto: dict = None) -> list:
+    """Avisos de proximidad y de extremo. Todos anclados a los cortes de zona
+    ya calibrados (ver ZONAS), no a umbrales sueltos: si un aviso dice que
+    faltan tres puntos para entrar en PRECAUCIÓN, es la misma frontera que
+    pinta la tarjeta de zona, no otra distinta escrita en otro sitio."""
+    alerts   = []
+    contexto = contexto or {}
 
-    # Proximidad a los dos niveles de referencia. Las dos ramas estaban mal:
-    #
-    #   - La de abajo calculaba `(ma200*0,5 − price)/price`, que solo sale
-    #     POSITIVO cuando el precio ya está por debajo del nivel −50% -- o sea,
-    #     avisaba de que "faltaba" para llegar a un sitio en el que ya estabas,
-    #     y callaba justo durante todo el trayecto, que es cuando sirve.
-    #   - La de arriba anunciaba "a X% de entrar en COMPRA FUERTE" con el
-    #     precio hasta un 15% POR ENCIMA de la MA200W, cuando a esa distancia
-    #     el score ronda 41 y COMPRA FUERTE empieza en 60 hacia abajo: ya se
-    #     estaba dentro.
-    #
-    # Ahora cada aviso mide lo que dice medir: cuánto tiene que caer el precio
-    # (en %) para tocar el nivel, y solo se emite si aún no lo ha tocado.
-    nivel_max = ma200 * 0.5
-    if price > nivel_max:
-        caida_a_max = (price - nivel_max) / price * 100
-        if caida_a_max <= 20:
-            alerts.append({"icon": "🔥", "msg": f"A un {caida_a_max:.1f}% de caída del nivel de OPORTUNIDAD MÁXIMA (−50% de la MA200W)",
-                           "color": "var(--color-accent)"})
+    # Cuánto tiene que MOVERSE el precio para cruzar la frontera de zona más
+    # cercana. La versión anterior calculaba `(ma200*0,5 − price)/price`, que
+    # solo sale positivo cuando el precio ya está por debajo del nivel: avisaba
+    # de lo que "faltaba" para llegar a un sitio en el que ya estabas, y callaba
+    # durante todo el trayecto, que es cuando el aviso sirve.
+    for desde, hasta, nombre, _c, _a, _u, _e in ZONAS:
+        if rsu >= hasta:                       # frontera por debajo: hay que caer
+            objetivo = _score_a_precio(hasta, ma200)
+            if objetivo and price > objetivo:
+                caida = (price - objetivo) / price * 100
+                if caida <= 15:
+                    alerts.append({"icon": "🔥", "color": "var(--color-accent)",
+                                   "msg": f"A un {caida:.1f}% de caída de entrar en zona {nombre} "
+                                          f"(${objetivo:,.0f})".replace(",", ".")})
+                break
 
-    if price > ma200:
-        caida_a_ma = (price - ma200) / price * 100
-        if caida_a_ma <= 15:
-            alerts.append({"icon": "📉", "msg": f"A un {caida_a_ma:.1f}% de caída de la MA200W, el soporte de referencia del modelo",
-                           "color": "var(--color-secondary)"})
+    if rsu < 50:
+        alerts.append({"icon": "🚨", "color": "var(--color-accent)",
+                       "msg": f"RSU Score en {rsu:.1f}: el precio está en la parte baja de su rango histórico "
+                              f"frente a la media de 200 semanas"})
+    elif rsu >= 90:
+        alerts.append({"icon": "⚠️", "color": "var(--color-danger)",
+                       "msg": f"RSU Score en {rsu:.1f}: en este tramo, el 67,8% de las sesiones históricas "
+                              f"acabaron con el precio más bajo un año después"})
 
-    if rsu < 25:
-        alerts.append({"icon": "🚨", "msg": f"RSU Score extremo ({rsu:.1f}) — zona que históricamente ha coincidido con suelos, vista en un único episodio (jun 2022 – mar 2023)",
-                       "color": "var(--color-accent)"})
+    # Contexto on-chain: informa, pero NO entra en el score (ver EL SCORE).
+    # Cada aviso dice de dónde sale su número; ninguno se estima desde el precio.
+    mvrv = contexto.get("mvrv_z")
+    if mvrv is not None and mvrv < 0:
+        alerts.append({"icon": "💎", "color": "var(--color-secondary)",
+                       "msg": f"MVRV Z-Score en {mvrv:.2f} (dato on-chain): de media, quien tiene bitcoins "
+                              f"los compró más caros de lo que valen ahora"})
 
-    if mvrv_z < -0.5:
-        # El "vs realized cap" que decía antes esta alerta era falso siempre
-        # que el MVRV viniera del proxy -- que en producción es SIEMPRE, porque
-        # CoinGecko dejó el market cap histórico detrás de una API key y la
-        # rama buena no llega a ejecutarse. Afirmar una comparación on-chain
-        # que no se ha hecho es peor que no decir nada: el usuario no tiene
-        # forma de saber que el número mide otra cosa. Ahora cada rama dice lo
-        # que de verdad ha comparado.
-        detalle = ("BTC por debajo de su capitalización media del último año"
-                   if mvrv_metodo == "capmercado"
-                   else "precio muy por debajo de su media de 200 semanas (aprox., sin dato on-chain)")
-        alerts.append({"icon": "💎", "msg": f"MVRV Z-Score negativo ({mvrv_z:.2f}) — {detalle}", "color": "var(--color-secondary)"})
+    puell = contexto.get("puell")
+    if puell is not None and puell < 0.6:
+        alerts.append({"icon": "⛏️", "color": "var(--color-warning)",
+                       "msg": f"Puell Multiple en {puell:.2f} (ingresos reales de mineros): los mineros ingresan "
+                              f"muy por debajo de su media anual"})
 
-    if puell < 0.6:
-        alerts.append({"icon": "⛏️", "msg": f"Puell Multiple bajo ({puell:.2f}) — mineros en stress, señal de suelo", "color": "var(--color-warning)"})
+    ribbon = contexto.get("hash_ribbon")
+    if ribbon is not None and ribbon < 0.97:
+        alerts.append({"icon": "🔌", "color": "var(--color-warning)",
+                       "msg": f"El hashrate cae frente a su media de 30 días ({ribbon:.3f}): hay mineros "
+                              f"apagando máquinas"})
 
     return alerts
 
@@ -560,37 +601,29 @@ def get_btc_backtest() -> dict:
             return {"ok": False, "error": "Histórico insuficiente para calcular MA200W (hacen falta 1400 días)"}
         start_pos = close.index.get_loc(first_valid)
 
-        # Calcular MVRV si tenemos market_cap
-        if "market_cap" in df.columns:
-            realized_cap = df["market_cap"].ewm(span=365).mean()
-            mvrv_ratio   = df["market_cap"] / realized_cap
-            mvrv_mean    = mvrv_ratio.rolling(365).mean()
-            mvrv_std     = mvrv_ratio.rolling(365).std()
-            mvrv_z_series = (mvrv_ratio - mvrv_mean) / mvrv_std
-        else:
-            dev           = (close - ma200) / ma200
-            mvrv_z_series = dev * 3.5
-
-        puell_series = close / close.rolling(365).mean()
-        ma_safe      = ma200.replace(0, np.nan)
-        ahr_series   = (close / ma_safe) / np.log(ma_safe)
-
-        # RSU Score serie
+        # El backtest usa EXACTAMENTE el mismo score que el dashboard. Hasta el
+        # 16/08/2026 no era así: el dashboard puntuaba con el Puell real
+        # (ingresos de mineros de Blockchain.com) y aquí se usaba
+        # `close/close.rolling(365).mean()`, un cociente de precio -- dos
+        # magnitudes distintas alimentando la misma fórmula, de modo que lo que
+        # se validaba no era lo que se enseñaba (hallazgo #5 de la auditoría).
+        # Al quedarse el score en un único factor derivado del precio y la
+        # MA200W, esa divergencia desaparece de raíz: no hay nada que el
+        # dashboard pueda leer de una fuente y el backtest de otra.
         def rsu_point(i):
             try:
-                p   = float(close.iloc[i])
-                m   = float(ma200.iloc[i])
-                mz  = float(mvrv_z_series.iloc[i])
-                pu  = float(puell_series.iloc[i])
-                ah  = float(ahr_series.iloc[i])
-                if any(np.isnan(x) or np.isinf(x) for x in [p, m, mz, pu, ah]):
+                p = float(close.iloc[i])
+                m = float(ma200.iloc[i])
+                if np.isnan(p) or np.isnan(m) or np.isinf(p) or np.isinf(m):
                     return None
-                sc = _calc_rsu_score_improved(p, m, mz, pu, ah)
-                return sc["total"]
+                return _calc_rsu_score(p, m)
             except Exception:
                 return None
 
-        thresholds = [20, 40, 60]
+        # Umbrales sobre la escala nueva, alineados con los cortes de zona ya
+        # calibrados (50 = frontera de OPORTUNIDAD, 80 = de PRECAUCIÓN).
+        thresholds   = [50, 65, 80]
+        VENTA_UMBRAL = 90   # la frontera de RIESGO ALTO, la misma que ve el usuario
         results    = []
         bh_return  = (float(close.iloc[-1]) - float(close.iloc[start_pos])) / float(close.iloc[start_pos]) * 100
 
@@ -614,7 +647,7 @@ def get_btc_backtest() -> dict:
                     in_position = True
                     trades.append({"date": date, "type": "BUY",  "price": round(price, 0), "rsu": round(score, 1)})
 
-                elif score > 80 and in_position and btc_held > 0:
+                elif score > VENTA_UMBRAL and in_position and btc_held > 0:
                     capital    += btc_held * price
                     trades.append({"date": date, "type": "SELL", "price": round(price, 0), "rsu": round(score, 1)})
                     btc_held    = 0.0
@@ -625,7 +658,7 @@ def get_btc_backtest() -> dict:
 
             results.append({
                 "threshold":    threshold,
-                "label":        f"RSU < {threshold}",
+                "label":        f"Comprar con RSU < {threshold}",
                 "total_return": round(total_return, 1),
                 "final_value":  round(final_value, 0),
                 "n_buys":       len([t for t in trades if t["type"] == "BUY"]),
@@ -653,6 +686,7 @@ def get_btc_backtest() -> dict:
             "price_series": price_series,
             "period_start": close.index[start_pos].strftime("%Y-%m-%d"),
             "period_days":  len(close) - start_pos,
+            "venta_umbral": VENTA_UMBRAL,
             "timestamp":    get_timestamp(),
         }
         cache.set("btc:backtest", result, 3600)
@@ -706,45 +740,20 @@ def get_btc_dashboard() -> dict:
         if np.isnan(ma_val):
             return {"ok": False, "error": "Histórico insuficiente para calcular MA200W (hacen falta 1400 días)"}
 
-        # MVRV. Dos caminos MUY distintos, y hasta ahora nada decía cuál se
-        # estaba mirando: (a) market cap real ÷ su EMA365 -- una aproximación
-        # del realized cap, pero construida sobre capitalización de verdad; o
-        # (b) `(precio − MA200W)/MA200W × 3,5`, que no es un Z-score de nada,
-        # solo la distancia a la media reescalada por una constante elegida a
-        # ojo. Los dos números no son comparables entre sí, así que el método
-        # viaja en la respuesta y se usa para redactar la alerta.
-        mvrv_data = _calc_mvrv_z_improved(hist_df)
-        if mvrv_data.get("mvrv_z") is not None:
-            mvrv_z = mvrv_data["mvrv_z"]
-            mvrv_metodo = "capmercado"
-        else:
-            mvrv_z = float(((close - ma200) / ma200 * 3.5).iloc[-1])
-            mvrv_metodo = "proxy"
-
-        # Puell — real si disponible, proxy si no. Verificado el 11/08/2026:
-        # en producción SÍ llega el real (Blockchain.com, ingresos diarios de
-        # mineros contra su SMA365), pese a que la UI lo anunciaba como una
-        # aproximación de precio. De ahí que ahora se declare cuál es.
-        if puell_data.get("puell"):
-            puell = puell_data["puell"]
-            puell_metodo = "real"
-        else:
-            puell = _calc_puell_from_series(close)
-            puell_metodo = "proxy"
-
-        # AHR999
-        ahr_data = _calc_ahr999_improved(close, ma200)
-        ahr      = ahr_data.get("ahr999") or float(((close / ma200.replace(0, np.nan)) / np.log(ma200.replace(0, np.nan))).iloc[-1])
-
-        # RSU Score
-        scores   = _calc_rsu_score_improved(price, ma_val, mvrv_z, puell, ahr)
-        rsu      = scores["total"]
+        # El score: un solo factor, la distancia del precio a su media de 200
+        # semanas, transformado con una logística que conserva el orden entero
+        # y no satura. Ver el bloque EL SCORE para por qué dejó de ser una
+        # media ponderada de cuatro cosas que en realidad eran una y media.
+        rsu       = _calc_rsu_score(price, ma_val)
         deviation = (price - ma_val) / ma_val * 100
+
+        # Datos on-chain REALES, al lado del score y fuera de él.
+        contexto = _get_contexto_onchain(puell_data, hash_data)
 
         zone     = _get_zone(rsu)
         signal   = _get_signal_label(rsu)
         halving  = _get_halving_cycle()
-        alerts   = _calc_alerts(price, ma_val, rsu, mvrv_z, puell, mvrv_metodo)
+        alerts   = _calc_alerts(price, ma_val, rsu, contexto)
         stress   = _run_stress_tests(price, zone["allocation"])
 
         # MA curvatura
@@ -799,19 +808,16 @@ def get_btc_dashboard() -> dict:
         ath_desde = close.index[0].strftime("%Y-%m-%d")
 
         # Avisos para la banda compartida del frontend (core/ui.js::avisosBanda).
-        # Se redactan aquí, donde se sabe qué camino tomó cada dato, en vez de
-        # dejar que la página los adivine.
+        # Se redactan aquí, donde se sabe qué camino tomó cada dato.
         avisos = []
-        if mvrv_metodo != "capmercado":
+        if contexto.get("mvrv_z") is None:
             avisos.append({"tipo": "parcial", "mensaje":
-                "El MVRV Z-Score de hoy no usa datos on-chain: la fuente de capitalización histórica "
-                "dejó de ser gratuita, así que se estima con el precio frente a su media de 200 semanas. "
-                "Eso lo convierte, de hecho, en una segunda lectura del mismo factor que ya pesa un 40%."})
-        if puell_metodo != "real":
+                "El MVRV Z-Score no está disponible ahora mismo. Aparece vacío en vez de estimarse "
+                "con el precio: esa estimación era, punto por punto, el mismo dato que ya muestra el "
+                "RSU Score, y presentarla como una medida on-chain independiente era engañoso."})
+        if contexto.get("puell") is None:
             avisos.append({"tipo": "parcial", "mensaje":
-                "El Puell Multiple de hoy es una aproximación de precio: no ha llegado el dato de ingresos "
-                "de mineros. Es el único de los cuatro factores que mide algo distinto del precio, así que "
-                "sin él el modelo se queda apoyado en una sola señal."})
+                "No ha llegado el dato de ingresos de mineros, así que el Puell Multiple aparece vacío."})
         if macro_data.get("dxy") is None:
             avisos.append({"tipo": "parcial", "mensaje":
                 "Sin datos macro en este momento (dólar y liquidez): las tarjetas de entorno aparecen vacías "
@@ -820,13 +826,19 @@ def get_btc_dashboard() -> dict:
             f"El máximo histórico y la caída desde máximos se miden sobre el histórico disponible "
             f"(desde {ath_desde}), no sobre toda la vida de bitcoin."})
 
-        # Data sources badge
         sources = {
-            "price":   cg_price.get("source", "yfinance"),
-            "puell":   puell_data.get("source", "proxy precio"),
-            "mvrv":    mvrv_data.get("source", "proxy precio"),
-            "hashrate": hash_data.get("source", "N/A"),
+            "price":    cg_price.get("source", "yfinance"),
+            "puell":    contexto["fuentes"].get("puell") or "sin dato",
+            "mvrv":     contexto["fuentes"].get("mvrv") or "sin dato",
+            "hashrate": contexto["fuentes"].get("hashrate") or "sin dato",
         }
+
+        # Los cortes de zona traducidos a precio: es como de verdad se entiende
+        # un score. "80" no dice nada; "$112.000" sí.
+        fronteras = [
+            {"score": desde, "zona": nombre, "precio": _score_a_precio(desde, ma_val)}
+            for desde, _h, nombre, _c, _a, _u, _e in ZONAS if desde > 0
+        ]
 
         result = {
             "ok":          True,
@@ -841,23 +853,18 @@ def get_btc_dashboard() -> dict:
             "rsu_score":   rsu,
             "rsu_signal":  signal,
             "zone":        zone,
-            # `origen` por componente. Hasta ahora la página decía en bloque
-            # que los tres eran "aproximaciones basadas en precio/MA200W", y
-            # eso era falso en los dos sentidos: el Puell suele ser un dato
-            # on-chain REAL (ingresos de mineros vía Blockchain.com) que se
-            # estaba infravendiendo, y el MVRV no tiene nada que ver con la
-            # MA200W cuando corre por su rama buena. Cada tarjeta dice ahora de
-            # dónde sale su número. Ver auditoría de BTC Stratum, #1.
-            "components": {
-                "ma200":  {"score": scores["ma200"],  "raw": round(deviation/100, 3), "weight": 40,
-                           "origen": ORIGEN_MA200},
-                "mvrv":   {"score": scores["mvrv"],   "raw": round(mvrv_z, 3),        "weight": 30,
-                           "origen": ORIGEN_MVRV_REAL if mvrv_metodo == "capmercado" else ORIGEN_MVRV_PROXY},
-                "puell":  {"score": scores["puell"],  "raw": round(puell, 3),         "weight": 20,
-                           "origen": ORIGEN_PUELL_REAL if puell_metodo == "real" else ORIGEN_PUELL_PROXY},
-                "ahr999": {"score": scores["ahr999"], "raw": round(ahr, 4),           "weight": 10,
-                           "origen": ORIGEN_AHR999},
+            # El score dejó de ser una media ponderada de cuatro sub-scores.
+            # `score_detalle` explica de qué está hecho el único número que hay,
+            # y `contexto` trae los datos on-chain reales que antes se fundían
+            # dentro de él con pesos que no se sostenían. Ver el bloque EL SCORE.
+            "score_detalle": {
+                "origen":     ORIGEN_MA200,
+                "ma200":      round(ma_val, 0),
+                "desviacion": round(deviation, 1),
+                "fronteras":  fronteras,
+                "muestra":    ZONAS_MUESTRA,
             },
+            "contexto":    contexto,
             "curvature":   curvature,
             "halving":     halving,
             "macro":       macro_data,
@@ -867,7 +874,6 @@ def get_btc_dashboard() -> dict:
             "chart_data":  chart_data,
             "puell_data":  puell_data,
             "hash_data":   hash_data,
-            "mvrv_data":   mvrv_data,
             "sources":     sources,
             "timestamp":   get_timestamp(),
         }
