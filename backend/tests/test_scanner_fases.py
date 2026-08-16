@@ -152,3 +152,82 @@ def test_se_dice_cuantos_valores_eran_comparables(db):
               (0, "SOLO_HOY", 2, 1)])
     r = S.transiciones_de_fase(sesiones=5)
     assert r["comparables"] == 2
+
+
+# ── Hallazgo #9: los puntos por volumen ─────────────────────────────────────
+#
+# La auditoría decía: "rvol_pts satura a RVOL=3x, pero los RVOL extremos siguen
+# siendo informativos". Al medirlo aparecieron DOS defectos más en las mismas
+# dos líneas, y uno de ellos pesa más que el denunciado.
+#
+# Calibrado sobre las 6.012 observaciones reales de snapshots.db (12 sesiones x
+# ~500 valores): mediana 0,78 · p90 1,35 · p95 1,65 · p99 2,42 · máximo 9,67.
+
+import pandas as pd  # noqa: E402
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..', 'scripts'))
+from scanner_universe import _rvol, _rvol_pts, RVOL_WINDOW, RVOL_TECHO  # noqa: E402
+
+
+def test_el_volumen_normal_no_puntua():
+    """EL DEFECTO QUE MÁS PESABA, y no es el que denunciaba la auditoría. La
+    fórmula anterior era lineal desde 0, así que un valor con volumen NORMAL se
+    llevaba 6,7 de los 20 puntos y uno con la mitad de lo habitual, 3,3. Con la
+    mediana del universo en 0,78, eso era un sumando casi constante que añadía
+    ruido al score sin distinguir nada."""
+    assert _rvol_pts(1.0) == 0.0
+    assert _rvol_pts(0.5) == 0.0
+    assert _rvol_pts(0.26) == 0.0
+
+
+def test_por_encima_de_lo_normal_si_puntua_y_crece():
+    a, b, c = _rvol_pts(1.5), _rvol_pts(2.0), _rvol_pts(3.0)
+    assert 0 < a < b < c <= 20
+
+
+def test_el_crecimiento_es_logaritmico_no_lineal():
+    """Con crecimiento lineal, el tramo 1-2 y el 2-3 valdrían lo mismo. El
+    logaritmo da más peso al primer salto, que es donde está la información:
+    pasar de normal a el doble dice más que de el doble al triple."""
+    primero = _rvol_pts(2.0) - _rvol_pts(1.0)
+    segundo = _rvol_pts(3.0) - _rvol_pts(2.0)
+    assert primero > segundo
+
+
+def test_un_volumen_extremo_ya_no_empata_con_uno_de_tres():
+    """El hallazgo #9 tal cual lo escribía la auditoría. Antes, `min(rvol/3,1)`
+    daba 20 puntos tanto a un RVOL de 3 como a uno de 9,67 -- y en el histórico
+    real hay 21 observaciones por encima de 3."""
+    assert _rvol_pts(3.0) < _rvol_pts(4.0)
+
+
+def test_queda_un_techo_y_esta_puesto_a_conciencia():
+    """No se resuelve del todo, y está escrito así en el código: solo hay 20
+    puntos, y una curva que llegue al máximo en 10x aplastaría el tramo 1-2,5
+    donde vive el 99% de los datos. Por encima de 4 (el 0,13% de las
+    observaciones) se sigue empatando."""
+    assert _rvol_pts(RVOL_TECHO) == 20.0
+    assert _rvol_pts(9.67) == _rvol_pts(RVOL_TECHO)
+
+
+# ── El promedio que se incluía a sí mismo ───────────────────────────────────
+
+def test_el_dia_evaluado_no_entra_en_su_propia_media():
+    """Tercer defecto, encontrado al medir. Con 20 días a 100 y hoy a 300, el
+    RVOL real es 3,0; incluyendo hoy en la media el denominador sube a 110 y
+    sale 2,73 -- el día anómalo disimula su propia anomalía. Mismo fallo ya
+    corregido dos veces: alertas de Watchlist y _vol_ratio_desde_serie."""
+    vols = pd.Series([100.0] * RVOL_WINDOW + [300.0])
+    assert _rvol(vols) == 3.0
+
+
+def test_sin_serie_suficiente_se_devuelve_normal():
+    """1.0 significa «normal», y con la curva nueva vale cero puntos: no se
+    regala nada por no tener datos."""
+    assert _rvol(pd.Series([100.0] * 5)) == 1.0
+    assert _rvol(pd.Series(dtype=float)) == 1.0
+    assert _rvol_pts(_rvol(pd.Series(dtype=float))) == 0.0
+
+
+def test_una_media_de_cero_no_revienta():
+    vols = pd.Series([0.0] * RVOL_WINDOW + [500.0])
+    assert _rvol(vols) == 1.0

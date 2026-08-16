@@ -35,6 +35,7 @@ import sys
 import json
 import time
 import requests
+import math
 import pandas as pd
 import numpy as np
 from datetime import datetime, timezone
@@ -303,13 +304,68 @@ def _fetch_batch(all_syms: list) -> tuple:
                            log_prefix="[Scanner] ")
 
 
+# Techo de la curva de volumen. Calibrado sobre las 6.012 observaciones reales
+# guardadas en snapshots.db (12 sesiones x ~500 valores): mediana 0,78,
+# p90 1,35, p95 1,65, p99 2,42, p99,9 4,18 y máximo histórico 9,67.
+#
+# ELEGIR ESTE NÚMERO ES UN COMPROMISO, y conviene dejarlo escrito: solo hay 20
+# puntos, así que una curva que llegue al máximo en 10x tiene que dar ~9 en 3x,
+# y aplastaría el tramo 1-2,5 donde vive el 99% de los datos. Con el techo en 4
+# el 0,13% de observaciones que lo superan siguen empatando arriba -- así que
+# el hallazgo #9 de la auditoría queda MEJOR, no resuelto del todo. Se prefiere
+# eso a perder resolución donde el módulo discrimina cada día.
+RVOL_TECHO = 4.0
+
+
+def _rvol(vols) -> float:
+    """Volumen de hoy frente a lo normal en ese valor.
+
+    El promedio EXCLUYE el día evaluado. Incluirlo hace que un día de volumen
+    alto infle su propio denominador y acerque el cociente a 1, disimulando
+    justo los días anómalos que el RVOL busca. Es el mismo fallo ya corregido
+    dos veces en este proyecto -- alertas de Watchlist (#3 de su auditoría) y
+    `_vol_ratio_desde_serie` de Market -- y aquí seguía vivo.
+
+    Devuelve 1.0 (o sea, "normal") cuando no hay serie bastante: es lo que
+    hacía antes y lo que el score espera, y con la curva nueva 1.0 vale cero
+    puntos, así que no regala nada.
+    """
+    if vols is None or len(vols) <= RVOL_WINDOW:
+        return 1.0
+    vol_today = float(vols.iloc[-1])
+    vol_avg   = float(vols.iloc[:-1].tail(RVOL_WINDOW).mean())
+    if vol_avg <= 0:
+        return 1.0
+    return round(vol_today / vol_avg, 2)
+
+
+def _rvol_pts(rvol: float) -> float:
+    """Puntos por volumen relativo, 0-20.
+
+    DOS ARREGLOS sobre `min(rvol/3, 1) * 20` (hallazgo #9 de la auditoría de
+    Scanner, más uno que salió al medirlo):
+
+    1. Por DEBAJO de lo normal no se puntúa. La fórmula anterior era lineal
+       desde 0, así que un valor con volumen NORMAL (RVOL 1) se llevaba 6,7 de
+       los 20 puntos y uno con la mitad de lo habitual, 3,3. Con la mediana del
+       universo en 0,58, eso era un sumando casi constante que añadía ruido al
+       score sin distinguir nada.
+    2. Crecimiento LOGARÍTMICO en vez de lineal con tope en 3. La anterior
+       saturaba tan pronto que un día de RVOL 12 puntuaba igual que uno de 3, y
+       no son el mismo suceso. El logaritmo mantiene sensibilidad donde se
+       concentran los datos y sigue premiando los extremos.
+    """
+    if not rvol or rvol <= 1:
+        return 0.0
+    return min(math.log(rvol) / math.log(RVOL_TECHO), 1.0) * 20
+
+
 def _technical_score(rs_pct: float, phase: int, rvol: float) -> float:
     """Score Técnico 0-100 — ver docstring del módulo para el porqué de este
     alcance (solo técnico, no fundamental) en v1."""
     phase_pts = {2: 30, 1: 18, 3: 10, 4: 0}.get(phase, 10)
-    rvol_pts  = min(rvol / 3.0, 1.0) * 20  # satura en RVOL=3x
     rs_pts    = (rs_pct or 0) * 0.50
-    return round(rs_pts + phase_pts + rvol_pts, 1)
+    return round(rs_pts + phase_pts + _rvol_pts(rvol), 1)
 
 
 def _compute_breadth_history(close_d: dict, tickers: list, lookback_days: int = 150) -> list:
@@ -423,10 +479,7 @@ def run_scan() -> dict:
                 rs_vals[p] = float(sm.iloc[-1]) if not sm.empty else 0.0
             rs_score_raw = sum(rs_vals[p] * WEIGHTS[p] for p in PERIODS)
 
-            vols      = vol_d.get(ticker, pd.Series(dtype=float))
-            vol_today = float(vols.iloc[-1]) if len(vols) > 0 else 0.0
-            vol_avg   = float(vols.tail(RVOL_WINDOW).mean()) if len(vols) >= RVOL_WINDOW else 0.0
-            rvol      = round(vol_today / vol_avg, 2) if vol_avg > 0 else 1.0
+            rvol      = _rvol(vol_d.get(ticker, pd.Series(dtype=float)))
 
             phase_info = classify_phase_debounced(prices)
             phase_weekly_info = classify_phase_weekly(prices)
