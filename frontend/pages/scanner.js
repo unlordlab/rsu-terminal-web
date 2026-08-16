@@ -42,6 +42,42 @@ const CRITERIOS = [
     { id: 'l3zona',    tipo: 'toggle', param: 'l3_zona_baja',  etiqueta: 'ZONA BAJA DEL INDICADOR RSU', tip: 'rsu-flow',  nota: 'Entre 10 y 20' },
 ];
 
+// ── Presets: combinaciones de criterios guardadas con nombre ────────────────
+//
+// Un preset ES una cadena de consulta, la misma que el deep-link. No hace
+// falta serializar el estado del panel: aplicarlo es lo mismo que entrar por
+// un enlace, y guardarlo es lo mismo que leer la URL.
+//
+// En localStorage y no en la base de usuarios a propósito: se quería tenerlo
+// hoy, no tabla + endpoints + migración. Se pierden al cambiar de navegador,
+// y eso se dice en pantalla en vez de dejar que el usuario lo descubra.
+const PRESETS_KEY = 'rsu_scanner_presets';
+const PRESETS_MAX = 12;
+const PRESET_NOMBRE_MAX = 32;
+
+function leerPresets() {
+    try {
+        const crudo = JSON.parse(localStorage.getItem(PRESETS_KEY) || '[]');
+        // Se valida la forma: localStorage lo puede tocar cualquiera, y un
+        // objeto raro aquí rompería el panel entero al pintarlo.
+        return Array.isArray(crudo)
+            ? crudo.filter(p => p && typeof p.nombre === 'string' && typeof p.qs === 'string')
+                   .slice(0, PRESETS_MAX)
+            : [];
+    } catch (_) {
+        return [];
+    }
+}
+
+function guardarPresets(lista) {
+    try {
+        localStorage.setItem(PRESETS_KEY, JSON.stringify(lista.slice(0, PRESETS_MAX)));
+        return true;
+    } catch (_) {
+        return false;   // modo privado o cuota llena: se avisa, no se finge
+    }
+}
+
 let _scannerData = null;
 let _scannerSort = { key: 'score_tecnico', dir: -1 };
 
@@ -259,9 +295,46 @@ function criteriaPanel() {
         + '</div>'
         + '<div style="display:flex;justify-content:space-between;align-items:center;">'
         + '<div style="color:var(--color-muted);font-size:11px;">Los criterios activados se combinan con AND (deben cumplirse todos). El resultado se ordena por Score Técnico.</div>'
+        + '<div style="display:flex;gap:8px;align-items:center;">'
+        + '<button id="scanner-save-preset" style="background:transparent;color:var(--color-muted);border:1px solid var(--color-border);border-radius:var(--radius);padding:8px 14px;font-family:var(--font-mono);font-size:11px;cursor:pointer;">GUARDAR COMBINACIÓN</button>'
         + '<button id="scanner-run-btn" style="background:var(--color-accent);color:#000;border:none;border-radius:var(--radius);padding:8px 20px;font-family:var(--font-mono);font-size:12px;cursor:pointer;letter-spacing:0.05em;">ESCANEAR</button>'
         + '</div>'
+        + '</div>'
+        + '<div id="scanner-presets" style="margin-top:0.9rem;"></div>'
         + '</div>';
+}
+
+// Las combinaciones guardadas, en fila. Se repinta entera cada vez: son doce
+// como mucho y así no hay que llevar la cuenta de qué chip cambió.
+function renderPresets(container) {
+    const el = container.querySelector('#scanner-presets');
+    if (!el) return;
+    const presets = leerPresets();
+    if (!presets.length) {
+        el.innerHTML = '<div style="color:var(--color-muted);font-size:10px;">'
+            + 'Aún no has guardado ninguna combinación. Activa criterios y pulsa «Guardar combinación».</div>';
+        return;
+    }
+    el.innerHTML = '<div style="display:flex;flex-wrap:wrap;gap:6px;align-items:center;">'
+        + '<span style="color:var(--color-muted);font-size:10px;letter-spacing:0.06em;margin-right:2px;">GUARDADAS</span>'
+        + presets.map((p, i) =>
+            '<span style="display:inline-flex;align-items:center;gap:6px;border:1px solid var(--color-border);border-radius:var(--radius);padding:3px 6px 3px 10px;font-size:11px;">'
+            + '<span class="scanner-preset-apply" data-i="' + i + '" style="color:var(--color-accent);cursor:pointer;" title="'
+            + esc(descripcionPreset(p.qs)) + '">' + esc(p.nombre) + '</span>'
+            + '<span class="scanner-preset-del" data-i="' + i + '" title="Borrar" '
+            + 'style="color:var(--color-muted);cursor:pointer;padding:0 2px;">×</span></span>').join('')
+        + '</div>'
+        + '<div style="color:var(--color-muted);font-size:9px;margin-top:5px;">'
+        + 'Se guardan en este navegador: no viajan a otro dispositivo.</div>';
+}
+
+// Qué criterios lleva un preset, en cristiano, para el tooltip del chip.
+function descripcionPreset(qs) {
+    const p = new URLSearchParams(qs);
+    const partes = CRITERIOS
+        .filter(c => p.has(c.param))
+        .map(c => c.tipo === 'toggle' ? c.etiqueta : c.etiqueta + ' ' + p.get(c.param));
+    return partes.length ? partes.join(' · ') : 'Sin criterios';
 }
 
 function criterionBlock(id, label, type, placeholder, step, cfg) {
@@ -386,6 +459,55 @@ function setupPanel(container) {
 
     const btn = container.querySelector('#scanner-run-btn');
     btn.addEventListener('click', () => runFilter(container));
+
+    // ── Presets ────────────────────────────────────────────────────────────
+    const guardar = container.querySelector('#scanner-save-preset');
+    if (guardar) guardar.addEventListener('click', () => {
+        const qs = new URLSearchParams(buildQuery(container));
+        qs.delete('limit');
+        if (![...qs.keys()].length) {
+            avisoPreset(container, 'Activa algún criterio antes de guardar la combinación.');
+            return;
+        }
+        const nombre = (window.prompt('Nombre para esta combinación:', '') || '').trim().slice(0, PRESET_NOMBRE_MAX);
+        if (!nombre) return;
+        const lista = leerPresets().filter(p => p.nombre !== nombre);   // mismo nombre = se reemplaza
+        lista.unshift({ nombre, qs: qs.toString() });
+        if (lista.length > PRESETS_MAX) {
+            avisoPreset(container, 'Solo caben ' + PRESETS_MAX + ' combinaciones: se ha quitado la más antigua.');
+        }
+        if (!guardarPresets(lista)) {
+            avisoPreset(container, 'Este navegador no deja guardar (¿modo privado?). La combinación no se ha conservado.');
+            return;
+        }
+        renderPresets(container);
+    });
+
+    // Delegación: los chips se repintan enteros, así que escuchar en el
+    // contenedor evita tener que recablear listeners en cada repintado.
+    const zona = container.querySelector('#scanner-presets');
+    if (zona) zona.addEventListener('click', (e) => {
+        const aplicar = e.target.closest('.scanner-preset-apply');
+        const borrar  = e.target.closest('.scanner-preset-del');
+        const lista   = leerPresets();
+        if (aplicar) {
+            const p = lista[Number(aplicar.dataset.i)];
+            if (!p) return;
+            // Se limpia ANTES: aplicar un preset encima de los criterios que ya
+            // estaban activos daría una combinación que el usuario no ha
+            // pedido y que además no coincide con el nombre del chip.
+            limpiarCriterios(container);
+            aplicarUrl(container, new URLSearchParams(p.qs));
+            runFilter(container);
+        } else if (borrar) {
+            const i = Number(borrar.dataset.i);
+            if (!lista[i]) return;
+            lista.splice(i, 1);
+            guardarPresets(lista);
+            renderPresets(container);
+        }
+    });
+    renderPresets(container);
 }
 
 async function loadUniverseMeta(container) {
@@ -441,6 +563,27 @@ function guardarEnUrl(qs) {
         const url = window.location.pathname + (p.toString() ? '?' + p.toString() : '');
         window.history.replaceState(null, '', url);
     } catch (_) { /* si el navegador no deja, el scan funciona igual */ }
+}
+
+// Apaga todos los criterios y vacía sus campos. Hace falta antes de aplicar un
+// preset: si no, se sumaría a lo que ya estuviera activo.
+function limpiarCriterios(container) {
+    CRITERIOS.forEach(c => {
+        if (c.tipo === 'toggle') { setActiveToggle(container, c.id, false); return; }
+        const el = container.querySelector('#scanner-' + c.id + '-value');
+        setActive(container, c.id, false);
+        if (el) el.value = '';
+    });
+}
+
+// Aviso breve bajo el panel. No usa alert() para no cortar el flujo por algo
+// que no es un error.
+function avisoPreset(container, texto) {
+    const el = container.querySelector('#scanner-presets');
+    if (!el) return;
+    const antes = el.innerHTML;
+    el.innerHTML = '<div style="color:#ffb800;font-size:11px;">' + esc(texto) + '</div>' + antes;
+    setTimeout(() => renderPresets(container), 4000);
 }
 
 function aplicarUrl(container, p) {
