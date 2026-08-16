@@ -1,30 +1,91 @@
 import { authHeader } from '/core/api.js';
 import { tt } from '/components/tooltip.js';
-import { errorMessage, esc, fmtFecha } from '/core/ui.js';
+import { errorMessage, esc, fmtFecha, panel } from '/core/ui.js';
+
+/*
+ * BTC Stratum. Hasta el 16/08/2026 esta página iba por libre estéticamente:
+ * repetía a mano once veces la caja "surface + border + radius" (cada una con
+ * su propio padding) y clavaba 49 colores hexadecimales, entre ellos 18
+ * `#f23645` y 13 `#ffb800` teniendo los tokens `--color-danger` y
+ * `--color-warning` definidos en themes/base.css. Con cualquier tema que no
+ * fuera el oscuro por defecto -- y hay nueve -- se quedaba con la paleta
+ * antigua. Ahora el envoltorio es el compartido (core/ui.js::panel) y los
+ * colores salen del tema.
+ */
+
+// Única excepción deliberada: el naranja de bitcoin es color de marca del
+// activo, no del tema, así que no debe cambiar con la piel de la terminal.
+const BTC_NARANJA = '#f7931a';
+
+const C = {
+    ok:    'var(--color-accent)',
+    info:  'var(--color-secondary)',
+    warn:  'var(--color-warning)',
+    bad:   'var(--color-danger)',
+    muted: 'var(--color-muted)',
+    text:  'var(--color-text)',
+    fondo: 'var(--color-bg)',
+};
+
+/** Mismo recurso que ya usa components/sidebar.js para teñir sin clavar rgba(). */
+function alpha(color, pct) {
+    return 'color-mix(in srgb, ' + color + ' ' + pct + '%, transparent)';
+}
+
+/** Chart.js pinta sobre canvas y no entiende var(): hay que resolver el token
+ *  en el momento de crear el gráfico. Mismo patrón que cartera.js:1299. */
+function cssVar(nombre, respaldo) {
+    const v = getComputedStyle(document.documentElement).getPropertyValue(nombre).trim();
+    return v || respaldo;
+}
+
+const usd = n => '$' + Number(n).toLocaleString('en-US');
+
+// Instancias de Chart vivas, para poder destruirlas al salir de la página.
+// Sin esto quedaban dos gráficos huérfanos por visita (el router destruye el
+// contenedor, pero Chart.js mantiene sus propios listeners y su animación).
+let _charts = [];
+
+export function cleanup() {
+    _charts.forEach(c => { try { c.destroy(); } catch (_) {} });
+    _charts = [];
+}
 
 export async function render(container) {
     container.innerHTML = pageShell();
     const result = container.querySelector('#btc-result');
+    const bDash  = container.querySelector('#btn-dashboard');
+    const bBack  = container.querySelector('#btn-backtest');
 
-    // Cargar dashboard y backtest en paralelo
+    const activar = (activo, otro) => {
+        activo.style.background = 'var(--color-accent)';
+        activo.style.color      = 'var(--color-bg)';
+        activo.style.border     = '1px solid var(--color-accent)';
+        otro.style.background   = 'transparent';
+        otro.style.color        = 'var(--color-muted)';
+        otro.style.border       = '1px solid var(--color-border)';
+    };
+
     loadDashboard(result);
-
-    container.querySelector('#btn-backtest').addEventListener('click', () => {
-        loadBacktest(result);
-    });
-    container.querySelector('#btn-dashboard').addEventListener('click', () => {
-        loadDashboard(result);
-    });
+    bDash.addEventListener('click', () => { activar(bDash, bBack); loadDashboard(result); });
+    bBack.addEventListener('click', () => { activar(bBack, bDash); loadBacktest(result); });
 }
 
 function pageShell() {
+    const boton = (id, txt, activo) =>
+        '<button id="' + id + '" style="background:' + (activo ? 'var(--color-accent)' : 'transparent')
+        + ';color:' + (activo ? 'var(--color-bg)' : C.muted)
+        + ';border:1px solid ' + (activo ? 'var(--color-accent)' : 'var(--color-border)')
+        + ';border-radius:var(--radius);padding:8px 20px;font-family:var(--font-mono);font-size:12px;'
+        + 'cursor:pointer;letter-spacing:0.05em;transition:var(--transition);">' + txt + '</button>';
+
     return '<div style="margin-bottom:1.5rem;">'
         + '<div style="color:var(--color-accent);font-size:18px;letter-spacing:0.1em;text-shadow:var(--glow-text);margin-bottom:4px;">₿ BTC STRATUM ' + tt('btc-stratum') + '</div>'
-        + '<div style="color:var(--color-muted);font-size:12px;">Modelo de Acumulación RSU · MA200W + MVRV + Puell + AHR999</div>'
+        + '<div style="color:' + C.muted + ';font-size:12px;">Modelo de acumulación RSU · MA200W + MVRV + Puell + AHR999</div>'
         + '</div>'
         + '<div style="display:flex;gap:8px;margin-bottom:1.5rem;">'
-        + '<button id="btn-dashboard" style="background:var(--color-accent);color:#000;border:none;border-radius:var(--radius);padding:8px 20px;font-family:var(--font-mono);font-size:12px;cursor:pointer;letter-spacing:0.05em;font-weight:500;">📊 DASHBOARD</button>'
-        + '<button id="btn-backtest"  style="background:transparent;color:var(--color-muted);border:1px solid var(--color-border);border-radius:var(--radius);padding:8px 20px;font-family:var(--font-mono);font-size:12px;cursor:pointer;letter-spacing:0.05em;">📈 BACKTEST</button>'
+        + boton('btn-dashboard', '📊 DASHBOARD', true)
+        + boton('btn-backtest',  '📈 BACKTEST',  false)
         + '</div>'
         + '<div id="btc-result"></div>';
 }
@@ -32,16 +93,15 @@ function pageShell() {
 // ── DASHBOARD ─────────────────────────────────────────────────────────────────
 
 async function loadDashboard(el) {
+    cleanup();
     el.innerHTML = loading('Cargando datos BTC...');
     try {
-        const res   = await fetch('/api/v1/btc-stratum/dashboard', {
-            headers: authHeader()
-        });
-        const data  = await res.json();
+        const res  = await fetch('/api/v1/btc-stratum/dashboard', { headers: authHeader() });
+        const data = await res.json();
         if (!data.ok) throw new Error(data.error || 'Sin datos');
         el.innerHTML = renderDashboard(data);
         renderChart(data);
-    } catch(e) {
+    } catch (e) {
         el.innerHTML = errorMessage(e.message);
     }
 }
@@ -50,432 +110,474 @@ function renderDashboard(data) {
     return headerSection(data)
         + alertsSection(data)
         + scoreSection(data)
-        + componentsSection(data)
+        + curvaturaSection(data)
         + chartSection(data)
         + halvingSection(data)
         + macroSection(data)
         + levelsSection(data)
-        + hashrateSection(data)
+        + mineriaSection(data)
         + stressSection(data)
         + methodologySection();
 }
 
+/** Tarjeta compacta, mismo formato que kpiCard() de rsrw.js. */
+function kpiCard(label, value, sub, color) {
+    return '<div style="background:' + C.fondo + ';border:1px solid var(--color-border);border-radius:var(--radius);padding:0.75rem;">'
+        + '<div style="color:' + C.muted + ';font-size:10px;letter-spacing:0.08em;margin-bottom:4px;">' + label + '</div>'
+        + '<div style="color:' + color + ';font-size:18px;font-weight:500;">' + value + '</div>'
+        + (sub ? '<div style="color:' + C.muted + ';font-size:10px;margin-top:4px;line-height:1.35;">' + sub + '</div>' : '')
+        + '</div>';
+}
+
 function headerSection(data) {
-    const chgColor = data.chg_24h >= 0 ? 'var(--color-accent)' : '#f23645';
+    const chgColor = data.chg_24h >= 0 ? C.ok : C.bad;
     const chgStr   = (data.chg_24h >= 0 ? '+' : '') + data.chg_24h + '%';
     const z        = data.zone;
+    const devColor = data.deviation >= 0 ? C.bad : C.ok;
 
-    return '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:1rem;margin-bottom:1rem;">'
-
-        // Precio
-        + '<div style="background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius);padding:1.25rem;">'
-        + '<div style="color:var(--color-muted);font-size:10px;letter-spacing:0.08em;margin-bottom:6px;">BITCOIN · BTC/USD</div>'
-        + '<div style="color:var(--color-text);font-size:32px;font-weight:500;">$' + Number(data.price).toLocaleString('en-US') + '</div>'
+    const precio = '<div style="padding:1rem 1.25rem;">'
+        + '<div style="color:' + C.text + ';font-size:32px;font-weight:500;">' + usd(data.price) + '</div>'
         + '<div style="color:' + chgColor + ';font-size:13px;margin-top:4px;">' + chgStr + ' 24h</div>'
-        + '<div style="color:var(--color-muted);font-size:11px;margin-top:4px;">ATH: $' + Number(data.ath).toLocaleString('en-US') + ' · Drawdown: <span style="color:#f23645;">' + data.drawdown + '%</span></div>'
+        + '<div style="color:' + C.muted + ';font-size:11px;margin-top:6px;">Máximo del periodo: ' + usd(data.ath)
+        + ' · Desde ahí: <span style="color:' + C.bad + ';">' + data.drawdown + '%</span></div>'
         + sourcesBar(data.sources)
-        + '</div>'
+        + '</div>';
 
-        // RSU Score
-        + '<div style="background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius);padding:1.25rem;">'
-        + '<div style="color:var(--color-muted);font-size:10px;letter-spacing:0.08em;margin-bottom:6px;">RSU SCORE ' + tt('rsu-btc-score') + '</div>'
+    const score = '<div style="padding:1rem 1.25rem;">'
         + '<div style="color:' + data.rsu_signal.color + ';font-size:36px;font-weight:500;">' + data.rsu_score + '</div>'
-        + '<div style="background:var(--color-bg,#0a0a0a);border-radius:4px;height:6px;margin:8px 0;">'
-        + '<div style="height:100%;width:' + data.rsu_score + '%;background:' + data.rsu_signal.color + ';border-radius:4px;transition:width 0.8s;"></div>'
+        + '<div style="background:' + C.fondo + ';border-radius:4px;height:6px;margin:8px 0;overflow:hidden;">'
+        + '<div style="height:100%;width:' + Math.max(0, Math.min(100, data.rsu_score)) + '%;background:' + data.rsu_signal.color + ';transition:width 0.8s;"></div>'
         + '</div>'
-        + '<div style="color:' + data.rsu_signal.color + ';font-size:12px;letter-spacing:0.08em;">' + data.rsu_signal.label + '</div>'
-        + '</div>'
+        + '<div style="color:' + data.rsu_signal.color + ';font-size:12px;letter-spacing:0.08em;">' + esc(data.rsu_signal.label) + '</div>'
+        + '</div>';
 
-        // Zona
-        + '<div style="background:var(--color-surface);border:1px solid ' + z.color + '44;border-radius:var(--radius);padding:1.25rem;">'
-        + '<div style="color:var(--color-muted);font-size:10px;letter-spacing:0.08em;margin-bottom:6px;">ZONA ACTUAL · URGENCIA</div>'
-        + '<div style="color:' + z.color + ';font-size:18px;font-weight:500;margin-bottom:4px;">' + z.zone + '</div>'
-        + '<div style="color:var(--color-muted);font-size:11px;">Asignación sugerida: <span style="color:' + z.color + ';font-size:16px;font-weight:500;">' + z.allocation + '%</span></div>'
-        + '<div style="color:var(--color-muted);font-size:11px;margin-top:4px;">Urgencia: <span style="color:' + z.color + ';">' + z.urgency + '</span></div>'
-        + '<div style="color:var(--color-muted);font-size:11px;margin-top:4px;">vs MA200W: <span style="color:' + (data.deviation >= 0 ? '#f23645' : 'var(--color-accent)') + ';">' + (data.deviation >= 0 ? '+' : '') + data.deviation + '%</span></div>'
-        + '</div>'
+    const zona = '<div style="padding:1rem 1.25rem;">'
+        + '<div style="color:' + z.color + ';font-size:18px;font-weight:500;margin-bottom:8px;">' + esc(z.zone) + '</div>'
+        + '<div style="color:' + C.muted + ';font-size:11px;">Asignación del modelo: <span style="color:' + z.color + ';font-size:16px;font-weight:500;">' + z.allocation + '%</span></div>'
+        + '<div style="color:' + C.muted + ';font-size:11px;margin-top:4px;">Urgencia: <span style="color:' + z.color + ';">' + esc(z.urgency) + '</span></div>'
+        + '<div style="color:' + C.muted + ';font-size:11px;margin-top:4px;">vs MA200W: <span style="color:' + devColor + ';">' + (data.deviation >= 0 ? '+' : '') + data.deviation + '%</span></div>'
+        + '</div>';
+
+    return '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:1rem;margin-bottom:1rem;">'
+        + panel({ titulo: 'BITCOIN · BTC/USD', contenido: precio, avisos: data.avisos })
+        + panel({ titulo: 'RSU SCORE ' + tt('rsu-btc-score'), contenido: score, escapar: false })
+        + panel({ titulo: 'ZONA ACTUAL · URGENCIA', contenido: zona })
         + '</div>';
 }
 
 function alertsSection(data) {
     if (!data.alerts || !data.alerts.length) return '';
-    return '<div style="background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius);padding:1.25rem;margin-bottom:1rem;">'
-        + '<div style="color:var(--color-accent);font-size:12px;letter-spacing:0.08em;margin-bottom:0.75rem;">⚡ ALERTAS ACTIVAS</div>'
-        + data.alerts.map(a => '<div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--color-border);font-size:12px;">'
-            + '<span style="font-size:16px;">' + a.icon + '</span>'
-            + '<span style="color:' + a.color + ';">' + a.msg + '</span>'
-            + '</div>').join('')
-        + '</div>';
+    const filas = data.alerts.map(a =>
+        '<div style="display:flex;align-items:flex-start;gap:10px;padding:9px 14px;border-bottom:1px solid var(--color-border);font-size:12px;line-height:1.45;">'
+        + '<span style="font-size:15px;flex-shrink:0;">' + esc(a.icon) + '</span>'
+        + '<span style="color:' + a.color + ';">' + esc(a.msg) + '</span>'
+        + '</div>').join('');
+    return panel({ titulo: '⚡ ALERTAS ACTIVAS', contenido: filas });
 }
 
 function scoreSection(data) {
     const c = data.components;
-    return '<div style="background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius);padding:1.25rem;margin-bottom:1rem;">'
-        + '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem;">'
-        + '<div style="color:var(--color-accent);font-size:12px;letter-spacing:0.08em;">DESGLOSE RSU SCORE ' + tt('rsu-btc-score') + '</div>'
-        + '<div style="color:' + data.rsu_signal.color + ';font-size:20px;font-weight:500;">' + data.rsu_score + '/100</div>'
-        + '</div>'
-        + '<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:1rem;">'
-        + componentCard('MA 200W', c.ma200, '40%', tt('ma200w'))
-        + componentCard('MVRV Z-Score', c.mvrv, '30%', tt('mvrv-z'))
+    const cuerpo = '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:1rem;padding:1.25rem;">'
+        + componentCard('MA 200W',       c.ma200,  '40%', tt('ma200w'))
+        + componentCard('MVRV Z-Score',  c.mvrv,   '30%', tt('mvrv-z'))
         + componentCard('Puell Multiple', c.puell, '20%', tt('puell-multiple'))
-        + componentCard('AHR999', c.ahr999, '10%', tt('ahr999'))
-        + '</div>'
+        + componentCard('AHR999',        c.ahr999, '10%', tt('ahr999'))
         + '</div>';
+    return panel({
+        titulo:    'DESGLOSE RSU SCORE ' + tt('rsu-btc-score'),
+        subtitulo: data.rsu_score + '/100',
+        contenido: cuerpo,
+        escapar:   false,
+    });
 }
 
 function componentCard(name, comp, weight, tooltip) {
-    const color = comp.score < 40 ? 'var(--color-accent)' : comp.score < 70 ? '#ffb800' : '#f23645';
-    return '<div style="background:var(--color-bg,#0a0a0a);border:1px solid var(--color-border);border-radius:var(--radius);padding:0.75rem;text-align:center;">'
-        + '<div style="color:var(--color-muted);font-size:10px;margin-bottom:4px;">' + name + ' ' + tooltip + '</div>'
-        + '<div style="color:var(--color-muted);font-size:10px;margin-bottom:6px;">Peso: ' + weight + '</div>'
+    const color = comp.score < 40 ? C.ok : comp.score < 70 ? C.warn : C.bad;
+    const aprox = comp.origen && comp.origen.startsWith('Aproximado');
+    return '<div style="background:' + C.fondo + ';border:1px solid var(--color-border);border-radius:var(--radius);padding:0.75rem;text-align:center;">'
+        + '<div style="color:' + C.muted + ';font-size:10px;margin-bottom:4px;">' + name + ' ' + tooltip + '</div>'
+        + '<div style="color:' + C.muted + ';font-size:10px;margin-bottom:6px;">Peso: ' + weight + '</div>'
         + '<div style="color:' + color + ';font-size:22px;font-weight:500;">' + comp.score.toFixed(1) + '</div>'
-        + '<div style="background:var(--color-surface);border-radius:2px;height:4px;margin-top:6px;">'
-        + '<div style="height:100%;width:' + comp.score + '%;background:' + color + ';border-radius:2px;"></div>'
+        + '<div style="background:var(--color-surface2,var(--color-surface));border-radius:2px;height:4px;margin-top:6px;overflow:hidden;">'
+        + '<div style="height:100%;width:' + Math.max(0, Math.min(100, comp.score)) + '%;background:' + color + ';"></div>'
         + '</div>'
-        + '<div style="color:var(--color-muted);font-size:10px;margin-top:4px;">Raw: ' + comp.raw + '</div>'
-        // De dónde sale este número, por tarjeta. Antes había un único aviso
-        // al pie diciendo que los tres eran aproximaciones de precio/MA200W, y
-        // no era cierto para dos de ellos: el Puell suele venir de ingresos
-        // reales de mineros. Un dato real y uno aproximado no merecen la misma
-        // confianza, y hasta ahora no había forma de distinguirlos.
+        + '<div style="color:' + C.muted + ';font-size:10px;margin-top:4px;">Valor: ' + comp.raw + '</div>'
+        // De dónde sale este número, por tarjeta. Un dato real y uno aproximado
+        // no merecen la misma confianza, y sin esto no había forma de saberlo.
         + (comp.origen
-            ? '<div style="color:' + (comp.origen.startsWith('Aproximado') ? '#ffb800' : 'var(--color-muted)')
-              + ';font-size:9px;margin-top:4px;line-height:1.3;">' + esc(comp.origen) + '</div>'
+            ? '<div style="color:' + (aprox ? C.warn : C.muted) + ';font-size:9px;margin-top:4px;line-height:1.3;">' + esc(comp.origen) + '</div>'
             : '')
         + '</div>';
 }
 
-function componentsSection(data) {
-    const curv = data.curvature;
-    const color = curv.slope > 0.2 ? 'var(--color-accent)' : curv.slope < -0.2 ? '#f23645' : '#ffb800';
-    return '<div style="background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius);padding:1.25rem;margin-bottom:1rem;">'
-        + '<div style="color:var(--color-accent);font-size:12px;letter-spacing:0.08em;margin-bottom:0.75rem;">CURVATURA MA200W</div>'
-        + '<div style="display:flex;gap:2rem;flex-wrap:wrap;font-size:12px;">'
-        + '<div><span style="color:var(--color-muted);">MA200W: </span><span style="color:var(--color-text);">$' + Number(curv.ma_value).toLocaleString('en-US') + '</span></div>'
-        + '<div><span style="color:var(--color-muted);">Pendiente: </span><span style="color:' + color + ';">' + curv.slope + '% (30d)</span></div>'
-        + '<div><span style="color:var(--color-muted);">Tendencia: </span><span style="color:' + color + ';">' + curv.trend + '</span></div>'
-        + '<div><span style="color:var(--color-muted);">Aceleración: </span><span style="color:' + (curv.acceleration === 'ACELERANDO' ? 'var(--color-accent)' : '#ffb800') + ';">' + curv.acceleration + '</span></div>'
-        + '</div>'
+function curvaturaSection(data) {
+    const curv  = data.curvature;
+    const color = curv.slope > 0.2 ? C.ok : curv.slope < -0.2 ? C.bad : C.warn;
+    const dato  = (k, v, col) => '<div><span style="color:' + C.muted + ';">' + k + ': </span><span style="color:' + (col || C.text) + ';">' + v + '</span></div>';
+    const cuerpo = '<div style="display:flex;gap:2rem;flex-wrap:wrap;font-size:12px;padding:1.25rem;">'
+        + dato('MA200W', usd(curv.ma_value))
+        + dato('Pendiente', curv.slope + '% (30d)', color)
+        + dato('Tendencia', esc(curv.trend), color)
+        + dato('Aceleración', esc(curv.acceleration), curv.acceleration === 'ACELERANDO' ? C.ok : C.warn)
         + '</div>';
+    return panel({ titulo: 'CURVATURA MA200W', contenido: cuerpo });
 }
 
-function chartSection(data) {
-    return '<div style="background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius);overflow:hidden;margin-bottom:1rem;">'
-        + '<div style="display:flex;justify-content:space-between;align-items:center;padding:10px 14px;border-bottom:1px solid var(--color-border);">'
-        + '<div style="color:var(--color-accent);font-size:12px;letter-spacing:0.08em;">PRECIO BTC · MA200W · ZONAS (3 AÑOS)</div>'
-        + '<div style="color:var(--color-muted);font-size:11px;">Semanal</div>'
-        + '</div>'
-        + '<div style="padding:16px;"><canvas id="btc-chart" height="200"></canvas></div>'
-        + '</div>';
+function chartSection() {
+    return panel({
+        titulo:    'PRECIO BTC · MA200W · ZONAS (3 AÑOS)',
+        subtitulo: 'Semanal',
+        contenido: '<div style="padding:16px;"><canvas id="btc-chart" height="200"></canvas></div>',
+    });
 }
 
 function halvingSection(data) {
     const h = data.halving;
-    const phaseColor = h.phase === 'ACUMULACIÓN' ? 'var(--color-accent)'
-        : h.phase === 'BULL TEMPRANO' ? '#00d9ff'
-        : h.phase === 'BULL AVANZADO' ? '#ffb800'
-        : h.phase === 'DISTRIBUCIÓN'  ? '#ff9800'
-        : '#f23645';
+    const phaseColor = h.phase === 'ACUMULACIÓN'  ? C.ok
+        : h.phase === 'BULL TEMPRANO' ? C.info
+        : h.phase === 'BULL AVANZADO' ? C.warn
+        : h.phase === 'DISTRIBUCIÓN'  ? C.warn
+        : C.bad;
 
-    return '<div style="background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius);padding:1.25rem;margin-bottom:1rem;">'
-        + '<div style="color:var(--color-accent);font-size:12px;letter-spacing:0.08em;margin-bottom:0.75rem;">CICLO HALVING ' + tt('halving-cycle') + '</div>'
-        + '<div style="display:flex;gap:2rem;flex-wrap:wrap;align-items:center;">'
-        + '<div style="flex:1;">'
-        + '<div style="color:' + phaseColor + ';font-size:18px;font-weight:500;margin-bottom:4px;">' + h.phase + '</div>'
-        + '<div style="color:var(--color-muted);font-size:11px;">Progreso del ciclo: <span style="color:var(--color-text);">' + h.progress_pct + '%</span></div>'
-        + '<div style="color:var(--color-muted);font-size:11px;">Días desde halving: <span style="color:var(--color-text);">' + h.days_since + '</span></div>'
-        + '<div style="color:var(--color-muted);font-size:11px;">Días al próximo: <span style="color:#ffb800;">' + h.days_to_next + '</span> (' + h.next_halving + ')</div>'
+    const cuerpo = '<div style="display:flex;gap:2rem;flex-wrap:wrap;align-items:center;padding:1.25rem;">'
+        + '<div style="flex:1;min-width:200px;">'
+        + '<div style="color:' + phaseColor + ';font-size:18px;font-weight:500;margin-bottom:4px;">' + esc(h.phase) + '</div>'
+        + '<div style="color:' + C.muted + ';font-size:11px;">Progreso del ciclo: <span style="color:' + C.text + ';">' + h.progress_pct + '%</span></div>'
+        + '<div style="color:' + C.muted + ';font-size:11px;">Días desde el halving: <span style="color:' + C.text + ';">' + h.days_since + '</span></div>'
+        + '<div style="color:' + C.muted + ';font-size:11px;">Días hasta el próximo: <span style="color:' + C.warn + ';">' + h.days_to_next + '</span> (' + esc(h.next_halving) + ')</div>'
         + '</div>'
-        + '<div style="flex:2;">'
-        + '<div style="background:var(--color-bg,#0a0a0a);border-radius:4px;height:8px;">'
-        + '<div style="height:100%;width:' + h.progress_pct + '%;background:linear-gradient(90deg,var(--color-accent),' + phaseColor + ');border-radius:4px;"></div>'
+        + '<div style="flex:2;min-width:220px;">'
+        + '<div style="background:' + C.fondo + ';border-radius:4px;height:8px;overflow:hidden;">'
+        + '<div style="height:100%;width:' + Math.max(0, Math.min(100, h.progress_pct)) + '%;background:linear-gradient(90deg,' + C.ok + ',' + phaseColor + ');"></div>'
         + '</div>'
-        + '<div style="display:flex;justify-content:space-between;font-size:10px;color:var(--color-muted);margin-top:4px;">'
-        + '<span>' + h.last_halving + '</span><span>' + h.next_halving + '</span>'
-        + '</div>'
+        + '<div style="display:flex;justify-content:space-between;font-size:10px;color:' + C.muted + ';margin-top:4px;">'
+        + '<span>' + esc(h.last_halving) + '</span><span>' + esc(h.next_halving) + '</span>'
         + '</div>'
         + '</div>'
         + '</div>';
+
+    // La fecha del próximo halving no se puede saber de antemano: depende del
+    // ritmo al que se minen los bloques que faltan. Antes estaba clavada a
+    // mano y nada lo decía.
+    const avisos = h.fuente
+        ? [{ tipo: 'antiguo', mensaje: 'La fecha del próximo halving es una estimación: ' + h.fuente + '.' }]
+        : null;
+
+    return panel({ titulo: 'CICLO HALVING ' + tt('halving-cycle'), contenido: cuerpo, avisos, escapar: false });
 }
 
 function macroSection(data) {
     const m = data.macro;
-    // m.dxy puede venir null si la fuente (yfinance) falló -- antes el
-    // backend fabricaba 103.0/50/NEUTRAL fijo; ahora se admite la ausencia
-    // y aquí se muestra explícitamente "N/D" en vez de "null" o un color
-    // engañoso (null < 50 evaluaría true en JS por coerción a 0).
-    const hasData = m.dxy != null;
-    const statusColor = m.status === 'EXPANSIVO' ? 'var(--color-accent)' : m.status === 'NEUTRAL' ? '#ffb800' : m.status === 'RESTRICTIVO' ? '#f23645' : 'var(--color-muted)';
-    return '<div style="background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius);padding:1.25rem;margin-bottom:1rem;">'
-        + '<div style="color:var(--color-accent);font-size:12px;letter-spacing:0.08em;margin-bottom:0.75rem;">CONDICIONES MACRO</div>'
-        + '<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:1rem;">'
-        + macroCard('DXY', hasData ? m.dxy : 'N/D', 'Índice Dólar — valor alto = adverso para BTC', hasData ? (m.dxy_score < 50 ? 'var(--color-accent)' : '#f23645') : 'var(--color-muted)')
-        + macroCard('LIQUIDEZ', hasData ? m.liquidity_score + '/100' : 'N/D', 'Score de condiciones de liquidez global', hasData ? statusColor : 'var(--color-muted)')
-        + macroCard('ENTORNO', hasData ? m.status : 'Sin datos', 'Condición macroeconómica actual', hasData ? statusColor : 'var(--color-muted)')
-        + '</div>'
-        + '</div>';
-}
+    // m.dxy puede venir null si la fuente falló: se muestra "N/D" en gris, no
+    // un color engañoso (null < 50 evaluaría true en JS por coerción a 0).
+    const hay = m && m.dxy != null;
+    const statusColor = !hay ? C.muted
+        : m.status === 'EXPANSIVO' ? C.ok
+        : m.status === 'NEUTRAL'   ? C.warn
+        : C.bad;
 
-function macroCard(label, value, desc, color) {
-    return '<div style="background:var(--color-bg,#0a0a0a);border:1px solid var(--color-border);border-radius:var(--radius);padding:0.75rem;">'
-        + '<div style="color:var(--color-muted);font-size:10px;margin-bottom:4px;">' + label + '</div>'
-        + '<div style="color:' + color + ';font-size:18px;font-weight:500;">' + value + '</div>'
-        + '<div style="color:var(--color-muted);font-size:10px;margin-top:4px;">' + desc + '</div>'
+    const anios = hay && m.liquidez_base ? (m.liquidez_base / 252).toFixed(0) : null;
+    const cuerpo = '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:1rem;padding:1.25rem;">'
+        + kpiCard('DÓLAR (DXY)', hay ? m.dxy : 'N/D',
+                  'Un dólar fuerte suele ir en contra de bitcoin',
+                  hay ? (m.dxy_score < 50 ? C.ok : C.bad) : C.muted)
+        + kpiCard('LIQUIDEZ', hay ? m.liquidity_score + '/100' : 'N/D',
+                  hay ? ('Percentil del bono largo (TLT) frente a sus últimos ' + anios + ' años') : 'Sin datos ahora mismo',
+                  hay ? statusColor : C.muted)
+        + kpiCard('ENTORNO', hay ? esc(m.status) : 'Sin datos',
+                  'Lectura combinada de las condiciones de financiación',
+                  statusColor)
         + '</div>';
+    return panel({ titulo: 'CONDICIONES MACRO', contenido: cuerpo });
 }
 
 function levelsSection(data) {
     const l = data.levels;
     const price = data.price;
     const rows = [
-        { label: 'OPORTUNIDAD MÁXIMA (-50% MA)', value: l.minus_50, color: '#006b1b' },
-        { label: 'COMPRA AGRESIVA (-25% MA)',    value: l.minus_25, color: '#009627' },
-        { label: 'MA 200 SEMANAS',               value: l.ma200,    color: 'var(--color-accent)' },
-        { label: 'BUENA COMPRA (+25% MA)',        value: l.plus_25,  color: '#ffb800' },
-        { label: 'ZONA DCA (+50% MA)',            value: l.plus_50,  color: '#ff9800' },
+        { label: 'OPORTUNIDAD MÁXIMA (−50% MA)', value: l.minus_50, color: C.ok },
+        { label: 'COMPRA AGRESIVA (−25% MA)',    value: l.minus_25, color: alpha(C.ok, 70) },
+        { label: 'MA 200 SEMANAS',               value: l.ma200,    color: C.info },
+        { label: 'BUENA COMPRA (+25% MA)',       value: l.plus_25,  color: C.warn },
+        { label: 'ZONA DCA (+50% MA)',           value: l.plus_50,  color: alpha(C.warn, 75) },
     ];
-    return '<div style="background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius);overflow:hidden;margin-bottom:1rem;">'
-        + '<div style="padding:10px 14px;border-bottom:1px solid var(--color-border);color:var(--color-accent);font-size:12px;letter-spacing:0.08em;">NIVELES CLAVE · MA200W</div>'
-        + rows.map(r => {
-            const dist = r.value ? ((price - r.value) / r.value * 100).toFixed(1) : null;
-            const isCurrent = r.value && Math.abs(price - r.value) < r.value * 0.02;
-            return '<div style="display:flex;justify-content:space-between;align-items:center;padding:10px 14px;border-bottom:1px solid var(--color-border);background:' + (isCurrent ? r.color + '11' : 'transparent') + ';">'
-                + '<div style="color:' + r.color + ';font-size:11px;">' + r.label + '</div>'
-                + '<div style="text-align:right;">'
-                + '<div style="color:var(--color-text);font-size:13px;font-weight:500;">$' + Number(r.value).toLocaleString('en-US') + '</div>'
-                + (dist ? '<div style="color:' + (parseFloat(dist) >= 0 ? '#f23645' : 'var(--color-accent)') + ';font-size:10px;">' + (parseFloat(dist) >= 0 ? '+' : '') + dist + '% actual</div>' : '')
-                + '</div>'
-                + '</div>';
-        }).join('')
+    const filas = rows.map(r => {
+        const dist      = r.value ? ((price - r.value) / r.value * 100) : null;
+        const esActual  = r.value && Math.abs(price - r.value) < r.value * 0.02;
+        return '<div style="display:flex;justify-content:space-between;align-items:center;padding:10px 14px;border-bottom:1px solid var(--color-border);'
+            + (esActual ? 'background:' + alpha(r.color, 8) + ';' : '') + '">'
+            + '<div style="color:' + r.color + ';font-size:11px;">' + r.label + (esActual ? ' · aquí' : '') + '</div>'
+            + '<div style="text-align:right;">'
+            + '<div style="color:' + C.text + ';font-size:13px;font-weight:500;">' + usd(r.value) + '</div>'
+            // Se dice en qué dirección, no solo el signo: "+96,8%" a secas
+            // sobre un nivel que está POR DEBAJO del precio se lee al revés.
+            + (dist != null ? '<div style="color:' + (dist >= 0 ? C.bad : C.ok) + ';font-size:10px;">El precio está un '
+                + Math.abs(dist).toFixed(1) + '% ' + (dist >= 0 ? 'por encima' : 'por debajo') + '</div>' : '')
+            + '</div></div>';
+    }).join('');
+    return panel({ titulo: 'NIVELES CLAVE · MA200W', contenido: filas });
+}
+
+function mineriaSection(data) {
+    const h = data.hash_data;
+    const p = data.puell_data;
+    if ((!h || !h.hashrate_ehs) && (!p || !p.puell)) return '';
+    const cuerpo = '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:1rem;padding:1.25rem;">'
+        + (h && h.hashrate_ehs
+            ? kpiCard('HASHRATE', h.hashrate_ehs + ' EH/s',
+                      'Media de 30 días: ' + h.avg30_ehs + ' EH/s · ' + esc(h.trend),
+                      h.trend === 'SUBIENDO' ? C.ok : C.bad) : '')
+        + (p && p.puell
+            ? kpiCard('PUELL MULTIPLE', p.puell,
+                      'Ingresos de mineros: $' + p.daily_revenue + 'M frente a su media anual de $' + p.sma365_revenue + 'M',
+                      p.puell < 0.5 ? C.ok : p.puell < 1 ? C.warn : C.bad) : '')
+        + (p && p.source
+            ? kpiCard('ORIGEN DEL PUELL', esc(p.source),
+                      'Ingresos reales de la red, no una estimación de precio', C.muted) : '')
         + '</div>';
+    return panel({ titulo: 'DATOS ON-CHAIN · MINERÍA', contenido: cuerpo });
 }
 
 function stressSection(data) {
-    const s = data.stress;
-    return '<div style="background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius);overflow:hidden;margin-bottom:1rem;">'
-        + '<div style="padding:10px 14px;border-bottom:1px solid var(--color-border);color:var(--color-accent);font-size:12px;letter-spacing:0.08em;">STRESS TEST · ESCENARIOS ADVERSOS ' + tt('stress-test') + '</div>'
-        + '<div style="padding:8px 14px;background:rgba(242,54,69,0.05);border-bottom:1px solid var(--color-border);font-size:10px;color:var(--color-muted);">⚠ Las probabilidades son estimaciones subjetivas, no predicciones. Usar solo como referencia para gestión de riesgo.</div>'
-        + s.map(sc => {
-            const sevColor = sc.severity === 'extreme' ? '#f23645' : sc.severity === 'high' ? '#ff9800' : '#ffb800';
-            return '<div style="padding:12px 14px;border-bottom:1px solid var(--color-border);">'
-                + '<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:6px;">'
-                + '<div style="color:' + sevColor + ';font-size:12px;font-weight:500;">' + sc.name + '</div>'
-                + '<div style="color:var(--color-muted);font-size:10px;">' + sc.probability + '</div>'
-                + '</div>'
-                + '<div style="color:var(--color-muted);font-size:11px;margin-bottom:4px;">' + sc.description + '</div>'
-                + '<div style="display:flex;gap:1.5rem;font-size:11px;">'
-                + '<span style="color:var(--color-muted);">Precio objetivo: <span style="color:' + sevColor + ';">$' + Number(sc.target).toLocaleString('en-US') + '</span></span>'
-                + '<span style="color:var(--color-muted);">Caída: <span style="color:' + sevColor + ';">-' + sc.drop_pct + '%</span></span>'
-                + '</div>'
-                + '<div style="color:var(--color-muted);font-size:10px;margin-top:4px;">💡 ' + sc.hedge + '</div>'
-                + '</div>';
-        }).join('')
-        + '</div>';
+    const filas = (data.stress || []).map(sc => {
+        const sev = sc.severity === 'extreme' ? C.bad : sc.severity === 'high' ? C.warn : alpha(C.warn, 70);
+        return '<div style="padding:12px 14px;border-bottom:1px solid var(--color-border);">'
+            + '<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:1rem;margin-bottom:6px;">'
+            + '<div style="color:' + sev + ';font-size:12px;font-weight:500;">' + esc(sc.name) + '</div>'
+            + '<div style="color:' + C.muted + ';font-size:10px;text-align:right;flex-shrink:0;">' + esc(sc.probability) + '</div>'
+            + '</div>'
+            + '<div style="color:' + C.muted + ';font-size:11px;margin-bottom:4px;">' + esc(sc.description) + '</div>'
+            + '<div style="display:flex;gap:1.5rem;flex-wrap:wrap;font-size:11px;">'
+            + '<span style="color:' + C.muted + ';">Precio resultante: <span style="color:' + sev + ';">' + usd(sc.target) + '</span></span>'
+            + '<span style="color:' + C.muted + ';">Caída: <span style="color:' + sev + ';">−' + sc.drop_pct + '%</span></span>'
+            + '</div>'
+            + '<div style="color:' + C.muted + ';font-size:10px;margin-top:4px;">💡 ' + esc(sc.hedge) + '</div>'
+            + '</div>';
+    }).join('');
+    return panel({
+        titulo:    'STRESS TEST · ESCENARIOS ADVERSOS ' + tt('stress-test'),
+        contenido: filas,
+        escapar:   false,
+        avisos: [{ tipo: 'parcial', mensaje:
+            'Las probabilidades de esta tabla son estimaciones subjetivas escritas a mano, no el resultado '
+            + 'de ningún cálculo. Sirven para pensar en la gestión del riesgo, no como pronóstico.' }],
+    });
 }
 
 function methodologySection() {
-    return '<div style="background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius);padding:1.25rem;margin-bottom:1rem;">'
-        + '<div style="color:var(--color-accent);font-size:12px;letter-spacing:0.08em;margin-bottom:0.75rem;">METODOLOGÍA RSU v2.1</div>'
-        + '<div style="color:var(--color-muted);font-size:11px;line-height:1.8;">'
-        // El aviso anterior metía los tres indicadores en el mismo saco
-        // ("aproximaciones basadas en precio/MA200W") y era falso para dos:
-        // el Puell suele ser un dato on-chain real, y el MVRV no usa la MA200W
-        // cuando corre por su rama buena. Ahora cada tarjeta dice su origen
-        // real y este bloque solo explica qué mide cada uno.
-        + '⚠️ <strong style="color:var(--color-text);">IMPORTANTE</strong>: no todos estos indicadores se calculan igual. Cada tarjeta de arriba dice de dónde sale su número, y las que ponen «Aproximado» en ámbar no usan datos on-chain: son una estimación a partir del precio. Usar como orientación, no como señal definitiva.<br><br>'
-        + '<strong style="color:var(--color-text);">MA 200 Semanas (40%)</strong> — Soporte histórico más importante de BTC. Precio bajo = oportunidad histórica.<br>'
-        + '<strong style="color:var(--color-text);">MVRV Z-Score (30%)</strong> — Compara lo que vale BTC hoy con lo que valía de media. Lo ideal es medirlo contra el «valor realizado» (el precio al que cada bitcoin cambió de manos por última vez), pero eso exige un histórico de capitalización de pago: hoy se estima con el precio frente a su media larga. &lt;0 = infravalorado.<br>'
-        + '<strong style="color:var(--color-text);">Puell Multiple (20%)</strong> — Ingresos diarios de los mineros frente a su media anual. Cuando el dato llega de Blockchain.com es real, no una estimación. &lt;0.5 = stress minero.<br>'
-        + '<strong style="color:var(--color-text);">AHR999 (10%)</strong> — Índice de acumulación basado en relación precio/MA200. &lt;0.45 = compra fuerte.<br><br>'
-        + '<strong style="color:#f23645;">Este módulo no es asesoramiento financiero. Bitcoin es un activo de alto riesgo. Solo invertir lo que puedas permitirte perder.</strong>'
-        + '</div>'
+    const cuerpo = '<div style="color:' + C.muted + ';font-size:11px;line-height:1.8;padding:1.25rem;">'
+        + '<strong style="color:' + C.text + ';">MA 200 semanas (40%)</strong> — El soporte de largo plazo más seguido de bitcoin. Cuanto más por debajo cotiza el precio, más histórica es la oportunidad.<br>'
+        + '<strong style="color:' + C.text + ';">MVRV Z-Score (30%)</strong> — Compara lo que vale bitcoin hoy con lo que ha valido de media. Lo ideal es medirlo contra el «valor realizado» (el precio al que cada bitcoin cambió de manos por última vez); cuando ese dato no llega, se estima con el precio frente a su media larga. Por debajo de 0 = infravalorado.<br>'
+        + '<strong style="color:' + C.text + ';">Puell Multiple (20%)</strong> — Lo que ingresan los mineros cada día frente a su media anual. Es el único de los cuatro que no se deriva del precio. Por debajo de 0,5 = mineros bajo presión.<br>'
+        + '<strong style="color:' + C.text + ';">AHR999 (10%)</strong> — Índice de acumulación construido sobre la relación entre el precio y su media de 200 semanas.<br><br>'
+        + '<strong style="color:' + C.text + ';">Cómo leerlo.</strong> Los cuatro indicadores no son independientes entre sí: tres de ellos se calculan a partir del precio y de su media de 200 semanas, así que en la práctica el score refleja sobre todo lo lejos que está bitcoin de esa media. Donde mejor funciona no es afinando entre zonas contiguas, sino distinguiendo las lecturas bajas de las altas.<br><br>'
+        + '<strong style="color:' + C.bad + ';">Esto no es asesoramiento financiero. Bitcoin es un activo de alto riesgo: invierte solo lo que puedas permitirte perder.</strong>'
         + '</div>';
+    return panel({
+        titulo:    'METODOLOGÍA RSU',
+        contenido: cuerpo,
+        avisos: [{ tipo: 'parcial', mensaje:
+            'No todos estos indicadores se calculan igual. Cada tarjeta del desglose dice de dónde sale su '
+            + 'número, y las que aparecen en ámbar como «Aproximado» no usan datos de la red: son una '
+            + 'estimación a partir del precio.' }],
+    });
 }
 
 // ── BACKTEST ──────────────────────────────────────────────────────────────────
 
 async function loadBacktest(el) {
+    cleanup();
     el.innerHTML = loading('Ejecutando backtest histórico...');
     try {
-        const res   = await fetch('/api/v1/btc-stratum/backtest', {
-            headers: authHeader()
-        });
-        const data  = await res.json();
+        const res  = await fetch('/api/v1/btc-stratum/backtest', { headers: authHeader() });
+        const data = await res.json();
         if (!data.ok) throw new Error(data.error || 'Sin datos');
         el.innerHTML = renderBacktest(data);
         renderBacktestChart(data);
-    } catch(e) {
+    } catch (e) {
         el.innerHTML = errorMessage(e.message);
     }
 }
 
 function renderBacktest(data) {
-    const results = data.results;
+    const results = data.results || [];
     const bh      = results[0] ? results[0].bh_return : 0;
+    const anios   = data.period_days ? (data.period_days / 365) : null;
 
-    const summary = '<div style="background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius);padding:1.25rem;margin-bottom:1rem;">'
-        + '<div style="color:var(--color-accent);font-size:12px;letter-spacing:0.08em;margin-bottom:1rem;">BACKTEST HISTÓRICO · RSU STRATUM ' + tt('btc-backtest') + '</div>'
-        + '<div style="color:var(--color-muted);font-size:11px;margin-bottom:1rem;">Capital inicial: $10,000 · Estrategia: comprar 50% capital disponible cuando RSU &lt; umbral, vender cuando RSU &gt; 80</div>'
-        + '<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:1rem;">'
-        + results.map(r => {
-            const color  = r.total_return > bh ? 'var(--color-accent)' : r.total_return > 0 ? '#ffb800' : '#f23645';
-            const alphaColor = r.alpha > 0 ? 'var(--color-accent)' : '#f23645';
-            return '<div style="background:var(--color-bg,#0a0a0a);border:1px solid var(--color-border);border-radius:var(--radius);padding:1rem;">'
-                + '<div style="color:var(--color-muted);font-size:10px;margin-bottom:6px;">' + r.label + '</div>'
-                + '<div style="color:' + color + ';font-size:22px;font-weight:500;">+' + r.total_return + '%</div>'
-                + '<div style="color:var(--color-muted);font-size:11px;margin-top:4px;">Capital final: <span style="color:var(--color-text);">$' + Number(r.final_value).toLocaleString('en-US') + '</span></div>'
-                + '<div style="color:var(--color-muted);font-size:11px;">Alpha vs B&H: <span style="color:' + alphaColor + ';">' + (r.alpha > 0 ? '+' : '') + r.alpha + '%</span></div>'
-                + '<div style="color:var(--color-muted);font-size:11px;">Operaciones: ' + r.n_buys + ' compras · ' + r.n_sells + ' ventas</div>'
-                + '</div>';
-        }).join('')
-        + '</div>'
-        + '<div style="margin-top:1rem;padding-top:1rem;border-top:1px solid var(--color-border);font-size:11px;color:var(--color-muted);">BTC Buy & Hold: <span style="color:var(--color-text);">+' + bh + '%</span> · El backtest asume ejecución perfecta sin slippage ni fees</div>'
-        // El periodo evaluado empieza donde la MA200W (200 semanas) ya
-        // tiene histórico real -- antes de esa fecha no hay buffer previo
-        // como sí tiene el RSU Algoritmo, así que se recorta la serie
-        // entera en vez de usar un valor inmaduro (ver backend, sesión
-        // "min_periods mal etiquetado", 22/07/2026).
-        + (data.period_start ? '<div style="font-size:10px;color:var(--color-muted);margin-top:4px;">Periodo evaluado: desde ' + data.period_start + ' (' + (data.period_days / 365).toFixed(1) + ' años) — antes de esa fecha la MA200W no tenía histórico suficiente</div>' : '')
+    const tarjetas = results.map(r => {
+        const color      = r.total_return > bh ? C.ok : r.total_return > 0 ? C.warn : C.bad;
+        const alphaColor = r.alpha > 0 ? C.ok : C.bad;
+        return '<div style="background:' + C.fondo + ';border:1px solid var(--color-border);border-radius:var(--radius);padding:1rem;">'
+            + '<div style="color:' + C.muted + ';font-size:10px;margin-bottom:6px;">' + esc(r.label) + '</div>'
+            + '<div style="color:' + color + ';font-size:22px;font-weight:500;">' + (r.total_return >= 0 ? '+' : '') + r.total_return + '%</div>'
+            + '<div style="color:' + C.muted + ';font-size:11px;margin-top:4px;">Capital final: <span style="color:' + C.text + ';">' + usd(r.final_value) + '</span></div>'
+            + '<div style="color:' + C.muted + ';font-size:11px;">Frente a comprar y mantener: <span style="color:' + alphaColor + ';">' + (r.alpha > 0 ? '+' : '') + r.alpha + '%</span></div>'
+            + '<div style="color:' + C.muted + ';font-size:11px;">Operaciones: ' + r.n_buys + ' compras · ' + r.n_sells + ' ventas</div>'
+            + '</div>';
+    }).join('');
+
+    const cuerpo = '<div style="padding:1.25rem;">'
+        + '<div style="color:' + C.muted + ';font-size:11px;margin-bottom:1rem;">Capital inicial: $10.000 · Estrategia: invertir la mitad del capital disponible cuando el RSU Score baje del umbral, y vender cuando supere 80</div>'
+        + '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:1rem;">' + tarjetas + '</div>'
+        + '<div style="margin-top:1rem;padding-top:1rem;border-top:1px solid var(--color-border);font-size:11px;color:' + C.muted + ';">'
+        + 'Comprar y mantener bitcoin en el mismo periodo: <span style="color:' + C.text + ';">' + (bh >= 0 ? '+' : '') + bh + '%</span></div>'
         + '</div>';
 
-    const chartHtml = '<div style="background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius);padding:1.25rem;margin-bottom:1rem;">'
-        + '<div style="color:var(--color-accent);font-size:12px;letter-spacing:0.08em;margin-bottom:0.75rem;">RSU SCORE HISTÓRICO · SEÑALES DE COMPRA/VENTA</div>'
-        + '<canvas id="backtest-chart" height="200"></canvas>'
-        + '</div>';
+    const avisos = [
+        { tipo: 'parcial', mensaje:
+            'El backtest supone ejecución perfecta: sin comisiones, sin deslizamiento de precio y operando '
+            + 'siempre al cierre del día. En la práctica los resultados serían peores.' },
+    ];
+    if (data.period_start) {
+        avisos.push({ tipo: 'antiguo', mensaje:
+            'Periodo evaluado: desde ' + data.period_start + (anios ? ' (' + anios.toFixed(1) + ' años' : '')
+            + (anios ? ', apenas dos ciclos de halving completos)' : '')
+            + '. Antes de esa fecha la media de 200 semanas todavía no tenía histórico suficiente.' });
+    }
 
-    const lastTrades = results[1] ? results[1].trades : [];
-    const tradesHtml = lastTrades.length
-        ? '<div style="background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius);overflow:hidden;margin-bottom:1rem;">'
-            + '<div style="padding:10px 14px;border-bottom:1px solid var(--color-border);color:var(--color-accent);font-size:12px;letter-spacing:0.08em;">ÚLTIMAS OPERACIONES · RSU &lt; 40</div>'
-            + '<div style="display:grid;grid-template-columns:100px 80px 120px 80px;gap:8px;padding:6px 14px;border-bottom:1px solid var(--color-border);font-size:10px;color:var(--color-muted);">'
-            + '<div>FECHA</div><div>TIPO</div><div>PRECIO</div><div>RSU</div>'
-            + '</div>'
-            + lastTrades.map(t => '<div style="display:grid;grid-template-columns:100px 80px 120px 80px;gap:8px;padding:8px 14px;border-bottom:1px solid var(--color-border);font-size:11px;align-items:center;">'
-                + '<div style="color:var(--color-muted);">' + fmtFecha(t.date) + '</div>'
-                + '<div style="color:' + (t.type === 'BUY' ? 'var(--color-accent)' : '#f23645') + ';font-weight:500;">' + t.type + '</div>'
-                + '<div style="color:var(--color-text);">$' + Number(t.price).toLocaleString('en-US') + '</div>'
-                + '<div style="color:var(--color-muted);">' + t.rsu + '</div>'
-                + '</div>').join('')
-            + '</div>'
-        : '';
+    const resumen = panel({
+        titulo:    'BACKTEST HISTÓRICO · RSU STRATUM ' + tt('btc-backtest'),
+        contenido: cuerpo,
+        avisos,
+        escapar:   false,
+    });
 
-    const disclaimer = '<div style="background:rgba(242,54,69,0.05);border:1px solid rgba(242,54,69,0.2);border-radius:var(--radius);padding:1rem;margin-bottom:1rem;font-size:11px;color:var(--color-muted);">'
-        + '⚠️ <strong style="color:#f23645;">DISCLAIMER BACKTEST</strong>: Resultados históricos no garantizan rentabilidad futura. El backtest asume ejecución perfecta, sin costes de transacción, sin impacto en mercado y con datos de cierre diario. En la práctica los resultados diferirán significativamente. No es asesoramiento financiero.'
-        + '</div>';
+    const grafico = panel({
+        titulo:    'RSU SCORE HISTÓRICO · SEÑALES DE COMPRA Y VENTA',
+        contenido: '<div style="padding:16px;"><canvas id="backtest-chart" height="200"></canvas></div>',
+    });
 
-    return summary + chartHtml + tradesHtml + disclaimer;
+    const trades = results[1] ? (results[1].trades || []) : [];
+    const cols   = 'grid-template-columns:minmax(90px,1fr) 70px minmax(90px,1fr) 60px;';
+    const tabla  = trades.length ? panel({
+        titulo:    'ÚLTIMAS OPERACIONES · RSU < 40',
+        contenido: '<div style="display:grid;' + cols + 'gap:8px;padding:6px 14px;border-bottom:1px solid var(--color-border);font-size:10px;color:' + C.muted + ';">'
+            + '<div>FECHA</div><div>TIPO</div><div>PRECIO</div><div>RSU</div></div>'
+            + trades.map(t => '<div style="display:grid;' + cols + 'gap:8px;padding:8px 14px;border-bottom:1px solid var(--color-border);font-size:11px;align-items:center;">'
+                + '<div style="color:' + C.muted + ';">' + esc(fmtFecha(t.date)) + '</div>'
+                + '<div style="color:' + (t.type === 'BUY' ? C.ok : C.bad) + ';font-weight:500;">' + (t.type === 'BUY' ? 'COMPRA' : 'VENTA') + '</div>'
+                + '<div style="color:' + C.text + ';">' + usd(t.price) + '</div>'
+                + '<div style="color:' + C.muted + ';">' + t.rsu + '</div>'
+                + '</div>').join(''),
+    }) : '';
+
+    return resumen + grafico + tabla;
 }
 
-// ── CHARTS ────────────────────────────────────────────────────────────────────
+// ── GRÁFICOS ──────────────────────────────────────────────────────────────────
+
+/** Ejes y rejilla, resueltos desde el tema en cada render. */
+function ejes(opts = {}) {
+    const tinta   = cssVar('--color-muted', '#555');
+    const rejilla = alpha(tinta, 15);
+    return {
+        x: { ticks: { color: tinta, font: { size: 9 }, maxTicksLimit: 8, maxRotation: 0 }, grid: { color: rejilla } },
+        y: Object.assign({ ticks: { color: tinta, font: { size: 9 } }, grid: { color: rejilla } }, opts.y || {}),
+    };
+}
+
+function leyenda() {
+    return { display: true, position: 'top', labels: { color: cssVar('--color-muted', '#666'), font: { size: 10 }, boxWidth: 12 } };
+}
 
 function renderChart(data) {
     loadChartJs(() => {
         const ctx = document.getElementById('btc-chart');
-        if (!ctx || !data.chart_data.length) return;
-        const labels  = data.chart_data.map(d => d.date);
-        const prices  = data.chart_data.map(d => d.price);
-        const ma200   = data.chart_data.map(d => d.ma200);
-        const minus25 = data.chart_data.map(d => d.minus25);
-        const minus50 = data.chart_data.map(d => d.minus50);
-        const plus25  = data.chart_data.map(d => d.plus25);
+        if (!ctx || !data.chart_data || !data.chart_data.length) return;
+        const d       = data.chart_data;
+        const acento  = cssVar('--color-accent', '#00ffad');
+        const aviso   = cssVar('--color-warning', '#ffb800');
+        const linea = (label, campo, color, ancho, dash) => ({
+            label, data: d.map(x => x[campo]), borderColor: color, borderWidth: ancho,
+            pointRadius: 0, fill: false, tension: 0.3, borderDash: dash || [],
+        });
 
-        new Chart(ctx, {
+        _charts.push(new Chart(ctx, {
             type: 'line',
             data: {
-                labels,
+                labels: d.map(x => x.date),
                 datasets: [
-                    { label: 'BTC/USD',     data: prices,  borderColor: '#f7931a', borderWidth: 2,   pointRadius: 0, fill: false, tension: 0.3 },
-                    { label: 'MA200W',      data: ma200,   borderColor: '#00ffad', borderWidth: 2,   pointRadius: 0, fill: false, tension: 0.3 },
-                    { label: '-25% MA',     data: minus25, borderColor: '#28a745', borderWidth: 1,   pointRadius: 0, fill: false, tension: 0.3, borderDash: [4,4] },
-                    { label: '-50% MA',     data: minus50, borderColor: '#006b1b', borderWidth: 1.5, pointRadius: 0, fill: false, tension: 0.3, borderDash: [2,4] },
-                    { label: '+25% MA',     data: plus25,  borderColor: '#ffb800', borderWidth: 1,   pointRadius: 0, fill: false, tension: 0.3, borderDash: [4,4] },
-                ]
+                    linea('BTC/USD', 'price',   BTC_NARANJA, 2),
+                    linea('MA200W',  'ma200',   acento,      2),
+                    linea('−25% MA', 'minus25', alpha(acento, 65), 1,   [4, 4]),
+                    linea('−50% MA', 'minus50', alpha(acento, 40), 1.5, [2, 4]),
+                    linea('+25% MA', 'plus25',  aviso,       1,   [4, 4]),
+                ],
             },
             options: {
                 responsive: true, maintainAspectRatio: false,
                 interaction: { mode: 'index', intersect: false },
                 plugins: {
-                    legend: { display: true, position: 'top', labels: { color: '#666', font: { size: 10 }, boxWidth: 12 } },
-                    tooltip: { backgroundColor: '#111', borderColor: '#333', borderWidth: 1, titleColor: '#aaa', bodyColor: '#ccc',
-                        callbacks: { label: item => item.dataset.label + ': $' + Number(item.parsed.y).toLocaleString('en-US') }
-                    }
+                    legend: leyenda(),
+                    tooltip: {
+                        backgroundColor: cssVar('--color-surface', '#111'),
+                        borderColor: cssVar('--color-border', '#333'), borderWidth: 1,
+                        titleColor: cssVar('--color-muted', '#aaa'), bodyColor: cssVar('--color-text', '#ccc'),
+                        callbacks: { label: item => item.dataset.label + ': ' + usd(item.parsed.y) },
+                    },
                 },
-                scales: {
-                    x: { ticks: { color: '#555', font: { size: 9 }, maxTicksLimit: 8, maxRotation: 0 }, grid: { color: 'rgba(255,255,255,0.04)' } },
-                    y: { ticks: { color: '#555', font: { size: 9 }, callback: v => '$' + Number(v).toLocaleString('en-US') }, grid: { color: 'rgba(255,255,255,0.04)' } }
-                }
-            }
-        });
+                scales: ejes({ y: { ticks: { color: cssVar('--color-muted', '#555'), font: { size: 9 }, callback: v => usd(v) } } }),
+            },
+        }));
     });
 }
 
 function renderBacktestChart(data) {
     loadChartJs(() => {
         const ctx = document.getElementById('backtest-chart');
-        if (!ctx || !data.rsu_series.length) return;
+        if (!ctx || !data.rsu_series || !data.rsu_series.length) return;
         const labels = data.rsu_series.map(d => d.date);
-        const rsu    = data.rsu_series.map(d => d.value);
+        const acento = cssVar('--color-accent', '#00ffad');
+        const umbral = (valor, color) => ({
+            label: 'Umbral ' + valor, data: labels.map(() => valor),
+            borderColor: color, borderWidth: 1, pointRadius: 0, borderDash: [4, 4], fill: false,
+        });
 
-        new Chart(ctx, {
+        _charts.push(new Chart(ctx, {
             type: 'line',
             data: {
                 labels,
                 datasets: [
-                    { label: 'RSU Score', data: rsu, borderColor: '#00d9ff', backgroundColor: '#00d9ff11', borderWidth: 1.5, pointRadius: 0, fill: true, tension: 0.3 },
-                    { label: 'Umbral 20', data: labels.map(() => 20), borderColor: '#00ffad', borderWidth: 1, pointRadius: 0, borderDash: [4,4], fill: false },
-                    { label: 'Umbral 40', data: labels.map(() => 40), borderColor: '#ffb800', borderWidth: 1, pointRadius: 0, borderDash: [4,4], fill: false },
-                    { label: 'Umbral 80', data: labels.map(() => 80), borderColor: '#f23645', borderWidth: 1, pointRadius: 0, borderDash: [4,4], fill: false },
-                ]
+                    { label: 'RSU Score', data: data.rsu_series.map(d => d.value),
+                      borderColor: cssVar('--color-secondary', '#00d9ff'),
+                      backgroundColor: alpha(cssVar('--color-secondary', '#00d9ff'), 8),
+                      borderWidth: 1.5, pointRadius: 0, fill: true, tension: 0.3 },
+                    umbral(20, acento),
+                    umbral(40, cssVar('--color-warning', '#ffb800')),
+                    umbral(80, cssVar('--color-danger', '#f23645')),
+                ],
             },
             options: {
                 responsive: true, maintainAspectRatio: false,
-                plugins: { legend: { display: true, position: 'top', labels: { color: '#666', font: { size: 10 }, boxWidth: 12 } } },
-                scales: {
-                    x: { ticks: { color: '#555', font: { size: 9 }, maxTicksLimit: 8, maxRotation: 0 }, grid: { color: 'rgba(255,255,255,0.04)' } },
-                    y: { min: 0, max: 100, ticks: { color: '#555', font: { size: 9 } }, grid: { color: 'rgba(255,255,255,0.04)' } }
-                }
-            }
-        });
+                plugins: { legend: leyenda() },
+                scales: ejes({ y: { min: 0, max: 100, ticks: { color: cssVar('--color-muted', '#555'), font: { size: 9 } } } }),
+            },
+        }));
     });
 }
 
 function loadChartJs(cb) {
     if (window.Chart) { cb(); return; }
-    const s   = document.createElement('script');
-    s.src     = 'https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js';
-    s.onload  = cb;
+    const s  = document.createElement('script');
+    s.src    = 'https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js';
+    s.onload = cb;
     document.head.appendChild(s);
 }
 
+// ── AUXILIARES ────────────────────────────────────────────────────────────────
+
 function sourcesBar(sources) {
     if (!sources) return '';
-    return '<div style="display:flex;gap:6px;margin-top:8px;flex-wrap:wrap;">'
+    return '<div style="display:flex;gap:6px;margin-top:10px;flex-wrap:wrap;">'
         + Object.entries(sources).map(([k, v]) =>
-            '<span style="font-size:9px;background:rgba(0,217,255,0.08);border:1px solid rgba(0,217,255,0.2);border-radius:3px;padding:1px 6px;color:var(--color-muted);">'
-            + k.toUpperCase() + ': ' + v + '</span>'
-        ).join('')
-        + '</div>';
-}
-// ── HELPERS ───────────────────────────────────────────────────────────────────
-
-function hashrateSection(data) {
-    const h = data.hash_data;
-    const p = data.puell_data;
-    if (!h && !p) return '';
-    return '<div style="background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius);padding:1.25rem;margin-bottom:1rem;">'
-        + '<div style="color:var(--color-accent);font-size:12px;letter-spacing:0.08em;margin-bottom:0.75rem;">DATOS ON-CHAIN · MINERÍA</div>'
-        + '<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:1rem;">'
-        + (h ? macroCard('HASHRATE', h.hashrate_ehs + ' EH/s', 'Media 30d: ' + h.avg30_ehs + ' EH/s · ' + h.trend, h.trend === 'SUBIENDO' ? 'var(--color-accent)' : '#f23645') : '')
-        + (p && p.puell ? macroCard('PUELL MULTIPLE', p.puell, 'Ingresos mineros: $' + p.daily_revenue + 'M · Media 365d: $' + p.sma365_revenue + 'M', p.puell < 0.5 ? 'var(--color-accent)' : p.puell < 1 ? '#ffb800' : '#f23645') : '')
-        + (p ? macroCard('FUENTE PUELL', p.source || 'N/A', 'Datos reales de ingresos de mineros', 'var(--color-muted)') : '')
-        + '</div>'
+            '<span style="font-size:9px;background:' + alpha(C.info, 8) + ';border:1px solid ' + alpha(C.info, 20)
+            + ';border-radius:3px;padding:1px 6px;color:' + C.muted + ';">'
+            + esc(k.toUpperCase()) + ': ' + esc(v) + '</span>').join('')
         + '</div>';
 }
 
 function loading(msg) {
-    return '<div style="padding:2rem;color:var(--color-muted);font-size:12px;text-align:center;">'
-        + '<div style="font-size:24px;margin-bottom:8px;">₿</div>'
-        + msg
-        + '</div>';
+    return '<div style="padding:2rem;color:' + C.muted + ';font-size:12px;text-align:center;">'
+        + '<div style="font-size:24px;margin-bottom:8px;color:' + BTC_NARANJA + ';">₿</div>'
+        + esc(msg) + '</div>';
 }

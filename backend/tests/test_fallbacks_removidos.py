@@ -32,7 +32,14 @@ def test_reddit_fallback_sin_datos_devuelve_ok_false():
 def test_dxy_fallback_sin_datos_devuelve_none_no_103():
     with patch("services.btc_stratum_service.yf.download", side_effect=Exception("red caída")):
         r = _get_macro_data()
-    assert r == {"dxy": None, "dxy_score": None, "liquidity_score": None, "status": None}
+    # Lo que protege este test es que NINGÚN campo traiga un valor fabricado
+    # (antes: dxy=103.0, score=50, status="NEUTRAL"). Se comprueba campo a
+    # campo en vez de con una igualdad de dict exacta: comparar el dict entero
+    # ataba el test a la lista de claves, y al añadir una nueva (`liquidez_base`,
+    # 16/08/2026) fallaba sin que hubiera ninguna regresión real.
+    for clave in ("dxy", "dxy_score", "liquidity_score", "status"):
+        assert r[clave] is None, f"{clave} deberia ser None sin datos reales, no {r[clave]!r}"
+    assert all(v is None for v in r.values()), f"algun campo trae un valor fabricado: {r}"
 
 
 def test_rs_rating_sin_universo_devuelve_none():

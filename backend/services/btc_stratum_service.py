@@ -310,36 +310,91 @@ def _calc_rsu_score_improved(
         "ahr999": round(ahr_score, 1),
     }
 
+# Los colores viajan como expresiones CSS con tokens del tema, no como hex.
+# Antes esta escalera inventaba seis verdes propios (#006b1b, #009627, #28a745,
+# #78a832, #aa8c28) que no existían en ningún otro módulo de la terminal y que
+# se quedaban clavados con cualquier tema que no fuera el oscuro por defecto.
+# La rampa se construye ahora mezclando los dos tokens semánticos que ya
+# definen los extremos -- así el degradado sigue leyéndose igual en los nueve
+# temas. `color-mix` ya se usa en components/sidebar.js.
+def _mezcla(pct_accent: int) -> str:
+    return f"color-mix(in srgb, var(--color-accent) {pct_accent}%, var(--color-warning))"
+
 def _get_zone(rsu: float) -> dict:
     if rsu < 20:
-        return {"zone": "OPORTUNIDAD MÁXIMA", "color": "#006b1b", "allocation": 25, "urgency": "CRÍTICA"}
+        return {"zone": "OPORTUNIDAD MÁXIMA", "color": "var(--color-accent)", "allocation": 25, "urgency": "CRÍTICA"}
     elif rsu < 40:
-        return {"zone": "COMPRA AGRESIVA",    "color": "#009627", "allocation": 20, "urgency": "ALTA"}
+        return {"zone": "COMPRA AGRESIVA",    "color": _mezcla(80), "allocation": 20, "urgency": "ALTA"}
     elif rsu < 60:
-        return {"zone": "COMPRA FUERTE",      "color": "#28a745", "allocation": 15, "urgency": "MEDIA-ALTA"}
+        return {"zone": "COMPRA FUERTE",      "color": _mezcla(60), "allocation": 15, "urgency": "MEDIA-ALTA"}
     elif rsu < 70:
-        return {"zone": "BUENA COMPRA",       "color": "#78a832", "allocation": 10, "urgency": "MEDIA"}
+        return {"zone": "BUENA COMPRA",       "color": _mezcla(35), "allocation": 10, "urgency": "MEDIA"}
     elif rsu < 85:
-        return {"zone": "ZONA DCA",           "color": "#aa8c28", "allocation": 5,  "urgency": "BAJA"}
+        return {"zone": "ZONA DCA",           "color": "var(--color-warning)", "allocation": 5,  "urgency": "BAJA"}
     else:
-        return {"zone": "ESPERAR",            "color": "#666666", "allocation": 0,  "urgency": "ESPERAR"}
+        return {"zone": "ESPERAR",            "color": "var(--color-muted)",   "allocation": 0,  "urgency": "ESPERAR"}
 
 def _get_signal_label(rsu: float) -> dict:
-    if rsu < 20:   return {"label": "OPORTUNIDAD EXTREMA",  "color": "#00ffad"}
-    elif rsu < 40: return {"label": "ACUMULACIÓN FUERTE",   "color": "#00d9ff"}
-    elif rsu < 60: return {"label": "ACUMULACIÓN MODERADA", "color": "#ffd60a"}
-    elif rsu < 80: return {"label": "NEUTRAL / ESPERA",     "color": "#ff9800"}
-    else:          return {"label": "SOBRECOMPRA / RIESGO", "color": "#f23645"}
+    if rsu < 20:   return {"label": "OPORTUNIDAD EXTREMA",  "color": "var(--color-accent)"}
+    elif rsu < 40: return {"label": "ACUMULACIÓN FUERTE",   "color": "var(--color-secondary)"}
+    elif rsu < 60: return {"label": "ACUMULACIÓN MODERADA", "color": _mezcla(40)}
+    elif rsu < 80: return {"label": "NEUTRAL / ESPERA",     "color": "var(--color-warning)"}
+    else:          return {"label": "SOBRECOMPRA / RIESGO", "color": "var(--color-danger)"}
+
+HALVING_BLOQUES = 210_000
+HALVING_MIN_POR_BLOQUE = 10  # objetivo del protocolo; el ritmo real oscila ±5%
+
+
+def _proximo_halving_por_altura():
+    """Estima la fecha del próximo halving a partir de la altura de bloque
+    actual, en vez de tenerla clavada. La fecha exacta NO se puede conocer de
+    antemano -- depende del ritmo al que se minen los bloques que faltan --
+    así que esto es una estimación, pero una que se corrige sola cada día.
+
+    Antes era `datetime(2028, 4, 1)` a fuego: en cuanto pasara esa fecha, el
+    progreso del ciclo superaría el 100% y la fase se quedaría encallada en
+    "MERCADO BAJISTA" para siempre sin que nada avisara. Devuelve None si
+    mempool.space no responde -- el llamador decide, no se fabrica una fecha.
+    """
+    try:
+        r = requests.get("https://mempool.space/api/blocks/tip/height", timeout=8)
+        if r.status_code != 200:
+            return None
+        altura = int(r.text.strip())
+        if altura <= 0:
+            return None
+        bloque_objetivo = ((altura // HALVING_BLOQUES) + 1) * HALVING_BLOQUES
+        faltan          = bloque_objetivo - altura
+        return {
+            "fecha":  datetime.now() + timedelta(minutes=faltan * HALVING_MIN_POR_BLOQUE),
+            "altura": altura,
+            "bloque": bloque_objetivo,
+            "faltan": faltan,
+        }
+    except Exception:
+        return None
+
 
 def _get_halving_cycle() -> dict:
     halvings = [datetime(2012,11,28), datetime(2016,7,9),
                 datetime(2020,5,11), datetime(2024,4,19)]
     now          = datetime.now()
     last_halving = max(h for h in halvings if h <= now)
-    next_halving = datetime(2028, 4, 1)
+
+    est = _proximo_halving_por_altura()
+    if est:
+        next_halving  = est["fecha"]
+        halving_fuente = f"estimado por altura de bloque ({est['faltan']:,} bloques para el {est['bloque']:,})".replace(",", ".")
+    else:
+        # Sin altura de bloque no se inventa una fecha: se proyecta desde el
+        # último halving con el ritmo nominal del protocolo (210.000 bloques ×
+        # 10 min ≈ 1.458 días) y se dice que es eso.
+        next_halving   = last_halving + timedelta(minutes=HALVING_BLOQUES * HALVING_MIN_POR_BLOQUE)
+        halving_fuente = "proyectado desde el último halving (sin conexión con la red)"
+
     days_since   = (now - last_halving).days
-    days_total   = (next_halving - last_halving).days
-    progress     = days_since / days_total
+    days_total   = max(1, (next_halving - last_halving).days)
+    progress     = min(1.0, days_since / days_total)
 
     if progress < 0.2:   phase = "ACUMULACIÓN"
     elif progress < 0.4: phase = "BULL TEMPRANO"
@@ -351,9 +406,10 @@ def _get_halving_cycle() -> dict:
         "phase":        phase,
         "progress_pct": round(progress * 100, 1),
         "days_since":   days_since,
-        "days_to_next": (next_halving - now).days,
+        "days_to_next": max(0, (next_halving - now).days),
         "last_halving": last_halving.strftime("%Y-%m-%d"),
         "next_halving": next_halving.strftime("%Y-%m-%d"),
+        "fuente":       halving_fuente,
     }
 
 def _get_macro_data() -> dict:
@@ -361,8 +417,11 @@ def _get_macro_data() -> dict:
         from services.yf_pool import yf_executor
         f_dxy = yf_executor.submit(lambda: yf.download(
             "DX-Y.NYB", period="1y", interval="1d", progress=False, auto_adjust=True))
+        # 5 años en vez de 1: el score de liquidez es ahora un percentil sobre
+        # la propia historia del TLT (ver abajo) y necesita una ventana con la
+        # que comparar. El DXY solo usa su SMA50, así que le sobra.
         f_tlt = yf_executor.submit(lambda: yf.download(
-            "TLT", period="1y", interval="1d", progress=False, auto_adjust=True))
+            "TLT", period="5y", interval="1d", progress=False, auto_adjust=True))
         dxy_df = _flatten(f_dxy.result()).dropna()
         tlt_df = _flatten(f_tlt.result()).dropna()
 
@@ -370,13 +429,24 @@ def _get_macro_data() -> dict:
         dxy_ma50    = float(dxy_df["Close"].rolling(50).mean().iloc[-1])
         dxy_score   = max(0, min(100, 50 - ((dxy_current / dxy_ma50 - 1) * 500)))
 
-        tlt_price       = float(tlt_df["Close"].iloc[-1])
-        liquidity_score = max(0, min(100, (tlt_price - 80) / 0.6))
+        # Percentil del TLT dentro de su propia historia reciente, en vez de la
+        # recta `(precio − 80)/0,6`. Aquella estaba calibrada para una banda de
+        # precios que ya no existe: medido el 16/08/2026, con el TLT en 82,0
+        # daba 3,4 sobre 100, y el "entorno" derivado había sido RESTRICTIVO
+        # 1.087 de los últimos 1.255 días (87%) -- una etiqueta que casi nunca
+        # cambia no informa de nada. El percentil no puede quedarse pegado a un
+        # extremo por mucho que se desplace el rango de precios, y es el mismo
+        # criterio que ya usan el McClellan del RSU Algoritmo y el RS de RS/RW.
+        tlt_serie       = tlt_df["Close"].dropna()
+        tlt_price       = float(tlt_serie.iloc[-1])
+        liquidity_score = round(float((tlt_serie < tlt_price).sum()) / len(tlt_serie) * 100, 1)
+        liquidez_base   = len(tlt_serie)
 
         return {
             "dxy":             round(dxy_current, 2),
             "dxy_score":       round(dxy_score, 1),
-            "liquidity_score": round(liquidity_score, 1),
+            "liquidity_score": liquidity_score,
+            "liquidez_base":   liquidez_base,
             "status":          "EXPANSIVO" if liquidity_score > 60 else "NEUTRAL" if liquidity_score > 40 else "RESTRICTIVO",
         }
     except Exception:
@@ -384,23 +454,42 @@ def _get_macro_data() -> dict:
         # de un dato real -- ante fallo real de la fuente, se admite la
         # ausencia (ver precedente ya correcto en market_service.py para el
         # DXY de forex, líneas ~201-204).
-        return {"dxy": None, "dxy_score": None, "liquidity_score": None, "status": None}
+        return {"dxy": None, "dxy_score": None, "liquidity_score": None,
+                "liquidez_base": None, "status": None}
 
 def _calc_alerts(price: float, ma200: float, rsu: float,
                  mvrv_z: float, puell: float, mvrv_metodo: str = "proxy") -> list:
     alerts = []
 
+    # Proximidad a los dos niveles de referencia. Las dos ramas estaban mal:
+    #
+    #   - La de abajo calculaba `(ma200*0,5 − price)/price`, que solo sale
+    #     POSITIVO cuando el precio ya está por debajo del nivel −50% -- o sea,
+    #     avisaba de que "faltaba" para llegar a un sitio en el que ya estabas,
+    #     y callaba justo durante todo el trayecto, que es cuando sirve.
+    #   - La de arriba anunciaba "a X% de entrar en COMPRA FUERTE" con el
+    #     precio hasta un 15% POR ENCIMA de la MA200W, cuando a esa distancia
+    #     el score ronda 41 y COMPRA FUERTE empieza en 60 hacia abajo: ya se
+    #     estaba dentro.
+    #
+    # Ahora cada aviso mide lo que dice medir: cuánto tiene que caer el precio
+    # (en %) para tocar el nivel, y solo se emite si aún no lo ha tocado.
+    nivel_max = ma200 * 0.5
+    if price > nivel_max:
+        caida_a_max = (price - nivel_max) / price * 100
+        if caida_a_max <= 20:
+            alerts.append({"icon": "🔥", "msg": f"A un {caida_a_max:.1f}% de caída del nivel de OPORTUNIDAD MÁXIMA (−50% de la MA200W)",
+                           "color": "var(--color-accent)"})
+
     if price > ma200:
-        dist = (price - ma200) / ma200 * 100
-        if dist <= 15:
-            alerts.append({"icon": "📉", "msg": f"A {dist:.1f}% de entrar en COMPRA FUERTE", "color": "#00d9ff"})
-    else:
-        dist_max = (ma200 * 0.5 - price) / price * 100
-        if 0 < dist_max <= 20:
-            alerts.append({"icon": "🔥", "msg": f"A {dist_max:.1f}% de OPORTUNIDAD MÁXIMA", "color": "#006b1b"})
+        caida_a_ma = (price - ma200) / price * 100
+        if caida_a_ma <= 15:
+            alerts.append({"icon": "📉", "msg": f"A un {caida_a_ma:.1f}% de caída de la MA200W, el soporte de referencia del modelo",
+                           "color": "var(--color-secondary)"})
 
     if rsu < 25:
-        alerts.append({"icon": "🚨", "msg": f"RSU Score extremo ({rsu:.1f}) — señal histórica de suelo", "color": "#00ffad"})
+        alerts.append({"icon": "🚨", "msg": f"RSU Score extremo ({rsu:.1f}) — zona que históricamente ha coincidido con suelos, vista en un único episodio (jun 2022 – mar 2023)",
+                       "color": "var(--color-accent)"})
 
     if mvrv_z < -0.5:
         # El "vs realized cap" que decía antes esta alerta era falso siempre
@@ -413,10 +502,10 @@ def _calc_alerts(price: float, ma200: float, rsu: float,
         detalle = ("BTC por debajo de su capitalización media del último año"
                    if mvrv_metodo == "capmercado"
                    else "precio muy por debajo de su media de 200 semanas (aprox., sin dato on-chain)")
-        alerts.append({"icon": "💎", "msg": f"MVRV Z-Score negativo ({mvrv_z:.2f}) — {detalle}", "color": "#00d9ff"})
+        alerts.append({"icon": "💎", "msg": f"MVRV Z-Score negativo ({mvrv_z:.2f}) — {detalle}", "color": "var(--color-secondary)"})
 
     if puell < 0.6:
-        alerts.append({"icon": "⛏️", "msg": f"Puell Multiple bajo ({puell:.2f}) — mineros en stress, señal de suelo", "color": "#ffd60a"})
+        alerts.append({"icon": "⛏️", "msg": f"Puell Multiple bajo ({puell:.2f}) — mineros en stress, señal de suelo", "color": "var(--color-warning)"})
 
     return alerts
 
@@ -699,8 +788,37 @@ def get_btc_dashboard() -> dict:
                 "plus50":  round(float(mv * 1.50), 0),
             })
 
-        ath      = round(float(close.max()), 0)
-        drawdown = round((price - ath) / ath * 100, 1)
+        # `close.max()` es el máximo de la VENTANA descargada, no el máximo
+        # histórico de bitcoin. Con la ventana actual acierta por casualidad
+        # (el ATH real cae dentro), pero dejaría de acertar en silencio si la
+        # fuente cambiara o la ventana se acortara. Se publica junto a la fecha
+        # desde la que se ha mirado, para que el número no pueda mentir sin que
+        # se vea.
+        ath       = round(float(close.max()), 0)
+        drawdown  = round((price - ath) / ath * 100, 1)
+        ath_desde = close.index[0].strftime("%Y-%m-%d")
+
+        # Avisos para la banda compartida del frontend (core/ui.js::avisosBanda).
+        # Se redactan aquí, donde se sabe qué camino tomó cada dato, en vez de
+        # dejar que la página los adivine.
+        avisos = []
+        if mvrv_metodo != "capmercado":
+            avisos.append({"tipo": "parcial", "mensaje":
+                "El MVRV Z-Score de hoy no usa datos on-chain: la fuente de capitalización histórica "
+                "dejó de ser gratuita, así que se estima con el precio frente a su media de 200 semanas. "
+                "Eso lo convierte, de hecho, en una segunda lectura del mismo factor que ya pesa un 40%."})
+        if puell_metodo != "real":
+            avisos.append({"tipo": "parcial", "mensaje":
+                "El Puell Multiple de hoy es una aproximación de precio: no ha llegado el dato de ingresos "
+                "de mineros. Es el único de los cuatro factores que mide algo distinto del precio, así que "
+                "sin él el modelo se queda apoyado en una sola señal."})
+        if macro_data.get("dxy") is None:
+            avisos.append({"tipo": "parcial", "mensaje":
+                "Sin datos macro en este momento (dólar y liquidez): las tarjetas de entorno aparecen vacías "
+                "en vez de con un valor supuesto."})
+        avisos.append({"tipo": "antiguo", "mensaje":
+            f"El máximo histórico y la caída desde máximos se miden sobre el histórico disponible "
+            f"(desde {ath_desde}), no sobre toda la vida de bitcoin."})
 
         # Data sources badge
         sources = {
@@ -717,7 +835,9 @@ def get_btc_dashboard() -> dict:
             "ma200":       round(ma_val, 0),
             "deviation":   round(deviation, 1),
             "ath":         ath,
+            "ath_desde":   ath_desde,
             "drawdown":    drawdown,
+            "avisos":      avisos,
             "rsu_score":   rsu,
             "rsu_signal":  signal,
             "zone":        zone,
