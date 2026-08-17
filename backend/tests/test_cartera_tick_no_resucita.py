@@ -37,7 +37,8 @@ import pytest
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 
 from services.cartera_service import _price_cache  # noqa: E402
-from services.finnhub_stream_service import _aplicar_trade  # noqa: E402
+from services.finnhub_stream_service import _aplicar_trade
+from services.cartera_service import _ultima_sesion_esperada  # noqa: E402
 
 
 @pytest.fixture(autouse=True)
@@ -123,7 +124,11 @@ def test_con_referencia_buena_el_tick_si_calcula_el_porcentaje():
     ayer (la entrada traía un chg real), el tick actualiza el porcentaje."""
     _price_cache["MSTR"] = {"ticker": "MSTR", "price": 95.00, "prev": 94.83,
                             "chg": 0.18, "sin_datos_hoy": False,
-                            "chg_fecha": "2026-08-13", "updated": 0}
+                            "chg_fecha": "2026-08-13",
+                            # Desde el 17/08/2026 la referencia declara de qué
+                            # sesión es; sin fecha ya no se considera válida.
+                            "prev_fecha": str(_ultima_sesion_esperada()),
+                            "updated": 0}
     _aplicar_trade("MSTR", 98.55)
     d = _price_cache["MSTR"]
     assert d["chg"] == pytest.approx(3.92, abs=0.01)
@@ -136,7 +141,11 @@ def test_la_fecha_de_la_sesion_no_se_pierde_en_el_camino_bueno():
     antiguo lo borraba SIEMPRE, también con datos buenos."""
     _price_cache["MSTR"] = {"ticker": "MSTR", "price": 95.00, "prev": 94.83,
                             "chg": 0.18, "sin_datos_hoy": False,
-                            "chg_fecha": "2026-08-13", "updated": 0}
+                            "chg_fecha": "2026-08-13",
+                            # Desde el 17/08/2026 la referencia declara de qué
+                            # sesión es; sin fecha ya no se considera válida.
+                            "prev_fecha": str(_ultima_sesion_esperada()),
+                            "updated": 0}
     _aplicar_trade("MSTR", 98.55)
     assert _price_cache["MSTR"]["chg_fecha"] == "2026-08-13"
 

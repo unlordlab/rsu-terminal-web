@@ -173,7 +173,8 @@ def _aplicar_trade(ticker: str, precio: float) -> bool:
     `FINNHUB_REALTIME` viene apagado por defecto: sin el flag este código no
     llega a ejecutarse nunca, así que toda verificación local pasaba.
     """
-    from services.cartera_service import _price_cache
+    from services.cartera_service import (_price_cache, _is_market_open,
+                                          _ultima_sesion_esperada)
 
     previo = _price_cache.get(ticker) or {}
     prev = previo.get("prev")
@@ -185,6 +186,51 @@ def _aplicar_trade(ticker: str, precio: float) -> bool:
     # es correcto aunque no sepamos el porcentaje del día.
     base = {**previo, "price": round(precio, 2), "prev": prev,
             "updated": time.time()}
+
+    # ── LA REFERENCIA CADUCA, Y HASTA AHORA NADIE LO MIRABA ──────────────────
+    #
+    # Aquí estaba la razón de que el «HOY %» volviera a salir mal cada pocos
+    # días pese a tres arreglos seguidos. Los tres vivían en las ramas de
+    # `_fetch_price_single()`... y esa función DEJA DE EJECUTARSE en cuanto
+    # llegan ticks: su caché tiene un TTL de 60 s, y la línea de arriba escribe
+    # `updated: time.time()` en cada trade. Con el stream vivo, la entrada nunca
+    # cumple 60 segundos, así que nunca se vuelve a pedir y su `prev` se queda
+    # congelado en el que hubiera cuando arrancó el stream -- cruzando noches y
+    # fines de semana enteros.
+    #
+    # Medido el 17/08/2026 (lunes) con la cartera real: de 24 posiciones, 12
+    # calculaban contra el cierre del viernes 14 (correcto), 11 contra el del
+    # jueves 13 y una contra el del miércoles 12. SNDK enseñaba +14,02% cuando
+    # su movimiento del día era +6,72%: viernes y lunes sumados bajo la
+    # etiqueta «HOY». Y como el precio sí llegaba en vivo, el número parecía
+    # fresco.
+    #
+    # El arreglo tiene dos mitades y las dos hacen falta:
+    #   1. `prev` viaja con la fecha de su sesión (`prev_fecha`), porque una
+    #      referencia sin fecha no se puede validar -- solo se podía comprobar
+    #      que existiera y fuera positiva, que es lo que fallaba.
+    #   2. Si esa fecha no es la de la última sesión cerrada, no se publica
+    #      porcentaje Y NO SE RENUEVA `updated`: así la entrada envejece, la
+    #      vuelve a pedir `_fetch_price_single()` y se cura sola. Renovarla era
+    #      lo que hacía inmortal al dato viejo.
+    #
+    # Solo se exige con el mercado abierto: fuera de sesión, `prev` es el cierre
+    # anterior al que se está enseñando y no tiene por qué ser el de la última
+    # sesión cerrada.
+    esperada = str(_ultima_sesion_esperada())
+    if _is_market_open() and previo.get("prev_fecha") != esperada:
+        base.update({"chg": None, "sin_datos_hoy": True,
+                     # Si ya venía una explicación de qué sesión es el dato, se
+                     # respeta: es más informativa que la fecha del `prev`, y
+                     # pisarla dejaba a la pantalla sin nada que contar.
+                     "ultimo_cierre": (previo.get("ultimo_cierre")
+                                       or previo.get("prev_fecha") or ""),
+                     "fuente": "finnhub-referencia-caducada"})
+        # A propósito: se conserva el `updated` anterior para que la entrada
+        # caduque y se vuelva a pedir con una referencia fresca.
+        base["updated"] = previo.get("updated", 0)
+        _price_cache[ticker] = base
+        return True
 
     if previo.get("chg") is None or previo.get("sin_datos_hoy"):
         # Quien puso `prev` ya dijo que no servía como referencia de hoy. Se

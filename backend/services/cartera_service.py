@@ -294,6 +294,18 @@ def _fetch_price_single(ticker: str) -> dict | None:
             last_bar, prev_bar, fecha_ultima, fecha_prev = _get_daily_bars(tk_obj, ticker)
             hoy_ny = datetime.now(ZoneInfo("America/New_York")).date()
 
+            # De qué sesión es el cierre que se va a usar como referencia. Se
+            # arrastra por todas las ramas y viaja en la entrada del caché.
+            #
+            # POR QUÉ ES IMPRESCINDIBLE, y no un extra de diagnóstico: el
+            # stream de Finnhub recalcula el «HOY %» contra este `prev` desde
+            # otro módulo, y hasta ahora solo podía comprobar que el número
+            # existiera y fuera positivo. Un `prev` sin fecha no se puede
+            # validar, así que no se puede distinguir el cierre de ayer del de
+            # hace tres sesiones. Ver _aplicar_trade() en
+            # finnhub_stream_service.py.
+            prev_fecha = None
+
             if fecha_ultima == hoy_ny:
                 # La barra de hoy ya está publicada. Pero que exista la de HOY
                 # no garantiza que la de AYER también: yfinance deja huecos por
@@ -321,6 +333,9 @@ def _fetch_price_single(ticker: str) -> dict | None:
                     if q:
                         entry = {"ticker": ticker, "price": q["price"], "prev": q["prev"],
                                  "chg": q["chg"], "chg_fecha": str(hoy_ny),
+                                 # `pc` de Finnhub es, por contrato, el cierre
+                                 # de la sesión anterior a la que está en curso.
+                                 "prev_fecha": str(_ultima_sesion_esperada()),
                                  "sin_datos_hoy": False, "fuente": "finnhub-quote",
                                  "updated": now}
                         _price_cache[ticker] = entry
@@ -328,10 +343,12 @@ def _fetch_price_single(ticker: str) -> dict | None:
                     entry = {"ticker": ticker, "price": round(price or last_bar, 2),
                              "prev": round(prev_bar, 2), "chg": None,
                              "chg_fecha": None, "sin_datos_hoy": True,
+                             "prev_fecha": str(fecha_prev),
                              "ultimo_cierre": str(fecha_prev), "updated": now}
                     _price_cache[ticker] = entry
                     return entry
                 prev = prev_bar
+                prev_fecha = fecha_prev
                 if not price:
                     price = last_bar
             elif fecha_ultima and fecha_ultima < _ultima_sesion_esperada():
@@ -360,6 +377,7 @@ def _fetch_price_single(ticker: str) -> dict | None:
                 entry = {"ticker": ticker, "price": round(price or last_bar, 2),
                          "prev": round(last_bar, 2), "chg": None,
                          "chg_fecha": None, "sin_datos_hoy": True,
+                         "prev_fecha": str(fecha_ultima),
                          "ultimo_cierre": str(fecha_ultima),
                          "updated": now}
                 _price_cache[ticker] = entry
@@ -371,6 +389,7 @@ def _fetch_price_single(ticker: str) -> dict | None:
                 # penúltimo: emparejar un precio de hoy con el penúltimo cierre
                 # daba el movimiento de DOS sesiones etiquetado como "hoy".
                 prev = last_bar
+                prev_fecha = fecha_ultima
                 if not price or abs(price - last_bar) < 0.005:
                     # Antes de rendirse: Finnhub /quote trae precio Y cierre
                     # anterior en una sola llamada, así que puede resolver el
@@ -387,6 +406,7 @@ def _fetch_price_single(ticker: str) -> dict | None:
                         entry = {"ticker": ticker, "price": q["price"],
                                  "prev": q["prev"], "chg": q["chg"],
                                  "chg_fecha": str(hoy_ny), "sin_datos_hoy": False,
+                                 "prev_fecha": str(_ultima_sesion_esperada()),
                                  "fuente": "finnhub-quote", "updated": now}
                         _price_cache[ticker] = entry
                         return entry
@@ -413,6 +433,7 @@ def _fetch_price_single(ticker: str) -> dict | None:
                     entry = {"ticker": ticker, "price": round(last_bar, 2),
                              "prev": round(last_bar, 2), "chg": None,
                              "chg_fecha": None, "sin_datos_hoy": True,
+                             "prev_fecha": str(fecha_ultima or ""),
                              "ultimo_cierre": str(fecha_ultima or ""),
                              "updated": now}
                     _price_cache[ticker] = entry
@@ -437,7 +458,7 @@ def _fetch_price_single(ticker: str) -> dict | None:
             # consecutivas de las barras, sea cual sea su fecha. El problema de
             # arriba nace de emparejar un precio EN VIVO de hoy con un cierre
             # que se supone de ayer; aquí no hay precio en vivo que emparejar.
-            price, prev, fecha_ultima, _ = _get_daily_bars(tk_obj, ticker)
+            price, prev, fecha_ultima, prev_fecha = _get_daily_bars(tk_obj, ticker)
 
         if not price or not math.isfinite(price):
             return None
@@ -455,6 +476,8 @@ def _fetch_price_single(ticker: str) -> dict | None:
                  # De qué sesión es ese porcentaje. La pantalla lo compara con
                  # el día de hoy para no llamar "Hoy %" a lo que no lo es.
                  "chg_fecha": str(fecha_ultima or ""),
+                 # De qué sesión es el cierre contra el que se ha calculado.
+                 "prev_fecha": str(prev_fecha or ""),
                  "sin_datos_hoy": False,
                  "updated": now}
         _price_cache[ticker] = entry
@@ -486,7 +509,8 @@ def _fetch_price_single(ticker: str) -> dict | None:
                     # — mismo criterio de «sin dato, no se inventa» del resto
                     # del proyecto. Ver auditoría de Cartera, hallazgo #A3.
                     entry = {"ticker": ticker, "price": round(price, 2),
-                             "prev": None, "chg": None, "updated": now}
+                             "prev": None, "chg": None, "prev_fecha": None,
+                             "updated": now}
                     _price_cache[ticker] = entry
                     return entry
     except Exception as e:
