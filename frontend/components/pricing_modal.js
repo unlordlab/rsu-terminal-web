@@ -7,6 +7,8 @@
 // no bloquea con checkbox obligatorio -- es informativo, no legal, así que
 // un solo botón de "Entendido" basta.
 
+import { authHeader } from '/core/api.js';
+
 export function showPricingModal(onAcknowledged, opciones = {}) {
     const esConsulta = opciones.esConsulta === true;  // reabierto desde la cabecera, no el flujo de bienvenida
     if (document.getElementById('pricing-modal-overlay')) return;

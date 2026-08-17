@@ -10,6 +10,8 @@
 // explícitamente, porque a alguien que lleva meses usando la terminal le
 // reaparece un modal que creía haber cerrado para siempre.
 
+import { authHeader } from '/core/api.js';
+
 export function showDisclaimerModal(onAccepted, esActualizacion = false) {
     if (document.getElementById('disclaimer-modal-overlay')) return;
 

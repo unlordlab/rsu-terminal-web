@@ -78,8 +78,8 @@ async function loadPulseStrip(el) {
     el.innerHTML = '<div style="background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius);padding:0.8rem 1rem;color:var(--color-muted);font-size:11px;">Cargando pulso de mercado...</div>';
     try {
         const [idxRes, fgRes] = await Promise.all([
-            fetch('/api/v1/market/indices', { headers: authHeaderDash() }),
-            fetch('/api/v1/market/fear-greed', { headers: authHeaderDash() }),
+            fetch('/api/v1/market/indices', { headers: authHeader() }),
+            fetch('/api/v1/market/fear-greed', { headers: authHeader() }),
         ]);
         const idx = await idxRes.json();
         const fg  = await fgRes.json();
@@ -128,7 +128,7 @@ async function loadBriefingPreview(el) {
     if (!el) return;
     el.innerHTML = briefingShell('<div style="padding:1rem;color:var(--color-muted);font-size:12px;">Cargando...</div>');
     try {
-        const res  = await fetch('/api/v1/market/briefing', { headers: authHeaderDash() });
+        const res  = await fetch('/api/v1/market/briefing', { headers: authHeader() });
         const data = await res.json();
         if (!data.ok || !data.content) throw new Error('Sin briefing disponible todavía');
 
@@ -172,8 +172,8 @@ async function loadWatchlistSummary(el) {
     el.innerHTML = watchlistShell('<div style="padding:1rem;color:var(--color-muted);font-size:12px;">Cargando...</div>');
     try {
         const [wlRes, countRes] = await Promise.all([
-            fetch('/api/v1/watchlist', { headers: authHeaderDash() }),
-            fetch('/api/v1/watchlist/alerts/unseen-count', { headers: authHeaderDash() }),
+            fetch('/api/v1/watchlist', { headers: authHeader() }),
+            fetch('/api/v1/watchlist/alerts/unseen-count', { headers: authHeader() }),
         ]);
         const wl    = await wlRes.json();
         const count = await countRes.json();
