@@ -62,6 +62,14 @@ class MintTokenRequest(BaseModel):
     # servicio (scripts), no para una sesión de usuario normal.
 
 
+class BorrarCuentaRequest(BaseModel):
+    # La contraseña, otra vez. Borrar es irreversible y la cookie de sesión
+    # puede estar viva en un ordenador que el dueño dejó abierto -- pedirla
+    # aquí es la diferencia entre "quien tenga la pestaña abierta" y "quien
+    # sea la persona". Mismo criterio que cualquier acción destructiva.
+    password: str
+
+
 class ResetPasswordRequest(BaseModel):
     email: str
     new_password: str
@@ -217,6 +225,50 @@ async def telegram_unlink(payload: dict = Depends(verify_token)):
     if not user:
         raise HTTPException(status_code=401, detail="Usuario no encontrado")
     return users_service.unlink_telegram(user["id"])
+
+
+@router.get("/mis-datos")
+async def mis_datos(payload: dict = Depends(verify_token)):
+    """Todo lo que la terminal guarda de quien lo pide, en un JSON.
+
+    Derecho de acceso y de portabilidad (arts. 15 y 20 del RGPD). Hasta el
+    18/08/2026 no existía ninguna forma de pedirlo: la única manera de saber
+    qué se guardaba era leer el código."""
+    from services.datos_personales_service import exportar
+    email = payload.get("sub")
+    user  = users_service.get_user_by_email(email) if email else None
+    if not user:
+        raise HTTPException(status_code=401, detail="Usuario no encontrado")
+    return exportar(user["id"], user["email"])
+
+
+@router.post("/borrar-cuenta")
+async def borrar_cuenta(req: BorrarCuentaRequest, response: Response,
+                        payload: dict = Depends(verify_token)):
+    """Borra la cuenta y TODO lo asociado, de las cuatro bases donde vive.
+
+    Derecho de supresión (art. 17 del RGPD). Es irreversible y no hay
+    papelera, así que:
+      - se exige la contraseña otra vez (una sesión abierta no basta),
+      - se devuelve el recuento por tabla, para que el borrado se pueda
+        comprobar en vez de creer,
+      - se limpia la cookie, porque la sesión apunta a un usuario que ya no
+        existe y dejarla puesta produce errores raros en la siguiente carga.
+
+    Lo que NO se borra, y es deliberado: los datos de mercado (escaneos,
+    snapshots, cadenas de opciones). Son precios públicos, no identifican a
+    nadie, y no dejan de ser ciertos porque alguien se dé de baja."""
+    from services.datos_personales_service import borrar
+    email = payload.get("sub")
+    user  = users_service.get_user_by_email(email) if email else None
+    if not user:
+        raise HTTPException(status_code=401, detail="Usuario no encontrado")
+    if not users_service.authenticate(email, req.password):
+        raise HTTPException(status_code=401, detail="La contraseña no es correcta")
+
+    resultado = borrar(user["id"], user["email"])
+    clear_session_cookie(response)
+    return resultado
 
 
 @router.post("/admin/session")
