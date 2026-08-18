@@ -7,6 +7,24 @@ const TIER_LABELS = { free: 'FREE', tier1: 'TIER 1', tiers: 'TIER S' };
 const TIER_COLORS = { free: 'var(--color-muted)', tier1: 'var(--color-accent)', tiers: '#ffd700' };
 
 export function renderTopbar(container, navigate) {
+    // DESMONTAR LO DE LA LLAMADA ANTERIOR, Y LO PRIMERO DE TODO.
+    //
+    // renderTopbar() no corre una vez: en cada carga corre DOS (al arrancar el
+    // router, y otra vez cuando /auth/me devuelve el tier al día). Cada llamada
+    // enganchaba escuchas nuevas y abría un `setInterval` para el reloj, y
+    // nada de eso se quitaba jamás -- se acumulaban, cada una apuntando a un
+    // `container` distinto, y el reloj latía dos veces por carga.
+    //
+    // Va al PRINCIPIO por un error que ya se cometió aquí: puesto más abajo,
+    // la segunda llamada paraba el reloj que ella misma acababa de arrancar
+    // unas líneas antes, y el reloj se quedaba congelado. El orden no es un
+    // detalle de estilo.
+    //
+    // El desmontaje vive en el módulo y no en el container a propósito: las
+    // escuchas cuelgan de `document`, del velo y de la barra lateral, así que
+    // sobreviven aunque el topbar se repinte entero.
+    desmontarTopbar();
+
     container.innerHTML = `
         <button id="nav-toggle" aria-label="Abrir el menú de secciones" aria-expanded="false">☰</button>
         <div style="flex:1;overflow:hidden;position:relative;min-width:0;height:48px;">
@@ -78,7 +96,7 @@ export function renderTopbar(container, navigate) {
 
     // Reloj en tiempo real hora Madrid
     updateClock(container);
-    setInterval(() => updateClock(container), 1000);
+    _relojT = setInterval(() => updateClock(container), 1000);
 
     // Theme
     container.querySelector('#theme-toggle').addEventListener('click', () => {
@@ -116,19 +134,13 @@ export function renderTopbar(container, navigate) {
         navigate('/login');
     });
 
-    // WS events
-    document.addEventListener('ws:connected',    () => setWsIndicator(container, true));
-    document.addEventListener('ws:disconnected', () => setWsIndicator(container, false));
-
-    // Market updates
-    onMarketUpdate('topbar', (data) => {
-        requestAnimationFrame(() => updateTicker(container, data));
-    });
-
-    // Escuchar también el evento directo del documento
-    document.addEventListener('ws:market_update', (e) => {
-        requestAnimationFrame(() => updateTicker(container, e.detail));
-    });
+    _escuchas = [
+        ['ws:connected',    () => setWsIndicator(container, true)],
+        ['ws:disconnected', () => setWsIndicator(container, false)],
+        ['ws:market_update', (e) => pintarTicker(container, e.detail)],
+    ];
+    _escuchas.forEach(([tipo, fn]) => document.addEventListener(tipo, fn));
+    onMarketUpdate('topbar', (data) => pintarTicker(container, data));
 
     updateThemeLabel(container);
 
@@ -148,22 +160,88 @@ export function renderTopbar(container, navigate) {
         const abierta = app.classList.toggle('nav-abierta');
         toggle.setAttribute('aria-expanded', String(abierta));
     });
-    if (velo) velo.addEventListener('click', cerrarNav);
+    // Estas tres viven en elementos que NO están dentro del topbar (el velo,
+    // la barra lateral y el propio documento), así que no desaparecen al
+    // repintarlo: hay que quitarlas a mano o se acumulan una por llamada.
+    // `#nav-toggle` no entra aquí porque sí se recrea con el innerHTML de
+    // arriba, y con él se va su escucha.
+    const cerrarConEscape = e => {
+        if (e.key === 'Escape' && app.classList.contains('nav-abierta')) cerrarNav();
+    };
     // Tocar una sección tiene que cerrar el cajón: si no, se queda tapando
     // la página que se acaba de abrir. Delegado en el propio sidebar para
     // que siga funcionando cuando renderSidebar() lo repinte entero.
-    const sidebar = document.getElementById('sidebar');
-    if (sidebar) sidebar.addEventListener('click', e => {
+    const cerrarSiEsSeccion = e => {
         if (e.target.closest('.nav-item')) cerrarNav();
-    });
-    document.addEventListener('keydown', e => {
-        if (e.key === 'Escape' && app.classList.contains('nav-abierta')) cerrarNav();
-    });
+    };
+    const sidebar = document.getElementById('sidebar');
+    if (velo)    _escuchasExtra.push([velo, 'click', cerrarNav]);
+    if (sidebar) _escuchasExtra.push([sidebar, 'click', cerrarSiEsSeccion]);
+    _escuchasExtra.push([document, 'keydown', cerrarConEscape]);
+    _escuchasExtra.forEach(([el, tipo, fn]) => el.addEventListener(tipo, fn));
 
     // Iniciar WebSocket. Sin condicionarlo a isLoggedIn() -- ver el comentario
     // largo en core/router.js: ese marcador puede faltar con la sesión viva, y
     // entonces el ticker se quedaba en «Conectando...» sin que nada lo dijera.
     initWebSocket();
+
+    // RED DE SEGURIDAD: el ticker no puede depender SOLO de que llegue un
+    // empujón del WebSocket.
+    //
+    // Hasta ahora, si ese primer mensaje se perdía por cualquier motivo, el
+    // ticker se quedaba en «Conectando...» para siempre y sin reintentar --
+    // que es justo lo que reportó el usuario. Y hay varias formas de
+    // perderlo: la pestaña cargada de fondo (ver pintarTicker), un socket
+    // que muere antes del primer envío, o un dato que reventase el pintado.
+    //
+    // Los mismos números salen por HTTP, así que a los 6 segundos sin
+    // noticias se piden y se pinta con ellos. No sustituye al WebSocket: en
+    // cuanto llegue el primer mensaje real, este lo sobrescribe.
+    clearTimeout(_respaldoT);
+    _respaldoT = setTimeout(() => respaldoPorHttp(container), 6000);
+}
+
+// ── Estado del módulo, para poder desmontar lo de la llamada anterior ──
+let _escuchas = [];
+let _escuchasExtra = [];
+let _relojT   = null;
+let _respaldoT = null;
+let _tickerPintado = false;
+
+function desmontarTopbar() {
+    _escuchas.forEach(([tipo, fn]) => document.removeEventListener(tipo, fn));
+    _escuchas = [];
+    _escuchasExtra.forEach(([el, tipo, fn]) => el.removeEventListener(tipo, fn));
+    _escuchasExtra = [];
+    if (_relojT)    { clearInterval(_relojT); _relojT = null; }
+    if (_respaldoT) { clearTimeout(_respaldoT); _respaldoT = null; }
+}
+
+function pintarTicker(container, data) {
+    _tickerPintado = true;
+    clearTimeout(_respaldoT);
+    // requestAnimationFrame NO dispara mientras la pestaña está oculta, así
+    // que una página cargada de fondo dejaría el pintado en cola. Se usa solo
+    // cuando la pestaña se ve; si no, se pinta directamente.
+    if (document.hidden) updateTicker(container, data);
+    else requestAnimationFrame(() => updateTicker(container, data));
+}
+
+async function respaldoPorHttp(container) {
+    if (_tickerPintado) return;
+    try {
+        const r = await fetch('/api/v1/market/indices', { credentials: 'include' });
+        if (!r.ok) return;
+        const d = await r.json();
+        const indices = (d.data || [])
+            .filter(i => i.ok && i.price != null)
+            .map(i => ({ ticker: i.ticker, price: i.price, chg: i.pct }));
+        // Sin ningún dato utilizable no se pinta: dejar «Conectando...» dice
+        // más que un ticker vacío, porque el vacío parece un mercado parado.
+        if (indices.length) updateTicker(container, { indices });
+    } catch (_) {
+        // Silencioso a propósito: es una red de seguridad, no la vía normal.
+    }
 }
 
 function updateClock(container) {
@@ -198,16 +276,31 @@ function updateTicker(container, data) {
 
     const items = [];
 
+    // Un dato que falta se salta; NO tumba el ticker entero.
+    //
+    // `idx.price.toLocaleString()` revienta con un precio nulo, y desde el
+    // 18/08/2026 los nulos son posibles POR DISEÑO: el backend convierte los
+    // no-finitos en null en vez de escribir un NaN que rompía el JSON. Al
+    // arreglar aquello se abrió esto -- una excepción dentro del pintado deja
+    // el ticker en «Conectando...» exactamente igual que antes, con el mismo
+    // silencio. Mejor enseñar los que sí tienen precio que ninguno.
+    const utilizable = (v) => v != null && Number.isFinite(Number(v));
+
     // Índices
-    (data.indices || []).forEach(idx => {
+    (data.indices || []).filter(idx => utilizable(idx.price)).forEach(idx => {
         const up    = idx.chg >= 0;
         const color = up ? 'var(--color-accent)' : '#f23645';
         const arrow = up ? '▲' : '▼';
+        // Sin variación medida no se escribe «0.00%», que se leería como un
+        // día plano: se deja en blanco, que es lo que de verdad se sabe.
+        const varia = utilizable(idx.chg)
+            ? '<span style="color:' + color + ';font-size:9px;">' + arrow + ' ' + Math.abs(idx.chg).toFixed(2) + '%</span>'
+            : '<span style="color:var(--color-muted);font-size:9px;">—</span>';
         items.push(
             '<span style="display:inline-flex;flex-direction:column;align-items:center;flex-shrink:0;min-width:60px;">'
             + '<span style="color:var(--color-muted);font-size:9px;letter-spacing:0.05em;">' + idx.ticker + '</span>'
             + '<span style="color:var(--color-text);font-size:12px;">' + idx.price.toLocaleString('en-US') + '</span>'
-            + '<span style="color:' + color + ';font-size:9px;">' + arrow + ' ' + Math.abs(idx.chg).toFixed(2) + '%</span>'
+            + varia
             + '</span>'
         );
     });
@@ -216,7 +309,7 @@ function updateTicker(container, data) {
     items.push('<span style="color:var(--color-border);font-size:16px;flex-shrink:0;">│</span>');
 
     // Precios extra
-    (data.prices || []).forEach(p => {
+    (data.prices || []).filter(p => utilizable(p.price)).forEach(p => {
         const up    = p.chg >= 0;
         const color = up ? 'var(--color-accent)' : '#f23645';
         const arrow = up ? '▲' : '▼';
@@ -224,7 +317,9 @@ function updateTicker(container, data) {
             '<span style="display:inline-flex;flex-direction:column;align-items:center;flex-shrink:0;min-width:60px;">'
             + '<span style="color:var(--color-muted);font-size:9px;letter-spacing:0.05em;">' + p.name + '</span>'
             + '<span style="color:var(--color-text);font-size:12px;">' + p.price.toLocaleString('en-US') + '</span>'
-            + '<span style="color:' + color + ';font-size:9px;">' + arrow + ' ' + Math.abs(p.chg).toFixed(2) + '%</span>'
+            + (utilizable(p.chg)
+                ? '<span style="color:' + color + ';font-size:9px;">' + arrow + ' ' + Math.abs(p.chg).toFixed(2) + '%</span>'
+                : '<span style="color:var(--color-muted);font-size:9px;">—</span>')
             + '</span>'
         );
     });
@@ -239,6 +334,15 @@ function updateTicker(container, data) {
             + '<span style="color:' + data.algo.color + ';font-size:9px;">' + data.algo.estado + '</span>'
             + '</span>'
         );
+    }
+
+    // Si no ha sobrevivido ni un dato, no se deja el ticker en blanco: un
+    // ticker vacío se lee como «el mercado no se mueve», que es una
+    // afirmación, y aquí lo cierto es que no hay dato.
+    const hayDatos = items.some(x => x.indexOf('min-width') !== -1);
+    if (!hayDatos) {
+        track.innerHTML = '<span style="color:var(--color-muted);font-size:11px;">Sin datos de mercado ahora mismo</span>';
+        return;
     }
 
     // Duplicar contenido para loop infinito suave
