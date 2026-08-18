@@ -561,6 +561,33 @@ async def canslim_resultados_loop():
             print(f"[CANSLIMResultados] Error: {e}")
 
 
+async def retencion_datos_loop():
+    """Cumple los plazos de conservación que promete la política de privacidad.
+
+    Existe porque hasta el 18/08/2026 NADA se purgaba: la analítica y el
+    historial del chat crecían desde el primer día y para siempre. Prometer un
+    plazo sin código que lo cumpla es una promesa vacía, y es justo lo que este
+    proyecto lleva meses quitando de otros sitios.
+
+    Cada 24h, no cada hora: son borrados de mantenimiento, no urgencias. Y la
+    primera pasada se hace al arrancar sin esperar el primer día completo, para
+    que un contenedor que se reinicie a diario no deje de purgar nunca --
+    exactamente el error del bucle de Options Flow que ya se corrigió una vez."""
+    primera = True
+    while True:
+        if not primera:
+            await asyncio.sleep(86400)  # 24h
+        primera = False
+        try:
+            loop = asyncio.get_event_loop()
+            from services.analytics_service import purgar_antiguos as purgar_analytics
+            from services.chat_service import purgar_antiguos as purgar_chat
+            await loop.run_in_executor(None, purgar_analytics)
+            await loop.run_in_executor(None, purgar_chat)
+        except Exception as e:
+            print(f"[Retencion] Error: {type(e).__name__}: {e}")
+
+
 # Revisa Cartera (Google Sheet) cada 15 min buscando aperturas/cierres nuevos
 # y notifica por Telegram — el sheet lo edita Marc a mano, así que no hace
 # falta más frecuencia que esta para no perderse cambios durante horario de

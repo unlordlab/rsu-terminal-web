@@ -268,3 +268,35 @@ def borrar_historial(usuario: str) -> dict:
 
 
 init_db()
+
+
+# Cuánto se conserva el historial del chat. 30 días: sirve para dar contexto a
+# una conversación en curso, no para guardar lo que alguien preguntó hace un
+# año. Este número lo promete la política de privacidad -- cambiarlo aquí
+# obliga a cambiarlo allí.
+RETENCION_DIAS = 30
+
+
+def purgar_antiguos() -> int:
+    """Borra los mensajes de más de RETENCION_DIAS días.
+
+    Hasta el 18/08/2026 el historial no se purgaba nunca: solo se borraba
+    entero si alguien lo pedía a mano. Ver el comentario gemelo en
+    analytics_service.purgar_antiguos()."""
+    from datetime import datetime, timedelta, timezone
+    corte = (datetime.now(timezone.utc) - timedelta(days=RETENCION_DIAS)).isoformat()
+    try:
+        conn = _conn()
+    except Exception:
+        return 0
+    try:
+        cur = conn.execute("DELETE FROM mensajes WHERE creado_en < ?", (corte,))
+        n = cur.rowcount or 0
+        conn.commit()
+        if n:
+            print(f"[Chat] Purgados {n} mensajes con más de {RETENCION_DIAS} días")
+        return n
+    except sqlite3.OperationalError:
+        return 0
+    finally:
+        conn.close()

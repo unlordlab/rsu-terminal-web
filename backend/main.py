@@ -59,7 +59,11 @@ async def lifespan(app: FastAPI):
     # Track record de CANSLIM: rellena el retorno real de los candidatos que
     # propuso cada scan nocturno (ver services/canslim_tracking_service.py).
     task12 = asyncio.create_task(ws.supervisar("canslim_resultados_loop", ws.canslim_resultados_loop))
+    # Cumple los plazos de conservación de la política de privacidad. Ver
+    # ws.retencion_datos_loop().
+    task13 = asyncio.create_task(ws.supervisar("retencion_datos_loop", ws.retencion_datos_loop))
     yield
+    task13.cancel()
     task1.cancel()
     task2.cancel()
     task3.cancel()

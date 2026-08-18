@@ -12,6 +12,17 @@ services:
       - .:/app
     env_file:
       - .env
+    # Los registros del servidor guardan la IP de cada petición, y el driver
+    # por defecto de Docker no los rota NUNCA: eran IPs guardadas para
+    # siempre y un fichero creciendo sin techo en el disco del VPS. La
+    # política de privacidad dice 30 días; 3 ficheros de 10 MB son
+    # aproximadamente esa ventana con el tráfico actual, y sobre todo ponen
+    # un límite donde no había ninguno. Añadido el 18/08/2026.
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
     working_dir: /app/backend
     # Sin --reload: era modo desarrollo corriendo en producción (reinicios en
     # caliente a mitad de peticiones con cada git pull, WatchFiles vigilando

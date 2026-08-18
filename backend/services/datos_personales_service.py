@@ -40,6 +40,12 @@ DB_CHAT      = os.path.join(_AQUI, '..', 'chat_historial.db')
 DB_ANALYTICS = os.path.join(_AQUI, '..', 'analytics.db')
 
 # (base, tabla, columna que identifica, tipo de clave)
+#
+# `seudonimo` existe porque desde el 18/08/2026 la analítica ya no guarda el
+# email sino una huella irreversible de él. Si esta entrada se hubiera quedado
+# apuntando a `email`, el borrado de cuenta habría dejado de limpiar la
+# analítica EN SILENCIO -- el DELETE no habría fallado, simplemente no habría
+# encontrado ninguna fila. Es la clase de rotura que no da error.
 INVENTARIO = [
     (DB_USERS,     'users',            'id',         'user_id'),
     (DB_USERS,     'watchlist',        'user_id',    'user_id'),
@@ -48,8 +54,19 @@ INVENTARIO = [
     (DB_USERS,     'academy_quiz',     'user_id',    'user_id'),
     (DB_COMMUNITY, 'feedback',         'user_id',    'user_id'),
     (DB_CHAT,      'mensajes',         'usuario',    'email'),
-    (DB_ANALYTICS, 'events',           'email',      'email'),
+    (DB_ANALYTICS, 'events',           'usuario_hash', 'seudonimo'),
 ]
+
+
+def _valor_clave(tipo: str, user_id: int, email: str):
+    """Cómo se identifica a la persona en cada tabla. No es lo mismo en todas
+    y no se puede unificar sin migrar datos que ya existen."""
+    if tipo == 'user_id':
+        return user_id
+    if tipo == 'seudonimo':
+        from services.analytics_service import seudonimo
+        return seudonimo(email)
+    return email
 
 
 def _filas(db, tabla, columna, valor) -> list:
@@ -78,7 +95,7 @@ def exportar(user_id: int, email: str) -> dict:
     equivocado. Se dice que existe, que es lo que importa saber."""
     export = {}
     for db, tabla, columna, tipo in INVENTARIO:
-        valor = user_id if tipo == 'user_id' else email
+        valor = _valor_clave(tipo, user_id, email)
         filas = _filas(db, tabla, columna, valor)
         if tabla == 'users':
             for f in filas:
@@ -111,7 +128,7 @@ def borrar(user_id: int, email: str) -> dict:
     for db, tabla, columna, tipo in INVENTARIO:
         if not os.path.exists(db):
             continue
-        valor = user_id if tipo == 'user_id' else email
+        valor = _valor_clave(tipo, user_id, email)
         conn = sqlite3.connect(db)
         try:
             cur = conn.execute(f'DELETE FROM {tabla} WHERE {columna} = ?', (valor,))
@@ -131,7 +148,7 @@ def quedan_datos(user_id: int, email: str) -> dict:
     verdad."""
     resto = {}
     for db, tabla, columna, tipo in INVENTARIO:
-        valor = user_id if tipo == 'user_id' else email
+        valor = _valor_clave(tipo, user_id, email)
         n = len(_filas(db, tabla, columna, valor))
         if n:
             resto[tabla] = n
