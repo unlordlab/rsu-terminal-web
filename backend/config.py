@@ -152,6 +152,20 @@ class Settings(BaseSettings):
     # falla), igual que hoy -- sin romper nada mientras no haya credenciales.
     reddit_client_id: str = ""
     reddit_client_secret: str = ""
+
+    # ── Titular del servicio, para la política de privacidad ────────────────
+    #
+    # Van en el .env y NO en el código a propósito: el repositorio es PÚBLICO,
+    # así que escribir aquí un DNI lo publicaría en el historial de git para
+    # siempre -- y de ahí ya no se quita, porque queda en los clones y en los
+    # forks. El texto de la política sí está en el repo; los datos personales
+    # del titular, no.
+    #
+    # Vacío = la página de privacidad lo dice en vez de enseñar un hueco: una
+    # política sin responsable identificado no vale, y es mejor que se note.
+    titular_nombre: str = ""
+    titular_nif: str = ""
+    titular_email: str = ""
     # Reddit exige un User-Agent único y descriptivo (con el usuario/app real)
     # para no ser limitado agresivamente -- actualizar con el nombre de la app
     # creada en reddit.com/prefs/apps.

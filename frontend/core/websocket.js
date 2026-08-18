@@ -16,7 +16,16 @@ let reconnectT = null;
 // llevando su token en el navegador.
 // Páginas donde no se intenta conectar: no hay sesión que valga y el servidor
 // rechazaría con un 4401 que mandaría a login estando ya en login.
-const RUTAS_SIN_SESION = ['/login', '/register'];
+// Rutas que se ven SIN cuenta. Exportada porque no es solo cosa del
+// WebSocket: cualquier cosa que pida datos protegidos en estas páginas se
+// come un 401, y el interceptor de sesión caducada manda a login -- que en la
+// política de privacidad significa que nadie de fuera puede leerla.
+//
+// Pasó de verdad el 18/08/2026: el respaldo por HTTP del ticker (añadido esa
+// misma tarde) pedía /market/indices en /privacidad, y el 401 rebotaba a
+// login. Una lista compartida evita que el siguiente que añada una llamada
+// tenga que acordarse de esto.
+export const RUTAS_SIN_SESION = ['/login', '/register', '/privacidad'];
 
 export function initWebSocket(token) {
     if (socket && socket.readyState === WebSocket.OPEN) return;

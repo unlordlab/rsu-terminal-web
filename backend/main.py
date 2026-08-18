@@ -10,7 +10,7 @@ from json_seguro import JSONSeguro
 from auth import verify_token, require_tier, verify_admin_key
 from middleware.rate_limit import rate_limit
 from middleware.analytics import AnalyticsMiddleware
-from routers import auth, market, cartera, canslim, rsu_algoritmo, research, newsfeed, tesis, spxl, rsrw, ws, options, btc_stratum, insider, scanner, analytics, watchlist, community, chat, academy, academy_review, laia_ethics, meeting_room, congress, track_record
+from routers import auth, market, cartera, canslim, rsu_algoritmo, research, newsfeed, tesis, spxl, rsrw, ws, options, btc_stratum, insider, scanner, analytics, watchlist, community, chat, academy, academy_review, laia_ethics, meeting_room, congress, track_record, legal
 
 # Proxy global para yfinance — se aplica UNA vez aquí y afecta a TODAS las
 # llamadas a yfinance en cualquier archivo del backend (Algoritmo, Cartera,
@@ -107,6 +107,9 @@ rl = [Depends(rate_limit)]
 # a cualquier usuario registrado, solo con el rate limit general.
 paid = [Depends(rate_limit), Depends(require_tier("tier1"))]
 app.include_router(auth.router)
+# Sin `dependencies=rl` ni auth: una política de privacidad tiene que poder
+# leerse antes de tener cuenta (ver routers/legal.py).
+app.include_router(legal.router)
 app.include_router(market.router,       dependencies=rl)
 app.include_router(cartera.router,      dependencies=paid)
 app.include_router(canslim.router,      dependencies=rl)

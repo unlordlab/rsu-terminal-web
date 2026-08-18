@@ -156,6 +156,7 @@ export async function render(container) {
                     color: var(--color-muted);
                 ">
                     ¿Contraseña olvidada? Escribe a Marc para resetearla.
+                    <br><a id="go-privacidad" href="/privacidad" style="color:var(--color-muted);text-decoration:underline;">Política de privacidad</a>
                 </div>
             </div>
         </div>
@@ -205,5 +206,13 @@ export async function render(container) {
     goRegister.addEventListener('click', (e) => {
         e.preventDefault();
         window.__navigate('/register');
+    });
+
+    // La política tiene que ser alcanzable SIN cuenta: es lo que alguien lee
+    // antes de decidir si se registra.
+    const goPriv = container.querySelector('#go-privacidad');
+    if (goPriv) goPriv.addEventListener('click', (e) => {
+        e.preventDefault();
+        window.__navigate('/privacidad');
     });
 }

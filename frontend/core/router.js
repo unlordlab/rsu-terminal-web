@@ -36,6 +36,9 @@ const ROUTES = {
     '/algoritmo':  () => import('/pages/algoritmo.js'),
     '/login':      () => import('/pages/login.js'),
     '/register':   () => import('/pages/register.js'),
+    // Fuera de protectedRoutes a propósito: quien se plantea registrarse tiene
+    // que poder leer la política ANTES de tener cuenta.
+    '/privacidad': () => import('/pages/privacidad.js'),
     '/admin':      () => import('/pages/admin.js'),
     '/disclaimer': () => import('/pages/disclaimer.js'),
 };

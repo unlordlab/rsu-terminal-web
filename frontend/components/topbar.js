@@ -1,5 +1,5 @@
 import { cycleTheme, getCurrentTheme, nombreTema } from '/core/theme.js';
-import { initWebSocket, onMarketUpdate } from '/core/websocket.js';
+import { initWebSocket, onMarketUpdate, RUTAS_SIN_SESION } from '/core/websocket.js';
 import { logout, getTier, isLoggedIn } from '/core/api.js';
 import { showPricingModal } from '/components/pricing_modal.js';
 
@@ -229,6 +229,9 @@ function pintarTicker(container, data) {
 
 async function respaldoPorHttp(container) {
     if (_tickerPintado) return;
+    // En una página que se ve sin cuenta, esta petición devuelve 401 y el
+    // interceptor manda a login -- dejando la página pública inalcanzable.
+    if (RUTAS_SIN_SESION.includes(window.location.pathname)) return;
     try {
         const r = await fetch('/api/v1/market/indices', { credentials: 'include' });
         if (!r.ok) return;
