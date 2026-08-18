@@ -89,13 +89,30 @@ async def scan_now(_admin: None = Depends(verify_admin_key)):
 
     El workflow tuvo que cambiar de cabecera: ahora manda X-Admin-Key en vez
     de Authorization. Requiere el secret ADMIN_KEY en GitHub."""
+    from fastapi.responses import JSONResponse
     from services.options_service import run_and_save_scan
     if not _scan_lock.acquire(blocking=False):
-        return {"ok": False, "error": "Ya hay un escaneo en curso; no se lanza otro.", "en_curso": True}
+        # 409, no 200: hay un escaneo en curso, asi que ESTA peticion no ha
+        # hecho nada. Devolverlo como 200 hacia que el disparador lo apuntase
+        # como exito.
+        return JSONResponse(status_code=409, content={
+            "ok": False, "error": "Ya hay un escaneo en curso; no se lanza otro.",
+            "en_curso": True})
     try:
-        return run_and_save_scan()
+        resultado = run_and_save_scan()
     finally:
         _scan_lock.release()
+
+    # UN ESCANEO FALLIDO TIENE QUE FALLAR TAMBIEN POR HTTP.
+    #
+    # Antes esta funcion devolvia siempre 200, incluso con `ok: False` dentro
+    # del cuerpo -- y el disparador solo miraba el codigo. Resultado: un
+    # escaneo caido se apuntaba como bueno y el aviso de Telegram no salia.
+    # Es el mismo fallo mudo que ya costo caro con la ruta inexistente que
+    # devolvia 200 con `null` (hallazgo #27).
+    if not resultado.get("ok"):
+        return JSONResponse(status_code=502, content=resultado)
+    return resultado
 
 # ── DOS ENDPOINTS RETIRADOS EL 05/08/2026 (auditoría Options Flow #3 y #5) ────
 #

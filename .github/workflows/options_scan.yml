@@ -7,16 +7,26 @@ on:
     # porque option_chain() usa un endpoint de Yahoo distinto al de los
     # otros 4 (no compite por el mismo rate limit) y no hay urgencia de
     # ir pegado a los demás.
+    #
+    # PENDIENTE DE REVISAR (hallazgo #29, 18/08/2026): las 23:00 UTC son las
+    # 19:00 ET, tres horas después del cierre. Desde que una operación sin
+    # precios de compra y venta ya no se publica, la hora del escaneo decide
+    # cuántas señales sobreviven -- y esta se eligió por hueco libre, no por
+    # calidad del dato. Hay que medirlo antes de moverlo.
     - cron: '0 23 * * 1-5'
   workflow_dispatch:  # Permite ejecutar manualmente desde la pestaña Actions
 
 jobs:
   trigger:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 40   # el escaneo puede esperar a que Yahoo levante un
+                          # corte por exceso de peticiones (ver el comentario
+                          # largo en get_options_flow): presupuesto de 20 min
+                          # dentro del backend + margen
 
     steps:
       - name: Disparar el scan de Options Flow en el backend
+        id: scan
         run: |
           # X-Admin-Key desde el 05/08/2026: el endpoint dejó de aceptar un
           # token de usuario normal (auditoría Options Flow #4 — cualquier
@@ -24,18 +34,87 @@ jobs:
           # REQUIERE el secret ADMIN_KEY en GitHub, con el mismo valor que
           # ADMIN_KEY tiene en el .env del VPS.
           status=$(curl -s -o /tmp/resp.json -w "%{http_code}" -X POST \
-            --max-time 1500 \
+            --max-time 2100 \
             -H "X-Admin-Key: ${{ secrets.ADMIN_KEY }}" \
-            "${{ secrets.RSU_BACKEND_URL }}/api/v1/options/scan-now")
+            "${{ secrets.RSU_BACKEND_URL }}/api/v1/options/scan-now") || true
           echo "HTTP status: $status"
-          cat /tmp/resp.json
+          cat /tmp/resp.json || true
+          echo
+
+          # El aviso tiene que decir QUÉ ha fallado, no solo que algo falló.
+          # Hasta el 18/08/2026 el mensaje de Telegram era una frase fija con
+          # el id de la ejecución: para saber si había sido la clave, el VPS
+          # caído o un fallo del escaneo había que entrar a GitHub a leer los
+          # registros. El estado y el cuerpo ya estaban aquí, en /tmp/resp.json
+          # y en $status -- solo faltaba pasarlos al paso del aviso.
+          case "$status" in
+            000) motivo="No se pudo contactar con el backend (sin respuesta, DNS, o se agotó el tiempo). Comprueba que el VPS está en pie." ;;
+            401|403) motivo="El backend rechazó la clave de administrador (HTTP $status). El secret ADMIN_KEY de GitHub y el ADMIN_KEY del .env del VPS no coinciden." ;;
+            404|405) motivo="El backend no reconoce la ruta del escaneo (HTTP $status). Es la firma de tener desplegada una versión antigua -- comprobado en local: una ruta /api que no existe responde 405 a un POST, no 404." ;;
+            409) motivo="Ya había otro escaneo en curso (HTTP 409), así que este no ha hecho nada." ;;
+            502) motivo="El escaneo se ejecutó pero falló por dentro (HTTP 502)." ;;
+            5*) motivo="El backend devolvió un error (HTTP $status)." ;;
+            200) motivo="" ;;
+            *) motivo="Respuesta inesperada del backend (HTTP $status)." ;;
+          esac
+
+          # Cuerpo recortado: los mensajes de Telegram tienen límite y un
+          # volcado entero no se lee. 500 caracteres bastan para el `error` y
+          # las cifras de cobertura.
+          cuerpo=$(head -c 500 /tmp/resp.json 2>/dev/null || echo "(sin cuerpo)")
+
+          {
+            echo "status=$status"
+            echo "motivo<<FIN"; echo "$motivo"; echo "FIN"
+            echo "cuerpo<<FIN"; echo "$cuerpo"; echo "FIN"
+          } >> "$GITHUB_OUTPUT"
+
           if [ "$status" != "200" ]; then
-            echo "::error::El disparo del scan de Options Flow falló (HTTP $status)"
+            echo "::error::Options Flow: $motivo"
             exit 1
+          fi
+
+          # Un 200 tampoco garantiza que el día sirva: el escaneo puede haber
+          # leído media lista, o haber descartado casi todo por no poder saber
+          # si cada operación fue compra o venta. El backend ya lo calcula y lo
+          # devuelve en el cuerpo (`incompleto`) -- aquí solo se avisa, sin
+          # marcar la ejecución como fallida: el dato SÍ se ha guardado, pero
+          # conviene saber que describe media sesión.
+          if grep -q '"incompleto": *true' /tmp/resp.json; then
+            echo "incompleto=1" >> "$GITHUB_OUTPUT"
+            echo "::warning::Options Flow: el escaneo se guardó pero está marcado como incompleto."
           fi
 
       - name: Avisar por Telegram si falló
         if: failure()
         continue-on-error: true
         run: |
-          curl -s -X POST "https://api.telegram.org/bot${{ secrets.TELEGRAM_BOT_TOKEN }}/sendMessage"             -d chat_id="${{ secrets.TELEGRAM_CHAT_ID }}"             -d text="⚠️ Options Flow: el scan diario ha fallado. Hoy no se guardan cadenas de opciones -- ese dato NO se puede recuperar despues. (run ${{ github.run_id }})."
+          texto="⚠️ Options Flow: el escaneo diario ha fallado.
+
+          Qué ha pasado: ${{ steps.scan.outputs.motivo }}
+
+          Respuesta del backend (HTTP ${{ steps.scan.outputs.status }}):
+          ${{ steps.scan.outputs.cuerpo }}
+
+          Hoy no se guardan cadenas de opciones, y ese dato NO se puede recuperar después: solo existen mientras están vivas.
+
+          Registro: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          curl -s -X POST "https://api.telegram.org/bot${{ secrets.TELEGRAM_BOT_TOKEN }}/sendMessage" \
+            -d chat_id="${{ secrets.TELEGRAM_CHAT_ID }}" \
+            --data-urlencode text="$texto"
+
+      - name: Avisar por Telegram si el escaneo quedó incompleto
+        if: success() && steps.scan.outputs.incompleto == '1'
+        continue-on-error: true
+        run: |
+          texto="⚠️ Options Flow: el escaneo se ha guardado, pero describe media sesión.
+
+          Respuesta del backend:
+          ${{ steps.scan.outputs.cuerpo }}
+
+          Los datos de hoy están guardados, pero el sesgo del día se apoya en una muestra parcial. La página lo avisa también.
+
+          Registro: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          curl -s -X POST "https://api.telegram.org/bot${{ secrets.TELEGRAM_BOT_TOKEN }}/sendMessage" \
+            -d chat_id="${{ secrets.TELEGRAM_CHAT_ID }}" \
+            --data-urlencode text="$texto"

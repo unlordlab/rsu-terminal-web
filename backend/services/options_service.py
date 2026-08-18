@@ -675,7 +675,7 @@ def run_and_save_scan() -> dict:
     data = get_options_flow()
     if not data.get("ok"):
         print(f"[OptionsFlow] Escaneo fallido: {data.get('error', 'desconocido')}")
-        return {"ok": False}
+        return {"ok": False, "error": data.get("error", "desconocido")}
     resultado = save_current_scan(data)
     print(f"[OptionsFlow] Escaneo guardado: {resultado['inserted']}/{resultado['total']} entradas nuevas "
           f"(sesión {data.get('scan_date')})")
@@ -683,6 +683,27 @@ def run_and_save_scan() -> dict:
     if purgadas:
         print(f"[OptionsFlow] Purgadas {purgadas} filas con más de {RETENTION_DAYS} días")
     resultado["purgadas"] = purgadas
+
+    # Cobertura EN LA RESPUESTA, no solo en la base de datos.
+    #
+    # Quien dispara este escaneo es un cron de GitHub Actions que solo ve el
+    # codigo HTTP y el cuerpo. Antes el cuerpo decia unicamente cuantas filas
+    # se habian insertado -- y un dia en el que se leyera media lista devolvia
+    # exactamente lo mismo que un dia sano, asi que el aviso nunca saltaba y el
+    # usuario se enteraba dias despues mirando la pagina. Estos numeros son los
+    # que permiten que el disparador avise con lo que de verdad ha pasado.
+    pedidos     = data.get("scanned") or 0
+    respondidos = data.get("respondidos") or 0
+    resultado.update({
+        "scan_date":     data.get("scan_date"),
+        "pedidos":       pedidos,
+        "respondidos":   respondidos,
+        "cobertura_pct": round(respondidos / pedidos * 100, 1) if pedidos else None,
+        "sin_direccion": data.get("sin_direccion"),
+        "oi_cero":       data.get("oi_cero"),
+    })
+    log = get_scan_log(data.get("scan_date")) or {}
+    resultado["incompleto"] = bool(log.get("incompleto"))
     return resultado
 
 # ────────────────────────────────────────────────────────────────────────────
