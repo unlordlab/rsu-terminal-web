@@ -161,6 +161,18 @@ def get_market_status() -> dict:
         if spy_hist.empty:
             raise ValueError("Sin datos SPY")
 
+        # Fuera las sesiones sin cierre antes de calcular NADA. La fila del día
+        # en curso viene con Close=NaN, y `_safe()` lo convertía en 0.0 -- su
+        # valor por defecto. Para un PRECIO, cero no es un respaldo prudente:
+        # es un número imposible que envenena todo lo que se derive de él. El
+        # 17/08/2026 dejó a SPY en "$0", con -100% en la variación del día, en
+        # el 1M, en el 3M y en la distancia al máximo, y el score cayó a 20
+        # anunciando "MERCADO EN CORRECCIÓN" cuando el índice estaba por encima
+        # de sus dos medias. Reportado por el usuario, que vio que no cuadraba.
+        spy_hist = spy_hist[spy_hist['Close'].notna()]
+        if spy_hist.empty:
+            raise ValueError("Sin ninguna sesión de SPY con cierre válido")
+
         spy_price  = _safe(spy_hist['Close'].iloc[-1])
         # iloc[-2] necesita DOS sesiones, no solo que el DataFrame no esté
         # vacío. Todas las líneas de alrededor ya llevan su `len(...) >= N`;

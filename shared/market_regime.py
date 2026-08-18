@@ -27,6 +27,17 @@ def spy_trend_snapshot(close: pd.Series) -> dict:
     {price, sma50, sma200, above_sma50, above_sma200} -- sma200/
     above_sma200 son None si hay menos de 200 sesiones (nunca se
     aproxima con el SMA50 ni con la media de lo que haya)."""
+    # Se descartan las sesiones sin cierre ANTES de nada. yfinance devuelve la
+    # barra del día en curso con Close=NaN, y ese NaN no se propaga como error
+    # sino como una MENTIRA silenciosa: `NaN > sma50` es False, así que un
+    # mercado claramente alcista sale "por debajo de su media" sin que nada
+    # chirríe. Medido el 17/08/2026: SPY cerró en 776,34 con la SMA50 en 748,54
+    # y la SMA200 en 702,75 -- por encima de las dos -- y CAN SLIM anunciaba
+    # "MERCADO EN CORRECCIÓN". Se limpia aquí, en la primitiva, para que valga
+    # igual para market_service.py que para canslim_service.py.
+    close = close.dropna()
+    if close.empty:
+        raise ValueError("Serie de cierres vacía tras descartar las sesiones sin dato")
     price = float(close.iloc[-1])
     sma50 = float(close.rolling(50).mean().iloc[-1])
     above_sma50 = price > sma50
