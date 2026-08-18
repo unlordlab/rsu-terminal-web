@@ -43,3 +43,7 @@ backend/VERSION
 
 # Carpeta de datos varios (backups locales, exports, etc.)
 data/
+
+# Mediciones acumuladas a mano (ver scripts/medir_bidask_por_hora.py) -- el
+# script se versiona, sus resultados no: dependen del dia y de la sesion.
+scripts/medir_bidask_por_hora.csv
