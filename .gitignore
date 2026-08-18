@@ -47,3 +47,5 @@ data/
 # Mediciones acumuladas a mano (ver scripts/medir_bidask_por_hora.py) -- el
 # script se versiona, sus resultados no: dependen del dia y de la sesion.
 scripts/medir_bidask_por_hora.csv
+
+scripts/medir_russell_opciones.csv
