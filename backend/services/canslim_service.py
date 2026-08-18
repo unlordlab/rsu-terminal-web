@@ -293,6 +293,18 @@ def analyze_ticker(ticker: str, universe_perfs: list = None) -> dict:
     try:
         tk   = yf.Ticker(ticker.upper())
         hist = tk.history(period="2y")
+        # La barra de hoy viene con el cierre VACÍO mientras el mercado está
+        # cerrado, y `_safe()` lo convierte en 0.0 -- un cero rotundo que
+        # después se propaga a todo: la variación del día sale -100%, la
+        # distancia al máximo -100%, y la letra N del CAN SLIM falla con un
+        # "-100.0%" que parece medido.
+        #
+        # Lo reportó el usuario viendo APA a "$0" con el mercado cerrado. Y es
+        # la MISMA causa que ya se arregló el 17/08 para SPY (unas líneas más
+        # arriba) y para el scan nocturno (`_scan_single`): tres ramas
+        # hermanas, dos protegidas y esta olvidada. Se arregló la que dio el
+        # síntoma y se dejó viva la de al lado.
+        hist = hist[hist['Close'].notna()]
         if len(hist) < 50:
             return {"ok": False, "error": "Histórico insuficiente"}
 
@@ -304,6 +316,13 @@ def analyze_ticker(ticker: str, universe_perfs: list = None) -> dict:
 
         price      = _safe(hist['Close'].iloc[-1])
         prev_close = _safe(hist['Close'].iloc[-2])
+        # Sin precio no hay análisis que dar. Devolver el informe entero con
+        # un 0 dentro es peor que no darlo: todo lo que cuelga del precio sale
+        # con pinta de medido y dice justo lo contrario de la realidad.
+        if price <= 0:
+            return {"ok": False,
+                    "error": f"Sin precio de cierre válido para {ticker.upper()} "
+                             f"ahora mismo. Vuelve a intentarlo en unos minutos."}
         chg_pct    = ((price - prev_close) / prev_close * 100) if prev_close else 0
 
         perf_12m = _perf_12m(hist)
