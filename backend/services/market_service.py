@@ -1,5 +1,6 @@
 from services.gist_client import cabeceras_gist
 from datetime import datetime, date, timedelta, timezone
+import math
 import json
 import yfinance as yf
 import pandas as pd
@@ -2102,7 +2103,18 @@ def get_liquidity() -> dict:
             if spx_hist.empty: return []
             out = []
             for idx, row in spx_hist.iterrows():
-                out.append({'date': idx.strftime('%Y-%m-%d'), 'value': round(float(row['Close']), 2)})
+                # Se descartan las velas sin cierre. yfinance devuelve NaN en la
+                # barra semanal en curso y en semanas de festivo, y ese NaN
+                # llegaba tal cual a la respuesta: Starlette serializa con
+                # `allow_nan=False`, así que reventaba con un 500 en TEXTO PLANO
+                # y la pantalla enseñaba «Unexpected token 'I', "Internal S"...».
+                # Mismo fallo que ya tuvo /api/v1/watchlist con las barras
+                # diarias (ver cartera_service.py). Reproducido el 17/08/2026:
+                # el punto 104 de la serie venía NaN.
+                cierre = row['Close']
+                if cierre is None or not math.isfinite(float(cierre)):
+                    continue
+                out.append({'date': idx.strftime('%Y-%m-%d'), 'value': round(float(cierre), 2)})
             return out
         except Exception:
             return []

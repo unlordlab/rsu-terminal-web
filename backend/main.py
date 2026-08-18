@@ -6,6 +6,7 @@ from contextlib import asynccontextmanager
 import asyncio
 import os
 from config import settings
+from json_seguro import JSONSeguro
 from auth import verify_token, require_tier, verify_admin_key
 from middleware.rate_limit import rate_limit
 from middleware.analytics import AnalyticsMiddleware
@@ -74,6 +75,10 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(
     title=settings.app_name,
+    # Un NaN suelto en cualquier respuesta dejaba de ser un dato que falta y
+    # pasaba a ser un 500 en texto plano que borraba el modulo entero de la
+    # pantalla. Ver backend/json_seguro.py.
+    default_response_class=JSONSeguro,
     # En producción no exponemos el esquema completo de la API (rutas,
     # parámetros, modelos) a cualquiera que visite /api/docs sin login.
     docs_url="/api/docs" if settings.environment != "production" else None,

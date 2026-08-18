@@ -160,8 +160,10 @@ export function renderTopbar(container, navigate) {
         if (e.key === 'Escape' && app.classList.contains('nav-abierta')) cerrarNav();
     });
 
-    // Iniciar WebSocket
-    if (isLoggedIn()) initWebSocket();
+    // Iniciar WebSocket. Sin condicionarlo a isLoggedIn() -- ver el comentario
+    // largo en core/router.js: ese marcador puede faltar con la sesión viva, y
+    // entonces el ticker se quedaba en «Conectando...» sin que nada lo dijera.
+    initWebSocket();
 }
 
 function updateClock(container) {

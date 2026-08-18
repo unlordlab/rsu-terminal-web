@@ -14,8 +14,13 @@ let reconnectT = null;
 // token -- ni tenerlo a mano, ni exponerlo en la URL. El parámetro se acepta
 // todavía para las sesiones abiertas antes del cambio a cookie, que siguen
 // llevando su token en el navegador.
+// Páginas donde no se intenta conectar: no hay sesión que valga y el servidor
+// rechazaría con un 4401 que mandaría a login estando ya en login.
+const RUTAS_SIN_SESION = ['/login', '/register'];
+
 export function initWebSocket(token) {
     if (socket && socket.readyState === WebSocket.OPEN) return;
+    if (RUTAS_SIN_SESION.includes(window.location.pathname)) return;
 
     const url = WS_URL + (token ? '?token=' + token : '');
     socket = new WebSocket(url);

@@ -6,6 +6,8 @@ from auth import decode_token
 from datetime import datetime, timezone
 import asyncio
 import json
+import math
+from json_seguro import sanear
 import yfinance as yf
 import pytz
 
@@ -115,7 +117,13 @@ def _get_quick_prices() -> list:
             if len(hist) < 2: continue
             prev = float(hist['Close'].iloc[-2])
             last = float(hist['Close'].iloc[-1])
+            # Sin esto, una barra sin cierre (materias primas y cripto lo hacen
+            # a menudo) metía NaN en el precio Y en el porcentaje.
+            if not (math.isfinite(prev) and math.isfinite(last)) or prev == 0:
+                continue
             chg  = (last - prev) / prev * 100
+            if not math.isfinite(chg):
+                continue
             # Se manda TAMBIÉN el símbolo real, no solo la clave.
             #
             # La pantalla identifica cada fila por el símbolo de yfinance
@@ -210,7 +218,7 @@ class ConnectionManager:
         dead = []
         for ws in self.active:
             try:
-                await ws.send_text(json.dumps(data))
+                await ws.send_text(json.dumps(sanear(data)))
             except Exception:
                 dead.append(ws)
         for ws in dead:
@@ -233,7 +241,7 @@ class CarteraManager:
         dead = []
         for ws in self.active:
             try:
-                await ws.send_text(json.dumps(data))
+                await ws.send_text(json.dumps(sanear(data)))
             except Exception:
                 dead.append(ws)
         for ws in dead:
@@ -252,12 +260,12 @@ async def websocket_endpoint(websocket: WebSocket):
     await manager.connect(websocket)
     try:
         payload = await _build_payload()
-        await websocket.send_text(json.dumps(payload))
+        await websocket.send_text(json.dumps(sanear(payload)))
         while True:
             try:
                 await asyncio.wait_for(websocket.receive_text(), timeout=65.0)
             except asyncio.TimeoutError:
-                await websocket.send_text(json.dumps({"type": "ping"}))
+                await websocket.send_text(json.dumps(sanear({"type": "ping"})))
     except WebSocketDisconnect:
         manager.disconnect(websocket)
     except Exception:
@@ -272,12 +280,12 @@ async def websocket_cartera(websocket: WebSocket):
     try:
         loop   = asyncio.get_event_loop()
         snap   = await loop.run_in_executor(None, _get_cartera_prices)
-        await websocket.send_text(json.dumps({"type": "cartera_update", **snap}))
+        await websocket.send_text(json.dumps(sanear({"type": "cartera_update", **snap})))
         while True:
             try:
                 await asyncio.wait_for(websocket.receive_text(), timeout=65.0)
             except asyncio.TimeoutError:
-                await websocket.send_text(json.dumps({"type": "ping"}))
+                await websocket.send_text(json.dumps(sanear({"type": "ping"})))
     except WebSocketDisconnect:
         cartera_manager.disconnect(websocket)
     except Exception:

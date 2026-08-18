@@ -289,7 +289,15 @@ export function navigate(path, options = {}) {
 initTheme();
 initInstallPrompt();
 const sesionActiva = isLoggedIn();
-if (sesionActiva) initWebSocket();
+// El WebSocket NO se condiciona a isLoggedIn(): esa función lee un marcador
+// de localStorage/sessionStorage, y desde que el token vive en una cookie
+// httpOnly ese marcador puede faltar con la sesión perfectamente viva (p. ej.
+// tras reiniciar el navegador con el marcador en sessionStorage). En ese estado
+// la app funcionaba entera --las llamadas HTTP llevan la cookie sola-- pero el
+// ticker del topbar se quedaba en «Conectando...» para siempre, porque nadie
+// llegaba a abrir el socket. Se intenta conectar y decide el servidor: si no
+// hay sesión responde 4401, que onclose ya sabe tratar mandando a login.
+initWebSocket();
 if (sesionActiva) initChatWidget();
 renderSidebar(document.getElementById('sidebar'), navigate);
 renderTopbar(document.getElementById('topbar'), navigate);
