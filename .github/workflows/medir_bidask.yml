@@ -1,0 +1,84 @@
+name: Medir bid/ask por hora (TEMPORAL)
+
+# ESTE WORKFLOW ES TEMPORAL Y HAY QUE BORRARLO.
+#
+# Existe para responder a UNA pregunta concreta: a qué hora del día devuelve
+# Yahoo precios de compra y venta en las cadenas de opciones. De eso depende
+# decidir a qué hora debe correr el escaneo diario de Options Flow -- desde el
+# 18/08/2026 una operación sin bid/ask ya no se publica, así que la hora del
+# escaneo decide cuántas señales sobreviven, y la hora actual (23:00 UTC =
+# 19:00 ET) se eligió por hueco libre entre crons, no por calidad del dato.
+# Ver hallazgo #29 en ESTADO_REAL.md y la tarea #231.
+#
+# CUANDO HAYA CUATRO O CINCO DÍAS DE MEDICIONES, SE DECIDE Y SE BORRA ESTE
+# FICHERO. No es infraestructura: es un experimento con fecha de caducidad, y
+# dejarlo vivo sería ruido diario para siempre.
+#
+# Ya medido a mano el 18/08:
+#   05:20 ET (premarket)   ->    0% (la cadena viene vacía entera)
+#   12:22 ET (media sesión) ->  63,6%  (1.966 de 3.090 contratos)
+#   19:00 ET (hora actual)  ->  47,4%  (del escaneo real guardado del 17/08)
+#
+# Faltan justo las horas de este cron.
+#
+# UN CAVEAT QUE HAY QUE TENER EN CUENTA AL LEER EL RESULTADO: esto corre en un
+# runner de GitHub, que es una IP de centro de datos -- las mismas que Yahoo
+# estrangula (ver hallazgo #28). Si una medición sale con muchos fallos, puede
+# ser el corte y no la hora. El script cuenta los fallos justo para poder
+# distinguirlo.
+
+on:
+  schedule:
+    - cron: '15 20 * * 1-5'   # 16:15 ET, justo tras el cierre
+    - cron: '0 21 * * 1-5'    # 17:00 ET
+    - cron: '0 2 * * 2-6'     # 22:00 ET (del día anterior: cae en la madrugada UTC)
+  workflow_dispatch:
+
+jobs:
+  medir:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      # El script importa scanner_universe para la lista del Russell, y ese
+      # modulo trae requests y numpy a nivel de modulo -- sin ellos el paso
+      # falla al importar, no al medir.
+      - run: pip install yfinance pandas numpy requests
+
+      - name: Medir
+        id: medir
+        run: |
+          python -u scripts/medir_bidask_por_hora.py | tee /tmp/medicion.txt
+          # La línea de resumen es la que interesa; el resto es el detalle por
+          # valor, que se queda en el registro de la ejecución.
+          resumen=$(grep -E "=== [0-9]{2}:[0-9]{2} ET:" /tmp/medicion.txt | head -1)
+          russell=$(grep -E "APORTAN \(pasan filtros\)" /tmp/medicion.txt | head -1)
+          {
+            echo "resumen<<FIN"; echo "$resumen"; echo "FIN"
+            echo "russell<<FIN"; echo "$russell"; echo "FIN"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Guardar los CSV acumulados
+        uses: actions/upload-artifact@v4
+        with:
+          name: medicion-bidask-${{ github.run_id }}
+          path: scripts/medir_*.csv
+          if-no-files-found: warn
+
+      - name: Mandar el resumen por Telegram
+        if: always()
+        continue-on-error: true
+        run: |
+          texto="📏 Medición de bid/ask (temporal, hallazgo #29)
+
+          ${{ steps.medir.outputs.resumen }}
+          ${{ steps.medir.outputs.russell }}
+
+          Detalle: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          curl -s -X POST "https://api.telegram.org/bot${{ secrets.TELEGRAM_BOT_TOKEN }}/sendMessage" \
+            -d chat_id="${{ secrets.TELEGRAM_CHAT_ID }}" \
+            --data-urlencode text="$texto"
