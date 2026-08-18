@@ -1,4 +1,5 @@
 import yfinance as yf
+from yfinance.exceptions import YFRateLimitError
 import requests
 import pandas as pd
 import numpy as np
@@ -1178,6 +1179,15 @@ def _pct_from_atm(strike: float, price: float) -> str:
     pct = (strike - price) / price * 100
     return f"{pct:+.0f}%"
 
+# Reintento tras un estrangulamiento de Yahoo. Los números salen de medir el
+# mecanismo real, no de tantear: ver el comentario largo en get_options_flow().
+REINTENTO_ESPERAS   = [180, 300, 300]  # segundos antes de cada ronda de reintento
+REINTENTO_PAUSA_ENTRE = 0.6           # entre ticker y ticker dentro de una ronda
+REINTENTO_ABORTAR_TRAS = 12           # bloqueos seguidos en una ronda -> el muro
+                                      # sigue en pie, no se gasta más tiempo
+PRESUPUESTO_SEGUNDOS   = 20 * 60      # el disparador corta a los 25 min: se
+                                      # publica lo que haya antes de llegar ahí
+
 MIN_VOLUME = 200   # antes 10 — muy por debajo del estándar de la industria (Barchart usa 500);
                     # 200 es un punto medio razonable dado que escaneamos tickers más pequeños
                     # que los universos de los scanners comerciales, no una copia exacta de Barchart
@@ -1405,11 +1415,19 @@ def _process_chain(ticker: str, min_premium: float = 100_000, min_score: int = 4
             # Reintentos con backoff corto -- option_chain() es la llamada más
             # expuesta a fallos transitorios de red; antes un solo fallo
             # perdía el vencimiento entero sin reintentar.
+            #
+            # Un estrangulamiento de Yahoo NO es un fallo transitorio y aquí se
+            # trata aparte: reintentarlo tres veces con 1,5 s de pausa es pedir
+            # el TRIPLE de peticiones justo cuando el muro acaba de levantarse,
+            # que es lo que lo mantiene en pie. Se propaga hacia arriba para que
+            # el escaneo entero se entere y espere de verdad.
             chain = None
             for attempt in range(3):
                 try:
                     chain = tk.option_chain(exp)
                     break
+                except YFRateLimitError:
+                    raise
                 except Exception:
                     if attempt < 2:
                         time.sleep(1.5)
@@ -1586,6 +1604,13 @@ def _process_chain(ticker: str, min_premium: float = 100_000, min_score: int = 4
             "puts_sold":       sorted(puts_sold,    key=lambda x: -x['score'])[:10],
             "next_earnings":   next_earnings,
         }
+    except YFRateLimitError:
+        # Distinto de cualquier otro fallo: no es que ESTE ticker no tenga
+        # cadena, es que Yahoo ha cortado a esta IP y lo siguiente que se pida
+        # va a fallar igual. Quien llama necesita saberlo para esperar en vez
+        # de seguir pidiendo.
+        return {"ticker": ticker, "ok": False, "rate_limited": True,
+                "error": "Yahoo ha limitado las peticiones desde esta IP"}
     except Exception as e:
         return {"ticker": ticker, "ok": False, "error": str(e)}
 
@@ -1596,6 +1621,10 @@ def get_options_flow(min_premium: float = 100_000, min_score: int = 4, tickers: 
     # datos. No son lo mismo y antes la segunda se derivaba de la primera.
     scan_ts   = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
     scan_date = _fecha_sesion()
+    # Tope duro para todo el escaneo. El disparador (options_scan.yml) corta a
+    # los 25 min; se deja margen para que sea ESTA función quien decida
+    # publicar lo que tenga, en vez de morir a medias sin guardar nada.
+    presupuesto_fin = time.time() + PRESUPUESTO_SEGUNDOS
 
     # Umbral rebajado para lo que el usuario TIENE en cartera. Entrar en el
     # universo no basta: el corte de prima actúa ANTES de puntuar, así que una
@@ -1628,8 +1657,90 @@ def get_options_flow(min_premium: float = 100_000, min_score: int = 4, tickers: 
     respondidos = 0
     oi_cero     = 0
     oi_filas: list = []
-    for f in futures:
-        r = f.result()
+    resultados = [f.result() for f in futures]
+
+    # SEGUNDA PASADA: esperar a que baje el muro y retomar lo que quedó fuera.
+    #
+    # EL DIAGNÓSTICO, medido el 18/08/2026 y no supuesto. En producción el
+    # escaneo leía 306 de 579 (52,8%) mientras la MISMA función en local leía
+    # 528. Parecía un problema de la IP del VPS, pero al reproducirlo aquí
+    # apareció el mecanismo de verdad: los que fallan NO son tickers sueltos
+    # con un tropiezo, son TODO lo que viene después de cierto punto. Yahoo no
+    # rechaza peticiones una a una: corta a la IP entera. Comprobado pidiendo
+    # AAPL justo después de un escaneo caído -- también fallaba, con
+    # YFRateLimitError, siendo el primer ticker del universo y el más líquido
+    # que existe.
+    #
+    # De ahí que el primer intento de arreglo (reintentar enseguida) recuperara
+    # 0 de 234: a los 5 segundos el muro seguía en pie. Lo que sí funciona es
+    # esperar.
+    #
+    # CUÁNTO hay que esperar salió de medirlo dos veces, y la segunda corrigió a
+    # la primera: sondeando con una sola petición, el corte se levanta a los
+    # ~61 s; pero después de un escaneo completo dura MÁS -- a los 90 s seguía
+    # en pie, y hasta los ~290 s de silencio no volvió a responder. Tiene
+    # sentido: cada petición inútil contra el muro reinicia la cuenta.
+    #
+    # Por eso el reintento va por RONDAS con esperas crecientes (180 s, 300 s,
+    # 300 s), en serie y despacio, y cada ronda solo pide lo que sigue faltando.
+    # Si una ronda se topa otra vez con el muro nada más empezar, se corta a las
+    # pocas peticiones y se pasa a la siguiente espera en vez de gastar el
+    # tiempo dándose contra la pared -- y de paso deja de reiniciarle la cuenta.
+    #
+    # Medido con el universo real (579 tickers, 18/08/2026): de 345/579 (59,6%)
+    # a 575/579 (99,3%) en 15 minutos.
+    #
+    # Y hay un presupuesto de tiempo, porque este escaneo no se puede reintentar
+    # mañana: las cadenas de opciones solo existen mientras están vivas. Más
+    # vale volver con el 90% que quedarse sin publicar nada por agotar el
+    # temporizador del disparador.
+    pendientes = [(i, r.get('ticker')) for i, r in enumerate(resultados)
+                  if not r.get('ok') and r.get('ticker')]
+    hubo_bloqueo = any(r.get('rate_limited') for r in resultados)
+    if pendientes:
+        print(f"[OptionsFlow] {len(pendientes)}/{len(target)} sin cadena en la primera pasada"
+              + (" (Yahoo ha limitado las peticiones)" if hubo_bloqueo else ""))
+
+    for ronda, espera in enumerate(REINTENTO_ESPERAS, start=1):
+        if not pendientes:
+            break
+        restante = presupuesto_fin - time.time()
+        if restante < espera + 60:
+            print(f"[OptionsFlow] Sin tiempo para la ronda {ronda} "
+                  f"({restante:.0f}s de presupuesto): se publica con lo que hay")
+            break
+        print(f"[OptionsFlow] Ronda {ronda}: esperando {espera}s a que Yahoo levante el corte, "
+              f"luego {len(pendientes)} tickers en serie")
+        time.sleep(espera)
+
+        siguen, recuperados, bloqueos_seguidos = [], 0, 0
+        for pos, (i, t) in enumerate(pendientes):
+            if time.time() >= presupuesto_fin:
+                print("[OptionsFlow] Presupuesto de tiempo agotado a mitad de ronda")
+                siguen.append((i, t))
+                continue
+            r2 = _process_chain(t, MIN_PREMIUM_CARTERA if t in de_cartera else min_premium, min_score)
+            if r2.get('ok'):
+                resultados[i] = r2
+                recuperados += 1
+                bloqueos_seguidos = 0
+            else:
+                siguen.append((i, t))
+                if r2.get('rate_limited'):
+                    bloqueos_seguidos += 1
+                    if bloqueos_seguidos >= REINTENTO_ABORTAR_TRAS:
+                        print(f"[OptionsFlow] Ronda {ronda} abortada: {bloqueos_seguidos} cortes "
+                              f"seguidos, el muro sigue en pie")
+                        siguen.extend(pendientes[pos + 1:])
+                        break
+                else:
+                    bloqueos_seguidos = 0
+            time.sleep(REINTENTO_PAUSA_ENTRE)
+
+        print(f"[OptionsFlow] Ronda {ronda}: {recuperados} recuperados, {len(siguen)} siguen sin cadena")
+        pendientes = siguen
+
+    for r in resultados:
         if r.get('ok'):
             respondidos += 1
             # Cadena leída pero con TODO el open interest a cero: el dato llegó
