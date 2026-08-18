@@ -280,12 +280,22 @@ async function loadTicker(ticker, period) {
         // principal (mismo criterio de resiliencia que el resto del proyecto).
         const gexQs = new URLSearchParams({ max_dte: _gexParams.max_dte });
         if (_gexParams.strike_range) gexQs.set('strike_range', _gexParams.strike_range);
-        const [flowRes, gexRes] = await Promise.all([
+        // Al cambiar de ticker se olvida la sesión elegida para el anterior:
+        // una fecha que existía para NVDA puede no existir para AMAT, y
+        // arrastrarla daría un "no hay foto de ese día" desconcertante.
+        _gexParams.fecha = '';
+        _gexFechas = [];
+        const [flowRes, gexRes, fechasRes] = await Promise.all([
             fetch('/api/v1/options/ticker-flow/' + ticker + '?period=' + period, { headers: authHeader() }),
             fetch(`/api/v1/options/gex/${ticker}?${gexQs}`, { headers: authHeader() }).catch(() => null),
+            fetch(`/api/v1/options/gex/${ticker}/fechas`, { headers: authHeader() }).catch(() => null),
         ]);
         const data = await flowRes.json();
         const gex  = gexRes ? await gexRes.json().catch(() => ({ ok: false })) : { ok: false };
+        if (fechasRes) {
+            const f = await fechasRes.json().catch(() => null);
+            _gexFechas = (f && f.ok && Array.isArray(f.fechas)) ? f.fechas : [];
+        }
         // GEX/DEX se pintan AUNQUE no haya histórico de flujo para el ticker:
         // se calculan sobre la cadena de opciones en vivo, no sobre lo que el
         // escaneo nocturno haya llegado a registrar. Antes un `return` aquí
@@ -307,7 +317,10 @@ async function loadTicker(ticker, period) {
 // tradingedge.club. strike_range vacío = rango automático (±12% del spot,
 // lo decide el backend) -- un ±15 fijo no significa lo mismo en un ticker
 // de $5 que en uno de $900.
-let _gexParams = { max_dte: 50, strike_range: '' };
+let _gexParams = { max_dte: 50, strike_range: '', fecha: '' };
+// Sesiones de las que se puede recalcular el GEX. Se piden una vez por ticker
+// y se guardan aquí para no volver a preguntar en cada GENERAR.
+let _gexFechas = [];
 
 function _fmtExp(v) {
     if (!v) return '$0';          // sin signo: un "+$0" no significa nada
@@ -352,6 +365,36 @@ function expChart(titulo, rows, keyCall, keyPut, spot, tooltipKey) {
     </div>`;
 }
 
+// Solo se ofrece elegir sesión si de verdad hay alguna guardada. Un
+// desplegable con «Hoy» de única opción no aporta nada y sugiere que hay un
+// histórico que todavía no existe.
+function selectorDeSesion() {
+    if (!_gexFechas.length) return '';
+    const opciones = ['<option value="">Hoy (en vivo)</option>']
+        .concat(_gexFechas.map(f =>
+            `<option value="${esc(f)}"${f === _gexParams.fecha ? ' selected' : ''}>${esc(f)}</option>`))
+        .join('');
+    return `
+        <label style="font-size:10px;color:var(--color-muted);display:flex;flex-direction:column;gap:3px;">SESIÓN
+            <select id="gex-fecha" style="padding:4px 6px;background:var(--color-bg);color:var(--color-text);border:1px solid var(--color-border);border-radius:3px;font-size:11px;">${opciones}</select>
+        </label>`;
+}
+
+// Un día pasado NO se calcula sobre la cadena entera, sino sobre la foto
+// guardada (los contratos con más open interest). Su total sale por debajo
+// del que habría dado ese mismo día en vivo, así que compararlo con el de hoy
+// es comparar dos cosas distintas -- y eso hay que decirlo donde se ve, no
+// dejarlo en un comentario del código.
+function avisoDeSesionPasada(gex) {
+    if (!gex || !gex.ok || !gex.historico) return '';
+    return `<div style="background:rgba(255,184,0,0.08);border:1px solid #ffb800;border-radius:var(--radius);padding:8px 14px;margin-top:8px;font-size:11px;color:var(--color-text);">
+        📅 Sesión del <strong>${esc(gex.fecha)}</strong>, reconstruida de la foto guardada de ese día.
+        Esa foto recoge los contratos con más posiciones abiertas, no la cadena entera, así que
+        <strong>el total sale más bajo que el de un día en vivo</strong> — sirve para ver cómo se movió
+        el perfil de un día a otro, no para compararlo con el número de hoy.
+    </div>`;
+}
+
 function renderGex(gex) {
     // Los controles se pintan SIEMPRE, aunque la consulta falle: si un
     // Max DTE o un rango demasiado estrecho deja la cadena vacía, el usuario
@@ -364,8 +407,10 @@ function renderGex(gex) {
         <label style="font-size:10px;color:var(--color-muted);display:flex;flex-direction:column;gap:3px;">RANGO STRIKES (± $)
             <input id="gex-range" type="number" min="0.5" step="0.5" placeholder="auto" value="${esc(_gexParams.strike_range)}" style="width:90px;padding:4px 6px;background:var(--color-bg);color:var(--color-text);border:1px solid var(--color-border);border-radius:3px;font-size:11px;">
         </label>
+        ${selectorDeSesion()}
         <button id="gex-go" style="padding:5px 14px;background:var(--color-accent);color:var(--color-bg);border:none;border-radius:3px;font-size:11px;font-weight:700;cursor:pointer;">GENERAR</button>
-    </div>`;
+    </div>`
+    + avisoDeSesionPasada(gex);
 
     if (!gex || !gex.ok) {
         return controles + `<div style="padding:12px 14px;font-size:11px;color:var(--color-muted);">${esc(gex && gex.error ? gex.error : 'Sin datos de GEX/DEX para este ticker.')}</div>`;
@@ -403,6 +448,7 @@ async function loadGex(ticker) {
     if (!bloque) return;
     const qs = new URLSearchParams({ max_dte: _gexParams.max_dte });
     if (_gexParams.strike_range) qs.set('strike_range', _gexParams.strike_range);
+    if (_gexParams.fecha) qs.set('fecha', _gexParams.fecha);
     let gex = { ok: false };
     try {
         const res = await fetch(`/api/v1/options/gex/${ticker}?${qs}`, { headers: authHeader() });
@@ -420,8 +466,10 @@ function wireGex(scope, ticker) {
     go.addEventListener('click', () => {
         const dte = parseInt(scope.querySelector('#gex-dte').value, 10);
         const rng = scope.querySelector('#gex-range').value.trim();
+        const sel = scope.querySelector('#gex-fecha');
         _gexParams.max_dte      = (dte >= 1 && dte <= 365) ? dte : 50;
         _gexParams.strike_range = rng;
+        _gexParams.fecha        = sel ? sel.value : '';
         go.textContent = 'CARGANDO…';
         loadGex(ticker);
     });

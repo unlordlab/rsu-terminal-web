@@ -59,14 +59,37 @@ async def gex(
     ticker: str,
     max_dte: int = Query(50, ge=1, le=365),
     strike_range: float = Query(None, gt=0),
+    fecha: str = Query(None, pattern=r"^\d{4}-\d{2}-\d{2}$"),
     user=Depends(verify_token),
 ):
     """GEX y DEX por strike, con calls y puts separadas. Los dos parámetros
     replican los controles de la herramienta de tradingedge.club: `max_dte`
     son días hasta vencimiento y `strike_range` es un ± en unidades de
     PRECIO (no en porcentaje ni en número de strikes). Sin `strike_range` se
-    usa un rango automático del ±12% del spot."""
+    usa un rango automático del ±12% del spot.
+
+    Con `fecha` (YYYY-MM-DD) se recalcula el de esa SESIÓN a partir de la
+    foto de la cadena guardada, en vez de pedirle la cadena de ahora al
+    proveedor. El resultado viene marcado `historico: true` y `parcial:
+    true` -- la foto guarda los contratos con más open interest, no la
+    cadena entera, así que su total no es comparable con el de en vivo. Ver
+    get_gamma_exposure_historico()."""
+    if fecha:
+        from services.options_service import get_gamma_exposure_historico
+        return get_gamma_exposure_historico(ticker, fecha, max_dte=max_dte,
+                                            strike_range=strike_range)
     return get_gamma_exposure(ticker, max_dte=max_dte, strike_range=strike_range)
+
+
+@router.get("/gex/{ticker}/fechas")
+async def gex_fechas(ticker: str, user=Depends(verify_token)):
+    """Sesiones de las que se puede recalcular el GEX de este ticker. Solo
+    salen las que tienen guardadas la volatilidad implícita y el precio del
+    subyacente -- las anteriores al 18/08/2026 tienen la foto pero no esos
+    campos, y ofrecerlas daría un resultado vacío o inventado."""
+    from services.options_service import fechas_gex_disponibles
+    return {"ok": True, "ticker": ticker.upper(),
+            "fechas": fechas_gex_disponibles(ticker)}
 
 @router.post("/scan-now")
 async def scan_now(_admin: None = Depends(verify_admin_key)):

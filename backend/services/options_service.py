@@ -289,6 +289,24 @@ def init_db():
         )
     ''')
     conn.execute('CREATE INDEX IF NOT EXISTS idx_oisnap_date ON oi_snapshot(scan_date)')
+    # Añadidos el 18/08 para poder recalcular el GEX de un día pasado.
+    #
+    # La foto guardaba el open interest, que es lo que necesitaba su uso
+    # original (comparar dos sesiones). Pero la fórmula de gamma necesita
+    # ADEMÁS la volatilidad implícita de cada contrato y el precio del
+    # subyacente de ese día -- y los dos se estaban leyendo del proveedor y
+    # tirando a la basura en la misma línea. Sin ellos, el GEX de ayer no se
+    # puede calcular de ninguna manera: no es que fuera caro, es que el dato
+    # no existía.
+    #
+    # Patrón idempotente de siempre. Las filas anteriores a este cambio se
+    # quedan con NULL, y eso se dice en vez de rellenarse: un día sin IV no
+    # se puede reconstruir.
+    for columna in ('iv REAL', 'spot REAL'):
+        try:
+            conn.execute(f'ALTER TABLE oi_snapshot ADD COLUMN {columna}')
+        except sqlite3.OperationalError:
+            pass
     conn.execute('''
         CREATE TABLE IF NOT EXISTS scan_log (
             scan_date   TEXT PRIMARY KEY,
@@ -1134,19 +1152,9 @@ def get_gamma_exposure(ticker: str, max_dte: int = 50,
                     if oi <= 0 or iv <= 0 or strike <= 0: continue
                     if not (k_min <= strike <= k_max): continue
 
-                    gamma = _bs_gamma(price, strike, T, iv)
-                    delta = _bs_delta(price, strike, T, iv, es_call)
-                    # GEX: el signo es el convenio de dealer (call larga,
-                    # put corta). DEX: el signo ya viene en la propia delta.
-                    gex = (1 if es_call else -1) * gamma * oi * 100 * price ** 2 * 0.01
-                    dex = delta * oi * 100 * price
-
-                    s = por_strike.setdefault(strike, {"gex_call": 0.0, "gex_put": 0.0,
-                                                       "dex_call": 0.0, "dex_put": 0.0})
-                    if es_call:
-                        s["gex_call"] += gex; s["dex_call"] += dex; oi_call += oi
-                    else:
-                        s["gex_put"]  += gex; s["dex_put"]  += dex; oi_put  += oi
+                    _acumular_griegas(por_strike, es_call, oi, iv, strike, price, T)
+                    if es_call: oi_call += oi
+                    else:       oi_put  += oi
 
             exp_days_min = exp_days if exp_days_min is None else min(exp_days_min, exp_days)
             exp_days_max = exp_days if exp_days_max is None else max(exp_days_max, exp_days)
@@ -1156,53 +1164,206 @@ def get_gamma_exposure(ticker: str, max_dte: int = 50,
                     "error": f"Sin OI/IV suficiente para {ticker.upper()} con "
                              f"Max DTE {max_dte} y rango ±{rango}"}
 
-        filas = []
-        for k, v in por_strike.items():
-            gex_net = v["gex_call"] + v["gex_put"]
-            dex_net = v["dex_call"] + v["dex_put"]
-            filas.append({
-                "strike":   k,
-                "gex_call": round(v["gex_call"], 0), "gex_put": round(v["gex_put"], 0),
-                "dex_call": round(v["dex_call"], 0), "dex_put": round(v["dex_put"], 0),
-                "gex":      round(gex_net, 0), "gex_fmt": _fmt_gex(gex_net),
-                "dex":      round(dex_net, 0), "dex_fmt": _fmt_gex(dex_net),
-            })
-        # Si el rango deja demasiados strikes, se conservan los más cercanos
-        # al spot (no los de mayor GEX: la forma del perfil alrededor del
-        # precio es justo lo que se está mirando, y quitarle los huecos
-        # intermedios la falsearía).
-        filas.sort(key=lambda x: abs(x["strike"] - price))
-        filas = filas[:_GEX_MAX_STRIKES]
-        filas.sort(key=lambda x: x["strike"])
-
-        total_gex = sum(f["gex"] for f in filas)
-        total_dex = sum(f["dex"] for f in filas)
-        regimen   = "POSITIVO" if total_gex > 0 else "NEGATIVO"
-
-        return {
-            "ok":            True,
-            "ticker":        ticker.upper(),
-            "price":         round(price, 2),
-            "total_gex":     round(total_gex, 0),
-            "total_gex_fmt": _fmt_gex(total_gex),
-            "total_dex":     round(total_dex, 0),
-            "total_dex_fmt": _fmt_gex(total_dex),
-            "regimen":       regimen,
-            "by_strike":     filas,
-            "max_dte":       max_dte,
-            "strike_range":  rango,
-            "oi_call":       int(oi_call),
-            "oi_put":        int(oi_put),
-            # Ratio sobre OPEN INTEREST (no sobre volumen ni sobre prima) y
-            # solo dentro del rango de strikes pedido -- se dice explícito
-            # porque "call/put ratio" a secas es ambiguo y cada web usa una
-            # base distinta.
-            "call_put_ratio": round(oi_call / oi_put, 2) if oi_put > 0 else None,
-            "exp_days_range": [exp_days_min, exp_days_max] if exp_days_min is not None else None,
-            "timestamp":     get_timestamp(),
-        }
+        return _montar_gex(ticker, price, por_strike, oi_call, oi_put,
+                           max_dte, rango, exp_days_min, exp_days_max)
     except Exception as e:
         return {"ok": False, "ticker": ticker.upper(), "error": str(e)}
+
+
+def _acumular_griegas(por_strike, es_call, oi, iv, strike, spot, T):
+    """Suma un contrato al acumulado por strike. Compartido entre el GEX en
+    vivo y el de un día pasado: son el mismo cálculo sobre datos de distinta
+    procedencia, y tenerlo dos veces era pedir que divergieran -- que es el
+    error que este proyecto ya ha corregido en el motor RS, en el McClellan y
+    en las fases de Weinstein."""
+    gamma = _bs_gamma(spot, strike, T, iv)
+    delta = _bs_delta(spot, strike, T, iv, es_call)
+    # GEX: el signo es el convenio de dealer (call larga, put corta).
+    # DEX: el signo ya viene en la propia delta.
+    gex = (1 if es_call else -1) * gamma * oi * 100 * spot ** 2 * 0.01
+    dex = delta * oi * 100 * spot
+    s = por_strike.setdefault(strike, {"gex_call": 0.0, "gex_put": 0.0,
+                                       "dex_call": 0.0, "dex_put": 0.0})
+    if es_call:
+        s["gex_call"] += gex; s["dex_call"] += dex
+    else:
+        s["gex_put"]  += gex; s["dex_put"]  += dex
+
+
+def _montar_gex(ticker, price, por_strike, oi_call, oi_put, max_dte, rango,
+                exp_days_min, exp_days_max, fecha=None, parcial=False):
+    """Monta la respuesta a partir del acumulado por strike. Compartido por el
+    GEX en vivo y el histórico -- ver _acumular_griegas()."""
+    filas = []
+    for k, v in por_strike.items():
+        gex_net = v["gex_call"] + v["gex_put"]
+        dex_net = v["dex_call"] + v["dex_put"]
+        filas.append({
+            "strike":   k,
+            "gex_call": round(v["gex_call"], 0), "gex_put": round(v["gex_put"], 0),
+            "dex_call": round(v["dex_call"], 0), "dex_put": round(v["dex_put"], 0),
+            "gex":      round(gex_net, 0), "gex_fmt": _fmt_gex(gex_net),
+            "dex":      round(dex_net, 0), "dex_fmt": _fmt_gex(dex_net),
+        })
+    # Si el rango deja demasiados strikes, se conservan los más cercanos
+    # al spot (no los de mayor GEX: la forma del perfil alrededor del
+    # precio es justo lo que se está mirando, y quitarle los huecos
+    # intermedios la falsearía).
+    filas.sort(key=lambda x: abs(x["strike"] - price))
+    filas = filas[:_GEX_MAX_STRIKES]
+    filas.sort(key=lambda x: x["strike"])
+
+    total_gex = sum(f["gex"] for f in filas)
+    total_dex = sum(f["dex"] for f in filas)
+
+    return {
+        "ok":            True,
+        "ticker":        ticker.upper(),
+        "price":         round(price, 2),
+        "total_gex":     round(total_gex, 0),
+        "total_gex_fmt": _fmt_gex(total_gex),
+        "total_dex":     round(total_dex, 0),
+        "total_dex_fmt": _fmt_gex(total_dex),
+        "regimen":       "POSITIVO" if total_gex > 0 else "NEGATIVO",
+        "by_strike":     filas,
+        "max_dte":       max_dte,
+        "strike_range":  rango,
+        "oi_call":       int(oi_call),
+        "oi_put":        int(oi_put),
+        # Ratio sobre OPEN INTEREST (no sobre volumen ni sobre prima) y
+        # solo dentro del rango de strikes pedido -- se dice explícito
+        # porque "call/put ratio" a secas es ambiguo y cada web usa una
+        # base distinta.
+        "call_put_ratio": round(oi_call / oi_put, 2) if oi_put > 0 else None,
+        "exp_days_range": [exp_days_min, exp_days_max] if exp_days_min is not None else None,
+        # Solo en el histórico: de qué sesión es, y el aviso de que la foto
+        # guardada NO es la cadena entera (ver get_gamma_exposure_historico).
+        "fecha":         fecha,
+        "historico":     fecha is not None,
+        "parcial":       parcial,
+        "timestamp":     get_timestamp(),
+    }
+
+
+def fechas_gex_disponibles(ticker: str) -> list:
+    """Sesiones de las que SÍ se puede recalcular el GEX de este ticker.
+
+    No basta con que haya foto de OI: hacen falta la volatilidad implícita y
+    el precio del subyacente, que solo se guardan desde el 18/08/2026. Las
+    sesiones anteriores tienen las filas pero no esos dos campos, así que no
+    aparecen en la lista -- no se ofrecen días que darían un resultado
+    inventado o vacío."""
+    try:
+        init_db()
+        conn = sqlite3.connect(DB_PATH)
+        filas = conn.execute(
+            'SELECT DISTINCT scan_date FROM oi_snapshot '
+            'WHERE ticker = ? AND iv IS NOT NULL AND iv > 0 AND spot IS NOT NULL AND spot > 0 '
+            'ORDER BY scan_date DESC', (ticker.upper(),)
+        ).fetchall()
+        conn.close()
+        return [f[0] for f in filas]
+    except Exception:
+        return []
+
+
+def get_gamma_exposure_historico(ticker: str, fecha: str, max_dte: int = 50,
+                                 strike_range: float = None) -> dict:
+    """GEX y DEX de una sesión PASADA, recalculados desde la foto guardada.
+
+    MISMO cálculo que el de en vivo -- comparte `_acumular_griegas()` y
+    `_montar_gex()` a propósito, para que no puedan divergir.
+
+    DOS DIFERENCIAS QUE HAY QUE DECIR, no esconder:
+
+    1. La foto NO es la cadena entera. Guarda los contratos con OI >= 100
+       (`MIN_OI_SNAPSHOT`) y como mucho 50 por ticker, mientras que el GEX en
+       vivo recorre toda la cadena sin filtrar. Así que el total histórico
+       sale por debajo del que habría dado ese mismo día en vivo. Se marca
+       `parcial: True` y la pantalla lo dice: comparar un día histórico con
+       el de hoy en vivo es comparar dos cosas distintas.
+
+    2. El tiempo a vencimiento se cuenta desde la fecha de la SESIÓN, no
+       desde hoy. Usar la fecha de hoy daría griegas de un contrato que ya
+       ha vivido semanas de más -- el error crece justo en los vencimientos
+       cortos, que es donde más gamma hay.
+
+    Solo hay histórico desde el 18/08/2026, que es cuando se empezaron a
+    guardar la IV y el precio del subyacente. Y la foto se purga a los
+    `RETENTION_OI_DAYS` días, así que la ventana es esa, no infinita."""
+    try:
+        init_db()
+        conn = sqlite3.connect(DB_PATH)
+        filas = conn.execute(
+            'SELECT strike, exp, type, oi, iv, spot FROM oi_snapshot '
+            'WHERE ticker = ? AND scan_date = ? '
+            'AND iv IS NOT NULL AND iv > 0 AND spot IS NOT NULL AND spot > 0',
+            (ticker.upper(), fecha)
+        ).fetchall()
+        conn.close()
+    except Exception as e:
+        return {"ok": False, "ticker": ticker.upper(), "error": str(e)}
+
+    if not filas:
+        disponibles = fechas_gex_disponibles(ticker)
+        if disponibles:
+            error = (f"No hay foto de la cadena de {ticker.upper()} del {fecha}. "
+                     f"Sesiones disponibles: {', '.join(disponibles[:8])}")
+        else:
+            error = (f"Todavía no hay ninguna sesión guardada de {ticker.upper()} con "
+                     f"los datos que necesita el GEX. Se empezaron a guardar el "
+                     f"18/08/2026 y solo entran los tickers que el escaneo diario "
+                     f"llega a leer.")
+        return {"ok": False, "ticker": ticker.upper(), "error": error}
+
+    # El precio del subyacente de aquel día: la mediana de lo guardado, no la
+    # primera fila. Todas las filas de un ticker y una sesión llevan el mismo
+    # spot, pero si un escaneo se solapara con otro podría haber dos valores,
+    # y la mediana no se va detrás del raro.
+    spots = sorted(f[5] for f in filas)
+    spot  = spots[len(spots) // 2]
+
+    rango = strike_range if strike_range else round(spot * 0.12, 2)
+    k_min, k_max = spot - rango, spot + rango
+
+    try:
+        sesion = datetime.strptime(fecha, '%Y-%m-%d').date()
+    except Exception:
+        return {"ok": False, "ticker": ticker.upper(),
+                "error": f"Fecha no válida: {fecha}"}
+
+    por_strike = {}
+    oi_call = oi_put = 0
+    exp_days_min = exp_days_max = None
+
+    for strike, exp, tipo, oi, iv, _ in filas:
+        if not (k_min <= strike <= k_max):
+            continue
+        try:
+            # Días a vencimiento DESDE AQUEL DÍA, no desde hoy.
+            exp_days = (datetime.strptime(exp, '%Y-%m-%d').date() - sesion).days
+        except Exception:
+            continue
+        if exp_days < 0 or exp_days > max_dte:
+            continue
+        # Mismo trato del 0 DTE que en vivo: medio día en vez de descartarlo,
+        # porque las griegas se irían a infinito con T=0.
+        T = max(exp_days, 0.5) / 365.0
+        es_call = (tipo == 'call')
+        _acumular_griegas(por_strike, es_call, oi, iv, strike, spot, T)
+        if es_call: oi_call += oi
+        else:       oi_put  += oi
+        exp_days_min = exp_days if exp_days_min is None else min(exp_days_min, exp_days)
+        exp_days_max = exp_days if exp_days_max is None else max(exp_days_max, exp_days)
+
+    if not por_strike:
+        return {"ok": False, "ticker": ticker.upper(),
+                "error": (f"La foto del {fecha} de {ticker.upper()} no tiene contratos "
+                          f"dentro de Max DTE {max_dte} y rango ±{rango}")}
+
+    return _montar_gex(ticker, spot, por_strike, oi_call, oi_put, max_dte, rango,
+                       exp_days_min, exp_days_max, fecha=fecha, parcial=True)
+
 
 def _pct_from_atm(strike: float, price: float) -> str:
     if price <= 0: return ""
@@ -1512,7 +1673,10 @@ def _process_chain(ticker: str, min_premium: float = 100_000, min_score: int = 4
 
                     if oi > oi_max: oi_max = oi
                     if oi >= MIN_OI_SNAPSHOT and strike > 0:
-                        oi_snap.append((strike, exp, opt_type, int(oi)))
+                        # `iv` y `price` ya estaban aquí; hasta el 18/08 se
+                        # descartaban, y sin ellos el GEX de un día pasado no
+                        # se puede calcular (ver init_db).
+                        oi_snap.append((strike, exp, opt_type, int(oi), iv, price))
                     if vol < MIN_VOLUME or oi < MIN_OI or price_o < 0.10: continue
 
                     premium = vol * price_o * 100
@@ -1802,8 +1966,13 @@ def get_options_flow(min_premium: float = 100_000, min_score: int = 4, tickers: 
             # repetir el sesgo que este cambio viene a corregir: un contrato con
             # OI disparado en un ticker por lo demás tranquilo es exactamente el
             # caso que el ranking debe encontrar.
-            for strike, exp, tipo, oi in r.get('oi_snapshot', []):
-                oi_filas.append((r['ticker'], strike, exp, tipo, oi))
+            for fila in r.get('oi_snapshot', []):
+                # Tolerante a la forma antigua de 4 campos por si quedara
+                # algún resultado en vuelo durante un despliegue.
+                strike, exp, tipo, oi = fila[:4]
+                iv   = fila[4] if len(fila) > 4 else None
+                spot = fila[5] if len(fila) > 5 else None
+                oi_filas.append((r['ticker'], strike, exp, tipo, oi, iv, spot))
             if r['total_prem'] > 0:
                 results.append(r)
 
@@ -1929,16 +2098,21 @@ def save_current_scan(flow_data: dict) -> dict:
 
 def guardar_oi_snapshot(scan_date: str, filas: list) -> int:
     """Guarda la foto de Open Interest de la sesión. `filas` son tuplas
-    (ticker, strike, exp, type, oi). Idempotente por la clave primaria."""
+    (ticker, strike, exp, type, oi, iv, spot). La IV y el precio del
+    subyacente se guardan desde el 18/08 para poder recalcular el GEX de un
+    día pasado -- ver init_db(). Idempotente por la clave primaria."""
     if not filas:
         return 0
     try:
         init_db()
         conn = sqlite3.connect(DB_PATH)
         conn.executemany(
-            'INSERT OR REPLACE INTO oi_snapshot (scan_date, ticker, strike, exp, type, oi) '
-            'VALUES (?,?,?,?,?,?)',
-            [(scan_date, t, s, e, tp, oi) for (t, s, e, tp, oi) in filas]
+            'INSERT OR REPLACE INTO oi_snapshot '
+            '(scan_date, ticker, strike, exp, type, oi, iv, spot) '
+            'VALUES (?,?,?,?,?,?,?,?)',
+            [(scan_date, f[0], f[1], f[2], f[3], f[4],
+              f[5] if len(f) > 5 else None,
+              f[6] if len(f) > 6 else None) for f in filas]
         )
         conn.commit()
         conn.close()
