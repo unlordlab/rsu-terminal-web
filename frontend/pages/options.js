@@ -144,14 +144,19 @@ function renderDashboard(data) {
         ? `<div style="color:var(--color-muted);font-size:11px;margin-bottom:10px;">📊 Datos del escaneo: <span style="color:var(--color-text);font-weight:600;">${esc(_fmtFecha(data.scan_date))}</span>${coberturaTxt}</div>`
         : '';
 
-    // Dos motivos distintos por los que un escaneo no sirve, y se explican por
+    // Tres motivos distintos por los que un escaneo no sirve, y se explican por
     // separado porque no significan lo mismo: uno es no haber podido leer los
-    // valores, el otro es haberlos leído y que vinieran vacíos.
+    // valores, otro es haberlos leído y que vinieran vacíos, y el tercero es
+    // haberlos leído con contenido pero sin precios de compra y venta, que es
+    // lo único con lo que se puede saber si cada operación fue una compra o una
+    // venta. Los tres se ven igual desde fuera: pocas señales.
     let motivo = '';
     if (cob && cob.cobertura_baja) {
         motivo = `Solo se pudieron leer <strong>${esc(cob.respondidos)} de ${esc(cob.pedidos)}</strong> valores (${esc(cob.cobertura_pct)}%), así que faltan señales que sí pudieron existir.`;
     } else if (cob && cob.datos_vacios) {
         motivo = `Se leyeron ${esc(cob.respondidos)} valores, pero <strong>${esc(cob.oi_cero_pct)}% llegaron sin posiciones abiertas registradas</strong>. El proveedor de datos devolvió las cadenas vacías, así que la actividad de ese día no se pudo medir.`;
+    } else if (cob && cob.sin_direccion_alto) {
+        motivo = `Se descartaron <strong>${esc(cob.sin_direccion)} operaciones</strong> porque el proveedor no dio los precios de compra y venta del contrato, y sin ellos no hay forma de saber si cada una fue una compra o una venta. Se prefiere no enseñarlas antes que enseñarlas con una dirección adivinada.`;
     }
     const avisoCobertura = motivo
         ? `<div style="background:rgba(255,184,0,0.10);border:1px solid #ffb800;border-radius:var(--radius);padding:10px 14px;margin-bottom:1rem;font-size:12px;color:var(--color-text);">

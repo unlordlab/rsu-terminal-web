@@ -300,6 +300,15 @@ def init_db():
             oi_cero     INTEGER
         )
     ''')
+    # Añadida despues (18/08), con el patron idempotente que ya usa el resto
+    # del proyecto: cuantos contratos se descartaron por no poder determinar si
+    # eran compra o venta. Sin este numero, un dia en el que Yahoo no devuelva
+    # bid/ask se ve igual que un dia tranquilo -- el mismo agujero que ya
+    # tapamos con `oi_cero`.
+    try:
+        conn.execute('ALTER TABLE scan_log ADD COLUMN sin_direccion INTEGER')
+    except sqlite3.OperationalError:
+        pass
     conn.commit()
     conn.close()
 
@@ -1388,6 +1397,7 @@ def _process_chain(ticker: str, min_premium: float = 100_000, min_score: int = 4
 
         exps  = expirations[:5]
         today = datetime.now().date()
+        sin_direccion = 0   # contratos descartados por no poder saber el signo
 
         calls_bought, puts_bought, calls_sold, puts_sold = [], [], [], []
         total_call_vol, total_put_vol = 0, 0
@@ -1495,14 +1505,29 @@ def _process_chain(ticker: str, min_premium: float = 100_000, min_score: int = 4
 
                     # Dirección por precio vs. bid/ask (Lee-Ready simplificado):
                     # el último cruce por encima del punto medio del spread
-                    # indica agresor comprador. vol/OI mide actividad nueva
-                    # frente a posiciones existentes, no dirección -- con
-                    # spread inválido (contratos ilíquidos, bid/ask a 0) se
-                    # cae a ese heurístico como red de seguridad.
-                    if bid > 0 and ask > bid:
-                        is_buy = price_o >= (bid + ask) / 2
-                    else:
-                        is_buy = (vol / oi >= 0.3) if oi > 0 else True
+                    # indica agresor comprador.
+                    #
+                    # SIN bid/ask válido NO SE PUBLICA LA ENTRADA. Antes se caía
+                    # a `vol/OI >= 0.3` como supuesta red de seguridad, y esa
+                    # regla NO mide dirección: mide actividad nueva frente a
+                    # posiciones ya existentes. Un contrato con 200.000 de open
+                    # interest y 50.000 de volumen salía etiquetado "venta"
+                    # aunque fueran compras masivas, y uno recién listado salía
+                    # "compra" pasara lo que pasara. Medido con los escaneos
+                    # guardados: solo el 47,4% de las entradas del 17/08 tenían
+                    # bid/ask -- las otras llevaban una dirección que nadie
+                    # había medido, y por eso aparecían alcistas y bajistas
+                    # contradiciéndose sobre el mismo ticker el mismo día.
+                    #
+                    # Media entrada de la que no se sabe el signo es peor que
+                    # ninguna: se puede leer al revés y no hay forma de saberlo
+                    # desde la pantalla. Se descarta y se CUENTA (ver
+                    # `sin_direccion`), para que un día en el que Yahoo no dé
+                    # bid/ask no se confunda con un día tranquilo.
+                    if not (bid > 0 and ask > bid):
+                        sin_direccion += 1
+                        continue
+                    is_buy = price_o >= (bid + ask) / 2
                     # Block trade: prima alta, pocos contratos → institucional LEAPS
                     is_block = premium >= 500_000 and vol < 500
 
@@ -1603,6 +1628,7 @@ def _process_chain(ticker: str, min_premium: float = 100_000, min_score: int = 4
             "calls_sold":      sorted(calls_sold,   key=lambda x: -x['score'])[:10],
             "puts_sold":       sorted(puts_sold,    key=lambda x: -x['score'])[:10],
             "next_earnings":   next_earnings,
+            "sin_direccion":   sin_direccion,
         }
     except YFRateLimitError:
         # Distinto de cualquier otro fallo: no es que ESTE ticker no tenga
@@ -1654,8 +1680,9 @@ def get_options_flow(min_premium: float = 100_000, min_score: int = 4, tickers: 
     # la cadena, y cuántos de esos traían algo. `respondidos` bajo significa
     # problema de datos; `con_flujo` bajo con `respondidos` alto significa,
     # ahora sí, un día tranquilo de verdad.
-    respondidos = 0
-    oi_cero     = 0
+    respondidos   = 0
+    oi_cero       = 0
+    sin_direccion = 0   # contratos descartados por no poder saber el signo (ver _process_chain)
     oi_filas: list = []
     resultados = [f.result() for f in futures]
 
@@ -1748,6 +1775,7 @@ def get_options_flow(min_premium: float = 100_000, min_score: int = 4, tickers: 
             # confunde con uno tranquilo aunque la cobertura sea del 99%.
             if not r.get('oi_max'):
                 oi_cero += 1
+            sin_direccion += r.get('sin_direccion', 0)
             # La foto de OI se recoge de TODOS los que respondan, no solo de los
             # que tengan flujo destacable. Recogerla solo de `results` sería
             # repetir el sesgo que este cambio viene a corregir: un contrato con
@@ -1802,6 +1830,7 @@ def get_options_flow(min_premium: float = 100_000, min_score: int = 4, tickers: 
         "scan_date":    scan_date,
         "respondidos":  respondidos,
         "oi_cero":      oi_cero,
+        "sin_direccion": sin_direccion,
         "oi_filas":     oi_filas,
         "calls_bought": sorted(all_calls_bought, key=lambda x: (-x['score'], -x['premium']))[:50],
         "puts_bought":  sorted(all_puts_bought,  key=lambda x: (-x['score'], -x['premium']))[:30],
@@ -1872,6 +1901,7 @@ def save_current_scan(flow_data: dict) -> dict:
         con_flujo   = flow_data.get('matched', 0),
         entradas    = inserted,
         oi_cero     = flow_data.get('oi_cero'),
+        sin_direccion = flow_data.get('sin_direccion'),
     )
     return {"ok": True, "inserted": inserted, "total": len(all_items)}
 
@@ -1903,7 +1933,7 @@ COBERTURA_MINIMA = 0.80   # por debajo de esto, el escaneo se marca incompleto
 
 def guardar_scan_log(scan_date: str, scan_ts: str, pedidos: int,
                      respondidos: int, con_flujo: int, entradas: int,
-                     oi_cero: int = None) -> None:
+                     oi_cero: int = None, sin_direccion: int = None) -> None:
     """Deja constancia de la cobertura del escaneo. Se sobrescribe si se
     repite el mismo día (REPLACE): un segundo escaneo manual del mismo día
     describe mejor la realidad que el primero."""
@@ -1912,16 +1942,18 @@ def guardar_scan_log(scan_date: str, scan_ts: str, pedidos: int,
         conn = sqlite3.connect(DB_PATH)
         conn.execute(
             'INSERT OR REPLACE INTO scan_log '
-            '(scan_date, scan_ts, pedidos, respondidos, con_flujo, entradas, oi_cero) '
-            'VALUES (?,?,?,?,?,?,?)',
-            (scan_date, scan_ts, pedidos, respondidos, con_flujo, entradas, oi_cero)
+            '(scan_date, scan_ts, pedidos, respondidos, con_flujo, entradas, oi_cero, sin_direccion) '
+            'VALUES (?,?,?,?,?,?,?,?)',
+            (scan_date, scan_ts, pedidos, respondidos, con_flujo, entradas, oi_cero, sin_direccion)
         )
         conn.commit()
         conn.close()
         pct = (respondidos / pedidos * 100) if pedidos else 0
         aviso = "  <-- INCOMPLETO" if pedidos and respondidos / pedidos < COBERTURA_MINIMA else ""
+        descartes = (f", {sin_direccion} contratos descartados por no poder saber si eran compra o venta"
+                     if sin_direccion else "")
         print(f"[OptionsFlow] Cobertura {respondidos}/{pedidos} ({pct:.0f}%), "
-              f"{con_flujo} con flujo, {entradas} entradas nuevas{aviso}")
+              f"{con_flujo} con flujo, {entradas} entradas nuevas{descartes}{aviso}")
     except Exception as e:
         print(f"[OptionsFlow] No se pudo guardar el registro del escaneo: {type(e).__name__}: {e}")
 
@@ -1952,7 +1984,16 @@ def get_scan_log(scan_date: str = None) -> dict | None:
         d["oi_cero_pct"] = (round(d["oi_cero"] / d["respondidos"] * 100, 1)
                             if d.get("oi_cero") is not None and d["respondidos"] else None)
         d["datos_vacios"] = bool(d["oi_cero_pct"] is not None and d["oi_cero_pct"] > 50)
-        d["incompleto"] = d["cobertura_baja"] or d["datos_vacios"]
+        # Tercera forma de que un dia no sirva, y la mas engañosa de las tres:
+        # se leen los valores, traen open interest, pero Yahoo no da bid/ask, asi
+        # que no hay forma de saber si cada operacion fue compra o venta. Esas
+        # entradas ya no se publican (ver _process_chain), y si son muchas el dia
+        # queda vacio por falta de dato, no por falta de actividad. Sin decirlo,
+        # se lee como una sesion tranquila.
+        d["sin_direccion"] = d.get("sin_direccion")
+        d["sin_direccion_alto"] = bool(d.get("sin_direccion") and d.get("entradas") is not None
+                                       and d["sin_direccion"] > max(d["entradas"], 1))
+        d["incompleto"] = d["cobertura_baja"] or d["datos_vacios"] or d["sin_direccion_alto"]
         return d
     except Exception:
         return None
