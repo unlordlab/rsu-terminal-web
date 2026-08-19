@@ -164,6 +164,18 @@ function renderDashboard(data) {
         </div>`
         : '';
 
+    // Por qué se ven pocas filas. Sin decirlo, una pantalla con tres entradas
+    // donde antes había veinte parece un escaneo roto -- y era justo la
+    // confusión que este módulo arrastraba.
+    const notaRutina = data.descartadas_rutina
+        ? `<div style="color:var(--color-muted);font-size:11px;margin-bottom:10px;">
+             Se muestran solo las operaciones <strong style="color:var(--color-text);">inusuales</strong>:
+             aquellas en las que hoy se han negociado más contratos de los que había abiertos.
+             Otras <strong style="color:var(--color-text);">${esc(data.descartadas_rutina)}</strong>
+             quedaron fuera por ser movimiento rutinario de cadenas muy líquidas — están guardadas, solo no se listan.
+           </div>`
+        : '';
+
     const biasColor = data.dia_bias_label === 'ALCISTA' ? 'var(--color-accent)' : (data.dia_bias_label === 'BAJISTA' ? '#f23645' : 'var(--color-muted)');
     const biasBanner = data.dia_bias_pct != null
         ? `<div style="background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius);padding:12px 16px;margin-bottom:1rem;font-size:13px;">

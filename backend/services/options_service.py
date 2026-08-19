@@ -254,6 +254,9 @@ def init_db():
     # Ver DATOS_IRREPRODUCIBLES_PLAN.md, nivel 1.1.
     for col, typedef in [
         ("is_block",    "INTEGER DEFAULT 0"),
+        # is_sweep: el nombre se queda por las filas ya guardadas, pero NO marca
+        # un sweep -- marca repeticion en la misma cadena. Ver
+        # _detectar_repeticion_en_cadena().
         ("is_sweep",    "INTEGER DEFAULT 0"),
         ("near_earnings","INTEGER DEFAULT 0"),
         ("bid",         "REAL"),
@@ -469,9 +472,16 @@ def get_options_flow_simple() -> dict:
     bear_por_ticker: dict = {}
     bull_total, bear_total = 0.0, 0.0
 
+    descartadas_rutina = 0
     for r in rows:
         ot = ORDER_TYPE.get((r["type"], r["action"]))
         if not ot:
+            continue
+        # Solo lo INUSUAL. Ver MIN_VOL_OI_INUSUAL: sin este corte, un valor muy
+        # líquido llenaba la pantalla con cinco filas del mismo día y
+        # direcciones contradictorias, que es lo que hacía el módulo inútil.
+        if not r["oi"] or r["volume"] / r["oi"] < MIN_VOL_OI_INUSUAL:
+            descartadas_rutina += 1
             continue
         grupos[ot].append({
             "ticker": r["ticker"], "order_type": ot,
@@ -544,6 +554,12 @@ def get_options_flow_simple() -> dict:
         "cobertura":          get_scan_log(ultima_fecha),
         "dia_bias_pct":       dia_bias_pct,
         "dia_bias_label":     dia_bias_label,
+        # Cuántas operaciones se han dejado fuera por rutinarias. Se dice en
+        # vez de callarlo: una pantalla con tres filas donde antes había
+        # veinte necesita explicar por qué, o parece que el escaneo ha
+        # fallado -- que es justo la confusión que este módulo arrastraba.
+        "descartadas_rutina": descartadas_rutina,
+        "umbral_vol_oi":      MIN_VOL_OI_INUSUAL,
         "put_call":           put_call,
         "calls_bought":       [_entrada_simple(e, "Buy Call",  cartera_tickers, repetidos) for e in grupos["Buy Call"]][:25],
         "puts_sold":          [_entrada_simple(e, "Sell Put",  cartera_tickers, repetidos) for e in grupos["Sell Put"]][:25],
@@ -637,7 +653,7 @@ def get_ticker_flow_simple(ticker: str, period: str = "1w") -> dict:
     conn = sqlite3.connect(DB_PATH)
     conn.row_factory = sqlite3.Row
     rows = conn.execute('''
-        SELECT scan_date, type, action, strike, exp, oi, premium, premium_fmt, near_earnings, earnings_rel
+        SELECT scan_date, type, action, strike, exp, oi, volume, premium, premium_fmt, near_earnings, earnings_rel
         FROM options_flow
         WHERE ticker=? AND scan_date>=?
         ORDER BY scan_date DESC, premium DESC
@@ -659,7 +675,14 @@ def get_ticker_flow_simple(ticker: str, period: str = "1w") -> dict:
     ORDER_TYPE = {("call","buy"): "Buy Call", ("put","sell"): "Sell Put",
                   ("put","buy"): "Buy Put", ("call","sell"): "Sell Call"}
     entradas, net_score = [], 0
+    descartadas_rutina = 0
     for r in rows:
+        # El mismo corte que el panel, y por el mismo motivo: sin él, un valor
+        # activo llenaba esta tabla con veintitantas filas del mismo día en
+        # todas las direcciones. Ver MIN_VOL_OI_INUSUAL.
+        if not r["oi"] or r["volume"] / r["oi"] < MIN_VOL_OI_INUSUAL:
+            descartadas_rutina += 1
+            continue
         ot = ORDER_TYPE.get((r["type"], r["action"]), f"{r['action']} {r['type']}")
         net_score += 1 if ot in ("Buy Call", "Sell Put") else -1
         clave = (ticker.upper(), r["strike"], r["exp"], r["type"], r["action"])
@@ -678,6 +701,7 @@ def get_ticker_flow_simple(ticker: str, period: str = "1w") -> dict:
     return {
         "ok": True, "ticker": ticker.upper(), "period": period, "en_cartera": en_cartera,
         "total": len(entradas), "net_score": net_score, "entradas": entradas,
+        "descartadas_rutina": descartadas_rutina,
     }
 
 def run_and_save_scan() -> dict:
@@ -1382,6 +1406,26 @@ PRESUPUESTO_SEGUNDOS   = 20 * 60      # el disparador corta a los 25 min: se
 MIN_VOLUME = 200   # antes 10 — muy por debajo del estándar de la industria (Barchart usa 500);
                     # 200 es un punto medio razonable dado que escaneamos tickers más pequeños
                     # que los universos de los scanners comerciales, no una copia exacta de Barchart
+# Volumen frente a open interest: cuántos contratos se han negociado HOY por
+# cada uno que ya estaba abierto. Por encima de 1 significa que se ha operado
+# más de lo que existía, o sea POSICIONAMIENTO NUEVO en vez del trasiego
+# rutinario de una cadena líquida -- es la definición clásica de «actividad
+# inusual» y es exactamente lo que separaba nuestra lista de la de las
+# herramientas de referencia.
+#
+# Medido el 19/08/2026 sobre un escaneo real: de 19 entradas, solo 4 pasaban
+# este corte, y los tickers distintos bajaban de 10 a 4. Sin él, un valor muy
+# líquido aparecía cinco veces el mismo día (CVNA, CVX) con direcciones
+# contradictorias -- que no era un fallo del dato, sino que resumir el día
+# entero de una cadena activa no tiene una dirección que descubrir.
+#
+# SE FILTRA AL ENSEÑAR, NO AL GUARDAR. La base sigue registrando todo lo que
+# pasa los mínimos de volumen/OI/prima: un día de opciones no se puede
+# recuperar después, así que tirar datos por un umbral que todavía estamos
+# calibrando sería irreversible. Cambiar este número reordena la pantalla sin
+# haber perdido nada.
+MIN_VOL_OI_INUSUAL = 1.0
+
 MIN_OI     = 100    # no existía ningún mínimo antes — sin esto, un contrato con OI=5 y vol=20
                      # da un ratio Vol/OI de 4 (parece "muy inusual") siendo en realidad ilíquido
 
@@ -1542,17 +1586,29 @@ def _classify_sentiment_by_premium(bull_prem, bear_prem):
     if ratio <= 0.40:  return "bearish"
     return "neutral"
 
-def _detect_sweeps(entries_by_exp: dict) -> set:
+def _detectar_repeticion_en_cadena(entries_by_exp: dict) -> set:
     """
-    Detecta sweep: 3+ entradas del mismo tipo en el mismo exp con vol/OI > 1.
-    Retorna set de (ticker, exp, type).
+    3+ contratos del mismo tipo y vencimiento con mas volumen del dia que
+    open interest previo. Devuelve el set de (ticker, exp, type).
+
+    ESTO NO ES UN «SWEEP», y asi se llamaba hasta el 19/08/2026. Un sweep de
+    verdad es UNA orden partida entre varios mercados a la vez para llenarse
+    ya -- se reconoce por la microestructura de la ejecucion, y el dato de
+    cierre de yfinance no la trae. Lo que si se puede ver aqui es que un
+    mismo vencimiento se llene por varios strikes en el mismo dia, que es
+    otra cosa y vale menos: no dice nada sobre urgencia.
+
+    Se cambio el nombre porque la Academia ensena al usuario que un sweep
+    «sugiere urgencia por entrar» -- prometer eso con este dato seria
+    venderle una lectura que el numero no sostiene. La columna de la base
+    sigue llamandose is_sweep para no romper las filas ya guardadas.
     """
-    sweeps = set()
+    repetidos = set()
     for key, entries in entries_by_exp.items():
         high_vol = [e for e in entries if e.get('vol_oi_ratio', 0) >= 1.0]
         if len(high_vol) >= 3:
-            sweeps.add(key)
-    return sweeps
+            repetidos.add(key)
+    return repetidos
 
 # ── SCAN ENGINE ───────────────────────────────────────────────────────────────
 
@@ -1594,7 +1650,7 @@ def _process_chain(ticker: str, min_premium: float = 100_000, min_score: int = 4
         # antes solo veía los contratos que además destacaban por prima.
         oi_snap: list = []
         bull_prem_total, bear_prem_total = 0, 0
-        entries_by_exp: dict = {}   # para sweep detection
+        entries_by_exp: dict = {}   # para detectar repeticion en la cadena
 
         for exp in exps:
             try:
@@ -1753,9 +1809,9 @@ def _process_chain(ticker: str, min_premium: float = 100_000, min_score: int = 4
                         "is_sweep":     False,   # se rellena después
                     }
 
-                    # Acumular para sweep detection
-                    sweep_key = (ticker, exp, opt_type)
-                    entries_by_exp.setdefault(sweep_key, []).append(entry)
+                    # Acumular para detectar repeticion en la cadena
+                    clave_cadena = (ticker, exp, opt_type)
+                    entries_by_exp.setdefault(clave_cadena, []).append(entry)
 
                     is_bull = (opt_type=='call' and is_buy) or (opt_type=='put' and not is_buy)
                     if opt_type == 'call':
@@ -1775,12 +1831,12 @@ def _process_chain(ticker: str, min_premium: float = 100_000, min_score: int = 4
                             puts_sold.append(entry)
                             bull_prem_total += premium
 
-        # Marcar sweeps
-        sweep_keys = _detect_sweeps(entries_by_exp)
+        # Marcar repeticion en la misma cadena
+        claves_repetidas = _detectar_repeticion_en_cadena(entries_by_exp)
         for lst in [calls_bought, puts_bought, calls_sold, puts_sold]:
             for e in lst:
                 sk = (e['ticker'], e['exp'], e['type'])
-                if sk in sweep_keys:
+                if sk in claves_repetidas:
                     e['is_sweep'] = True
 
         # Net Premium Score normalizado
@@ -2004,7 +2060,7 @@ def get_options_flow(min_premium: float = 100_000, min_score: int = 4, tickers: 
     all_blocks = [e for e in all_calls_bought + all_puts_bought + all_calls_sold + all_puts_sold
                   if e.get('is_block')]
 
-    # Sweep trades
+    # Repeticion en la misma cadena (NO son sweeps, ver _detectar_repeticion_en_cadena)
     all_sweeps = [e for e in all_calls_bought + all_puts_bought + all_calls_sold + all_puts_sold
                   if e.get('is_sweep')]
 
@@ -2029,7 +2085,7 @@ def get_options_flow(min_premium: float = 100_000, min_score: int = 4, tickers: 
         "high_signals": sorted(all_high_signal,  key=lambda x: -x['premium'])[:20],
         "unusual":      sorted(all_unusual,      key=lambda x: -x['premium'])[:15],
         "blocks":       sorted(all_blocks,       key=lambda x: -x['premium'])[:15],
-        "sweeps":       sorted(all_sweeps,       key=lambda x: -x['premium'])[:15],
+        "repetidos_en_cadena": sorted(all_sweeps, key=lambda x: -x['premium'])[:15],
         "near_earnings":sorted(near_earn,        key=lambda x: -x['premium'])[:15],
         "top_premium":  [{"ticker": r['ticker'],
                           "premium_fmt": _fmt_premium(r['total_prem']),
@@ -2226,7 +2282,7 @@ def get_options_ticker(ticker: str) -> dict:
         # Señales especiales
         unusual = [e for e in all_flow if e['signal'] == 'UNUSUAL']
         blocks  = [e for e in all_flow if e.get('is_block')]
-        sweeps  = [e for e in all_flow if e.get('is_sweep')]
+        repetidos = [e for e in all_flow if e.get('is_sweep')]
 
         return {
             "ok":              True,
@@ -2241,7 +2297,7 @@ def get_options_ticker(ticker: str) -> dict:
             "flow":            all_flow[:40],
             "unusual":         unusual[:5],
             "blocks":          blocks[:5],
-            "sweeps":          sweeps[:5],
+            "repetidos_en_cadena": repetidos[:5],
             "next_earnings":   result.get('next_earnings'),
             "total_call_prem": _fmt_premium(result['total_call_prem']),
             "total_put_prem":  _fmt_premium(result['total_put_prem']),
