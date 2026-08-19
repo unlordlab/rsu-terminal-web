@@ -116,6 +116,15 @@ def _reclamar(conn, clave, tipo, ticker):
     return cur.rowcount == 1
 
 
+def _soltar(conn, clave):
+    """Deshace la reserva de _reclamar() cuando el envío no ha salido. Sin
+    esto, un fallo transitorio de Telegram convierte un aviso pendiente en un
+    aviso perdido para siempre: la clave queda puesta, y todas las pasadas
+    siguientes lo leen como «ya avisado»."""
+    conn.execute("DELETE FROM notificadas WHERE clave = ?", (clave,))
+    conn.commit()
+
+
 def _clave(row, tipo: str) -> str:
     """Identidad de una operación a efectos de «¿ya avisé de esto?».
 
@@ -171,6 +180,7 @@ def procesar_cartera_notificaciones():
 
     enviadas   = 0
     migradas   = 0
+    fallidas   = 0
     # La fecha de la clave es siempre la de ENTRADA, también en los cierres:
     # es lo que conecta ambos eventos de la misma posición.
     for tipo, filas, mensaje in (
@@ -193,8 +203,23 @@ def procesar_cartera_notificaciones():
             if _avisado_con_formato_viejo(conn, row, tipo):
                 migradas += 1
                 continue
-            enviar_telegram(mensaje(row))
-            enviadas += 1
+            if enviar_telegram(mensaje(row)):
+                enviadas += 1
+            else:
+                # Telegram ha fallado (sin red, HTTP 429, la API caída...) y la
+                # reserva de dedupe YA está puesta -- si se deja, el aviso de
+                # esta apertura o este cierre no se manda nunca más: el bucle
+                # de 15 minutos lo verá como «ya avisado» para siempre. Y no
+                # queda rastro en ninguna pantalla, porque los avisos de
+                # Cartera solo existen en Telegram. Se suelta la reserva para
+                # que la siguiente pasada lo reintente.
+                #
+                # El riesgo que se acepta a cambio: entre soltar y reintentar
+                # hay una ventana en la que otra llamada concurrente podría
+                # mandar el mismo aviso. Un duplicado raro es mucho menos malo
+                # que perder para siempre el aviso de una operación real.
+                _soltar(conn, clave)
+                fallidas += 1
 
     conn.commit()
     conn.close()
@@ -206,7 +231,9 @@ def procesar_cartera_notificaciones():
             print(f"[CarteraTracking] {migradas} operación(es) ya avisada(s) con el formato de clave anterior — reetiquetadas sin enviar nada")
         if enviadas:
             print(f"[CarteraTracking] {enviadas} notificación(es) enviada(s)")
-    return {"enviadas": enviadas, "migradas": migradas, "bootstrap": es_primera_vez}
+        if fallidas:
+            print(f"[CarteraTracking] {fallidas} notificación(es) NO enviada(s) — Telegram falló; la reserva se ha soltado y se reintentará en la próxima pasada")
+    return {"enviadas": enviadas, "migradas": migradas, "fallidas": fallidas, "bootstrap": es_primera_vez}
 
 
 init_db()

@@ -194,3 +194,35 @@ def verify_admin_key(request: Request, x_admin_key: str = Header(None)) -> None:
         if not allowed:
             raise HTTPException(status_code=429, detail=f"Demasiados intentos fallidos. Espera {retry_in}s.")
         raise HTTPException(status_code=401, detail="Clave de administrador inválida")
+
+# ── Titular ────────────────────────────────────────────────────────────────
+
+def es_titular(payload: dict) -> bool:
+    """¿Esta sesión es la del dueño de la cartera? (settings.owner_email).
+
+    Cartera no es por usuario: es una sola, la del titular, y sus avisos van a
+    SU Telegram -- así que hay acciones ahí que no tienen sentido para nadie
+    más, por mucho que el resto del módulo sí sea visible para los usuarios de
+    pago. Sin OWNER_EMAIL configurado devuelve False para todos: se prefiere
+    que la acción quede cerrada a que quede abierta por defecto.
+
+    Comparación en minúsculas y sin espacios, igual que hace el login al
+    guardar el correo -- si no, el mismo dueño escrito con una mayúscula
+    distinta en el .env dejaría de reconocerse.
+    """
+    correo = (payload or {}).get("sub") or ""
+    dueno  = getattr(settings, "owner_email", "") or ""
+    if not dueno:
+        return False
+    return correo.strip().lower() == dueno.strip().lower()
+
+
+def verify_owner(payload: dict = Depends(verify_token)) -> dict:
+    """Dependency: exige que quien llama sea el titular. 403, no 404 -- el
+    endpoint existe y se sabe que existe; lo que falta es el derecho."""
+    if not es_titular(payload):
+        raise HTTPException(
+            status_code=403,
+            detail="Solo el titular de la cartera puede forzar esta comprobación",
+        )
+    return payload

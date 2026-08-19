@@ -3,7 +3,7 @@ import { initTheme } from '/core/theme.js';
 import { renderSidebar, setActiveNavItem, NAV_ITEMS } from '/components/sidebar.js';
 import { renderTopbar } from '/components/topbar.js';
 import { initWebSocket } from '/core/websocket.js';
-import { api, setSession, isLoggedIn, authHeader, clearToken } from '/core/api.js';
+import { api, setSession, setEsTitular, isLoggedIn, authHeader, clearToken } from '/core/api.js';
 import { initCommandPalette } from '/components/command_palette.js';
 import { showDisclaimerModal } from '/components/disclaimer_modal.js';
 import { showPricingModal } from '/components/pricing_modal.js';
@@ -313,6 +313,7 @@ if (sesionActiva) {
     api.get('/auth/me').then(me => {
         if (me?.tier) {
             setSession(me.tier, me.email, !!localStorage.getItem('rsu_session'));
+            setEsTitular(me.es_titular === true);
             renderSidebar(document.getElementById('sidebar'), navigate);
             renderTopbar(document.getElementById('topbar'), navigate);
             setActiveNavItem(location.pathname);

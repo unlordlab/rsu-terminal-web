@@ -1,4 +1,4 @@
-import { authHeader } from '/core/api.js';
+import { authHeader, esTitular } from '/core/api.js';
 // ─────────────────────────────────────────────────────────────────────────────
 // RSU TERMINAL — CARTERA
 // Posiciones activas con precios live, P&L recalculado, hipervínculos a Research,
@@ -1352,13 +1352,21 @@ window.__carteraExportCSV = function() {
 // envía quien gana la inserción, de modo que pulsar diez veces no manda diez
 // mensajes. Y si la comprobación falla, el refresco de precios sigue su curso
 // -- son dos cosas independientes y la de los precios es la que se ha pedido.
+//
+// La comprobación de avisos solo la pide el TITULAR: la cartera es una sola
+// —la suya— y los mensajes van a su Telegram, así que a los demás usuarios el
+// botón solo les refresca precios, que es lo único que les afecta. El backend
+// lo exige igualmente (403); esto es para no mandar una petición que ya se
+// sabe rechazada. Ver auditoría de Cartera, #B9.
 window.__carteraRefresh = async function() {
     const btn = document.querySelector('.refresh-btn');
     if (btn) btn.textContent = '⟳ Actualizando...';
 
-    const avisos = fetch('/api/v1/cartera/notificaciones/check', {
-        method: 'POST', headers: authHeader(),
-    }).then(r => r.json()).catch(() => null);
+    const avisos = esTitular()
+        ? fetch('/api/v1/cartera/notificaciones/check', {
+              method: 'POST', headers: authHeader(),
+          }).then(r => r.json()).catch(() => null)
+        : Promise.resolve(null);
 
     try {
         const res  = await fetch('/api/v1/cartera/prices', { headers: authHeader() });

@@ -142,6 +142,18 @@ class Settings(BaseSettings):
     # contacto personal de usuarios, bugs delicados). Mismo bot de
     # telegram_bot_token, chat_id distinto. Ver sesión 26/07/2026.
     telegram_admin_chat_id: str = ""
+    # Correo de la cuenta DUEÑA de la cartera. Cartera no es por usuario: es
+    # una sola, la del titular, leída de su Google Sheet, y sus avisos de
+    # apertura/cierre van a SU Telegram. Así que forzar la comprobación de
+    # avisos (POST /cartera/notificaciones/check) no es una acción que tenga
+    # sentido para nadie más -- hasta el 19/08/2026 la podía disparar
+    # cualquier usuario de pago, que es lo que reportaba la auditoría de
+    # Cartera (#B9).
+    #
+    # Vacío = nadie puede forzarla, y el bucle de 15 minutos sigue haciendo su
+    # trabajo igual. Se prefiere eso a dejar la puerta abierta por defecto: lo
+    # único que se pierde sin configurarlo es la inmediatez del botón.
+    owner_email: str = ""
     terminal_base_url: str = "http://178.104.148.117"  # ver conversacion 17/07/2026, sin dominio propio todavia
     # Reddit OAuth (grant_type=client_credentials, solo lectura de listados
     # públicos) -- necesario porque reddit.com/*.json bloquea con 403 desde la

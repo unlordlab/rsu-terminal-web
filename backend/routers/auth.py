@@ -1,7 +1,7 @@
 from fastapi import APIRouter, HTTPException, Depends, Response
 from pydantic import BaseModel, field_validator
 from auth import (
-    create_token, verify_token, verify_admin_key,
+    create_token, verify_token, verify_admin_key, es_titular,
     set_session_cookie, clear_session_cookie,
     set_admin_cookie, clear_admin_cookie,
 )
@@ -156,6 +156,11 @@ async def me(payload: dict = Depends(verify_token)):
         "disclaimer_version": users_service.DISCLAIMER_VERSION,
         "pricing_message_seen": pricing_message_seen,
         "telegram_linked": telegram_linked,
+        # Para que la interfaz no ofrezca acciones que el backend va a
+        # rechazar (hoy: forzar la comprobación de avisos de Cartera). Es una
+        # pista de pintado, NO la barrera: quien mande la petición igualmente
+        # se lleva un 403 de verify_owner.
+        "es_titular": es_titular(payload),
     }
 
 

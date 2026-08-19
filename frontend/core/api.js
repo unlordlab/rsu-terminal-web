@@ -3,6 +3,7 @@ const TOKEN_KEY   = 'rsu_token';    // solo restos de antes de la cookie, ver ab
 const SESSION_KEY = 'rsu_session';
 const TIER_KEY    = 'rsu_tier';
 const EMAIL_KEY   = 'rsu_email';
+const TITULAR_KEY = 'rsu_es_titular';
 
 // El token de sesión YA NO VIVE AQUÍ. Está en una cookie httpOnly que pone
 // el backend, que el navegador reenvía sola en cada petición y que este
@@ -39,6 +40,7 @@ export function clearToken() {
         store.removeItem(SESSION_KEY);
         store.removeItem(TIER_KEY);
         store.removeItem(EMAIL_KEY);
+        store.removeItem(TITULAR_KEY);
     }
 }
 
@@ -67,6 +69,21 @@ export function getTier() {
 
 export function getEmail() {
     return localStorage.getItem(EMAIL_KEY) || sessionStorage.getItem(EMAIL_KEY) || '';
+}
+
+// ¿La sesión es la del dueño de la cartera? Lo dice /auth/me y sirve para no
+// ofrecer acciones que el backend va a rechazar (hoy: forzar los avisos de
+// Cartera). Es una pista de PINTADO, no una barrera: esto vive en el
+// navegador y cualquiera puede cambiarlo, pero la petición se sigue llevando
+// un 403 del backend. Ver auditoría de Cartera, #B9.
+export function setEsTitular(valor) {
+    const store = localStorage.getItem(SESSION_KEY) ? localStorage : sessionStorage;
+    if (valor) store.setItem(TITULAR_KEY, '1');
+    else       store.removeItem(TITULAR_KEY);
+}
+
+export function esTitular() {
+    return !!(localStorage.getItem(TITULAR_KEY) || sessionStorage.getItem(TITULAR_KEY));
 }
 
 // Nivel numérico del tier actual, para comparar en el front (p.ej. mostrar
