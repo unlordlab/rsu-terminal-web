@@ -1,10 +1,17 @@
 import threading
+from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, Query
 from auth import verify_token, verify_admin_key
 
 # Un escaneo tarda varios minutos y escribe en options_flow.db. El candado
 # impide que dos disparos solapados corran a la vez sobre la misma base.
 _scan_lock = threading.Lock()
+
+# Cómo fue el último escaneo. En memoria a propósito: es información de "qué
+# está pasando ahora mismo", y lo que hay que conservar entre reinicios ya se
+# guarda en `scan_log` dentro de la base de datos.
+_ultimo_scan: dict = {"iniciado_en": None, "terminado_en": None,
+                      "resultado": None, "error": None}
 from services import users_service, watchlist_service
 from services.insider_service import get_confluence_tickers
 from services.options_service import (
@@ -113,7 +120,6 @@ async def scan_now(_admin: None = Depends(verify_admin_key)):
     El workflow tuvo que cambiar de cabecera: ahora manda X-Admin-Key en vez
     de Authorization. Requiere el secret ADMIN_KEY en GitHub."""
     from fastapi.responses import JSONResponse
-    from services.options_service import run_and_save_scan
     if not _scan_lock.acquire(blocking=False):
         # 409, no 200: hay un escaneo en curso, asi que ESTA peticion no ha
         # hecho nada. Devolverlo como 200 hacia que el disparador lo apuntase
@@ -121,21 +127,71 @@ async def scan_now(_admin: None = Depends(verify_admin_key)):
         return JSONResponse(status_code=409, content={
             "ok": False, "error": "Ya hay un escaneo en curso; no se lanza otro.",
             "en_curso": True})
-    try:
-        resultado = run_and_save_scan()
-    finally:
-        _scan_lock.release()
 
-    # UN ESCANEO FALLIDO TIENE QUE FALLAR TAMBIEN POR HTTP.
+    # ARRANCA Y RESPONDE. NO espera a que termine.
     #
-    # Antes esta funcion devolvia siempre 200, incluso con `ok: False` dentro
-    # del cuerpo -- y el disparador solo miraba el codigo. Resultado: un
-    # escaneo caido se apuntaba como bueno y el aviso de Telegram no salia.
-    # Es el mismo fallo mudo que ya costo caro con la ruta inexistente que
-    # devolvia 200 con `null` (hallazgo #27).
-    if not resultado.get("ok"):
-        return JSONResponse(status_code=502, content=resultado)
-    return resultado
+    # POR QUE, medido el 19/08/2026: el escaneo tarda ~15 minutos, y Nginx
+    # corta las peticiones a los 60 segundos (`proxy_read_timeout` por
+    # defecto). El disparador recibia un 504 del PROXY y apuntaba el dia como
+    # fallido -- aunque el backend seguia escaneando por detras y guardaba
+    # bien: la sesion del 18/08 salio 575/579 pese al "fallo".
+    #
+    # Subir el tiempo de espera de Nginx seria tapar el sintoma. Una peticion
+    # HTTP de quince minutos es fragil por naturaleza: cualquier proxy,
+    # balanceador o cliente puede cortarla, y la configuracion de Nginx ni
+    # siquiera vive en este repositorio. Asi que se rompe la dependencia: se
+    # responde 202 en cuanto arranca y el estado se consulta aparte, en
+    # /scan-estado.
+    #
+    # El candado se suelta en la TAREA, no aqui: si se soltara al responder,
+    # un segundo disparo entraria mientras el primero sigue escaneando.
+    import threading
+
+    def _tarea():
+        from services.options_service import run_and_save_scan
+        try:
+            r = run_and_save_scan()
+            _ultimo_scan["resultado"] = r
+            _ultimo_scan["error"] = None if r.get("ok") else r.get("error", "desconocido")
+        except Exception as e:
+            _ultimo_scan["resultado"] = None
+            _ultimo_scan["error"] = f"{type(e).__name__}: {e}"
+            print(f"[OptionsFlow] El escaneo ha reventado: {_ultimo_scan['error']}")
+        finally:
+            _ultimo_scan["terminado_en"] = datetime.now(timezone.utc).isoformat()
+            _scan_lock.release()
+
+    _ultimo_scan.update({"iniciado_en": datetime.now(timezone.utc).isoformat(),
+                         "terminado_en": None, "resultado": None, "error": None})
+    threading.Thread(target=_tarea, daemon=True, name="options-scan").start()
+    return JSONResponse(status_code=202, content={
+        "ok": True, "iniciado": True,
+        "mensaje": ("Escaneo arrancado. Puede tardar unos 15 minutos; consulta "
+                    "GET /api/v1/options/scan-estado para saber cómo va."),
+        "iniciado_en": _ultimo_scan["iniciado_en"]})
+
+
+@router.get("/scan-estado")
+async def scan_estado(_admin: None = Depends(verify_admin_key)):
+    """Cómo va (o cómo fue) el último escaneo lanzado por /scan-now.
+
+    Existe porque el disparo dejó de ser síncrono: el disparador arranca el
+    escaneo y luego pregunta aquí hasta que termina. Devuelve el resultado
+    REAL del escaneo, no el de una conexión HTTP -- que era justo lo que se
+    estaba midiendo mal."""
+    from services.options_service import get_scan_log
+    en_curso = _scan_lock.locked()
+    return {
+        "ok": True,
+        "en_curso": en_curso,
+        "iniciado_en": _ultimo_scan.get("iniciado_en"),
+        "terminado_en": _ultimo_scan.get("terminado_en"),
+        "error": _ultimo_scan.get("error"),
+        "resultado": _ultimo_scan.get("resultado"),
+        # Del registro en disco, para poder responder también después de un
+        # reinicio del contenedor, cuando la memoria de arriba está vacía.
+        "ultimo_guardado": get_scan_log(),
+    }
 
 # ── DOS ENDPOINTS RETIRADOS EL 05/08/2026 (auditoría Options Flow #3 y #5) ────
 #

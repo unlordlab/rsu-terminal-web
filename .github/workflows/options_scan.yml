@@ -19,7 +19,7 @@ on:
 jobs:
   trigger:
     runs-on: ubuntu-latest
-    timeout-minutes: 40   # el escaneo puede esperar a que Yahoo levante un
+    timeout-minutes: 45   # 35 de sondeo + margen. El escaneo puede esperar a que Yahoo levante un
                           # corte por exceso de peticiones (ver el comentario
                           # largo en get_options_flow): presupuesto de 20 min
                           # dentro del backend + margen
@@ -33,13 +33,55 @@ jobs:
           # usuario registrado podía lanzar un escaneo de ~570 tickers).
           # REQUIERE el secret ADMIN_KEY en GitHub, con el mismo valor que
           # ADMIN_KEY tiene en el .env del VPS.
-          status=$(curl -s -o /tmp/resp.json -w "%{http_code}" -X POST \
-            --max-time 2100 \
-            -H "X-Admin-Key: ${{ secrets.ADMIN_KEY }}" \
-            "${{ secrets.RSU_BACKEND_URL }}/api/v1/options/scan-now") || true
-          echo "HTTP status: $status"
+          # ARRANCA el escaneo y NO espera a que termine.
+          #
+          # Antes esta llamada se quedaba colgada los ~15 minutos que dura, y
+          # Nginx corta a los 60 segundos: el disparador recibia un 504 del
+          # PROXY y apuntaba el dia como fallido aunque el backend siguiera
+          # escaneando y guardara bien. Medido el 19/08/2026: la sesion del
+          # 18/08 salio 575/579 (99,3%) pese a dos "fallos" seguidos.
+          #
+          # Ahora el backend responde 202 al arrancar y el estado se consulta
+          # abajo. Ningun tiempo de espera intermedio puede volver a romper
+          # esto, y el resultado que se evalua es el del ESCANEO y no el de
+          # una conexion.
+          status=$(curl -s -o /tmp/resp.json -w "%{http_code}" -X POST             --max-time 60             -H "X-Admin-Key: ${{ secrets.ADMIN_KEY }}"             "${{ secrets.RSU_BACKEND_URL }}/api/v1/options/scan-now") || true
+          echo "Arranque -> HTTP $status"
           cat /tmp/resp.json || true
           echo
+
+          if [ "$status" = "202" ]; then
+            # Preguntar cada minuto hasta que termine. 35 vueltas = 35 min,
+            # con margen sobre el presupuesto de 20 que se impone el backend.
+            for i in $(seq 1 35); do
+              sleep 60
+              curl -s -o /tmp/resp.json -w "%{http_code}" --max-time 30                 -H "X-Admin-Key: ${{ secrets.ADMIN_KEY }}"                 "${{ secrets.RSU_BACKEND_URL }}/api/v1/options/scan-estado" > /tmp/st.txt || true
+              estado=$(cat /tmp/st.txt)
+              if [ "$estado" != "200" ]; then
+                echo "Consulta $i -> HTTP $estado (se reintenta)"
+                continue
+              fi
+              if grep -q '"en_curso": *false' /tmp/resp.json; then
+                echo "Escaneo terminado tras $i minuto(s)."
+                cat /tmp/resp.json
+                echo
+                # El resultado del escaneo manda: un escaneo que revienta por
+                # dentro tiene que salir como fallo aunque las conexiones
+                # hayan ido bien.
+                if grep -q '"error": *null' /tmp/resp.json; then
+                  status=200
+                else
+                  status=502
+                fi
+                break
+              fi
+              echo "Consulta $i: sigue en curso..."
+            done
+            if grep -q '"en_curso": *true' /tmp/resp.json; then
+              echo "::warning::Sigue en curso tras 35 minutos; se deja correr."
+              status=200
+            fi
+          fi
 
           # El aviso tiene que decir QUÉ ha fallado, no solo que algo falló.
           # Hasta el 18/08/2026 el mensaje de Telegram era una frase fija con
@@ -52,7 +94,8 @@ jobs:
             401|403) motivo="El backend rechazó la clave de administrador (HTTP $status). El secret ADMIN_KEY de GitHub y el ADMIN_KEY del .env del VPS no coinciden." ;;
             404|405) motivo="El backend no reconoce la ruta del escaneo (HTTP $status). Es la firma de tener desplegada una versión antigua -- comprobado en local: una ruta /api que no existe responde 405 a un POST, no 404." ;;
             409) motivo="Ya había otro escaneo en curso (HTTP 409), así que este no ha hecho nada." ;;
-            502) motivo="El escaneo se ejecutó pero falló por dentro (HTTP 502)." ;;
+            502) motivo="El escaneo se ejecutó pero falló por dentro. Mira el cuerpo de abajo." ;;
+            504) motivo="Un proxy cortó la petición por tiempo (HTTP 504). No debería pasar desde el 19/08, porque el disparo ya no espera a que termine el escaneo -- si vuelve a salir, revisa que el backend desplegado tenga el arranque asíncrono." ;;
             5*) motivo="El backend devolvió un error (HTTP $status)." ;;
             200) motivo="" ;;
             *) motivo="Respuesta inesperada del backend (HTTP $status)." ;;

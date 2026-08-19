@@ -28,6 +28,7 @@ Uso:
     python -m pytest tests/test_options_scan_aviso.py -v
 """
 import os
+import time
 import sys
 from unittest.mock import patch
 
@@ -40,6 +41,13 @@ from main import app  # noqa: E402
 from config import settings  # noqa: E402
 
 CLAVE = {"X-Admin-Key": settings.admin_key}
+
+
+def setup_function():
+    # Ver el comentario en test_options_scan_asincrono.py: el limitador es
+    # compartido y agotarlo hace fallar a los tests de después.
+    from middleware.rate_limit import _store
+    _store.clear()
 
 
 def _flow_ok(**extra):
@@ -93,29 +101,46 @@ def test_un_escaneo_fallido_dice_por_que():
 
 # ── Y un escaneo fallido tiene que fallar también por HTTP ───────────────────
 
-def test_un_escaneo_fallido_no_devuelve_200():
-    """EL test. Antes devolvía 200 con `ok: False` dentro, y el disparador
-    solo mira el código -- así que el fallo se apuntaba como éxito y el aviso
-    de Telegram nunca salía."""
+def test_un_escaneo_fallido_sigue_sin_poder_parecer_un_exito():
+    """Lo que este test protege NO ha cambiado: un escaneo que falla no puede
+    apuntarse como bueno. Lo que ha cambiado el 19/08 es DÓNDE se ve.
+
+    El disparo dejó de ser síncrono porque Nginx cortaba a los 60 s una
+    petición de 15 minutos (ver test_options_scan_asincrono.py). Ahora el POST
+    responde 202 al ARRANCAR -- que no es una afirmación sobre el resultado --
+    y el fallo aparece en /scan-estado, que es lo que el disparador evalúa."""
     with patch("services.options_service.run_and_save_scan",
                return_value={"ok": False, "error": "Yahoo no responde"}):
         with TestClient(app) as c:
             resp = c.post("/api/v1/options/scan-now", headers=CLAVE)
-    assert resp.status_code == 502, \
-        f"un escaneo caido devolvio {resp.status_code}: el disparador lo apuntaria como bueno"
-    assert "Yahoo" in resp.json().get("error", "")
+            assert resp.status_code == 202, resp.status_code
+            for _ in range(100):
+                estado = c.get("/api/v1/options/scan-estado", headers=CLAVE).json()
+                if not estado["en_curso"]:
+                    break
+                time.sleep(0.05)
+    assert estado["en_curso"] is False
+    assert "Yahoo" in (estado.get("error") or ""), (
+        f"el fallo no llega al estado: {estado.get('error')}")
 
 
-def test_un_escaneo_bueno_sigue_devolviendo_200_con_sus_numeros():
+def test_un_escaneo_bueno_publica_sus_numeros_en_el_estado():
+    """Los números de cobertura siguen llegando al disparador; ahora por
+    /scan-estado en vez de por la respuesta del POST."""
     with patch("services.options_service.run_and_save_scan",
                return_value={"ok": True, "inserted": 12, "total": 20,
                              "pedidos": 579, "respondidos": 575,
                              "cobertura_pct": 99.3, "incompleto": False}):
         with TestClient(app) as c:
-            resp = c.post("/api/v1/options/scan-now", headers=CLAVE)
-    assert resp.status_code == 200
-    d = resp.json()
-    assert d["cobertura_pct"] == 99.3 and d["incompleto"] is False
+            assert c.post("/api/v1/options/scan-now", headers=CLAVE).status_code == 202
+            for _ in range(100):
+                estado = c.get("/api/v1/options/scan-estado", headers=CLAVE).json()
+                if not estado["en_curso"]:
+                    break
+                time.sleep(0.05)
+    assert estado["error"] is None
+    r = estado["resultado"]
+    assert r["cobertura_pct"] == 99.3 and r["incompleto"] is False
 
 
 def test_si_ya_hay_un_escaneo_en_curso_tampoco_es_un_200():
