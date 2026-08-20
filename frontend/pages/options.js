@@ -223,7 +223,7 @@ function renderDashboard(data) {
                 ? `<div style="color:var(--color-muted);font-size:11px;margin-top:10px;">Comparados ${esc(data.oi_comparados)} contratos entre las dos últimas sesiones.</div>`
                 : ''));
 
-    return fechaDatos + avisoCobertura + biasBanner + topBoxes + flowTables + oiTables + nota;
+    return fechaDatos + avisoCobertura + notaRutina + biasBanner + topBoxes + flowTables + oiTables + nota;
 }
 
 function flowTable(title, rows, color) {

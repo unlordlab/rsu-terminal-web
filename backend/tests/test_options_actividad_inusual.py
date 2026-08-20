@@ -187,3 +187,26 @@ def test_el_modulo_no_llama_sweep_a_tres_entradas_de_la_misma_cadena():
         "sigue existiendo _detect_sweeps: ese nombre promete una deteccion "
         "de ejecucion que este dato no permite")
     assert hasattr(O, "_detectar_repeticion_en_cadena")
+
+
+def test_la_nota_de_descartadas_no_solo_existe_sino_que_se_PINTA():
+    """El fallo que esto vigila lo cometi yo y lo vio el usuario en pantalla:
+    la nota quedo DECLARADA en options.js pero nadie la metio en el `return`,
+    asi que era codigo muerto y la pagina seguia sin explicar por que hay
+    menos filas. Lo peor es como lo «verifique»: evalue el fragmento suelto
+    en el navegador y comprobe que producia el HTML correcto -- lo cual es
+    cierto y no demuestra nada, porque nada lo renderizaba.
+
+    Comprobar que la constante existe habria pasado igual de verde. Lo que
+    hay que atar es que aparezca en la linea que construye la pagina."""
+    import os
+    ruta = os.path.join(os.path.dirname(__file__), "..", "..", "frontend", "pages", "options.js")
+    with open(ruta, encoding="utf-8") as fh:
+        fuente = fh.read()
+    declarada = "const notaRutina" in fuente
+    pintada = [l for l in fuente.split("\n")
+               if l.strip().startswith("return ") and "notaRutina" in l]
+    assert declarada, "ha desaparecido la nota de descartadas"
+    assert pintada, (
+        "notaRutina esta declarada pero NO aparece en ningun return: es codigo "
+        "muerto y la pantalla vuelve a no explicar por que hay pocas filas")
