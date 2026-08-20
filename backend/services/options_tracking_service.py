@@ -435,27 +435,50 @@ def resumen_strike() -> dict:
     Desglosado por tipo de operación porque tocar significa lo contrario según
     el lado: en una call comprada es el escenario que se buscaba; en una put
     VENDIDA, tocar es justo lo que el vendedor no quería."""
+    from services.options_service import MIN_VOL_OI_INUSUAL
+    init_db()
     init_db_strike()
     conn = _conn()
-    filas = conn.execute("SELECT * FROM strike_tocado").fetchall()
+    filas = conn.execute(
+        "SELECT * FROM strike_tocado WHERE tocado IS NOT NULL").fetchall()
+    # Los que todavía no tienen veredicto: apuestas vivas que aún pueden
+    # alcanzar su strike. No son fallos y no entran en el porcentaje, pero hay
+    # que poder decir cuántas son.
+    pendientes = conn.execute(
+        """
+        SELECT COUNT(*) FROM options_flow f
+        LEFT JOIN strike_tocado t
+               ON t.scan_date = f.scan_date AND t.ticker = f.ticker
+              AND t.strike = f.strike AND t.exp = f.exp
+              AND t.type = f.type AND t.action = f.action
+        WHERE f.oi > 0 AND f.volume IS NOT NULL
+          AND (CAST(f.volume AS REAL) / f.oi) >= ? AND f.strike > 0
+          AND t.tocado IS NULL
+        """,
+        (MIN_VOL_OI_INUSUAL,),
+    ).fetchone()[0]
     conn.close()
 
     def _bloque(rows):
-        resueltos = [r for r in rows if r["tocado"] is not None]
-        vivos = len(rows) - len(resueltos)
-        if not resueltos:
-            return {"n": 0, "vivos": vivos, "tocaron": 0, "tocaron_pct": None,
-                    "suficiente": False}
-        t = sum(1 for r in resueltos if r["tocado"])
-        return {"n": len(resueltos), "vivos": vivos, "tocaron": t,
-                "tocaron_pct": round(t / len(resueltos) * 100, 1),
-                "suficiente": len(resueltos) >= MIN_MUESTRA}
+        # Aquí NO se cuentan los pendientes: en esta tabla solo hay veredictos,
+        # porque un contrato que sigue vivo no se inserta. Contarlos desde aquí
+        # daba SIEMPRE cero -- un «siguen vivos: 0» mientras había 375 sin
+        # resolver, que es exactamente el tipo de cero que este proyecto lleva
+        # semanas quitando. Los pendientes se cuentan aparte, sobre la tabla de
+        # operaciones, y viajan en `pendientes` del resumen.
+        t = sum(1 for r in rows if r["tocado"])
+        if not rows:
+            return {"n": 0, "tocaron": 0, "tocaron_pct": None, "suficiente": False}
+        return {"n": len(rows), "tocaron": t,
+                "tocaron_pct": round(t / len(rows) * 100, 1),
+                "suficiente": len(rows) >= MIN_MUESTRA}
 
     fuera = [r for r in filas if not _ya_en_el_dinero(r)]
     dentro = [r for r in filas if _ya_en_el_dinero(r)]
 
     return {
         "ok": True,
+        "pendientes": pendientes,
         "total": _bloque(fuera),
         "por_tipo": {etiqueta: _bloque([r for r in fuera
                                         if r["type"] == tipo and r["action"] == accion])

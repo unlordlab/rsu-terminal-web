@@ -134,6 +134,12 @@ def test_un_contrato_que_sigue_vivo_no_es_un_fallo(bd):
     r = _evaluar(_precios(altos=[101] * 5, bajos=[99] * 5), hoy="2026-08-10")
     assert r["siguen_vivos"] == 1
     assert _fila(bd) is None, "no puede haber veredicto de algo sin resolver"
+    # Y el resumen tiene que poder DECIR cuántos hay. Contarlos desde la tabla
+    # de veredictos daba siempre cero, porque los vivos no se insertan ahí --
+    # en producción decía «siguen vivos: 0» con 375 sin resolver.
+    res = T.resumen_strike()
+    assert res["pendientes"] == 1, res["pendientes"]
+    assert res["total"]["n"] == 0
 
 
 # ── Lo que hace que el porcentaje signifique algo ────────────────────────────
