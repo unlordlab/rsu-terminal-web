@@ -630,10 +630,16 @@ def tasa_base_strike(semilla: int = 42, hoy: str = None) -> dict:
         """Las mismas cifras para cualquier subconjunto de contratos: el
         porcentaje, la tasa base, y la ventaja con su significancia agrupando
         por valor-sesión y por sesión."""
+        # MISMAS CLAVES ESTÉ VACÍO O NO. Devolver un diccionario más corto
+        # cuando no hay datos obliga a quien lo lee a saber de antemano si
+        # había o no -- y revienta en cuanto alguien recorre los dos lados de
+        # una partición. Pasó el 21/08 con `por_earnings`: un lado sin
+        # contratos y un KeyError en la cara del usuario.
         if not regs:
             return {"n": 0, "n_grupos": 0, "n_sesiones": 0, "real_pct": None,
-                    "tasa_base_pct": None, "ventaja_pp": None, "t": None,
-                    "t_sesion": None}
+                    "tasa_base_pct": None, "ventaja_pp": None,
+                    "ventaja_por_grupo_pp": None, "t": None,
+                    "ventaja_por_sesion_pp": None, "t_sesion": None}
         g: dict = {}
         ses: dict = {}
         for x in regs:

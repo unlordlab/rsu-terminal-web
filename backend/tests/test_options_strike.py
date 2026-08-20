@@ -404,6 +404,15 @@ def test_sin_contratos_cerca_de_resultados_no_se_inventa_una_cifra(bd):
     with patch("yf_batch.download_batch", return_value=({}, {}, {"XOM": _hl_serie([100.0] * 300)})):
         r = T.tasa_base_strike(hoy=HOY)
     cerca = r["por_earnings"]["cerca"]
-    assert cerca["n"] == 0
-    assert cerca["real_pct"] is None and cerca["ventaja_pp"] is None
-    assert r["por_earnings"]["lejos"]["n"] == 1
+    lejos = r["por_earnings"]["lejos"]
+    assert cerca["n"] == 0 and lejos["n"] == 1
+    # LA MISMA FORMA ESTE VACIO O NO. Comprobar dos claves sueltas -- que es lo
+    # que hacia este test-- dejaba pasar que el bloque vacio devolviera un
+    # diccionario mas corto: el usuario se llevo un KeyError en produccion al
+    # recorrer los dos lados de la particion.
+    assert set(cerca) == set(lejos), (
+        f"el bloque vacio tiene otra forma: le faltan {set(lejos) - set(cerca)}")
+    assert all(cerca[k] is None for k in
+               ("real_pct", "tasa_base_pct", "ventaja_pp",
+                "ventaja_por_grupo_pp", "ventaja_por_sesion_pp")), (
+        "un subconjunto sin contratos no puede devolver cifras")
