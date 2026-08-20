@@ -171,6 +171,19 @@ async def scan_now(_admin: None = Depends(verify_admin_key)):
         "iniciado_en": _ultimo_scan["iniciado_en"]})
 
 
+@router.get("/aciertos")
+async def aciertos(user=Depends(verify_token)):
+    """¿Acierta este módulo? Aciertos de las señales de flujo contra el S&P 500
+    en la misma ventana (ver options_tracking_service).
+
+    Contra el índice y no contra cero: en un tramo alcista, «apostó al alza y
+    subió» acierta casi siempre sin que la señal aporte nada. Y cada bloque
+    viene con su `n` y con `suficiente`, para que un porcentaje sacado de
+    cuatro casos no se lea como una conclusión."""
+    from services.options_tracking_service import resumen
+    return resumen()
+
+
 @router.get("/scan-estado")
 async def scan_estado(_admin: None = Depends(verify_admin_key)):
     """Cómo va (o cómo fue) el último escaneo lanzado por /scan-now.

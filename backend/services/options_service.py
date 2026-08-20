@@ -813,6 +813,21 @@ def run_and_save_scan() -> dict:
     })
     log = get_scan_log(data.get("scan_date")) or {}
     resultado["incompleto"] = bool(log.get("incompleto"))
+
+    # Seguimiento de aciertos (#25). En su propio try/except: si esto falla,
+    # el escaneo -- que es lo irrecuperable, un dia de cadenas de opciones no
+    # se puede pedir despues -- ya esta guardado y no se pierde por una caida
+    # de yfinance al calcular retornos de hace tres semanas.
+    try:
+        from services.options_tracking_service import registrar_senales, actualizar_resultados
+        reg = registrar_senales(data.get("scan_date"))
+        act = actualizar_resultados()
+        print(f"[OptionsFlow] Seguimiento: {reg['guardadas']} señal(es) nueva(s), "
+              f"{act.get('actualizadas', 0)} con resultado")
+        resultado["seguimiento"] = {"registradas": reg["guardadas"], **act}
+    except Exception as e:
+        print(f"[OptionsFlow] Seguimiento no actualizado: {type(e).__name__}: {e}")
+
     return resultado
 
 # ────────────────────────────────────────────────────────────────────────────
