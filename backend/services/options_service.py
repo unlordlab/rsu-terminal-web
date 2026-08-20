@@ -672,6 +672,7 @@ def get_ticker_flow_simple(ticker: str, period: str = "1w") -> dict:
         ORDER BY scan_date DESC, premium DESC
         LIMIT 200
     ''', (ticker.upper(), from_dt)).fetchall()
+    serie_nps = _serie_nps_diaria(conn, ticker, from_dt)
     conn.close()
 
     if not rows:
@@ -715,7 +716,60 @@ def get_ticker_flow_simple(ticker: str, period: str = "1w") -> dict:
         "ok": True, "ticker": ticker.upper(), "period": period, "en_cartera": en_cartera,
         "total": len(entradas), "net_score": net_score, "entradas": entradas,
         "descartadas_rutina": descartadas_rutina,
+        "serie_nps": serie_nps,
     }
+
+def _serie_nps_diaria(conn, ticker: str, from_dt: str) -> list:
+    """Sesgo por prima de cada sesión: (alcista - bajista) / total, de -100 a
+    +100. Alcista = comprar calls o vender puts; bajista, lo contrario.
+
+    CONSULTA PROPIA, NO LA DE LA TABLA. La de arriba lleva `LIMIT 200` y viene
+    ordenada por fecha y prima, así que en un periodo largo recorta las
+    sesiones más antiguas -- que en una tabla es aceptable (se ven las 200 más
+    relevantes) pero en una serie temporal seria una mentira: el gráfico
+    empezaría más tarde de lo que dice el periodo elegido y nadie lo notaría.
+
+    MISMO CORTE DE ACTIVIDAD INUSUAL que la tabla y que el panel: si el
+    gráfico contara operaciones que la tabla de debajo no enseña, los dos
+    números de la misma pantalla dirían cosas distintas sin avisar.
+
+    LOS DÍAS SIN OPERACIONES INUSUALES NO SALEN, no salen como cero: un cero
+    es «hubo tanto alcista como bajista», y eso no es lo que pasó -- lo que
+    pasó es que ese día no hubo nada que contar.
+    """
+    filas = conn.execute(
+        """
+        SELECT scan_date,
+               SUM(CASE WHEN (type='call' AND action='buy') OR (type='put' AND action='sell')
+                        THEN premium ELSE 0 END) AS bull,
+               SUM(CASE WHEN (type='put' AND action='buy') OR (type='call' AND action='sell')
+                        THEN premium ELSE 0 END) AS bear,
+               COUNT(*) AS n
+        FROM options_flow
+        WHERE ticker = ? AND scan_date >= ?
+          AND oi > 0 AND volume IS NOT NULL
+          AND (CAST(volume AS REAL) / oi) >= ?
+        GROUP BY scan_date
+        ORDER BY scan_date
+        """,
+        (ticker.upper(), from_dt, MIN_VOL_OI_INUSUAL),
+    ).fetchall()
+
+    serie = []
+    for f in filas:
+        total = (f["bull"] or 0) + (f["bear"] or 0)
+        if total <= 0:
+            continue          # sin prima no hay porcentaje que calcular
+        serie.append({
+            "fecha": f["scan_date"],
+            "nps":   round(((f["bull"] or 0) - (f["bear"] or 0)) / total * 100, 1),
+            # Cuántas operaciones sostienen ese número. Un día con UNA sola da
+            # +100 o -100 y en un gráfico parece una convicción enorme -- va en
+            # la respuesta para que la pantalla pueda decirlo.
+            "n":     f["n"],
+        })
+    return serie
+
 
 def run_and_save_scan() -> dict:
     """Ejecuta un escaneo completo del WATCHLIST y lo persiste. Desde la

@@ -192,3 +192,21 @@ export async function addToWatchlist(ticker) {
         return { ok: false, error: 'Error de red: ' + e.message };
     }
 }
+
+/**
+ * Carga Chart.js bajo demanda y ejecuta `cb` cuando está listo. Vivía como
+ * `_loadChartJsThen` dentro de market.js; se promueve aquí al aparecer el
+ * segundo consumidor (el gráfico de sesgo diario de Options Flow), mismo
+ * criterio que ya se siguió con esc()/errorMessage(): la segunda copia es el
+ * momento de compartir, no la quinta.
+ *
+ * Se carga aquí y no en index.html a propósito: la mayoría de páginas de la
+ * terminal no tienen ningún gráfico y no deben pagar ~250 KB por si acaso.
+ */
+export function cargarChartJs(cb) {
+    if (window.Chart) { cb(); return; }
+    const script  = document.createElement('script');
+    script.src    = 'https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js';
+    script.onload = cb;
+    document.head.appendChild(script);
+}

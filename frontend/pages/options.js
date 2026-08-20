@@ -1,6 +1,6 @@
 import { authHeader } from '/core/api.js';
 import { tt } from '/components/tooltip.js';
-import { errorMessage, esc, fmtFecha } from '/core/ui.js';
+import { errorMessage, esc, fmtFecha, cargarChartJs } from '/core/ui.js';
 
 // Esta página tenía su propia copia de este formateador, y su comentario decía
 // que era "el mismo formato usado en el resto de la terminal" — no lo era: la
@@ -334,7 +334,12 @@ async function loadTicker(ticker, period) {
         // solo a él al cambiar Max DTE o el rango de strikes, sin volver a
         // pedir todo el flujo del ticker.
         body.innerHTML = cabecera + '<div id="gex-block">' + renderGex(gex) + '</div>';
-        if (data.ok) wireTickerPeriods(body);
+        if (data.ok) {
+            wireTickerPeriods(body);
+            // Después de escribir el HTML: el canvas tiene que existir antes
+            // de que Chart.js lo busque.
+            pintarGraficoNps(data.serie_nps);
+        }
         wireGex(body.querySelector('#gex-block'), ticker);
     } catch (e) {
         body.innerHTML = errorMessage(e.message);
@@ -514,6 +519,95 @@ const PERIODS = [
     { key: '1m', label: '1 Mes' }, { key: '3m', label: '3 Meses' }, { key: '4m', label: '4 Meses' },
 ];
 
+// Sesgo por prima de cada sesión, en barras. En barras y no en línea a
+// propósito: una línea une los puntos y da a entender que entre dos sesiones
+// con datos hubo una evolución continua, cuando lo que hubo fue nada. Aquí los
+// días sin actividad inusual sencillamente no existen, y una barra suelta se
+// lee como lo que es: un día con dato, rodeado de días sin él.
+let _npsChart = null;
+
+function graficoNps(data) {
+    const serie = data.serie_nps || [];
+    if (serie.length < 2) return '';   // con un solo punto no hay nada que ver
+    // Cuántas sesiones se sostienen en una sola operación: un día así marca
+    // +100 o -100 y en un gráfico parece una convicción tremenda cuando es
+    // una sola línea de la tabla de abajo. Se avisa en vez de dejarlo pasar.
+    const flojas = serie.filter(d => d.n === 1).length;
+    const aviso = flojas
+        ? `<div style="color:var(--color-muted);font-size:10px;padding:0 14px 10px;">
+             ${esc(flojas)} de las ${esc(serie.length)} sesiones se apoyan en una sola operación:
+             ahí el ±100% es aritmética, no convicción. Los días sin actividad inusual no aparecen.
+           </div>`
+        : `<div style="color:var(--color-muted);font-size:10px;padding:0 14px 10px;">
+             Los días sin actividad inusual no aparecen — no son un cero, es que no hubo nada que contar.
+           </div>`;
+    return `
+    <div style="background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius);overflow:hidden;margin-bottom:1rem;">
+        <div style="padding:10px 14px;border-bottom:1px solid var(--color-border);">
+            <span style="color:var(--color-muted);font-size:11px;letter-spacing:0.06em;">SESGO POR SESIÓN ${tt('options-sesgo-sesion')}</span>
+        </div>
+        <div style="padding:12px 14px 6px;height:180px;"><canvas id="opt-nps-chart"></canvas></div>
+        ${aviso}
+    </div>`;
+}
+
+function pintarGraficoNps(serie) {
+    const canvas = document.getElementById('opt-nps-chart');
+    if (!canvas || !serie || serie.length < 2) return;
+    cargarChartJs(() => {
+        // El canvas puede haber desaparecido mientras se descargaba la
+        // librería (el usuario cambia de periodo o de página): sin esto,
+        // Chart.js reventaría contra un elemento que ya no está en el DOM.
+        const c = document.getElementById('opt-nps-chart');
+        if (!c) return;
+        if (_npsChart) { try { _npsChart.destroy(); } catch (_) {} _npsChart = null; }
+        const verde = '#00d9ff', rojo = '#f23645';
+        _npsChart = new Chart(c, {
+            type: 'bar',
+            data: {
+                labels: serie.map(d => _fmtFecha(d.fecha).slice(0, 5)),
+                datasets: [{
+                    data: serie.map(d => d.nps),
+                    backgroundColor: serie.map(d => (d.nps >= 0 ? verde : rojo) + '99'),
+                    borderColor:     serie.map(d => d.nps >= 0 ? verde : rojo),
+                    borderWidth: 1,
+                }],
+            },
+            options: {
+                responsive: true, maintainAspectRatio: false,
+                plugins: {
+                    legend: { display: false },
+                    tooltip: {
+                        callbacks: {
+                            label: (ctx) => {
+                                const d = serie[ctx.dataIndex];
+                                const signo = d.nps > 0 ? '+' : '';
+                                const ops = d.n === 1 ? '1 operación' : d.n + ' operaciones';
+                                return `${signo}${d.nps}% · ${ops}`;
+                            },
+                        },
+                    },
+                },
+                scales: {
+                    y: {
+                        min: -100, max: 100,
+                        ticks: { color: '#666', font: { size: 9 }, callback: (v) => v + '%' },
+                        grid:  { color: 'rgba(255,255,255,0.06)' },
+                    },
+                    x: { ticks: { color: '#666', font: { size: 9 } }, grid: { display: false } },
+                },
+            },
+        });
+    });
+}
+
+// El router llama a esto al destruir la página (ver core/router.js). Sin
+// destruir el gráfico, Chart.js se queda con el canvas y sus escuchas de
+// resize -- la misma fuga que se cerró en Market con sus siete gráficos.
+export function cleanup() {
+    if (_npsChart) { try { _npsChart.destroy(); } catch (_) {} _npsChart = null; }
+}
+
 function renderTicker(data) {
     const scoreColor = data.net_score > 0 ? 'var(--color-accent)' : (data.net_score < 0 ? '#f23645' : 'var(--color-muted)');
     const periodBtns = PERIODS.map(p => `
@@ -531,6 +625,7 @@ function renderTicker(data) {
             <div style="padding:14px;color:${scoreColor};font-size:22px;font-weight:700;text-align:center;">${data.net_score > 0 ? '+' : ''}${esc(data.net_score)}</div>
         </div>
     </div>
+    ${graficoNps(data)}
     <div style="background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius);overflow:hidden;">
         <div style="padding:10px 14px;border-bottom:1px solid var(--color-border);display:flex;justify-content:space-between;">
             <span style="color:var(--color-muted);font-size:11px;letter-spacing:0.06em;">TOTAL</span>

@@ -1467,6 +1467,23 @@ Una acción que cumple las 7 condiciones está en Etapa 2 confirmada.
 Minervini ganó el US Investing Championship con +155% en 1997 usando este sistema.`
     },
 
+    "options-sesgo-sesion": {
+        title: "Sesgo por sesión",
+        short: "Cada barra es un día: cuánto del dinero movido ese día en este valor apostaba al alza frente a la baja.",
+        long: `Una barra por sesión. Verde hacia arriba = ese día la prima se fue a comprar calls y vender puts (apuesta alcista); roja hacia abajo = comprar puts y vender calls.
+
+CÓMO SE CALCULA:
+(prima alcista − prima bajista) ÷ prima total, de −100% a +100%. Es dinero, no número de operaciones: una apuesta grande pesa más que tres pequeñas.
+
+LO QUE HAY QUE SABER PARA NO LEERLO MAL:
+
+Los días que faltan no son ceros. Si una sesión no aparece es porque ese día este valor no tuvo actividad inusual, no porque estuviera equilibrado. Por eso son barras y no una línea: una línea uniría los puntos y daría a entender que entre dos días con dato pasó algo intermedio.
+
+Un día con UNA sola operación marca +100% o −100%. No es convicción, es aritmética: si solo hay una apuesta, el 100% del dinero va en su dirección. El aviso de debajo del gráfico dice cuántas sesiones están en ese caso, y pasando el ratón por cada barra se ve en cuántas operaciones se apoya.
+
+Solo cuenta lo inusual, lo mismo que la tabla de abajo: operaciones donde se negociaron al menos el doble de contratos de los que había abiertos.`
+    },
+
     "options-put-call": {
         title: "Put/Call del día",
         short: "Cuántos contratos put se han movido por cada call. Mide volumen, no dirección — y solo sobre las operaciones que detectó el escaneo.",

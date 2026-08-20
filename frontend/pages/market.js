@@ -1,7 +1,7 @@
 import { authHeader } from '/core/api.js';
 import { tt } from '/components/tooltip.js';
 import { onMarketUpdate } from '/core/websocket.js';
-import { fmtFecha, esc, panel } from '/core/ui.js';
+import { fmtFecha, esc, panel, cargarChartJs } from '/core/ui.js';
 
 // IDs de canvas de los gráficos Chart.js creados por esta página cuyo
 // destroy() no está ya cubierto por una variable propia (_spreadsChart,
@@ -1524,13 +1524,10 @@ function _dibujarCuandoListo(chartId, dibujar, intentos = 20) {
     });
 }
 
-function _loadChartJsThen(cb) {
-    if (window.Chart) { cb(); return; }
-    const script  = document.createElement('script');
-    script.src    = 'https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js';
-    script.onload = cb;
-    document.head.appendChild(script);
-}
+// El cargador vive ahora en /core/ui.js (lo comparte el gráfico de Options
+// Flow desde el 20/08). Se mantiene el nombre local para no tocar los cuatro
+// sitios que ya lo llaman.
+const _loadChartJsThen = cargarChartJs;
 
 function renderSpreadsChart(seriesId) {
     const ctx = document.getElementById('spreads-chart');
