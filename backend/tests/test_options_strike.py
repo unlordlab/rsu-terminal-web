@@ -349,3 +349,20 @@ def test_valores_distintos_el_mismo_dia_si_son_grupos_distintos(bd):
     with patch("yf_batch.download_batch", return_value=({}, {}, {"XOM": plana, "AAA": plana})):
         r = T.tasa_base_strike(hoy=HOY)
     assert r["n"] == 2 and r["n_grupos"] == 2
+
+
+def test_dos_valores_distintos_el_mismo_dia_son_UNA_sesion(bd):
+    """La prueba conservadora: dos valores distintos la misma jornada comparten
+    el movimiento del mercado de ese dia. Si la ventaja no aguanta agrupando
+    asi, lo que se estaba midiendo pueden ser unos pocos dias buenos."""
+    _op(bd, "call", "buy", strike=110.0, spot=100.0, exp="2026-08-21", ticker="XOM")
+    _op(bd, "call", "buy", strike=110.0, spot=100.0, exp="2026-08-21", ticker="AAA")
+    hl = _precios(altos=[100, 103, 107, 120, 120], bajos=[99] * 5)
+    with patch("yf_batch.download_batch", return_value=({}, {}, {"XOM": hl, "AAA": hl})):
+        T.actualizar_toque_strike(hoy=HOY)
+    plana = _hl_serie([100.0] * 300)
+    with patch("yf_batch.download_batch", return_value=({}, {}, {"XOM": plana, "AAA": plana})):
+        r = T.tasa_base_strike(hoy=HOY)
+    assert r["n_grupos"] == 2, "son dos valores distintos"
+    assert r["n_sesiones"] == 1, "pero una sola jornada de mercado"
+    assert r["t_sesion"] is None and r["aguanta_agrupando_por_sesion"] is False

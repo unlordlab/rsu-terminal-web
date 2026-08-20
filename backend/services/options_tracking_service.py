@@ -564,6 +564,7 @@ def tasa_base_strike(semilla: int = 42, hoy: str = None) -> dict:
     rnd = random.Random(semilla)
     reales, bases = [], []
     grupos: dict = {}
+    por_sesion: dict = {}
     for r in filas:
         hl = hl_d.get(r["ticker"])
         if hl is None or len(hl) < 60:
@@ -606,8 +607,13 @@ def tasa_base_strike(semilla: int = 42, hoy: str = None) -> dict:
         # precio. Si sube, suben los seis. Contarlos por separado infla la
         # certeza, y con 655 contratos la diferencia entre hacerlo bien o mal
         # es la que hay entre «hallazgo» y «no se puede saber».
-        grupos.setdefault((r["scan_date"], r["ticker"]), []).append(
-            (1 if r["tocado"] else 0, aciertos / N_MUESTRAS_BASE))
+        par = (1 if r["tocado"] else 0, aciertos / N_MUESTRAS_BASE)
+        grupos.setdefault((r["scan_date"], r["ticker"]), []).append(par)
+        # Y una segunda agrupación, más exigente: por SESIÓN. Dos valores
+        # distintos el mismo día tampoco son independientes -- comparten el
+        # movimiento del mercado de esa jornada. Es la prueba conservadora, y
+        # la que decide si el resultado aguanta de verdad.
+        por_sesion.setdefault(r["scan_date"], []).append(par)
 
     if not reales:
         return {"ok": False, "error": "no se pudo construir la comparación"}
@@ -616,14 +622,18 @@ def tasa_base_strike(semilla: int = 42, hoy: str = None) -> dict:
 
     # ¿La ventaja se distingue del ruido? Se mide SOBRE LOS GRUPOS, no sobre
     # los contratos: una ventaja por valor-sesión, y la dispersión entre ellas.
-    diffs = [sum(r for r, _ in v) / len(v) - sum(b for _, b in v) / len(v)
-             for v in grupos.values()]
-    t = err = None
-    if len(diffs) >= 2:
-        media = sum(diffs) / len(diffs)
-        var = sum((d - media) ** 2 for d in diffs) / (len(diffs) - 1)
-        err = (var / len(diffs)) ** 0.5
-        t = round(media / err, 2) if err > 0 else None
+    def _t(agrupado):
+        d = [sum(r for r, _ in v) / len(v) - sum(b for _, b in v) / len(v)
+             for v in agrupado.values()]
+        if len(d) < 2:
+            return None, None, d
+        media = sum(d) / len(d)
+        var = sum((x - media) ** 2 for x in d) / (len(d) - 1)
+        err = (var / len(d)) ** 0.5
+        return (round(media / err, 2) if err > 0 else None), err, d
+
+    t, err, diffs = _t(grupos)
+    t_sesion, err_sesion, diffs_sesion = _t(por_sesion)
 
     return {
         "ok": True,
@@ -637,7 +647,14 @@ def tasa_base_strike(semilla: int = 42, hoy: str = None) -> dict:
         # |t| >= 2 es el corte convencional de «difícil de explicar por azar».
         # No es una certeza: es el mínimo para no llamarlo ruido.
         "t": t,
+        # La exigente: agrupando por sesión. Si la ventaja no aguanta aquí, lo
+        # que se estaba midiendo pueden ser unos pocos días buenos de mercado.
+        "n_sesiones": len(por_sesion),
+        "ventaja_por_sesion_pp": round(sum(diffs_sesion) / len(diffs_sesion) * 100, 1) if diffs_sesion else None,
+        "error_estandar_sesion_pp": round(err_sesion * 100, 1) if err_sesion else None,
+        "t_sesion": t_sesion,
         "distinguible_del_ruido": bool(t is not None and abs(t) >= 2),
+        "aguanta_agrupando_por_sesion": bool(t_sesion is not None and abs(t_sesion) >= 2),
         "nota": ("La tasa base es el mismo tipo de apuesta -misma distancia al strike y "
                  "mismo plazo, mismo valor- lanzada en días al azar del último año. Si la "
                  "ventaja en puntos porcentuales ronda cero, el porcentaje real solo mide "
