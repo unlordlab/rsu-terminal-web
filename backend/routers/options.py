@@ -197,6 +197,18 @@ async def aciertos_strike(user=Depends(verify_token)):
     return resumen_strike()
 
 
+@router.get("/aciertos-strike/tasa-base")
+async def aciertos_strike_tasa_base(user=Depends(verify_token)):
+    """La cifra contra la que hay que leer el porcentaje de strikes alcanzados.
+
+    Un 70% suena bien, pero no está comparado con nada. Esto mide qué habría
+    pasado con la misma apuesta -misma distancia al strike, mismo plazo, mismo
+    valor- lanzada en días al azar del último año. Si la ventaja en puntos
+    ronda cero, el porcentaje solo medía lo cerca que estaban los strikes."""
+    from services.options_tracking_service import tasa_base_strike
+    return tasa_base_strike()
+
+
 @router.get("/scan-estado")
 async def scan_estado(_admin: None = Depends(verify_admin_key)):
     """Cómo va (o cómo fue) el último escaneo lanzado por /scan-now.

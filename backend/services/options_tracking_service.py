@@ -491,3 +491,101 @@ def resumen_strike() -> dict:
                  "una call puede alcanzarlo y perder igualmente por la prima pagada. Los "
                  "contratos que siguen vivos no cuentan como fallo."),
     }
+# ── ¿Y qué habría pasado sin la señal? ───────────────────────────────────────
+#
+# LA PREGUNTA DEL USUARIO, 21/08: «pero los porcentajes no han sido buenos y
+# ofrecen una ventaja?». Un 70% de contratos que alcanzan su strike suena muy
+# bien, y esa intuición es razonable -- pero el 70% no está comparado con
+# nada, y sin comparación no significa ventaja.
+#
+# Lo que hace falta es la TASA BASE: si en ese mismo valor eliges un día
+# cualquiera y apuestas al mismo movimiento (el mismo % de distancia, el mismo
+# número de sesiones de plazo), ¿cuántas veces lo habrías conseguido? Si la
+# respuesta también ronda el 70%, la señal no aporta nada: lo que mide el
+# porcentaje es lo cerca que estaban los strikes, no que alguien supiera algo.
+#
+# NO ES UN MODELO NI UNA SIMULACIÓN DE PRECIOS. Son los máximos y mínimos
+# REALES del mismo valor en el mismo año, mirados desde días elegidos al azar.
+
+N_MUESTRAS_BASE = 20     # días al azar por contrato
+
+
+def tasa_base_strike(semilla: int = 42) -> dict:
+    """Compara el porcentaje real contra el de apuestas equivalentes lanzadas
+    en días al azar del mismo valor.
+
+    Para cada contrato ya resuelto se toma su distancia al strike y su plazo,
+    y se comprueba cuántas veces ese mismo valor habría recorrido esa misma
+    distancia en ese mismo plazo empezando en días cualesquiera."""
+    import random
+    import pandas as pd
+    from yf_batch import download_batch  # noqa: E402
+
+    init_db_strike()
+    conn = _conn()
+    filas = conn.execute(
+        """
+        SELECT t.*, f.underlying_price AS spot
+        FROM strike_tocado t
+        JOIN options_flow f
+          ON f.scan_date = t.scan_date AND f.ticker = t.ticker AND f.strike = t.strike
+         AND f.exp = t.exp AND f.type = t.type AND f.action = t.action
+        WHERE t.tocado IS NOT NULL AND f.underlying_price > 0
+        """
+    ).fetchall()
+    conn.close()
+    filas = [r for r in filas if not _ya_en_el_dinero(r)]
+    if not filas:
+        return {"ok": False, "error": "sin contratos resueltos que comparar"}
+
+    tickers = sorted({r["ticker"] for r in filas})
+    _, _, hl_d = download_batch(tickers, period="1y", batch_size=40, min_history=60,
+                                include_hl=True, log_prefix="[TasaBase] ")
+
+    rnd = random.Random(semilla)
+    reales, bases = [], []
+    for r in filas:
+        hl = hl_d.get(r["ticker"])
+        if hl is None or len(hl) < 60:
+            continue
+        dist = abs(r["strike"] - r["spot"]) / r["spot"]
+        # El plazo en SESIONES, no en días naturales: es la unidad en la que se
+        # mueven los precios.
+        plazo = len(hl[(hl.index > pd.Timestamp(r["scan_date"]))
+                       & (hl.index <= pd.Timestamp(r["exp"]))])
+        if plazo < 1:
+            continue
+        aciertos = 0
+        posibles = len(hl) - plazo - 1
+        if posibles < 5:
+            continue
+        for _ in range(N_MUESTRAS_BASE):
+            i = rnd.randrange(posibles)
+            base_px = float(hl["High"].iloc[i] + hl["Low"].iloc[i]) / 2
+            tramo = hl.iloc[i + 1: i + 1 + plazo]
+            if r["type"] == "call":
+                objetivo = base_px * (1 + dist)
+                if (tramo["High"] >= objetivo).any():
+                    aciertos += 1
+            else:
+                objetivo = base_px * (1 - dist)
+                if (tramo["Low"] <= objetivo).any():
+                    aciertos += 1
+        reales.append(1 if r["tocado"] else 0)
+        bases.append(aciertos / N_MUESTRAS_BASE)
+
+    if not reales:
+        return {"ok": False, "error": "no se pudo construir la comparación"}
+    real = sum(reales) / len(reales) * 100
+    base = sum(bases) / len(bases) * 100
+    return {
+        "ok": True,
+        "n": len(reales),
+        "real_pct": round(real, 1),
+        "tasa_base_pct": round(base, 1),
+        "ventaja_pp": round(real - base, 1),
+        "nota": ("La tasa base es el mismo tipo de apuesta -misma distancia al strike y "
+                 "mismo plazo, mismo valor- lanzada en días al azar del último año. Si la "
+                 "ventaja en puntos porcentuales ronda cero, el porcentaje real solo mide "
+                 "lo cerca que estaban los strikes, no que la señal supiera nada."),
+    }

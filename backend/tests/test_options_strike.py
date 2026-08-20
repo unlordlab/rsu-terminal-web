@@ -207,3 +207,82 @@ def test_lo_rutinario_no_se_evalua(bd):
     conn.commit(); conn.close()
     r = _evaluar(_precios(altos=[100, 103, 107, 112, 112], bajos=[99] * 5))
     assert r["evaluados"] == 0
+
+
+# ── ¿Y qué habría pasado sin la señal? ───────────────────────────────────────
+#
+# LA PREGUNTA DEL USUARIO al ver el 70,1% de produccion: «pero los porcentajes
+# no han sido buenos y ofrecen una ventaja?». Es la pregunta correcta y la
+# respuesta no puede ser una opinion: un 70% no esta comparado con nada. Lo
+# que decide si hay ventaja es la TASA BASE -- el mismo tipo de apuesta, misma
+# distancia y mismo plazo, lanzada en dias al azar del mismo valor.
+
+def _hl_serie(precios, inicio="2025-09-01"):
+    """Ojo con la longitud: la serie tiene que LLEGAR hasta el vencimiento del
+    contrato, o el plazo en sesiones sale vacio y no hay nada que comparar."""
+    idx = pd.bdate_range(start=inicio, periods=len(precios))
+    return pd.DataFrame({"High": precios, "Low": precios}, index=idx)
+
+
+def test_en_un_valor_que_no_se_mueve_la_tasa_base_es_cero(bd):
+    """Un precio plano nunca recorre la distancia: cualquier dia que elijas,
+    la apuesta equivalente falla. Si el contrato real SI toco, la ventaja es
+    entera."""
+    _op(bd, "call", "buy", strike=110.0, spot=100.0, exp="2026-08-21")
+    plano = [100.0] * 300
+    # El contrato real toca (se le da un tramo propio que llega a 112)...
+    hl_real = _precios(altos=[100, 103, 107, 112, 112], bajos=[99] * 5)
+    _evaluar(hl_real)
+    assert T.resumen_strike()["total"]["tocaron_pct"] == 100.0
+    # ...pero el valor, en el ultimo año, nunca se movio un 10%.
+    with patch("yf_batch.download_batch", return_value=({}, {}, {"XOM": _hl_serie(plano)})):
+        r = T.tasa_base_strike()
+    assert r["ok"] is True and r["n"] == 1
+    assert r["tasa_base_pct"] == 0.0, "un valor plano no puede tener tasa base"
+    assert r["ventaja_pp"] == 100.0
+
+
+def test_en_un_valor_que_sube_siempre_la_ventaja_desaparece(bd):
+    """EL test, y es el que responde la pregunta. El contrato real toco su
+    strike -- pero en ese valor CUALQUIER apuesta al alza habria tocado. La
+    ventaja es cero: el porcentaje real solo medía que el valor subia."""
+    _op(bd, "call", "buy", strike=110.0, spot=100.0, exp="2026-08-21")
+    _evaluar(_precios(altos=[100, 103, 107, 112, 112], bajos=[99] * 5))
+    assert T.resumen_strike()["total"]["tocaron_pct"] == 100.0
+    # Subida continua del 1% diario: el 10% se alcanza desde cualquier punto.
+    sube = [100.0 * (1.01 ** i) for i in range(300)]
+    with patch("yf_batch.download_batch", return_value=({}, {}, {"XOM": _hl_serie(sube)})):
+        r = T.tasa_base_strike()
+    assert r["tasa_base_pct"] == 100.0
+    assert r["ventaja_pp"] == 0.0, (
+        "el 100% real parecia una señal buenisima y no aporta nada: cualquier "
+        "apuesta equivalente habria acertado igual")
+
+
+def test_los_que_ya_estaban_dentro_del_dinero_tampoco_entran_en_la_comparacion(bd):
+    """Mismo criterio que en el resumen: no tenian nada que alcanzar, asi que
+    compararlos contra una tasa base no significaria nada."""
+    _op(bd, "call", "buy", strike=90.0, spot=100.0, exp="2026-08-21")
+    _evaluar(_precios(altos=[101] * 5, bajos=[99] * 5))
+    with patch("yf_batch.download_batch", return_value=({}, {}, {"XOM": _hl_serie([100.0] * 300)})):
+        r = T.tasa_base_strike()
+    assert r["ok"] is False, "ha comparado un contrato que ya estaba dentro del dinero"
+
+
+def test_los_dias_de_la_comparacion_se_reparten_por_todo_el_año(bd):
+    """El sabotaje que los otros no cazaban: fijar el dia de partida en vez de
+    sortearlo pasaba en verde, porque mis series eran planas o subian siempre
+    -- daba igual desde donde se mirase.
+
+    Aqui NO da igual: el valor esta muerto la primera mitad del año y sube en
+    la segunda. Si los dias se sortean de verdad, la tasa base cae en medio; si
+    se mira siempre desde el principio, sale 0%."""
+    _op(bd, "call", "buy", strike=110.0, spot=100.0, exp="2026-08-21")
+    _evaluar(_precios(altos=[100, 103, 107, 112, 112], bajos=[99] * 5))
+    mitad = [100.0] * 150 + [100.0 * (1.02 ** i) for i in range(150)]
+    with patch("yf_batch.download_batch", return_value=({}, {}, {"XOM": _hl_serie(mitad)})):
+        r = T.tasa_base_strike()
+    assert 15 <= r["tasa_base_pct"] <= 85, (
+        f"tasa base {r['tasa_base_pct']}%: los dias no se estan sorteando por "
+        f"todo el año -- con la mitad muerta y la mitad subiendo tiene que caer "
+        f"en medio, no pegada a 0 ni a 100")
