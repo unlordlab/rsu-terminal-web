@@ -819,12 +819,14 @@ def run_and_save_scan() -> dict:
     # se puede pedir despues -- ya esta guardado y no se pierde por una caida
     # de yfinance al calcular retornos de hace tres semanas.
     try:
-        from services.options_tracking_service import registrar_senales, actualizar_resultados
+        from services.options_tracking_service import (
+            registrar_senales, actualizar_resultados, actualizar_toque_strike)
         reg = registrar_senales(data.get("scan_date"))
         act = actualizar_resultados()
+        strike = actualizar_toque_strike()
         print(f"[OptionsFlow] Seguimiento: {reg['guardadas']} señal(es) nueva(s), "
               f"{act.get('actualizadas', 0)} con resultado")
-        resultado["seguimiento"] = {"registradas": reg["guardadas"], **act}
+        resultado["seguimiento"] = {"registradas": reg["guardadas"], **act, "strike": strike}
     except Exception as e:
         print(f"[OptionsFlow] Seguimiento no actualizado: {type(e).__name__}: {e}")
 

@@ -274,4 +274,197 @@ def resumen() -> dict:
     }
 
 
-init_db()
+# ── ¿Llegó el precio al strike? ──────────────────────────────────────────────
+#
+# LA PREGUNTA, planteada por el usuario el 21/08 y mejor que la mía: medir el
+# retorno a 5, 10 o 20 sesiones es medir algo que quien compró nunca prometió.
+# Una call a 340 con vencimiento el 18/09 es una apuesta CONCRETA -- que el
+# precio llegue a 340 antes de esa fecha-- y esa apuesta tiene su propio
+# examen. Aquí se corrige el examen.
+#
+# UNIDAD: el CONTRATO, no el ticker-sesión. Es lo que se apostó.
+#
+# CRITERIO: call, tocó si el MÁXIMO llegó al strike; put, si el MÍNIMO bajó a
+# él. Comprar o vender no cambia si tocó, cambia si eso es buena noticia -- por
+# eso el resumen desglosa por tipo de operación en vez de dar un número solo.
+#
+# LO QUE ESTO NO MIDE, y hay que decirlo donde se enseñe: tocar el strike NO es
+# ganar dinero. No tenemos el precio de la opción a lo largo de su vida, así
+# que una call puede tocar su strike y perder igualmente por la prima pagada.
+# Es un criterio de DIRECCIÓN, no de rentabilidad.
+
+def init_db_strike():
+    conn = _conn()
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS strike_tocado (
+            scan_date   TEXT NOT NULL,
+            ticker      TEXT NOT NULL,
+            strike      REAL NOT NULL,
+            exp         TEXT NOT NULL,
+            type        TEXT NOT NULL,
+            action      TEXT NOT NULL,
+            spot_inicio REAL,
+            tocado      INTEGER,          -- 1 tocó · 0 venció sin tocar · NULL sigue vivo
+            fecha_toque TEXT,
+            evaluado_en TEXT,
+            PRIMARY KEY (scan_date, ticker, strike, exp, type, action)
+        )
+    """)
+    conn.commit()
+    conn.close()
+
+
+def actualizar_toque_strike(hoy: str = None) -> dict:
+    """Recorre los contratos inusuales guardados y comprueba si el subyacente
+    llegó a su strike entre el día del escaneo y el vencimiento.
+
+    Solo mira los que siguen sin resolver (`tocado IS NULL`): un contrato que
+    ya tocó no puede des-tocar, y uno que venció sin tocar tampoco cambia."""
+    import pandas as pd
+    from yf_batch import download_batch  # noqa: E402
+    from services.options_service import MIN_VOL_OI_INUSUAL
+
+    init_db()
+    init_db_strike()
+    hoy = hoy or datetime.now(timezone.utc).strftime("%Y-%m-%d")
+
+    conn = _conn()
+    # Los contratos inusuales que aún no tienen veredicto. Se comparan contra
+    # la tabla de veredictos por su identidad completa (el mismo contrato
+    # detectado en dos sesiones distintas son dos apuestas distintas).
+    filas = conn.execute(
+        """
+        SELECT f.scan_date, f.ticker, f.strike, f.exp, f.type, f.action,
+               f.underlying_price AS spot
+        FROM options_flow f
+        LEFT JOIN strike_tocado t
+               ON t.scan_date = f.scan_date AND t.ticker = f.ticker
+              AND t.strike = f.strike AND t.exp = f.exp
+              AND t.type = f.type AND t.action = f.action
+        WHERE f.oi > 0 AND f.volume IS NOT NULL
+          AND (CAST(f.volume AS REAL) / f.oi) >= ?
+          AND f.strike > 0
+          AND (t.tocado IS NULL)
+        """,
+        (MIN_VOL_OI_INUSUAL,),
+    ).fetchall()
+    conn.close()
+    if not filas:
+        return {"evaluados": 0, "pendientes": 0}
+
+    tickers = sorted({r["ticker"] for r in filas})
+    # Con máximos y mínimos: tocar el strike es un suceso INTRADÍA, y mirarlo
+    # con cierres se perdería la mitad de los toques.
+    close_d, _, hl_d = download_batch(tickers, period="1y", batch_size=40,
+                                      min_history=25, include_hl=True,
+                                      log_prefix="[StrikeToque] ")
+
+    conn = _conn()
+    ahora = datetime.now(timezone.utc).isoformat()
+    tocados = vencidos = vivos = 0
+    for r in filas:
+        hl = hl_d.get(r["ticker"])
+        if hl is None or len(hl) == 0:
+            continue
+        desde = pd.Timestamp(r["scan_date"])
+        hasta = pd.Timestamp(min(r["exp"], hoy))
+        # El día del escaneo NO cuenta: el escaneo corre con el mercado ya
+        # cerrado, así que el recorrido de ese día ya había ocurrido cuando la
+        # operación se detectó. Contarlo sería mirar hacia atrás.
+        tramo = hl[(hl.index > desde) & (hl.index <= hasta)]
+        if len(tramo) == 0:
+            vivos += 1
+            continue
+        if r["type"] == "call":
+            alcanzo = tramo["High"] >= r["strike"]
+        else:
+            alcanzo = tramo["Low"] <= r["strike"]
+        idx = alcanzo[alcanzo].index
+        if len(idx):
+            veredicto, cuando = 1, idx[0].strftime("%Y-%m-%d")
+            tocados += 1
+        elif r["exp"] <= hoy:
+            veredicto, cuando = 0, None      # venció sin llegar
+            vencidos += 1
+        else:
+            vivos += 1
+            continue                         # sigue vivo: sin veredicto todavía
+        conn.execute(
+            "INSERT OR REPLACE INTO strike_tocado (scan_date, ticker, strike, exp, type, "
+            "action, spot_inicio, tocado, fecha_toque, evaluado_en) VALUES (?,?,?,?,?,?,?,?,?,?)",
+            (r["scan_date"], r["ticker"], r["strike"], r["exp"], r["type"], r["action"],
+             r["spot"], veredicto, cuando, ahora),
+        )
+    conn.commit()
+    conn.close()
+    return {"evaluados": tocados + vencidos, "tocados": tocados,
+            "vencidos_sin_tocar": vencidos, "siguen_vivos": vivos}
+
+
+_ETIQUETA = {("call", "buy"): "Compra de call", ("put", "sell"): "Venta de put",
+             ("put", "buy"): "Compra de put", ("call", "sell"): "Venta de call"}
+
+
+def _ya_en_el_dinero(r) -> bool:
+    """¿El precio ya había alcanzado el strike el día que se detectó?
+
+    ESTO ES LO QUE HACE QUE EL PORCENTAJE SIGNIFIQUE ALGO. Una call cuyo strike
+    está POR DEBAJO del precio ya está dentro del dinero: «llega al strike» el
+    primer día sin que ocurra nada, y contarla como acierto es contar un
+    suceso que ya había pasado antes de la apuesta.
+
+    Medido el 21/08 sobre los contratos guardados: 60 de 124 estaban así, y
+    tocaban el 100%. Con ellos dentro, el resultado global salía 81,5%; sin
+    ellos, 64,1%. La diferencia entre las dos cifras es enteramente esto.
+    """
+    if not r["spot_inicio"]:
+        return False
+    if r["type"] == "call":
+        return r["spot_inicio"] >= r["strike"]
+    return r["spot_inicio"] <= r["strike"]
+
+
+def resumen_strike() -> dict:
+    """Porcentaje de contratos inusuales que llegaron a su strike.
+
+    La cifra principal es la de los que estaban FUERA del dinero al
+    detectarse, que son los únicos que tenían algo que alcanzar. Los que ya
+    estaban dentro se cuentan aparte y se etiquetan, en vez de sumarlos al
+    total o de esconderlos.
+
+    Desglosado por tipo de operación porque tocar significa lo contrario según
+    el lado: en una call comprada es el escenario que se buscaba; en una put
+    VENDIDA, tocar es justo lo que el vendedor no quería."""
+    init_db_strike()
+    conn = _conn()
+    filas = conn.execute("SELECT * FROM strike_tocado").fetchall()
+    conn.close()
+
+    def _bloque(rows):
+        resueltos = [r for r in rows if r["tocado"] is not None]
+        vivos = len(rows) - len(resueltos)
+        if not resueltos:
+            return {"n": 0, "vivos": vivos, "tocaron": 0, "tocaron_pct": None,
+                    "suficiente": False}
+        t = sum(1 for r in resueltos if r["tocado"])
+        return {"n": len(resueltos), "vivos": vivos, "tocaron": t,
+                "tocaron_pct": round(t / len(resueltos) * 100, 1),
+                "suficiente": len(resueltos) >= MIN_MUESTRA}
+
+    fuera = [r for r in filas if not _ya_en_el_dinero(r)]
+    dentro = [r for r in filas if _ya_en_el_dinero(r)]
+
+    return {
+        "ok": True,
+        "total": _bloque(fuera),
+        "por_tipo": {etiqueta: _bloque([r for r in fuera
+                                        if r["type"] == tipo and r["action"] == accion])
+                     for (tipo, accion), etiqueta in _ETIQUETA.items()},
+        # Aparte y con nombre, no sumados: no prueban nada.
+        "ya_en_el_dinero": _bloque(dentro),
+        "nota": ("Solo cuentan los contratos que estaban FUERA del dinero al detectarse: "
+                 "los que ya estaban dentro alcanzan su strike el primer día sin que ocurra "
+                 "nada. Y llegar al strike es un criterio de DIRECCIÓN, no de rentabilidad: "
+                 "una call puede alcanzarlo y perder igualmente por la prima pagada. Los "
+                 "contratos que siguen vivos no cuentan como fallo."),
+    }

@@ -184,6 +184,19 @@ async def aciertos(user=Depends(verify_token)):
     return resumen()
 
 
+@router.get("/aciertos-strike")
+async def aciertos_strike(user=Depends(verify_token)):
+    """¿Cuántas de las operaciones inusuales llegaron a su strike?
+
+    El examen que la propia apuesta se puso, en vez de un horizonte inventado:
+    una call a 340 que vence el 18/09 apostó a que el precio llegara a 340
+    antes de esa fecha. Solo cuentan las que estaban FUERA del dinero al
+    detectarse -- las que ya estaban dentro llegan el primer día sin que ocurra
+    nada."""
+    from services.options_tracking_service import resumen_strike
+    return resumen_strike()
+
+
 @router.get("/scan-estado")
 async def scan_estado(_admin: None = Depends(verify_admin_key)):
     """Cómo va (o cómo fue) el último escaneo lanzado por /scan-now.
