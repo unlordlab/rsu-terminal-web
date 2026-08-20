@@ -424,7 +424,7 @@ def _ya_en_el_dinero(r) -> bool:
     return r["spot_inicio"] <= r["strike"]
 
 
-def resumen_strike() -> dict:
+def resumen_strike(hoy: str = None) -> dict:
     """Porcentaje de contratos inusuales que llegaron a su strike.
 
     La cifra principal es la de los que estaban FUERA del dinero al
@@ -473,12 +473,24 @@ def resumen_strike() -> dict:
                 "tocaron_pct": round(t / len(rows) * 100, 1),
                 "suficiente": len(rows) >= MIN_MUESTRA}
 
-    fuera = [r for r in filas if not _ya_en_el_dinero(r)]
-    dentro = [r for r in filas if _ya_en_el_dinero(r)]
+    # SOLO LOS VENCIDOS. Un contrato sin vencer únicamente tiene veredicto si
+    # YA tocó -- los que van perdiendo siguen pendientes, sin veredicto. Meter
+    # a los primeros sin sus compañeros es un sesgo de selección con un 100% de
+    # aciertos por construcción. Medido el 21/08 en producción: de 966
+    # contratos con veredicto, ~311 no habían vencido, o sea un tercio de la
+    # muestra que solo podía sumar aciertos.
+    hoy = hoy or datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    vencidos = [r for r in filas if r["exp"] <= hoy]
+    tocaron_antes_de_vencer = len(filas) - len(vencidos)
+    fuera = [r for r in vencidos if not _ya_en_el_dinero(r)]
+    dentro = [r for r in vencidos if _ya_en_el_dinero(r)]
 
     return {
         "ok": True,
         "pendientes": pendientes,
+        # Ya tocaron pero aún no han vencido. Son toques reales, pero no pueden
+        # entrar en el porcentaje sin los que todavía van perdiendo.
+        "tocaron_sin_vencer": tocaron_antes_de_vencer,
         "total": _bloque(fuera),
         "por_tipo": {etiqueta: _bloque([r for r in fuera
                                         if r["type"] == tipo and r["action"] == accion])
@@ -508,9 +520,13 @@ def resumen_strike() -> dict:
 # REALES del mismo valor en el mismo año, mirados desde días elegidos al azar.
 
 N_MUESTRAS_BASE = 20     # días al azar por contrato
+# Cuántas sesiones a cada lado de la fecha del contrato se pueden sortear. Un
+# año entero mezclaría regímenes de mercado distintos; ~3 meses a cada lado
+# compara la apuesta contra su propio tramo.
+VENTANA_BASE = 60
 
 
-def tasa_base_strike(semilla: int = 42) -> dict:
+def tasa_base_strike(semilla: int = 42, hoy: str = None) -> dict:
     """Compara el porcentaje real contra el de apuestas equivalentes lanzadas
     en días al azar del mismo valor.
 
@@ -534,7 +550,10 @@ def tasa_base_strike(semilla: int = 42) -> dict:
         """
     ).fetchall()
     conn.close()
-    filas = [r for r in filas if not _ya_en_el_dinero(r)]
+    hoy = hoy or datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    # Mismo criterio que el resumen: solo vencidos, o el sesgo de selección se
+    # cuela también aquí (y encima con una ventana recortada hasta hoy).
+    filas = [r for r in filas if not _ya_en_el_dinero(r) and r["exp"] <= hoy]
     if not filas:
         return {"ok": False, "error": "sin contratos resueltos que comparar"}
 
@@ -556,11 +575,19 @@ def tasa_base_strike(semilla: int = 42) -> dict:
         if plazo < 1:
             continue
         aciertos = 0
-        posibles = len(hl) - plazo - 1
+        # Los días de comparación se toman de una ventana ALREDEDOR de la fecha
+        # del contrato, no de todo el año. Las operaciones detectadas se
+        # concentran en unas pocas semanas; si ese tramo se movió más que la
+        # media anual, comparar contra todo el año regala ventaja que es del
+        # periodo y no de la señal.
+        idx_fecha = hl.index.searchsorted(pd.Timestamp(r["scan_date"]))
+        lo = max(0, idx_fecha - VENTANA_BASE)
+        hi = min(len(hl) - plazo - 1, idx_fecha + VENTANA_BASE)
+        posibles = hi - lo
         if posibles < 5:
             continue
         for _ in range(N_MUESTRAS_BASE):
-            i = rnd.randrange(posibles)
+            i = lo + rnd.randrange(posibles)
             base_px = float(hl["High"].iloc[i] + hl["Low"].iloc[i]) / 2
             tramo = hl.iloc[i + 1: i + 1 + plazo]
             if r["type"] == "call":

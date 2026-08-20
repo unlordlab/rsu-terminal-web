@@ -137,7 +137,7 @@ def test_un_contrato_que_sigue_vivo_no_es_un_fallo(bd):
     # Y el resumen tiene que poder DECIR cuántos hay. Contarlos desde la tabla
     # de veredictos daba siempre cero, porque los vivos no se insertan ahí --
     # en producción decía «siguen vivos: 0» con 375 sin resolver.
-    res = T.resumen_strike()
+    res = T.resumen_strike(hoy=HOY)
     assert res["pendientes"] == 1, res["pendientes"]
     assert res["total"]["n"] == 0
 
@@ -151,7 +151,7 @@ def test_un_contrato_YA_dentro_del_dinero_no_cuenta_en_el_total(bd):
     81,5%."""
     _op(bd, "call", "buy", strike=90.0, spot=100.0)     # ya dentro
     _evaluar(_precios(altos=[101] * 5, bajos=[99] * 5))
-    r = T.resumen_strike()
+    r = T.resumen_strike(hoy=HOY)
     assert r["total"]["n"] == 0, "un contrato que ya estaba dentro ha entrado en el total"
     assert r["ya_en_el_dinero"]["n"] == 1
     assert r["ya_en_el_dinero"]["tocaron_pct"] == 100.0
@@ -161,7 +161,7 @@ def test_una_put_ya_dentro_del_dinero_tambien_se_aparta(bd):
     """El mismo caso al otro lado: strike POR ENCIMA del precio."""
     _op(bd, "put", "buy", strike=110.0, spot=100.0)
     _evaluar(_precios(altos=[101] * 5, bajos=[99] * 5))
-    r = T.resumen_strike()
+    r = T.resumen_strike(hoy=HOY)
     assert r["total"]["n"] == 0 and r["ya_en_el_dinero"]["n"] == 1
 
 
@@ -169,7 +169,7 @@ def test_el_porcentaje_se_calcula_solo_sobre_los_resueltos(bd):
     _op(bd, "call", "buy", strike=110.0, spot=100.0, exp="2026-08-21")
     _op(bd, "call", "buy", strike=120.0, spot=100.0, exp="2026-08-21")
     _evaluar(_precios(altos=[100, 105, 112, 112, 112], bajos=[99] * 5))
-    t = T.resumen_strike()["total"]
+    t = T.resumen_strike(hoy=HOY)["total"]
     assert t["n"] == 2 and t["tocaron"] == 1 and t["tocaron_pct"] == 50.0
 
 
@@ -178,7 +178,7 @@ def test_se_desglosa_por_tipo_de_operacion(bd):
     lo que el vendedor no quería."""
     _op(bd, "put", "sell", strike=90.0, spot=100.0)
     _evaluar(_precios(altos=[101] * 5, bajos=[100, 97, 94, 89, 95]))
-    r = T.resumen_strike()
+    r = T.resumen_strike(hoy=HOY)
     assert r["por_tipo"]["Venta de put"]["n"] == 1
     assert r["por_tipo"]["Venta de put"]["tocaron_pct"] == 100.0
     assert r["por_tipo"]["Compra de call"]["n"] == 0
@@ -191,7 +191,7 @@ def test_evaluar_dos_veces_no_cambia_un_veredicto_ya_dado(bd):
     _evaluar(hl)
     segunda = _evaluar(hl)
     assert segunda["evaluados"] == 0, "ha vuelto a evaluar algo ya resuelto"
-    assert T.resumen_strike()["total"]["n"] == 1
+    assert T.resumen_strike(hoy=HOY)["total"]["n"] == 1
 
 
 def test_lo_rutinario_no_se_evalua(bd):
@@ -233,10 +233,10 @@ def test_en_un_valor_que_no_se_mueve_la_tasa_base_es_cero(bd):
     # El contrato real toca (se le da un tramo propio que llega a 112)...
     hl_real = _precios(altos=[100, 103, 107, 112, 112], bajos=[99] * 5)
     _evaluar(hl_real)
-    assert T.resumen_strike()["total"]["tocaron_pct"] == 100.0
+    assert T.resumen_strike(hoy=HOY)["total"]["tocaron_pct"] == 100.0
     # ...pero el valor, en el ultimo año, nunca se movio un 10%.
     with patch("yf_batch.download_batch", return_value=({}, {}, {"XOM": _hl_serie(plano)})):
-        r = T.tasa_base_strike()
+        r = T.tasa_base_strike(hoy=HOY)
     assert r["ok"] is True and r["n"] == 1
     assert r["tasa_base_pct"] == 0.0, "un valor plano no puede tener tasa base"
     assert r["ventaja_pp"] == 100.0
@@ -248,11 +248,11 @@ def test_en_un_valor_que_sube_siempre_la_ventaja_desaparece(bd):
     ventaja es cero: el porcentaje real solo medía que el valor subia."""
     _op(bd, "call", "buy", strike=110.0, spot=100.0, exp="2026-08-21")
     _evaluar(_precios(altos=[100, 103, 107, 112, 112], bajos=[99] * 5))
-    assert T.resumen_strike()["total"]["tocaron_pct"] == 100.0
+    assert T.resumen_strike(hoy=HOY)["total"]["tocaron_pct"] == 100.0
     # Subida continua del 1% diario: el 10% se alcanza desde cualquier punto.
     sube = [100.0 * (1.01 ** i) for i in range(300)]
     with patch("yf_batch.download_batch", return_value=({}, {}, {"XOM": _hl_serie(sube)})):
-        r = T.tasa_base_strike()
+        r = T.tasa_base_strike(hoy=HOY)
     assert r["tasa_base_pct"] == 100.0
     assert r["ventaja_pp"] == 0.0, (
         "el 100% real parecia una señal buenisima y no aporta nada: cualquier "
@@ -265,24 +265,57 @@ def test_los_que_ya_estaban_dentro_del_dinero_tampoco_entran_en_la_comparacion(b
     _op(bd, "call", "buy", strike=90.0, spot=100.0, exp="2026-08-21")
     _evaluar(_precios(altos=[101] * 5, bajos=[99] * 5))
     with patch("yf_batch.download_batch", return_value=({}, {}, {"XOM": _hl_serie([100.0] * 300)})):
-        r = T.tasa_base_strike()
+        r = T.tasa_base_strike(hoy=HOY)
     assert r["ok"] is False, "ha comparado un contrato que ya estaba dentro del dinero"
 
 
-def test_los_dias_de_la_comparacion_se_reparten_por_todo_el_año(bd):
+def test_los_dias_de_la_comparacion_se_sortean_dentro_de_la_ventana(bd):
     """El sabotaje que los otros no cazaban: fijar el dia de partida en vez de
     sortearlo pasaba en verde, porque mis series eran planas o subian siempre
     -- daba igual desde donde se mirase.
 
-    Aqui NO da igual: el valor esta muerto la primera mitad del año y sube en
-    la segunda. Si los dias se sortean de verdad, la tasa base cae en medio; si
-    se mira siempre desde el principio, sale 0%."""
+    Aqui NO da igual: dentro de la ventana de comparacion, la mitad anterior a
+    la fecha del contrato esta muerta y la posterior sube. Sorteando de verdad,
+    la tasa base cae en medio; mirando siempre desde el borde, sale 0%."""
     _op(bd, "call", "buy", strike=110.0, spot=100.0, exp="2026-08-21")
     _evaluar(_precios(altos=[100, 103, 107, 112, 112], bajos=[99] * 5))
-    mitad = [100.0] * 150 + [100.0 * (1.02 ** i) for i in range(150)]
-    with patch("yf_batch.download_batch", return_value=({}, {}, {"XOM": _hl_serie(mitad)})):
-        r = T.tasa_base_strike()
+    # La serie llega hasta despues del vencimiento; el tramo muerto ocupa todo
+    # lo anterior a la fecha del escaneo y a partir de ahi sube con fuerza.
+    idx = pd.bdate_range(start="2025-09-01", periods=300)
+    corte = idx.searchsorted(pd.Timestamp(SCAN))
+    precios = [100.0] * corte + [100.0 * (1.02 ** i) for i in range(300 - corte)]
+    with patch("yf_batch.download_batch", return_value=({}, {}, {"XOM": _hl_serie(precios)})):
+        r = T.tasa_base_strike(hoy=HOY)
     assert 15 <= r["tasa_base_pct"] <= 85, (
-        f"tasa base {r['tasa_base_pct']}%: los dias no se estan sorteando por "
-        f"todo el año -- con la mitad muerta y la mitad subiendo tiene que caer "
+        f"tasa base {r['tasa_base_pct']}%: los dias no se estan sorteando dentro "
+        f"de la ventana -- con la mitad muerta y la mitad subiendo tiene que caer "
         f"en medio, no pegada a 0 ni a 100")
+
+
+def test_un_contrato_que_toco_pero_NO_ha_vencido_no_entra_en_el_porcentaje(bd):
+    """EL sesgo que casi me cuela un resultado espectacular. Un contrato sin
+    vencer solo recibe veredicto si YA toco -- los que van perdiendo siguen
+    pendientes, sin veredicto. Meter a los primeros sin sus compañeros es un
+    100% de aciertos por construccion.
+
+    Medido en produccion el 21/08: de 966 contratos con veredicto, ~311 no
+    habian vencido. Un tercio de la muestra que solo podia sumar aciertos, y
+    con la tasa base midiendoles ademas una ventana recortada hasta hoy."""
+    _op(bd, "call", "buy", strike=110.0, spot=100.0, exp="2026-12-18")   # vence tarde
+    _evaluar(_precios(altos=[100, 103, 107, 112, 112], bajos=[99] * 5), hoy="2026-08-10")
+    assert _fila(bd)["tocado"] == 1, "toco de verdad, eso no se discute"
+    r = T.resumen_strike(hoy="2026-08-10")
+    assert r["total"]["n"] == 0, (
+        "un contrato que toco pero sigue vivo ha entrado en el porcentaje: sus "
+        "compañeros que van perdiendo todavia no tienen veredicto")
+    assert r["tocaron_sin_vencer"] == 1, "pero hay que poder decir cuantos son"
+
+
+def test_la_tasa_base_usa_los_mismos_contratos_que_el_porcentaje(bd):
+    """Si el porcentaje se calcula sobre vencidos y la tasa base sobre todos,
+    se estarian comparando dos poblaciones distintas."""
+    _op(bd, "call", "buy", strike=110.0, spot=100.0, exp="2026-12-18")
+    _evaluar(_precios(altos=[100, 103, 107, 112, 112], bajos=[99] * 5), hoy="2026-08-10")
+    with patch("yf_batch.download_batch", return_value=({}, {}, {"XOM": _hl_serie([100.0] * 300)})):
+        r = T.tasa_base_strike(hoy="2026-08-10")
+    assert r["ok"] is False, "ha comparado un contrato que todavia no ha vencido"
