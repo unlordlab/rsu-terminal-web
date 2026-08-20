@@ -473,16 +473,32 @@ def get_options_flow_simple() -> dict:
     bull_total, bear_total = 0.0, 0.0
 
     descartadas_rutina = 0
+    repetidas_del_mismo = 0
+    vistas_por_ticker: dict = {}
     for r in rows:
         ot = ORDER_TYPE.get((r["type"], r["action"]))
         if not ot:
             continue
-        # Solo lo INUSUAL. Ver MIN_VOL_OI_INUSUAL: sin este corte, un valor muy
-        # líquido llenaba la pantalla con cinco filas del mismo día y
-        # direcciones contradictorias, que es lo que hacía el módulo inútil.
+        # Corte 1 -- solo lo INUSUAL. Ver MIN_VOL_OI_INUSUAL.
         if not r["oi"] or r["volume"] / r["oi"] < MIN_VOL_OI_INUSUAL:
             descartadas_rutina += 1
             continue
+        # Los agregados (sesgo del día, tops) se acumulan ANTES del tope por
+        # ticker: describen todo lo inusual del día, no lo que cabe en la
+        # tabla. Ver MAX_POR_TICKER.
+        premio_por_ticker[r["ticker"]] = premio_por_ticker.get(r["ticker"], 0) + r["premium"]
+        if ot in ("Buy Call", "Sell Put"):
+            bull_por_ticker[r["ticker"]] = bull_por_ticker.get(r["ticker"], 0) + r["premium"]
+            bull_total += r["premium"]
+        else:
+            bear_por_ticker[r["ticker"]] = bear_por_ticker.get(r["ticker"], 0) + r["premium"]
+            bear_total += r["premium"]
+        # Corte 2 -- una por valor. Las filas vienen ordenadas por prima, así
+        # que la que sobrevive es la mayor del día para ese ticker.
+        if vistas_por_ticker.get(r["ticker"], 0) >= MAX_POR_TICKER:
+            repetidas_del_mismo += 1
+            continue
+        vistas_por_ticker[r["ticker"]] = vistas_por_ticker.get(r["ticker"], 0) + 1
         grupos[ot].append({
             "ticker": r["ticker"], "order_type": ot,
             "strike": r["strike"], "strike_pct": r["strike_pct"],
@@ -491,13 +507,6 @@ def get_options_flow_simple() -> dict:
             "near_earnings": r["near_earnings"],
             "earnings_rel":  r["earnings_rel"] if "earnings_rel" in r.keys() else None,
         })
-        premio_por_ticker[r["ticker"]] = premio_por_ticker.get(r["ticker"], 0) + r["premium"]
-        if ot in ("Buy Call", "Sell Put"):
-            bull_por_ticker[r["ticker"]] = bull_por_ticker.get(r["ticker"], 0) + r["premium"]
-            bull_total += r["premium"]
-        else:
-            bear_por_ticker[r["ticker"]] = bear_por_ticker.get(r["ticker"], 0) + r["premium"]
-            bear_total += r["premium"]
 
     top_premium = sorted(premio_por_ticker.items(), key=lambda x: -x[1])[:6]
     top_bullish = sorted(bull_por_ticker.items(), key=lambda x: -x[1])[:6]
@@ -560,6 +569,10 @@ def get_options_flow_simple() -> dict:
         # fallado -- que es justo la confusión que este módulo arrastraba.
         "descartadas_rutina": descartadas_rutina,
         "umbral_vol_oi":      MIN_VOL_OI_INUSUAL,
+        # Operaciones inusuales que SÍ pasaron el umbral pero son de un valor
+        # que ya aparece en la lista. No se tiran: se ven entrando al ticker.
+        "repetidas_del_mismo": repetidas_del_mismo,
+        "max_por_ticker":      MAX_POR_TICKER,
         "put_call":           put_call,
         "calls_bought":       [_entrada_simple(e, "Buy Call",  cartera_tickers, repetidos) for e in grupos["Buy Call"]][:25],
         "puts_sold":          [_entrada_simple(e, "Sell Put",  cartera_tickers, repetidos) for e in grupos["Sell Put"]][:25],
@@ -1413,18 +1426,49 @@ MIN_VOLUME = 200   # antes 10 — muy por debajo del estándar de la industria (
 # inusual» y es exactamente lo que separaba nuestra lista de la de las
 # herramientas de referencia.
 #
-# Medido el 19/08/2026 sobre un escaneo real: de 19 entradas, solo 4 pasaban
-# este corte, y los tickers distintos bajaban de 10 a 4. Sin él, un valor muy
-# líquido aparecía cinco veces el mismo día (CVNA, CVX) con direcciones
-# contradictorias -- que no era un fallo del dato, sino que resumir el día
-# entero de una cadena activa no tiene una dirección que descubrir.
+# CALIBRADO EL 20/08/2026 CONTRA UN ESCANEO REAL DE PRODUCCIÓN (el del
+# 19/08, 140 operaciones guardadas). La primera calibración, del día
+# anterior, la hice sobre mi copia LOCAL de la base -- cuyo último escaneo
+# tenía 19 filas porque estaba a medias-- y de ahí salió un «19 -> 7» que no
+# describía la terminal de nadie. Los números buenos son estos:
+#
+#     vol/OI >= 1     87 entradas   55 tickers   el que más repite: MSFT x6
+#     vol/OI >= 1.5   70            47                              MSFT x6
+#     vol/OI >= 2     62            41                              MSFT x6
+#     vol/OI >= 3     42            33                              INTC x3
+#     vol/OI >= 10    13             9                              MRNA x2
+#
+# Lo que enseña esa tabla es que EL UMBRAL NO ARREGLA LA REPETICIÓN: MSFT
+# aguanta seis veces hasta vol/OI >= 2, y no son filas rutinarias coladas --
+# son seis contratos genuinamente inusuales del mismo valor el mismo día. Son
+# dos problemas distintos y hacen falta dos cortes (ver MAX_POR_TICKER). El
+# umbral se queda en 2 porque quita las 25 entradas más flojas sin llegar a
+# cegar la lista: a 10 quedan 13 entradas, y eso ya no es filtrar.
 #
 # SE FILTRA AL ENSEÑAR, NO AL GUARDAR. La base sigue registrando todo lo que
 # pasa los mínimos de volumen/OI/prima: un día de opciones no se puede
 # recuperar después, así que tirar datos por un umbral que todavía estamos
 # calibrando sería irreversible. Cambiar este número reordena la pantalla sin
 # haber perdido nada.
-MIN_VOL_OI_INUSUAL = 1.0
+MIN_VOL_OI_INUSUAL = 2.0
+
+# Cuántas operaciones del MISMO valor se listan en el panel. El síntoma que
+# abrió todo esto era literalmente este: «en SNDK hay muchas entradas en todas
+# las direcciones», MSFT seis veces, CVNA cinco. Con una sola por valor el
+# panel pasa a ser un índice de QUÉ se ha movido hoy, y el detalle está a un
+# clic: la vista de ticker no aplica este tope y enseña todas sus operaciones
+# inusuales.
+#
+# Se queda la de MAYOR PRIMA (las filas llegan ordenadas por prima), que es la
+# más grande del valor ese día -- no la de mayor vol/OI, que sería la más
+# «inusual». Es una elección discutible y por eso se dice: la pantalla ordena
+# y se lee por prima, así que la representante coherente es esa.
+#
+# ESTE TOPE ES SOLO DE PANTALLA. El sesgo del día, los tops y el put/call se
+# siguen calculando sobre TODAS las operaciones inusuales, no sobre las que
+# caben en la tabla -- un porcentaje calculado sobre una lista recortada por
+# motivos de lectura no significaría nada.
+MAX_POR_TICKER = 1
 
 MIN_OI     = 100    # no existía ningún mínimo antes — sin esto, un contrato con OI=5 y vol=20
                      # da un ratio Vol/OI de 4 (parece "muy inusual") siendo en realidad ilíquido

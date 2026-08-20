@@ -128,7 +128,8 @@ function putCallLinea(pc) {
         Put/Call del día: <b style="color:var(--color-text);">${esc(pc.por_volumen)}</b> por volumen
         (<b style="color:var(--color-text);">${esc(pc.por_prima)}</b> por prima) ${tt('options-put-call')}
         · ${esc(pc.vol_put.toLocaleString('en-US'))} contratos put frente a ${esc(pc.vol_call.toLocaleString('en-US'))} call,
-        sobre las ${esc(pc.n_contratos)} operaciones que detectó el escaneo — no sobre todo el mercado
+        sobre las ${esc(pc.n_contratos)} operaciones que detectó el escaneo — todas, no solo
+        las inusuales que se listan abajo, y desde luego no todo el mercado
     </div>`;
 }
 
@@ -167,12 +168,27 @@ function renderDashboard(data) {
     // Por qué se ven pocas filas. Sin decirlo, una pantalla con tres entradas
     // donde antes había veinte parece un escaneo roto -- y era justo la
     // confusión que este módulo arrastraba.
-    const notaRutina = data.descartadas_rutina
+    // Por qué se ven pocas filas, y dónde está lo que no se ve. Sin decirlo,
+    // una pantalla con cuarenta entradas donde antes había ciento cuarenta
+    // parece un escaneo roto -- y era justo la confusión que este módulo
+    // arrastraba. Las dos cifras cuentan cosas distintas y por eso van
+    // separadas: una es lo que NO merece mirarse, la otra es lo que sí y está
+    // a un clic.
+    const partes = [];
+    if (data.descartadas_rutina) {
+        partes.push(`<strong style="color:var(--color-text);">${esc(data.descartadas_rutina)}</strong>
+            quedaron fuera por ser movimiento rutinario de cadenas muy líquidas`);
+    }
+    if (data.repetidas_del_mismo) {
+        partes.push(`otras <strong style="color:var(--color-text);">${esc(data.repetidas_del_mismo)}</strong>
+            son operaciones adicionales de valores que ya aparecen — pulsa el valor para verlas todas`);
+    }
+    const notaRutina = partes.length
         ? `<div style="color:var(--color-muted);font-size:11px;margin-bottom:10px;">
-             Se muestran solo las operaciones <strong style="color:var(--color-text);">inusuales</strong>:
-             aquellas en las que hoy se han negociado más contratos de los que había abiertos.
-             Otras <strong style="color:var(--color-text);">${esc(data.descartadas_rutina)}</strong>
-             quedaron fuera por ser movimiento rutinario de cadenas muy líquidas — están guardadas, solo no se listan.
+             Se muestra <strong style="color:var(--color-text);">una operación por valor</strong>, la mayor del día,
+             y solo las <strong style="color:var(--color-text);">inusuales</strong>: aquellas en las que hoy se han
+             negociado al menos el doble de contratos de los que había abiertos.
+             De las demás, ${partes.join('; ')}. Nada de esto se borra: está guardado.
            </div>`
         : '';
 

@@ -100,9 +100,18 @@ def test_la_direccion_de_la_orden_no_entra_en_el_ratio(db):
 
 def test_el_sesgo_y_el_put_call_pueden_discrepar_sin_que_nada_este_mal(db):
     """El caso real del 23/07: muchas más calls que puts, y aun así el sesgo no
-    sale alcista porque buena parte de esas calls están VENDIDAS."""
-    _insertar(db, [("call", "sell", 3000, 3_000_000),   # bajista
-                   ("put",  "sell",  500, 3_000_000)])  # alcista
+    sale alcista porque buena parte de esas calls están VENDIDAS.
+
+    El volumen del put subió de 500 a 1200 el 20/08 y no es cosmético: el
+    helper inserta las filas con open interest 500, así que con 500 de volumen
+    esa operación tenía vol/OI = 1 y dejó de contar como inusual al subir el
+    umbral a 2 (ver MIN_VOL_OI_INUSUAL). El sesgo pasaba a 0,0 porque solo
+    quedaba la pata bajista. Lo que el test comprueba no cambia -- sigue
+    habiendo muchas más calls que puts y el sesgo sigue empatado--, pero los
+    dos lados tienen que ser operaciones que el panel considere inusuales,
+    porque es sobre esas sobre las que se calcula el sesgo."""
+    _insertar(db, [("call", "sell", 3000, 3_000_000),   # bajista, vol/OI = 6
+                   ("put",  "sell", 1200, 3_000_000)])  # alcista, vol/OI = 2,4
     d = O.get_options_flow_simple()
     assert d["put_call"]["por_volumen"] < 1, "hay muchas más calls que puts"
     assert d["dia_bias_pct"] == 50.0, "y sin embargo la dirección está empatada"

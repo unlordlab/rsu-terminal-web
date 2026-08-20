@@ -210,3 +210,99 @@ def test_la_nota_de_descartadas_no_solo_existe_sino_que_se_PINTA():
     assert pintada, (
         "notaRutina esta declarada pero NO aparece en ningun return: es codigo "
         "muerto y la pantalla vuelve a no explicar por que hay pocas filas")
+
+
+# ── Una por valor ────────────────────────────────────────────────────────────
+#
+# CALIBRADO CONTRA PRODUCCION el 20/08/2026, sobre el escaneo del 19/08 (140
+# operaciones). La tabla que decidio los dos cortes:
+#
+#     vol/OI >= 1     87 entradas   55 tickers   MSFT x6
+#     vol/OI >= 2     62            41           MSFT x6
+#     vol/OI >= 3     42            33           INTC x3
+#
+# MSFT aguanta seis veces hasta vol/OI >= 2 y NO son filas rutinarias: son seis
+# contratos genuinamente inusuales del mismo valor el mismo dia. Por eso hacen
+# falta dos cortes distintos y no basta con subir el umbral.
+
+def test_el_mismo_valor_no_ocupa_seis_filas_aunque_las_seis_sean_inusuales():
+    """El caso MSFT, tal cual salio en produccion."""
+    tmp = _bd([("MSFT", "call", "sell", 400.0 + i, 5_000, 1_000, 20_000_000 - i * 100)
+               for i in range(6)]
+              + [("INTC", "call", "buy", 30.0, 4_000, 1_000, 900_000)])
+    d = _panel(tmp)
+    assert _cuantas(d) == 2, "un valor sigue ocupando varias filas"
+    assert d["repetidas_del_mismo"] == 5
+    assert d["max_por_ticker"] == O.MAX_POR_TICKER
+
+
+def test_la_que_sobrevive_es_la_de_mayor_prima():
+    """Eleccion documentada en MAX_POR_TICKER: la pantalla ordena y se lee por
+    prima, asi que la representante del valor es la mas grande del dia."""
+    tmp = _bd([("MSFT", "call", "sell", 400.0, 5_000, 1_000, 3_000_000),
+               ("MSFT", "call", "sell", 410.0, 5_000, 1_000, 20_000_000),
+               ("MSFT", "call", "sell", 420.0, 5_000, 1_000, 1_000_000)])
+    d = _panel(tmp)
+    assert _cuantas(d) == 1
+    assert d["calls_sold"][0]["premium"] == 20_000_000
+
+
+def test_el_tope_es_por_VALOR_no_por_tabla():
+    """Si el tope se aplicara dentro de cada tabla por separado, un valor con
+    actividad en las dos direcciones volveria a salir cuatro veces con
+    direcciones que se contradicen -- que es media queja del usuario."""
+    tmp = _bd([("XOM", "call", "buy",  120.0, 5_000, 1_000, 9_000_000),
+               ("XOM", "put",  "buy",  110.0, 5_000, 1_000, 8_000_000),
+               ("XOM", "call", "sell", 130.0, 5_000, 1_000, 7_000_000),
+               ("XOM", "put",  "sell", 100.0, 5_000, 1_000, 6_000_000)])
+    d = _panel(tmp)
+    assert _cuantas(d) == 1, "el mismo valor aparece en varias tablas a la vez"
+
+
+def test_el_sesgo_del_dia_NO_se_calcula_sobre_la_lista_recortada():
+    """El tope es de PANTALLA. Si el sesgo se calculara sobre lo que cabe en la
+    tabla, un porcentaje del dia dependeria de cuantas filas quepan -- que no
+    significa nada.
+
+    LOS NUMEROS ESTAN ELEGIDOS PARA QUE LA DIFERENCIA CAMBIE LA CONCLUSION, no
+    solo el decimal: cinco compras de calls de MSFT de 10M (50M alcistas) y una
+    compra de puts de INTC de 30M. Sobre todo lo inusual el dia es ALCISTA
+    (50 de 80 = 62,5%); sobre las dos filas visibles saldria BAJISTA (10 de 40
+    = 25%). Una primera version de este test usaba 1M en vez de 30M y daba
+    90,9% frente a 98%: pasaba en verde con el calculo mal puesto, porque el
+    umbral que comprobaba (>90) no separaba los dos casos. Lo descubrio el
+    sabotaje de mover los acumuladores detras del tope."""
+    tmp = _bd([("MSFT", "call", "buy", 400.0 + i, 5_000, 1_000, 10_000_000) for i in range(5)]
+              + [("INTC", "put", "buy", 30.0, 4_000, 1_000, 30_000_000)])
+    d = _panel(tmp)
+    assert _cuantas(d) == 2, "en pantalla se ve una operacion por valor"
+    assert d["dia_bias_label"] == "ALCISTA", (
+        "el sesgo se ha calculado sobre las filas visibles: sale bajista un dia "
+        "en el que la prima alcista es casi el doble de la bajista")
+    assert d["dia_bias_pct"] == 62.5, d["dia_bias_pct"]
+
+
+def test_el_umbral_subio_a_2_y_esta_dicho_en_la_respuesta():
+    """Una entrada con vol/OI = 1,5 pasaba el corte viejo y ya no pasa. El
+    numero viaja en la respuesta para que la pantalla no tenga que
+    adivinarlo."""
+    tmp = _bd([("AAA", "call", "buy", 10.0, 1_500, 1_000, 500_000),
+               ("BBB", "call", "buy", 10.0, 2_100, 1_000, 500_000)])
+    d = _panel(tmp)
+    assert _cuantas(d) == 1
+    assert d["calls_bought"][0]["ticker"] == "BBB"
+    assert d["umbral_vol_oi"] == 2.0
+
+
+def test_la_nota_habla_de_los_DOS_cortes_no_solo_del_primero():
+    """Las dos cifras cuentan cosas distintas: una es lo que no merece
+    mirarse, la otra es lo que si y esta a un clic. Si la pantalla solo
+    mencionara la primera, las repetidas pareceria que se han perdido."""
+    import os
+    ruta = os.path.join(os.path.dirname(__file__), "..", "..", "frontend", "pages", "options.js")
+    with open(ruta, encoding="utf-8") as fh:
+        fuente = fh.read()
+    assert "descartadas_rutina" in fuente
+    assert "repetidas_del_mismo" in fuente, (
+        "la nota no menciona las operaciones del mismo valor: pareceria que se "
+        "han tirado, cuando estan guardadas y se ven entrando al ticker")
