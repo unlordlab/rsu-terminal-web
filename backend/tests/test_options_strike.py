@@ -319,3 +319,33 @@ def test_la_tasa_base_usa_los_mismos_contratos_que_el_porcentaje(bd):
     with patch("yf_batch.download_batch", return_value=({}, {}, {"XOM": _hl_serie([100.0] * 300)})):
         r = T.tasa_base_strike(hoy="2026-08-10")
     assert r["ok"] is False, "ha comparado un contrato que todavia no ha vencido"
+
+
+def test_los_contratos_del_mismo_valor_y_dia_cuentan_como_UNA_prueba(bd):
+    """Seis contratos del mismo valor el mismo dia comparten el recorrido del
+    precio: si sube, suben los seis. Contarlos como seis pruebas separadas
+    infla la certeza -- con 655 contratos es la diferencia entre «hallazgo» y
+    «no se puede saber»."""
+    for k in range(6):
+        _op(bd, "call", "buy", strike=110.0 + k, spot=100.0, exp="2026-08-21")
+    _evaluar(_precios(altos=[100, 103, 107, 120, 120], bajos=[99] * 5))
+    with patch("yf_batch.download_batch", return_value=({}, {}, {"XOM": _hl_serie([100.0] * 300)})):
+        r = T.tasa_base_strike(hoy=HOY)
+    assert r["n"] == 6, "los seis contratos siguen contando para el porcentaje"
+    assert r["n_grupos"] == 1, (
+        "seis contratos del mismo valor y dia se han contado como seis pruebas "
+        "independientes")
+    # Con un solo grupo no hay dispersion que medir: no se puede afirmar nada.
+    assert r["t"] is None and r["distinguible_del_ruido"] is False
+
+
+def test_valores_distintos_el_mismo_dia_si_son_grupos_distintos(bd):
+    _op(bd, "call", "buy", strike=110.0, spot=100.0, exp="2026-08-21", ticker="XOM")
+    _op(bd, "call", "buy", strike=110.0, spot=100.0, exp="2026-08-21", ticker="AAA")
+    hl = _precios(altos=[100, 103, 107, 120, 120], bajos=[99] * 5)
+    with patch("yf_batch.download_batch", return_value=({}, {}, {"XOM": hl, "AAA": hl})):
+        T.actualizar_toque_strike(hoy=HOY)
+    plana = _hl_serie([100.0] * 300)
+    with patch("yf_batch.download_batch", return_value=({}, {}, {"XOM": plana, "AAA": plana})):
+        r = T.tasa_base_strike(hoy=HOY)
+    assert r["n"] == 2 and r["n_grupos"] == 2

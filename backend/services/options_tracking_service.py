@@ -563,6 +563,7 @@ def tasa_base_strike(semilla: int = 42, hoy: str = None) -> dict:
 
     rnd = random.Random(semilla)
     reales, bases = [], []
+    grupos: dict = {}
     for r in filas:
         hl = hl_d.get(r["ticker"])
         if hl is None or len(hl) < 60:
@@ -600,19 +601,48 @@ def tasa_base_strike(semilla: int = 42, hoy: str = None) -> dict:
                     aciertos += 1
         reales.append(1 if r["tocado"] else 0)
         bases.append(aciertos / N_MUESTRAS_BASE)
+        # Agrupados por valor y sesión: seis contratos del mismo valor el mismo
+        # día NO son seis pruebas independientes -- comparten el recorrido del
+        # precio. Si sube, suben los seis. Contarlos por separado infla la
+        # certeza, y con 655 contratos la diferencia entre hacerlo bien o mal
+        # es la que hay entre «hallazgo» y «no se puede saber».
+        grupos.setdefault((r["scan_date"], r["ticker"]), []).append(
+            (1 if r["tocado"] else 0, aciertos / N_MUESTRAS_BASE))
 
     if not reales:
         return {"ok": False, "error": "no se pudo construir la comparación"}
     real = sum(reales) / len(reales) * 100
     base = sum(bases) / len(bases) * 100
+
+    # ¿La ventaja se distingue del ruido? Se mide SOBRE LOS GRUPOS, no sobre
+    # los contratos: una ventaja por valor-sesión, y la dispersión entre ellas.
+    diffs = [sum(r for r, _ in v) / len(v) - sum(b for _, b in v) / len(v)
+             for v in grupos.values()]
+    t = err = None
+    if len(diffs) >= 2:
+        media = sum(diffs) / len(diffs)
+        var = sum((d - media) ** 2 for d in diffs) / (len(diffs) - 1)
+        err = (var / len(diffs)) ** 0.5
+        t = round(media / err, 2) if err > 0 else None
+
     return {
         "ok": True,
         "n": len(reales),
+        "n_grupos": len(grupos),
         "real_pct": round(real, 1),
         "tasa_base_pct": round(base, 1),
         "ventaja_pp": round(real - base, 1),
+        "ventaja_por_grupo_pp": round(sum(diffs) / len(diffs) * 100, 1) if diffs else None,
+        "error_estandar_pp": round(err * 100, 1) if err else None,
+        # |t| >= 2 es el corte convencional de «difícil de explicar por azar».
+        # No es una certeza: es el mínimo para no llamarlo ruido.
+        "t": t,
+        "distinguible_del_ruido": bool(t is not None and abs(t) >= 2),
         "nota": ("La tasa base es el mismo tipo de apuesta -misma distancia al strike y "
                  "mismo plazo, mismo valor- lanzada en días al azar del último año. Si la "
                  "ventaja en puntos porcentuales ronda cero, el porcentaje real solo mide "
-                 "lo cerca que estaban los strikes, no que la señal supiera nada."),
+                 "lo cerca que estaban los strikes, no que la señal supiera nada. La "
+                 "significancia se calcula sobre GRUPOS de valor-sesión: los contratos del "
+                 "mismo valor y día comparten el recorrido del precio y no son pruebas "
+                 "independientes."),
     }
