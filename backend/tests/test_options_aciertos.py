@@ -145,7 +145,7 @@ def test_subir_menos_que_el_indice_NO_es_un_acierto_alcista(bd):
     b = r["horizontes"]["5"]["todas"]
     assert b["n"] == 1
     assert b["aciertos_pct"] == 0.0, "ha contado como acierto quedarse por detrás del índice"
-    assert b["exceso_medio"] == -5.0
+    assert b["exceso_dirigido"] == -5.0
 
 
 def test_una_senal_bajista_acierta_si_el_valor_lo_hace_PEOR_que_el_indice(bd):
@@ -156,7 +156,10 @@ def test_una_senal_bajista_acierta_si_el_valor_lo_hace_PEOR_que_el_indice(bd):
                      [100, 100, 100, 100, 100, 105] + [105] * 20)
     b = T.resumen()["horizontes"]["5"]["todas"]
     assert b["aciertos_pct"] == 100.0
-    assert b["exceso_medio"] == -10.0
+    # El valor cayó un 5% mientras el índice subía un 5%: quedarse 10 puntos
+    # por detrás es un ACIERTO de una señal bajista, asi que dirigido = +10.
+    assert b["exceso_dirigido"] == 10.0
+    assert b["exceso_universo"] == -10.0, "el del universo va sin signo de la apuesta"
 
 
 # ── Lo que no se puede saber todavía ─────────────────────────────────────────
@@ -209,3 +212,32 @@ def test_el_escaneo_engancha_el_seguimiento(bd):
     assert any("actualizar_resultados(" in l for l in codigo), (
         "nadie rellena los retornos: las señales quedarian registradas para "
         "siempre sin resultado")
+
+
+def test_el_exceso_dirigido_y_el_del_universo_NO_son_lo_mismo(bd):
+    """EL test de esta correccion, y sale de un numero real de produccion:
+    aciertos por DEBAJO del 50% con un «exceso» POSITIVO y creciente. No era
+    una ventaja -- era el sesgo del universo colandose por la puerta de atras,
+    porque la media mezclaba las dos direcciones y una señal bajista fallida
+    (el valor sube) sumaba positivo.
+
+    Aqui: dos señales bajistas que fallan (sus valores baten al indice). El
+    universo sale +10 y la ventaja de seguir la señal, -10."""
+    _op(bd, "2026-08-03", "XOM", "put", "buy", 9_000_000)
+    _op(bd, "2026-08-03", "AAA", "put", "buy", 9_000_000)
+    T.registrar_senales("2026-08-03")
+    close_d = {
+        "XOM": _serie([100] * 5 + [110] + [110] * 20),
+        "AAA": _serie([100] * 5 + [110] + [110] * 20),
+        "SPY": _serie([100] * 26),
+    }
+    with patch("yf_batch.download_batch", return_value=(close_d, {})):
+        T.actualizar_resultados()
+    b = T.resumen()["horizontes"]["5"]["todas"]
+    assert b["n"] == 2
+    assert b["aciertos_pct"] == 0.0, "las dos señales bajistas han fallado"
+    assert b["exceso_universo"] == 10.0, (
+        "estar en esos valores batio al indice: ese es el baseline a batir")
+    assert b["exceso_dirigido"] == -10.0, (
+        "seguir la señal habria costado 10 puntos; si esto sale positivo, el "
+        "signo de la apuesta no se esta aplicando")

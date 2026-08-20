@@ -210,19 +210,39 @@ def actualizar_resultados() -> dict:
 
 
 def _bloque(rows, dias):
+    """Dos medias, no una, y la diferencia entre ellas es el hallazgo.
+
+    `exceso_dirigido` es lo que se ganaría SIGUIENDO la señal: el exceso sobre
+    el índice con el signo de la apuesta (si la señal era bajista, que el valor
+    caiga respecto al índice suma a favor). Es el único que se puede leer como
+    ventaja.
+
+    `exceso_universo` es cómo se comportaron esos valores frente al índice sin
+    mirar la dirección. Es el BASELINE que hay que batir: si simplemente estar
+    en valores con actividad inusual de opciones ya bate al S&P 500, la
+    dirección de la señal no ha aportado nada aunque el número salga bonito.
+
+    Hasta el 21/08 solo se daba el segundo, llamado `exceso_medio`, y eso era
+    engañoso: mezclaba las dos direcciones, así que una señal bajista fallida
+    (el valor sube) sumaba POSITIVO. Con aciertos por debajo del 50% y un
+    "exceso" creciente a la vez, el número parecía una ventaja y era el sesgo
+    del universo."""
     campo, ref = f"ret_{dias}d", f"spy_{dias}d"
     con_dato = [r for r in rows if r[campo] is not None and r[ref] is not None]
     if not con_dato:
-        return {"n": 0, "suficiente": False, "aciertos_pct": None, "exceso_medio": None}
-    excesos = [r[campo] - r[ref] for r in con_dato]
+        return {"n": 0, "suficiente": False, "aciertos_pct": None,
+                "exceso_dirigido": None, "exceso_universo": None}
+    excesos   = [r[campo] - r[ref] for r in con_dato]
+    dirigidos = [e if r["nps"] > 0 else -e for r, e in zip(con_dato, excesos)]
     # Acierto = batió al SPY si la señal era alcista, o se quedó por detrás si
     # era bajista.
-    aciertos = sum(1 for r, e in zip(con_dato, excesos) if (e > 0) == (r["nps"] > 0))
+    aciertos = sum(1 for d in dirigidos if d > 0)
     return {
         "n": len(con_dato),
         "suficiente": len(con_dato) >= MIN_MUESTRA,
         "aciertos_pct": round(aciertos / len(con_dato) * 100, 1),
-        "exceso_medio": round(sum(excesos) / len(excesos), 2),
+        "exceso_dirigido": round(sum(dirigidos) / len(dirigidos), 2),
+        "exceso_universo": round(sum(excesos) / len(excesos), 2),
     }
 
 
