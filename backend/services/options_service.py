@@ -1672,17 +1672,33 @@ def _score_entry(vol, oi, premium, iv, exp_days, strike_pct_val, baseline: dict 
     return score, signal, round(vol_oi, 2)
 
 def _get_next_earnings(ticker: str) -> str | None:
-    """Intenta obtener la próxima fecha de earnings de yfinance."""
+    """Próxima fecha de resultados, de yfinance.
+
+    ADMITE LAS DOS FORMAS, y esa es la razón de existir de este comentario:
+    `tk.calendar` devolvía un DataFrame y hoy devuelve un **dict**. El código
+    hacía `if not cal.empty`, que en un diccionario lanza AttributeError -- y
+    un `except Exception: pass` se lo tragaba. Resultado: esta función
+    devolvía None SIEMPRE, en silencio, desde que yfinance cambió el formato.
+    Y con ella se apagó todo lo que depende de la fecha de resultados: la
+    marca 📅/🕐 de la pantalla (hallazgo #10, dado por hecho el 06/08) y
+    cualquier análisis que separe por cercanía a resultados. Comprobado el
+    21/08 sobre la base de producción: 470 filas guardadas, `near_earnings`
+    en 0 y `earnings_rel` en NULL en el 100% -- ni una sola marca en meses.
+
+    El fallo lo escondía el `except` mudo, así que ahora se dice por el log.
+    """
     try:
-        tk = yf.Ticker(ticker)
-        cal = tk.calendar
-        if cal is not None and not cal.empty:
+        cal = yf.Ticker(ticker).calendar
+        fechas = None
+        if isinstance(cal, dict):
+            fechas = cal.get('Earnings Date')
+        elif cal is not None and getattr(cal, "empty", True) is False:
             if 'Earnings Date' in cal.index:
-                ed = cal.loc['Earnings Date'].values
-                if len(ed) > 0:
-                    return str(pd.Timestamp(ed[0]).date())
-    except Exception:
-        pass
+                fechas = cal.loc['Earnings Date'].values
+        if fechas is not None and len(fechas) > 0:
+            return str(pd.Timestamp(fechas[0]).date())
+    except Exception as e:
+        print(f"[OptionsFlow] Sin fecha de resultados para {ticker}: {type(e).__name__}: {e}")
     return None
 
 def _classify_sentiment(calls_vol, puts_vol):
