@@ -541,7 +541,7 @@ def tasa_base_strike(semilla: int = 42, hoy: str = None) -> dict:
     conn = _conn()
     filas = conn.execute(
         """
-        SELECT t.*, f.underlying_price AS spot
+        SELECT t.*, f.underlying_price AS spot, f.near_earnings AS near_earnings
         FROM strike_tocado t
         JOIN options_flow f
           ON f.scan_date = t.scan_date AND f.ticker = t.ticker AND f.strike = t.strike
@@ -565,6 +565,7 @@ def tasa_base_strike(semilla: int = 42, hoy: str = None) -> dict:
     reales, bases = [], []
     grupos: dict = {}
     por_sesion: dict = {}
+    registros: list = []
     for r in filas:
         hl = hl_d.get(r["ticker"])
         if hl is None or len(hl) < 60:
@@ -608,6 +609,9 @@ def tasa_base_strike(semilla: int = 42, hoy: str = None) -> dict:
         # certeza, y con 655 contratos la diferencia entre hacerlo bien o mal
         # es la que hay entre «hallazgo» y «no se puede saber».
         par = (1 if r["tocado"] else 0, aciertos / N_MUESTRAS_BASE)
+        registros.append({"scan_date": r["scan_date"], "ticker": r["ticker"],
+                          "real": par[0], "base": par[1],
+                          "near_earnings": bool(r["near_earnings"])})
         grupos.setdefault((r["scan_date"], r["ticker"]), []).append(par)
         # Y una segunda agrupación, más exigente: por SESIÓN. Dos valores
         # distintos el mismo día tampoco son independientes -- comparten el
@@ -622,6 +626,33 @@ def tasa_base_strike(semilla: int = 42, hoy: str = None) -> dict:
 
     # ¿La ventaja se distingue del ruido? Se mide SOBRE LOS GRUPOS, no sobre
     # los contratos: una ventaja por valor-sesión, y la dispersión entre ellas.
+    def _agregar(regs):
+        """Las mismas cifras para cualquier subconjunto de contratos: el
+        porcentaje, la tasa base, y la ventaja con su significancia agrupando
+        por valor-sesión y por sesión."""
+        if not regs:
+            return {"n": 0, "n_grupos": 0, "n_sesiones": 0, "real_pct": None,
+                    "tasa_base_pct": None, "ventaja_pp": None, "t": None,
+                    "t_sesion": None}
+        g: dict = {}
+        ses: dict = {}
+        for x in regs:
+            g.setdefault((x["scan_date"], x["ticker"]), []).append((x["real"], x["base"]))
+            ses.setdefault(x["scan_date"], []).append((x["real"], x["base"]))
+        rl = sum(x["real"] for x in regs) / len(regs) * 100
+        bs = sum(x["base"] for x in regs) / len(regs) * 100
+        t_g, err_g, d_g = _t(g)
+        t_s, err_s, d_s = _t(ses)
+        return {
+            "n": len(regs), "n_grupos": len(g), "n_sesiones": len(ses),
+            "real_pct": round(rl, 1), "tasa_base_pct": round(bs, 1),
+            "ventaja_pp": round(rl - bs, 1),
+            "ventaja_por_grupo_pp": round(sum(d_g) / len(d_g) * 100, 1) if d_g else None,
+            "t": t_g,
+            "ventaja_por_sesion_pp": round(sum(d_s) / len(d_s) * 100, 1) if d_s else None,
+            "t_sesion": t_s,
+        }
+
     def _t(agrupado):
         d = [sum(r for r, _ in v) / len(v) - sum(b for _, b in v) / len(v)
              for v in agrupado.values()]
@@ -655,6 +686,18 @@ def tasa_base_strike(semilla: int = 42, hoy: str = None) -> dict:
         "t_sesion": t_sesion,
         "distinguible_del_ruido": bool(t is not None and abs(t) >= 2),
         "aguanta_agrupando_por_sesion": bool(t_sesion is not None and abs(t_sesion) >= 2),
+        # LA EXPLICACIÓN ALTERNATIVA MÁS OBVIA, separada en dos. Si un contrato
+        # vence cerca de una publicación de resultados, el precio se mueve más
+        # por el EVENTO -- que está en un calendario público-- y no porque
+        # nadie supiera nada. La tasa base compara contra días al azar, que en
+        # su mayoría NO son días de evento, así que ese solo hecho podría
+        # explicar varios puntos de ventaja. Si la ventaja sobrevive LEJOS de
+        # resultados, el hallazgo se sostiene; si solo aparece cerca, lo que se
+        # estaba midiendo era el calendario.
+        "por_earnings": {
+            "cerca": _agregar([x for x in registros if x["near_earnings"]]),
+            "lejos": _agregar([x for x in registros if not x["near_earnings"]]),
+        },
         "nota": ("La tasa base es el mismo tipo de apuesta -misma distancia al strike y "
                  "mismo plazo, mismo valor- lanzada en días al azar del último año. Si la "
                  "ventaja en puntos porcentuales ronda cero, el porcentaje real solo mide "

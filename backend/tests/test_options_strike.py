@@ -58,14 +58,15 @@ def bd(monkeypatch):
     return ruta
 
 
-def _op(bd, tipo, accion, strike, spot, exp="2026-08-21", fecha=SCAN, ticker="XOM"):
+def _op(bd, tipo, accion, strike, spot, exp="2026-08-21", fecha=SCAN, ticker="XOM",
+        near_earnings=0):
     conn = sqlite3.connect(bd)
     conn.execute(
         "INSERT INTO options_flow (scan_date, scan_ts, ticker, strike, exp, type, action, "
         "premium, premium_fmt, volume, oi, vol_oi_ratio, score, signal, price, strike_pct, "
-        "iv, underlying_price) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+        "iv, underlying_price, near_earnings) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
         (fecha, fecha + " 23:00", ticker, strike, exp, tipo, accion, 1_000_000, "$1M",
-         5_000, 1_000, 5.0, 5, "ALTA", spot, "+0%", 0.3, spot))
+         5_000, 1_000, 5.0, 5, "ALTA", spot, "+0%", 0.3, spot, near_earnings))
     conn.commit(); conn.close()
 
 
@@ -366,3 +367,43 @@ def test_dos_valores_distintos_el_mismo_dia_son_UNA_sesion(bd):
     assert r["n_grupos"] == 2, "son dos valores distintos"
     assert r["n_sesiones"] == 1, "pero una sola jornada de mercado"
     assert r["t_sesion"] is None and r["aguanta_agrupando_por_sesion"] is False
+
+
+def test_la_ventaja_se_parte_entre_cerca_y_lejos_de_resultados(bd):
+    """LA EXPLICACION ALTERNATIVA. Si un contrato vence cerca de una
+    publicacion de resultados, el precio se mueve mas por el EVENTO -- que
+    esta en un calendario publico-- y no porque nadie supiera nada. La tasa
+    base compara contra dias al azar, que en su mayoria NO son de evento, asi
+    que ese solo hecho podria explicar varios puntos de ventaja.
+
+    Si la ventaja sobrevive LEJOS de resultados, el hallazgo se sostiene. Si
+    solo aparece cerca, lo que se estaba midiendo era el calendario."""
+    _op(bd, "call", "buy", strike=110.0, spot=100.0, ticker="XOM", near_earnings=1)
+    _op(bd, "call", "buy", strike=110.0, spot=100.0, ticker="AAA", near_earnings=0)
+    hl = _precios(altos=[100, 103, 107, 120, 120], bajos=[99] * 5)
+    with patch("yf_batch.download_batch", return_value=({}, {}, {"XOM": hl, "AAA": hl})):
+        T.actualizar_toque_strike(hoy=HOY)
+    plana = _hl_serie([100.0] * 300)
+    with patch("yf_batch.download_batch", return_value=({}, {}, {"XOM": plana, "AAA": plana})):
+        r = T.tasa_base_strike(hoy=HOY)
+    assert r["n"] == 2
+    assert r["por_earnings"]["cerca"]["n"] == 1
+    assert r["por_earnings"]["lejos"]["n"] == 1
+    # Los dos subconjuntos se miden con la misma vara que el total.
+    for lado in ("cerca", "lejos"):
+        b = r["por_earnings"][lado]
+        assert b["real_pct"] == 100.0 and b["tasa_base_pct"] == 0.0
+        assert b["ventaja_pp"] == 100.0
+
+
+def test_sin_contratos_cerca_de_resultados_no_se_inventa_una_cifra(bd):
+    """Mi copia local no tenia ni uno: el bloque tiene que decir n=0, no dar un
+    porcentaje sacado de la nada."""
+    _op(bd, "call", "buy", strike=110.0, spot=100.0, near_earnings=0)
+    _evaluar(_precios(altos=[100, 103, 107, 120, 120], bajos=[99] * 5))
+    with patch("yf_batch.download_batch", return_value=({}, {}, {"XOM": _hl_serie([100.0] * 300)})):
+        r = T.tasa_base_strike(hoy=HOY)
+    cerca = r["por_earnings"]["cerca"]
+    assert cerca["n"] == 0
+    assert cerca["real_pct"] is None and cerca["ventaja_pp"] is None
+    assert r["por_earnings"]["lejos"]["n"] == 1
