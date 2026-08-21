@@ -2235,7 +2235,7 @@ async function loadFedMacro(el) {
             + '<div style="background:var(--color-bg,#0a0a0a);border:1px solid var(--color-border);border-radius:var(--radius);padding:0.75rem;text-align:center;">'
             + '<div style="color:var(--color-muted);font-size:10px;margin-bottom:4px;">Δ MENSUAL BALANCE ' + tt('fed-monthly-change') + '</div>'
             + '<div style="color:' + wChgColor + ';font-size:18px;font-weight:500;">' + mChgStr + '</div>'
-            + '<div style="color:var(--color-muted);font-size:10px;margin-top:4px;">vs hace 5 semanas</div>'
+            + '<div style="color:var(--color-muted);font-size:10px;margin-top:4px;">vs hace 4 semanas</div>'
             + '</div>'
 
             + '</div>';
@@ -2270,13 +2270,22 @@ async function loadFedMacro(el) {
         }
 
         // ── CURVA DE TIPOS ────────────────────────────────────────────────────
-        const sp10_2  = y.spread_10_2;
-        const inverted = y.inverted;
-        const spColor  = inverted ? '#f23645' : '#00ffad';
-        const spLabel  = inverted ? '⚠ INVERTIDA' : '✓ NORMAL';
-        const spDesc   = inverted
-            ? 'Curva invertida — históricamente precede recesión 6-18 meses'
-            : 'Curva normal — expectativas de crecimiento económico saludable';
+        // TRES estados, no dos. Cuando el 2Y no llegaba -- que fue TODOS los
+        // días hasta el 21/08/2026, porque se pedía a dos símbolos que
+        // devuelven precios y no tipos-- el spread salía N/D y aquí se pintaba
+        // igualmente «✓ NORMAL · expectativas de crecimiento económico
+        // saludable». Un veredicto tranquilizador sin el dato debajo, que es
+        // peor que no decir nada.
+        const sp10_2   = y.spread_10_2;
+        const inverted = y.inverted;          // true / false / null (sin dato)
+        const sinDato  = inverted == null;
+        const spColor  = sinDato ? 'var(--color-muted)' : (inverted ? '#f23645' : '#00ffad');
+        const spLabel  = sinDato ? 'SIN DATO' : (inverted ? '⚠ INVERTIDA' : '✓ NORMAL');
+        const spDesc   = sinDato
+            ? 'No se puede juzgar la curva sin el tipo a 2 años'
+            : (inverted
+                ? 'Curva invertida — históricamente precede recesión 6-18 meses'
+                : 'Curva normal — expectativas de crecimiento económico saludable');
 
         const yieldPoints = [
             { label: '3M', val: y.Y3M },

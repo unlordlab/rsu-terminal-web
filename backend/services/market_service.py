@@ -1852,9 +1852,12 @@ def get_fed_macro() -> dict:
             prev_mo  = walcl[-5][1] if len(walcl) > 5 else total
             w_change = total - prev
             m_change = total - prev_mo
-            tga_val  = tga[-1][1] if tga else 0
-            rrp_val  = (rrp[-1][1] * 1000) if rrp else 0
-            net_liq  = total - tga_val - rrp_val
+            # Si falta TGA o RRP no se inventa un cero: restar cero de un
+            # balance de 6,7 billones da una «liquidez neta» inflada en cientos
+            # de miles de millones, con la misma pinta que una buena.
+            tga_val  = tga[-1][1] if tga else None
+            rrp_val  = (rrp[-1][1] * 1000) if rrp else None
+            net_liq  = (total - tga_val - rrp_val) if (tga_val is not None and rrp_val is not None) else None
             if w_change < -10000:  status, color = 'QT',      '#f23645'
             elif w_change > 10000: status, color = 'QE',      '#00ffad'
             else:                  status, color = 'ESTABLE',  '#ffb800'
@@ -1863,8 +1866,10 @@ def get_fed_macro() -> dict:
             return {
                 'status': status, 'color': color,
                 'total': fmt(total), 'total_num': total,
-                'tga': fmt(tga_val), 'rrp': fmt(rrp_val),
-                'net_liq': fmt(net_liq), 'net_liq_num': net_liq,
+                'tga': fmt(tga_val) if tga_val is not None else 'N/D',
+                'rrp': fmt(rrp_val) if rrp_val is not None else 'N/D',
+                'net_liq': fmt(net_liq) if net_liq is not None else 'N/D',
+                'net_liq_num': net_liq,
                 'w_change': round(w_change / 1000, 1),
                 'm_change': round(m_change / 1000, 1),
                 'date': walcl[-1][0], 'history': history,
@@ -1883,21 +1888,23 @@ def get_fed_macro() -> dict:
                         yields[key] = round(float(h['Close'].iloc[-1]), 3)
                 except Exception:
                     pass
-            # 2Y via yfinance — símbolo correcto
-            for sym_2y in ['^TU', 'SHY']:
-                try:
-                    h2 = yf.Ticker(sym_2y).history(period='5d')
-                    if not h2.empty:
-                        v = float(h2['Close'].iloc[-1])
-                        if 1.0 < v < 10.0:
-                            yields['Y2Y'] = round(v, 3)
-                            break
-                except Exception:
-                    pass
-            # Sin fallback sintético: si ninguna fuente real trae el 2Y, se
-            # deja ausente -- antes se aproximaba con Y3M + 0.47 (offset
-            # histórico fijo), un número inventado con la misma forma que
-            # uno real.
+            # EL 2Y, DE FRED. El comentario anterior decía «símbolo correcto» y
+            # probaba ^TU y SHY: ^TU es el FUTURO del bono a 2 años y SHY un
+            # ETF -- los dos devuelven un PRECIO (SHY ~82), no un tipo. El
+            # guard `1.0 < v < 10.0` los rechazaba, que estaba bien, pero el
+            # efecto neto es que **el 2Y nunca se obtuvo**: ni aparecía en la
+            # curva ni se podía calcular el spread 10Y-2Y, el más mirado de
+            # todos. Comprobado el 21/08/2026: ^TU deslistado en yfinance y
+            # SHY devolviendo 82,02.
+            #
+            # DGS2 de FRED es la serie oficial y lleva aquí todo el tiempo:
+            # este mismo bloque ya usaba fred_csv para DGS3MO y DGS10.
+            dgs2 = fred_csv('DGS2')
+            if dgs2 and dgs2[-1][1] > 0:
+                yields['Y2Y'] = round(dgs2[-1][1], 3)
+            # Sin fallback sintético: si FRED no trae el 2Y, se deja ausente --
+            # antes se aproximaba con Y3M + 0.47 (offset histórico fijo), un
+            # número inventado con la misma forma que uno real.
 
             dgs3m = fred_csv('DGS3MO')
             if dgs3m and dgs3m[-1][1] > 0:
@@ -1918,7 +1925,12 @@ def get_fed_macro() -> dict:
             return {
                 'Y3M': y3m, 'Y2Y': y2, 'Y5Y': y5, 'Y10Y': y10, 'Y30Y': y30,
                 'spread_10_2': sp10_2, 'spread_10_3m': sp10_3m,
-                'inverted': sp10_2 is not None and sp10_2 < 0,
+                # TRES estados, no dos. `inverted: False` se leía en pantalla
+                # como «curva normal, expectativas de crecimiento saludable» --
+                # un veredicto tranquilizador emitido SIN el dato, que es lo
+                # que pasaba cada día mientras el 2Y no se obtenía. Si no hay
+                # spread, no hay juicio.
+                'inverted': None if sp10_2 is None else sp10_2 < 0,
                 'history': history,
             }
         except Exception:
