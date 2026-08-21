@@ -42,7 +42,9 @@ import services.market_service as M  # noqa: E402
 FRED = {
     'DGS2':   [('2026-08-19', 4.19)],
     'DGS3MO': [('2026-08-19', 3.86)],
+    'DGS5':   [('2026-08-19', 4.35)],
     'DGS10':  [('2026-08-19', 4.65)],
+    'DGS30':  [('2026-08-19', 5.19)],
     'WALCL':  [(f'2026-0{6 + i // 4}-{1 + i:02d}', 6_700_000 + i * 100) for i in range(1, 8)],
     'WTREGEN': [('2026-08-19', 950_000)],
     'RRPONTSYD': [('2026-08-19', 0.0)],
@@ -106,9 +108,9 @@ def test_sin_2Y_la_curva_NO_se_declara_normal():
 
 
 def test_sin_10Y_tampoco_hay_veredicto():
-    """El 10Y viene de yfinance (^TNX), no de FRED: si esa fuente cae, el
-    veredicto tiene que desaparecer igual que sin el 2Y."""
-    y = _macro(precio_yf=None)["yields"]
+    """Si el 10Y no llega por ninguna de las dos vias, el veredicto tiene que
+    desaparecer igual que sin el 2Y."""
+    y = _macro(fred={'DGS10': []}, precio_yf=None)["yields"]
     assert y["Y10Y"] is None
     assert y["spread_10_2"] is None and y["inverted"] is None
 
@@ -144,3 +146,46 @@ def test_con_los_tres_datos_la_liquidez_neta_se_calcula():
     b = _macro()["balance"]
     assert b["net_liq_num"] is not None
     assert b["net_liq"].endswith("T")
+
+
+# ── Una sola fuente para toda la curva ───────────────────────────────────────
+
+def test_los_cinco_puntos_salen_de_FRED():
+    """Hasta el 21/08 el 3M y el 2Y venian de FRED y el 5Y/10Y/30Y de yfinance:
+    cinco puntos de una misma curva medidos por dos proveedores, con momentos y
+    convenciones distintas. Se notaba -- el 10Y de pantalla marcaba 4,70%
+    mientras DGS10 decia 4,65%-- y el pie del modulo afirma «Fuente: FRED»
+    para todo. Un spread entre dos puntos de proveedores distintos hereda esa
+    diferencia sin que nadie la vea."""
+    y = _macro()["yields"]
+    assert y["Y5Y"] == 4.35 and y["Y30Y"] == 5.19, "no se estan leyendo DGS5/DGS30"
+    assert set(y["fuentes"].values()) == {"FRED"}
+    assert y["curva_mixta"] is False
+
+
+def test_si_una_serie_de_FRED_falla_se_usa_el_respaldo_y_SE_DICE():
+    """Un punto de otra fuente es mejor que un hueco -- pero callarlo no. La
+    pantalla avisa de cuales no vienen de FRED."""
+    y = _macro(fred={'DGS10': []})["yields"]
+    assert y["Y10Y"] == 4.65, "no ha tirado del respaldo de yfinance"
+    assert y["fuentes"]["Y10Y"] == "yfinance"
+    assert y["fuentes"]["Y2Y"] == "FRED"
+    assert y["curva_mixta"] is True
+
+
+def test_el_2Y_no_tiene_respaldo_en_yfinance_a_proposito():
+    """Los simbolos que se probaban (^TU, SHY) devuelven PRECIOS, no tipos: no
+    sirvieron nunca. Volver a colgar el 2Y de ahi seria repetir el fallo."""
+    y = _macro(fred={'DGS2': []})["yields"]
+    assert y["Y2Y"] is None, (
+        "el 2Y ha salido de yfinance: esos simbolos devuelven precios de un "
+        "futuro y de un ETF, no un tipo de interes")
+
+
+def test_la_pantalla_avisa_cuando_la_curva_mezcla_proveedores():
+    ruta = os.path.join(os.path.dirname(__file__), "..", "..", "frontend", "pages", "market.js")
+    with open(ruta, encoding="utf-8") as fh:
+        fuente = fh.read()
+    assert "no viene de FRED" in fuente, (
+        "la pantalla no dice nada cuando un punto de la curva sale de otro "
+        "proveedor")

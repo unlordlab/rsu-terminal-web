@@ -1879,45 +1879,50 @@ def get_fed_macro() -> dict:
 
     def _fetch_yields():
         try:
-            yields = {}
-            syms = {'Y3M': '^IRX', 'Y5Y': '^FVX', 'Y10Y': '^TNX', 'Y30Y': '^TYX'}
-            for key, sym in syms.items():
+            # UNA SOLA FUENTE PARA LA CURVA ENTERA. Hasta el 21/08/2026 el 3M y
+            # el 2Y salían de FRED y el 5Y/10Y/30Y de yfinance (^FVX, ^TNX,
+            # ^TYX): cinco puntos de una misma curva medidos por dos
+            # proveedores distintos, con momentos y convenciones distintas. Se
+            # notaba -- el 10Y de la pantalla marcaba 4,70% mientras DGS10 decía
+            # 4,65%-- y además el pie del módulo afirma «Fuente: FRED» para
+            # todo. Un spread calculado entre dos puntos de proveedores
+            # distintos hereda esa diferencia sin que nadie lo vea.
+            #
+            # FRED publica las cinco a vencimiento constante y con la misma
+            # fecha (comprobado: 3,86 / 4,19 / 4,35 / 4,65 / 5,19 el 19/08).
+            SERIES_FRED = {'Y3M': 'DGS3MO', 'Y2Y': 'DGS2', 'Y5Y': 'DGS5',
+                           'Y10Y': 'DGS10', 'Y30Y': 'DGS30'}
+            # yfinance queda como RESPALDO por punto: si una serie de FRED no
+            # llega, es mejor un punto de otra fuente que un hueco -- pero se
+            # apunta de dónde vino y la pantalla lo dice.
+            SIMBOLOS_YF = {'Y3M': '^IRX', 'Y5Y': '^FVX', 'Y10Y': '^TNX', 'Y30Y': '^TYX'}
+
+            yields, fuentes = {}, {}
+            for key, sid in SERIES_FRED.items():
+                datos = fred_csv(sid)
+                if datos and datos[-1][1] > 0:
+                    yields[key]  = round(datos[-1][1], 3)
+                    fuentes[key] = 'FRED'
+
+            for key, sym in SIMBOLOS_YF.items():
+                if key in yields:
+                    continue
                 try:
                     h = yf.Ticker(sym).history(period='5d')
                     if not h.empty:
-                        yields[key] = round(float(h['Close'].iloc[-1]), 3)
-                except Exception:
-                    pass
-            # EL 2Y, DE FRED. El comentario anterior decía «símbolo correcto» y
-            # probaba ^TU y SHY: ^TU es el FUTURO del bono a 2 años y SHY un
-            # ETF -- los dos devuelven un PRECIO (SHY ~82), no un tipo. El
-            # guard `1.0 < v < 10.0` los rechazaba, que estaba bien, pero el
-            # efecto neto es que **el 2Y nunca se obtuvo**: ni aparecía en la
-            # curva ni se podía calcular el spread 10Y-2Y, el más mirado de
-            # todos. Comprobado el 21/08/2026: ^TU deslistado en yfinance y
-            # SHY devolviendo 82,02.
-            #
-            # DGS2 de FRED es la serie oficial y lleva aquí todo el tiempo:
-            # este mismo bloque ya usaba fred_csv para DGS3MO y DGS10.
-            dgs2 = fred_csv('DGS2')
-            if dgs2 and dgs2[-1][1] > 0:
-                yields['Y2Y'] = round(dgs2[-1][1], 3)
-            # Sin fallback sintético: si FRED no trae el 2Y, se deja ausente --
-            # antes se aproximaba con Y3M + 0.47 (offset histórico fijo), un
-            # número inventado con la misma forma que uno real.
+                        yields[key]  = round(float(h['Close'].iloc[-1]), 3)
+                        fuentes[key] = 'yfinance'
+                except Exception as e:
+                    print(f"[Market] Sin {key} por yfinance ({sym}): {type(e).__name__}: {e}")
 
-            dgs3m = fred_csv('DGS3MO')
-            if dgs3m and dgs3m[-1][1] > 0:
-                yields['Y3M'] = round(dgs3m[-1][1], 3)
+            # El 2Y NO tiene respaldo en yfinance a propósito: los símbolos que
+            # se probaban (^TU, SHY) devuelven PRECIOS, no tipos, así que nunca
+            # sirvieron. Ver el hallazgo del 21/08. Y tampoco se sintetiza con
+            # Y3M + 0.47 como se hacía antes: un número inventado con la misma
+            # forma que uno real.
 
-            # .get(key) sin default -- un yield ausente debe llegar como
-            # None al JSON final, no como 0 (antes .get(key, 0) fabricaba
-            # un "0%" silencioso para cualquier fuente que hubiera fallado).
-            y10 = yields.get('Y10Y')
-            y2  = yields.get('Y2Y')
-            y3m = yields.get('Y3M')
-            y5  = yields.get('Y5Y')
-            y30 = yields.get('Y30Y')
+            y10, y2 = yields.get('Y10Y'), yields.get('Y2Y')
+            y3m, y5, y30 = yields.get('Y3M'), yields.get('Y5Y'), yields.get('Y30Y')
             sp10_2  = round(y10 - y2, 3) if y10 and y2 else None
             sp10_3m = round(y10 - y3m, 3) if y10 and y3m else None
             dgs10 = fred_csv('DGS10')
@@ -1931,6 +1936,8 @@ def get_fed_macro() -> dict:
                 # que pasaba cada día mientras el 2Y no se obtenía. Si no hay
                 # spread, no hay juicio.
                 'inverted': None if sp10_2 is None else sp10_2 < 0,
+                'fuentes': fuentes,
+                'curva_mixta': any(v != 'FRED' for v in fuentes.values()),
                 'history': history,
             }
         except Exception:

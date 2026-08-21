@@ -2286,6 +2286,17 @@ async function loadFedMacro(el) {
             : (inverted
                 ? 'Curva invertida — históricamente precede recesión 6-18 meses'
                 : 'Curva normal — expectativas de crecimiento económico saludable');
+        // De dónde viene cada punto. Lo normal es que la curva entera salga de
+        // FRED (misma fecha, misma convención de vencimiento constante); si
+        // alguna serie falla y hay que tirar del respaldo de yfinance, el
+        // spread mezcla proveedores y eso hay que decirlo, no esconderlo.
+        const fuentes = (y.fuentes && Object.entries(y.fuentes)) || [];
+        const noFred  = fuentes.filter(([, f]) => f !== 'FRED').map(([k]) => k);
+        const notaFuente = noFred.length
+            ? '<div style="color:#ffb800;font-size:10px;margin-top:6px;">⚠ '
+              + esc(noFred.join(', ')) + ' no viene de FRED sino de yfinance: '
+              + 'esos puntos pueden ser de otro momento del día que el resto de la curva</div>'
+            : '';
 
         const yieldPoints = [
             { label: '3M', val: y.Y3M },
@@ -2324,6 +2335,7 @@ async function loadFedMacro(el) {
             + '</div>'
             + '<div style="background:var(--color-bg,#0a0a0a);border:1px solid var(--color-border);border-radius:var(--radius);padding:0.75rem;">'
             + '<div style="color:var(--color-muted);font-size:10px;line-height:1.6;">' + spDesc + '</div>'
+            + notaFuente
             + '</div>'
             + '</div>'
 
