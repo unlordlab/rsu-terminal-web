@@ -2022,7 +2022,7 @@ async function loadBriefing(el) {
                     window.Tooltip.openModal({ title: 'RESUMEN DE MERCADO DIARIO — Análisis completo', long: data.content });
                 } else {
                     // Fallback: inject modal directly
-                    openBriefingModal(data.content, html);
+                    openBriefingModal(data.content, html, data);
                 }
             });
         }
@@ -2031,7 +2031,7 @@ async function loadBriefing(el) {
     }
 }
 
-function openBriefingModal(rawContent, htmlContent) {
+function openBriefingModal(rawContent, htmlContent, data) {
     let overlay = document.getElementById('briefing-modal-overlay');
     if (!overlay) {
         overlay = document.createElement('div');
@@ -2060,7 +2060,35 @@ function openBriefingModal(rawContent, htmlContent) {
         overlay.addEventListener('click', e => { if (e.target === overlay) close(); });
         document.addEventListener('keydown', onKey);
     }
-    document.getElementById('briefing-modal-body').innerHTML = htmlContent;
+    // ¿Acierta el sesgo? Se publica una postura cada mañana; enseñar si se
+    // cumple es lo mínimo que se le exige a cualquier otra herramienta.
+    //
+    // NO SE PINTA HASTA QUE HAYA MUESTRA. Con menos de 30 días evaluados, un
+    // «acierta el 70%» sacado de siete sesiones es justo el tipo de número que
+    // esta terminal quita, no añade. El backend manda `suficiente` ya
+    // calculado; aquí solo se decide pintarlo.
+    const st = data && data.sesgo_track;
+    let pie = '';
+    if (st && st.horizontes) {
+        const partes = ['1', '5']
+            .map(h => [h, st.horizontes[h]])
+            .filter(([, b]) => b && b.suficiente)
+            .map(([h, b]) => `a ${h} ${h === '1' ? 'sesión' : 'sesiones'}: <strong style="color:var(--color-text);">${esc(b.aciertos_pct)}%</strong> de aciertos sobre ${esc(b.n)} días`);
+        if (partes.length) {
+            pie = `<div style="margin-top:1.25rem;padding-top:0.75rem;border-top:1px solid var(--color-border);font-size:11px;color:var(--color-muted);">
+                     Qué tal acierta este sesgo — ${partes.join(' · ')}. Se mide contra el S&P 500;
+                     los días de sesgo neutral no se cuentan, porque no hay dirección que juzgar.
+                   </div>`;
+        }
+    }
+    // Y con qué se escribió, si salió recortado por el límite de tokens.
+    if (data && data.nivel_recorte && data.nivel_recorte !== 'normal') {
+        pie += `<div style="margin-top:0.5rem;font-size:10px;color:#ffb800;">
+                  ⚠ Generado en modo «${esc(data.nivel_recorte)}»: el prompt no cabía en el límite del modelo,
+                  así que se escribió con menos titulares y el calendario recortado.
+                </div>`;
+    }
+    document.getElementById('briefing-modal-body').innerHTML = htmlContent + pie;
     document.body.style.overflow = 'hidden';
 }
 async function loadLiquidity(el) {

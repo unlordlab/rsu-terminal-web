@@ -34,6 +34,13 @@ MODEL      = "qwen/qwen3.6-27b"
 # pasados. Se poda a los últimos BIAS_HISTORY_DAYS automáticamente, así que
 # el tamaño nunca crece sin límite.
 BIAS_HISTORY_FILE = "bias_history.json"
+# Seguimiento del sesgo: ¿acierta el briefing? APPEND-ONLY, SIN PODA -- y esa
+# es la diferencia con BIAS_HISTORY_FILE, que se recorta a 14 días porque es
+# contexto narrativo para el prompt. Medir sobre una ventana que se poda es no
+# poder acumular muestra nunca: misma lección que DATOS_IRREPRODUCIBLES_PLAN.
+BIAS_TRACKING_FILE = "bias_tracking.json"
+# Por debajo de esto el porcentaje no se presenta como conclusión.
+MIN_MUESTRA_SESGO  = 30
 BIAS_HISTORY_DAYS = 14
 
 # Historial de varios días con el TEXTO COMPLETO del briefing (no solo el
@@ -1725,6 +1732,28 @@ def get_bias_history() -> list:
         return []
 
 
+def get_bias_tracking() -> list:
+    """Seguimiento acumulado del sesgo. Vive en el mismo Gist que el briefing,
+    en su propio fichero: no se poda nunca."""
+    if not GIST_TOKEN:
+        return []
+    try:
+        r = requests.get(
+            f"https://api.github.com/gists/{GIST_ID}",
+            headers={"Authorization": f"token {GIST_TOKEN}", "Accept": "application/vnd.github+json"},
+            timeout=10,
+        )
+        if r.status_code != 200:
+            print(f"⚠️  No se pudo leer el seguimiento del sesgo: HTTP {r.status_code}")
+            return []
+        contenido = r.json()["files"].get(BIAS_TRACKING_FILE, {}).get("content", "")
+        datos = json.loads(contenido) if contenido else []
+        return datos if isinstance(datos, list) else []
+    except Exception as e:
+        print(f"⚠️  No se pudo leer el seguimiento del sesgo: {type(e).__name__}: {e}")
+        return []
+
+
 def _append_bias(history: list, date: str, bias: str) -> list:
     """Añade la entrada de hoy y poda a los últimos BIAS_HISTORY_DAYS — así
     el fichero nunca crece sin límite, siempre son como mucho ~14 líneas."""
@@ -1741,8 +1770,71 @@ def format_bias_history(history: list) -> str:
 
 # ── GUARDAR EN GIST ───────────────────────────────────────────────────────────
 
+def evaluar_sesgos(tracking: list, bias_history: list, cierres) -> list:
+    """¿Acertó el sesgo de cada día? Devuelve el seguimiento actualizado.
+
+    `cierres` es una serie de cierres del S&P 500 indexada por fecha.
+
+    REGLAS, y todas nacen de lo aprendido midiendo Options Flow:
+    - NEUTRAL no se evalúa: no hay dirección que juzgar, y contarlo como
+      fallo (o como acierto) inventaría un resultado.
+    - Un día al que aún no le han pasado las sesiones del horizonte queda
+      PENDIENTE, no cuenta como fallo.
+    - Nada se reescribe: un resultado ya calculado no cambia.
+    """
+    import pandas as pd
+    por_fecha = {t["fecha"]: t for t in tracking}
+    for h in bias_history:
+        f = h.get("fecha") or h.get("date")
+        if f and f not in por_fecha:
+            por_fecha[f] = {"fecha": f, "sesgo": (h.get("sesgo") or h.get("bias") or "N/D").upper()}
+
+    for t in por_fecha.values():
+        if t["sesgo"] not in ("ALCISTA", "BAJISTA"):
+            continue
+        if cierres is None or len(cierres) == 0:
+            continue
+        idx = cierres.index
+        posteriores = idx[idx >= pd.Timestamp(t["fecha"])]
+        if len(posteriores) == 0:
+            continue
+        pos = idx.get_loc(posteriores[0])
+        for dias in (1, 5):
+            campo = f"ret_{dias}d"
+            if t.get(campo) is not None:
+                continue
+            if pos + dias >= len(cierres):
+                continue          # todavía no ha pasado: pendiente, no fallo
+            p0, p1 = float(cierres.iloc[pos]), float(cierres.iloc[pos + dias])
+            if p0 <= 0:
+                continue
+            ret = round((p1 - p0) / p0 * 100, 2)
+            t[campo] = ret
+            t[f"acierto_{dias}d"] = bool((ret > 0) == (t["sesgo"] == "ALCISTA"))
+    return sorted(por_fecha.values(), key=lambda x: x["fecha"])
+
+
+def resumen_sesgos(tracking: list) -> dict:
+    """Aciertos con la muestra siempre al lado. Por debajo de MIN_MUESTRA_SESGO
+    no se presenta como una conclusión: un 70% sobre 7 días no es un 70%."""
+    evaluables = [t for t in tracking if t.get("sesgo") in ("ALCISTA", "BAJISTA")]
+    out = {"dias_registrados": len(tracking), "horizontes": {}}
+    for dias in (1, 5):
+        con = [t for t in evaluables if t.get(f"acierto_{dias}d") is not None]
+        aciertos = sum(1 for t in con if t[f"acierto_{dias}d"])
+        out["horizontes"][str(dias)] = {
+            "n": len(con),
+            "aciertos_pct": round(aciertos / len(con) * 100, 1) if con else None,
+            "suficiente": len(con) >= MIN_MUESTRA_SESGO,
+        }
+    out["pendientes"] = len(evaluables) - len(
+        [t for t in evaluables if t.get("acierto_5d") is not None])
+    out["neutrales"] = len(tracking) - len(evaluables)
+    return out
+
+
 def save_to_gist(content: str, market_data: dict, bias: str, bias_history: list, briefing_history: list,
-                  nivel_usado: dict = None, diag: dict = None):
+                  nivel_usado: dict = None, diag: dict = None, bias_tracking: list = None):
     if not GIST_TOKEN:
         raise ValueError("GIST_TOKEN no configurado")
 
@@ -1768,6 +1860,24 @@ def save_to_gist(content: str, market_data: dict, bias: str, bias_history: list,
     }
 
     updated_history = _append_bias(bias_history, market_data["date"], bias or "N/D")
+
+    # Seguimiento del sesgo: ¿acierta? Se evalúa con los cierres del S&P 500 y
+    # se guarda aparte, sin podar. Un fallo aquí no puede tumbar la publicación
+    # del briefing, que es lo que la gente lee.
+    tracking_actualizado = bias_tracking or []
+    try:
+        import yfinance as _yf
+        hist = _yf.Ticker("^GSPC").history(period="6mo")
+        cierres = hist["Close"] if not hist.empty else None
+        if cierres is not None and getattr(cierres.index, "tz", None) is not None:
+            cierres.index = cierres.index.tz_localize(None)
+        tracking_actualizado = evaluar_sesgos(tracking_actualizado, updated_history, cierres)
+        r_sesgo = resumen_sesgos(tracking_actualizado)
+        payload["sesgo_track"] = r_sesgo
+        print(f"📊 Sesgo: {r_sesgo['horizontes']['1']['n']} días evaluados a 1 sesión, "
+              f"{r_sesgo['horizontes']['1']['aciertos_pct']}% de aciertos")
+    except Exception as e:
+        print(f"⚠️  Seguimiento del sesgo no actualizado: {type(e).__name__}: {e}")
     updated_briefing_history = _append_briefing_history(briefing_history, market_data["date"], content, bias)
 
     r = requests.patch(
@@ -1786,6 +1896,9 @@ def save_to_gist(content: str, market_data: dict, bias: str, bias_history: list,
                 },
                 BRIEFING_HISTORY_FILE: {
                     "content": json.dumps(updated_briefing_history, ensure_ascii=False, indent=2)
+                },
+                BIAS_TRACKING_FILE: {
+                    "content": json.dumps(tracking_actualizado, ensure_ascii=False, indent=2)
                 }
             }
         },
@@ -1892,7 +2005,9 @@ def main():
         )
 
     print("💾 Guardando en GitHub Gist...")
-    save_to_gist(briefing, market_data, bias, bias_history, briefing_history, nivel_usado, diag)
+    bias_tracking = get_bias_tracking()
+    save_to_gist(briefing, market_data, bias, bias_history, briefing_history, nivel_usado, diag,
+                 bias_tracking=bias_tracking)
 
     print("✅ Briefing completado")
     print(f"📝 Palabras generadas: {len(briefing.split())}")

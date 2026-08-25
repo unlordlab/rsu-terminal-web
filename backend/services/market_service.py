@@ -1392,6 +1392,30 @@ def get_nightly_briefing():
             raise ValueError(f"HTTP {r.status_code}")
         gist        = r.json()
         files       = gist.get("files", {})
+        # Seguimiento del sesgo: ¿acierta el briefing? Vive en su propio
+        # fichero del mismo Gist (bias_tracking.json, sin podar). Se lee aquí
+        # porque es donde el usuario ve el briefing -- decir cada mañana lo
+        # que va a pasar y no enseñar nunca el acierto es justo lo que este
+        # proyecto le reprocha a las demás herramientas.
+        sesgo_track = None
+        try:
+            crudo = files.get("bias_tracking.json", {}).get("content", "")
+            if crudo:
+                filas = _json.loads(crudo)
+                evaluables = [t for t in filas if t.get("sesgo") in ("ALCISTA", "BAJISTA")]
+                horizontes = {}
+                for dias in (1, 5):
+                    con = [t for t in evaluables if t.get(f"acierto_{dias}d") is not None]
+                    ac = sum(1 for t in con if t[f"acierto_{dias}d"])
+                    horizontes[str(dias)] = {
+                        "n": len(con),
+                        "aciertos_pct": round(ac / len(con) * 100, 1) if con else None,
+                        # Por debajo de 30 no se presenta como conclusión.
+                        "suficiente": len(con) >= 30,
+                    }
+                sesgo_track = {"dias_registrados": len(filas), "horizontes": horizontes}
+        except Exception as e:
+            print(f"[Briefing] Seguimiento del sesgo ilegible: {type(e).__name__}: {e}")
         # IMPORTANTE: coger explícitamente "briefing.json" por nombre, no "el
         # primer fichero" — desde que daily_briefing.py también guarda
         # bias_history.json en el MISMO Gist, coger el primero a ciegas podía
@@ -1401,6 +1425,7 @@ def get_nightly_briefing():
         if not raw_content:
             raise ValueError("Briefing vacío")
         content   = raw_content
+        parsed    = {}
         date_str  = ""
         model_str = ""
         bias_str  = ""
@@ -1424,7 +1449,16 @@ def get_nightly_briefing():
                 updated_str = mad_dt.strftime("%d %b %Y · %H:%M")
             except Exception:
                 updated_str = updated_at[:10]
-        result = {"content": content, "date": date_str, "model": model_str, "bias": bias_str, "updated": updated_str, "timestamp": get_timestamp(), "ok": True}
+        result = {"content": content, "date": date_str, "model": model_str,
+                  "bias": bias_str, "updated": updated_str,
+                  "timestamp": get_timestamp(), "ok": True,
+                  # ¿Acierta el sesgo? Se publica una postura cada mañana y
+                  # hasta ahora nadie había medido si se cumple.
+                  "sesgo_track": sesgo_track,
+                  # Con qué se escribió: si el prompt no cupo en el límite de
+                  # tokens, el modelo vio menos titulares y un calendario
+                  # podado. Ya se guardaba en el Gist y no lo veía nadie.
+                  "nivel_recorte": (parsed.get("diagnostico") or {}).get("nivel_recorte")}
         cache.set("market:briefing", result, TTL["briefing"])
         return result
     except Exception as e:
