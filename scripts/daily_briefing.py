@@ -42,6 +42,40 @@ BIAS_HISTORY_DAYS = 14
 # postura más allá de "ayer". briefing.json (un solo día, el más reciente)
 # se mantiene sin cambios porque backend/services/market_service.py
 # ::get_nightly_briefing() lo lee por nombre exacto para el frontend.
+# Qué eventos de fuera de EE.UU. entran en el calendario del briefing. Una
+# decisión del BCE o del Banco de Japón mueve los futuros de Wall Street antes
+# de la apertura; un IPC australiano a las 21:30 ET no. Sin esta lista pasaba
+# cualquier cosa de impacto "High" del feed, y el 25/08/2026 el briefing abrió
+# con el IPC de AUSTRALIA presentado como el de Estados Unidos.
+PAISES_QUE_MUEVEN_WALL_STREET = {"EUR", "GBP", "JPY", "CNY"}
+
+
+def evento_relevante(item: dict, hoy: str) -> bool:
+    """¿Este evento del calendario le importa a quien abre Wall Street?
+
+    Fuera vive dentro de get_market_data(), que es una función de red enorme y
+    no se puede probar sin salir a internet -- y una regla que solo existe
+    dentro de algo intestable acaba comprobándose reescribiéndola en el test,
+    que es como se me colaron dos sabotajes el 25/08."""
+    if item.get("impact") not in ("High", "Medium"):
+        return False
+    if hoy not in item.get("date", ""):
+        return False
+    pais = (item.get("country") or "").upper()
+    if pais == "USD":
+        return True
+    return pais in PAISES_QUE_MUEVEN_WALL_STREET and item.get("impact") == "High"
+
+
+def hora_et(item: dict) -> str:
+    """Hora del evento en Nueva York. `date[-8:-3]` sobre
+    "2026-08-25T21:30:00-04:00" devolvía "0-04:" -- basura rotulada «ET»."""
+    try:
+        return datetime.fromisoformat(item["date"]).astimezone(
+            ZoneInfo("America/New_York")).strftime("%H:%M")
+    except Exception:
+        return "N/D"
+
 BRIEFING_HISTORY_FILE = "briefing_history.json"
 BRIEFING_HISTORY_DAYS = 3
 # Presupuesto TOTAL de caracteres del bloque de memoria narrativa dentro del
@@ -385,15 +419,19 @@ def get_market_data() -> dict:
             today  = datetime.now().strftime("%Y-%m-%d")
             events = []
             for item in raw_events:
-                if item.get("impact") in ["High", "Medium"] and today in item.get("date", ""):
-                    events.append({
-                        "time":    item.get("date", "")[-8:-3],
-                        "event":   item.get("title", ""),
-                        "impact":  item.get("impact", ""),
-                        "actual":  item.get("actual", ""),
-                        "forecast":item.get("forecast", ""),
-                        "previous":item.get("previous", ""),
-                    })
+                if not evento_relevante(item, today):
+                    continue
+                pais = (item.get("country") or "").upper()
+                hora = hora_et(item)
+                events.append({
+                    "time":    hora,
+                    "pais":    pais,
+                    "event":   item.get("title", ""),
+                    "impact":  item.get("impact", ""),
+                    "actual":  item.get("actual", ""),
+                    "forecast":item.get("forecast", ""),
+                    "previous":item.get("previous", ""),
+                })
             # BUG CORREGIDO: antes se recortaba a events[:10] sin ordenar por
             # hora primero — en un día con muchos eventos de impacto alto/medio
             # (ej. CPI de EEUU + testimonio Fed + varios británicos el mismo
@@ -708,12 +746,21 @@ def get_rsu_breadth_signals() -> dict:
     ABI, % del S&P sobre SMA50, NH-NL) en vez de vivir aislado del resto de
     la herramienta. Lectura pública, sin necesidad de token."""
     try:
-        r = requests.get(
-            f"https://api.github.com/gists/{SCANNER_GIST_ID}",
-            timeout=10,
-            headers={"Accept": "application/vnd.github.v3+json"},
-        )
+        # CON EL TOKEN. Esta lectura iba sin autenticar, y desde un runner de
+        # GitHub Actions la API pública está limitada a 60 peticiones/hora POR
+        # IP COMPARTIDA: se come un 403 con facilidad. Cuando eso pasaba, el
+        # `return {}` mudo dejaba el briefing sin amplitud y el modelo escribía
+        # cosas como «la falta de datos de amplitud propia nos obliga a confiar
+        # en la rotación sectorial» -- diciéndole al lector que la herramienta
+        # no tiene un dato que sí calcula cada noche. Visto el 25/08/2026.
+        cabeceras = {"Accept": "application/vnd.github.v3+json"}
+        if GIST_TOKEN:
+            cabeceras["Authorization"] = f"token {GIST_TOKEN}"
+        r = requests.get(f"https://api.github.com/gists/{SCANNER_GIST_ID}",
+                         timeout=10, headers=cabeceras)
         if r.status_code != 200:
+            print(f"⚠️  Amplitud RSU no disponible: el Gist del Scanner respondió "
+                  f"HTTP {r.status_code} ({'con' if GIST_TOKEN else 'SIN'} token)")
             return {}
         content = r.json()["files"][SCANNER_GIST_FILE]["content"]
         gist = json.loads(content)
@@ -1018,7 +1065,9 @@ CONVICCIÓN CALIBRADA: Evita tanto las afirmaciones categóricas ("esto va a pas
 
 REGLAS ANTI-ALUCINACIÓN — ESTRICTAS, SIN EXCEPCIONES:
 1. No inventes datos, precios, ni titulares que no estén en los bloques de abajo. Si falta un dato, dilo o simplemente no lo menciones — no rellenes el hueco con algo inventado. No inventes noticias que no estén en la lista de titulares proporcionada. De los titulares recibidos, ignora cualquiera que no tenga impacto financiero/económico/geopolítico real — un feed de noticias generalista trae de todo, tu criterio es filtrar lo irrelevante, no mencionarlo por completar espacio.
-2. No asumas que hoy hay una publicación de datos macro "típica" (payrolls, IPC, etc.) salvo que aparezca en el CALENDARIO ECONÓMICO de abajo con fecha confirmada — un dato que "suele publicarse sobre estas fechas" no es lo mismo que un dato confirmado en el calendario proporcionado.
+2. No asumas que hoy hay una publicación de datos macro "típica" (payrolls, IPC, etc.) salvo que aparezca en el CALENDARIO ECONÓMICO de abajo con fecha confirmada — un dato que "suele publicarse sobre estas fechas" no es lo mismo que un dato confirmado en el calendario proporcionado. **Mira la columna País**: un IPC de AUD o de EUR no es el de Estados Unidos y no manda en Wall Street; dilo con su país. No inventes el MES de referencia de un dato (el calendario no lo dice) ni su hora si pone N/D.
+2b. Si un dato de abajo viene como "Dato no disponible", puedes decir que hoy no lo tienes, pero NO afirmes que la herramienta carece de él ni expliques por qué falta: no lo sabes.
+2c. Tu sesgo final tiene que ser coherente con el cuerpo: si mantienes sesgo bajista, no hables a la vez de invalidar "tu visión de rebote".
 3. Materias primas (oro, petróleo): los precios de arriba son de futuro continuo (front month), no spot ni un contrato con vencimiento específico — no inventes un código de contrato concreto (p.ej. "CLQ26"), refiérete a ellos como "el futuro" o "el precio" del activo.
 4. VIX: si lo citas fuera del horario de mercado (pre-market/after-hours), usa el dato de la sesión anterior tal cual se te proporciona, sin afirmar que es el "settlement oficial de las 16:15 ET" salvo certeza.
 5. Yields de bonos: la variación viene ya calculada EN PUNTOS BÁSICOS (pb) junto al nivel y al cierre previo. Cítala tal cual, en pb, incluso si es un movimiento pequeño o plano. NO la conviertas a porcentaje ni digas que el bono "cayó un X%": un yield que pasa del 4,70% al 4,64% ha bajado 6 pb, no un 1,3%.
@@ -1240,9 +1289,12 @@ def build_prompt(market_data: dict, news: list, major_headlines: list, earnings:
         # ordenar), así que recortar por la cola quita lo menos relevante.
         eventos = eventos[:max_calendario]
     for ev in eventos:
-        calendar_lines += f"| {ev['time']} ET | {ev['event']} | {ev.get('forecast','N/D')} | {ev.get('previous','N/D')} | {ev['impact']} |\n"
+        calendar_lines += (
+            f"| {ev['time']} ET | {ev.get('pais', '?')} | {ev['event']} | "
+            f"{ev.get('forecast', 'N/D')} | {ev.get('previous', 'N/D')} | {ev['impact']} |\n"
+        )
     if not calendar_lines:
-        calendar_lines = "| — | Sin eventos de alto impacto hoy | — | — | — |\n"
+        calendar_lines = "| — | — | Sin eventos de alto impacto para Wall Street hoy | — | — | — |\n"
 
     # Fear & Greed
     fg = d.get("fear_greed")
@@ -1417,8 +1469,8 @@ INSIDER FLOW — CLUSTERS DE COMPRA RECIENTES:
 |-----------|------------------|-------------|--------|------------|
 {macro_lines}
 CALENDARIO ECONÓMICO HOY:
-| Hora | Evento | Consenso | Previo | Impacto |
-|------|--------|----------|--------|---------|
+| Hora (ET) | País | Evento | Consenso | Previo | Impacto |
+|------|------|--------|----------|--------|---------|
 {calendar_lines}
 
 EARNINGS NOTABLES PRÓXIMAS 48H:
