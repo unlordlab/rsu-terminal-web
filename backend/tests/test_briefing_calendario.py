@@ -152,3 +152,94 @@ def test_la_amplitud_se_pide_CON_token_y_el_fallo_se_dice():
             contexto = " ".join(lineas[max(0, i - 3):i + 1])
             assert "print" in contexto, "el fallo de la amplitud se sigue tragando en silencio"
             break
+
+
+# ── Los numeros de amplitud, con su escala ───────────────────────────────────
+#
+# EL CASO, 26/08/2026. El briefing escribio: «El Oscilador McClellan RSU esta
+# en -26,7, lo que indica que la subida del indice no esta respaldada por una
+# participacion amplia», y lo uso como pilar de su sesgo bajista.
+#
+# Los tres numeros eran EXACTOS (verificados recalculandolos desde precios:
+# 59,1% frente al 59,2% del Gist, McClellan -26,69 frente a -26,70). El
+# problema era otro:
+#
+# 1. -26,7 es NEUTRO segun la propia terminal (market_service: alcista >70,
+#    bajista <-70). Al modelo le llegaba el numero DESNUDO, sin escala, asi que
+#    se invento la lectura -- y le salio la contraria a la que enseña la pagina
+#    de Market. Dos partes del mismo producto diciendo lo opuesto del mismo
+#    numero el mismo dia.
+#
+# 2. Su conclusion era CORRECTA pero la prueba no: esa sesion la amplitud del
+#    universo combinado fue POSITIVA (+141 neto). La prueba de verdad la tenia
+#    al lado y no la recibia -- del S&P 500 solo subieron 206 de 496 (41,5%)
+#    mientras el indice ganaba un 0,32%. El Gist ya separa `breadth_sp500` y
+#    `breadth_russell`; simplemente no viajaban al prompt.
+
+def _gist_falso(mcclellan_neto):
+    """Un Gist del Scanner minimo: 40+ sesiones para que salga McClellan."""
+    import json
+    from unittest.mock import MagicMock
+    hist = [{"date": f"2026-06-{d:02d}", "advances": 1000 + mcclellan_neto,
+             "declines": 1000, "pct_above_sma50": 59.2, "new_highs": 89,
+             "new_lows": 15} for d in range(1, 29)] * 2
+    contenido = {
+        "stocks": {"AAPL": {"above_sma50": True}},
+        "breadth_history": hist,
+        "breadth_sp500": [{"date": "2026-08-25", "advances": 206, "declines": 290,
+                           "pct_above_sma50": 59.4}],
+        "breadth_russell": [{"date": "2026-08-25", "advances": 1059, "declines": 834}],
+        "universe_size": 498,
+    }
+    r = MagicMock(status_code=200)
+    r.json.return_value = {"files": {D.SCANNER_GIST_FILE: {"content": json.dumps(contenido)}}}
+    return r
+
+
+def _amplitud(neto):
+    from unittest.mock import patch
+    with patch.object(D.requests, "get", return_value=_gist_falso(neto)):
+        return D.get_rsu_breadth_signals()
+
+
+def test_el_mcclellan_viaja_con_su_banda_no_desnudo():
+    """EL test. -26,7 es NEUTRO para la terminal, y el modelo lo leyo como
+    bajista porque nadie le dijo la escala."""
+    b = _amplitud(0)          # neto 0 -> McClellan ~0, zona neutra
+    assert b["mcclellan_estado"] == "NEUTRO", b.get("mcclellan")
+
+
+def test_las_bandas_son_las_MISMAS_que_usa_la_terminal():
+    """Si aqui se usara otro umbral, la pagina de Market y el briefing volverian
+    a decir cosas distintas del mismo numero."""
+    import re
+    ruta = os.path.join(os.path.dirname(__file__), "..", "services", "market_service.py")
+    with open(ruta, encoding="utf-8") as fh:
+        fuente = fh.read()
+    assert 'mcclellan > 70' in fuente and 'mcclellan < -70' in fuente
+    import inspect
+    mio = inspect.getsource(D.get_rsu_breadth_signals)
+    assert "> 70" in mio and "< -70" in mio, (
+        "el briefing usa unos umbrales de McClellan distintos a los de la terminal")
+
+
+def test_los_avances_del_S_and_P_llegan_por_separado():
+    """La prueba que el briefing necesitaba y no recibia."""
+    b = _amplitud(0)
+    assert b["sp500_advances"] == 206 and b["sp500_declines"] == 290
+    assert b["sp500_pct_al_alza"] == 41.5, (
+        "sin esto el modelo solo ve el agregado de 2.389 valores y no puede "
+        "decir que el S&P subio con el 41% de sus componentes en rojo")
+
+
+def test_tambien_llegan_los_avances_del_universo_completo():
+    b = _amplitud(0)
+    assert b["advances"] is not None and b["declines"] is not None
+
+
+def test_el_prompt_pinta_la_banda_y_los_avances():
+    """Que la funcion los devuelva no sirve si no llegan al texto."""
+    import inspect
+    fuente = inspect.getsource(D.build_prompt)
+    assert "mcclellan_estado" in fuente, "la banda no se pinta en el prompt"
+    assert "sp500_advances" in fuente, "los avances del S&P no se pintan en el prompt"

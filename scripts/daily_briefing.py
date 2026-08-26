@@ -802,8 +802,41 @@ def get_rsu_breadth_signals() -> dict:
                 abi = round(abs(adv - dec) / (adv + dec) * 100, 1)
             universo_amplitud = adv + dec if (adv is not None and dec is not None) else None
 
+        # AVANCES Y DESCENSOS DEL DÍA, y separados por índice. El Gist ya los
+        # trae en `breadth_sp500` y `breadth_russell` y no viajaban al prompt:
+        # el modelo solo veía el agregado de los ~2.389 valores. El 26/08/2026
+        # eso le costó el argumento -- escribió «el S&P sube pero la amplitud
+        # es débil» y lo apoyó en el McClellan, que ESA sesión venía de un día
+        # de amplitud POSITIVA (+141 neto). La prueba de verdad la tenía al
+        # lado y no la recibía: del S&P 500 solo subieron 206 de 496 (41,5%)
+        # mientras el índice ganaba un 0,32%.
+        sp = (gist.get("breadth_sp500") or [{}])[-1]
+        sp_adv, sp_dec = sp.get("advances"), sp.get("declines")
+        sp_pct = (round(sp_adv / (sp_adv + sp_dec) * 100, 1)
+                  if sp_adv is not None and sp_dec is not None and (sp_adv + sp_dec) else None)
+
+        # LA BANDA DEL McCLELLAN, con los mismos umbrales que usa la terminal
+        # (market_service.py: alcista >70, bajista <-70, en medio NEUTRO). Sin
+        # ellos el modelo recibe un número desnudo y se inventa la escala: leyó
+        # -26,7 como prueba bajista cuando la propia terminal lo clasifica
+        # NEUTRO. Dos partes del mismo producto diciendo lo contrario.
+        if mcclellan is None:
+            mc_estado = None
+        elif mcclellan > 70:
+            mc_estado = "ALCISTA"
+        elif mcclellan < -70:
+            mc_estado = "BAJISTA"
+        else:
+            mc_estado = "NEUTRO"
+
         return {
             "pct_above_sma50": pct_above_sma50,
+            "advances": adv,
+            "declines": dec,
+            "sp500_advances": sp_adv,
+            "sp500_declines": sp_dec,
+            "sp500_pct_al_alza": sp_pct,
+            "mcclellan_estado": mc_estado,
             "new_highs": new_highs,
             "new_lows": new_lows,
             "nh_nl": (new_highs - new_lows) if (new_highs is not None and new_lows is not None) else None,
@@ -1364,11 +1397,16 @@ def build_prompt(market_data: dict, news: list, major_headlines: list, earnings:
         abi_s  = f"{breadth['abi']}%" if breadth.get('abi') is not None else "N/D"
         rsu_breadth_str = (
             f"% S&P 500 sobre SMA50: {pct_s} | "
-            f"Oscilador McClellan RSU (real, sobre S&P 500 + Russell 2000): {mc_s} | "
-            f"ABI — Absolute Breadth Index (dispersión de mercado, NO direccional — no confundir con McClellan): {abi_s} "
-            f"(≥40% = mucha dispersión/actividad interna, propio de capitulación o cambios de régimen; ≤15% = mercado apagado) | "
+            f"Oscilador McClellan RSU (S&P 500 + Russell 2000): {mc_s}"
+            f"{(' (' + breadth['mcclellan_estado'] + '; alcista >+70, bajista <-70)') if breadth.get('mcclellan_estado') else ''} | "
+            f"ABI: {abi_s} (dispersión, NO direccional: ≤15% mercado apagado, ≥40% capitulación o cambio de régimen) | "
             f"New Highs−New Lows: {breadth.get('nh_nl', 'N/D')} "
-            f"({breadth.get('new_highs', '?')} nuevos máximos de 52 sem. vs {breadth.get('new_lows', '?')} nuevos mínimos, sobre S&P 500 + Russell 2000)"
+            f"({breadth.get('new_highs', '?')} vs {breadth.get('new_lows', '?')}) | "
+            # Lo que faltaba: avances y descensos DE HOY, y el S&P por separado.
+            f"Avances/descensos de la sesión — S&P 500: {breadth.get('sp500_advances', '?')}/"
+            f"{breadth.get('sp500_declines', '?')}"
+            f"{f" ({breadth['sp500_pct_al_alza']}% al alza)" if breadth.get('sp500_pct_al_alza') is not None else ''}"
+            f" · universo completo: {breadth.get('advances', '?')}/{breadth.get('declines', '?')}"
         )
     else:
         rsu_breadth_str = "Dato no disponible (Scanner sin datos frescos)"
