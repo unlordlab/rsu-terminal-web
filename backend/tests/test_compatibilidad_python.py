@@ -24,8 +24,11 @@ Uso:
 """
 import io
 import pathlib
+import sys
 import token
 import tokenize
+
+import pytest
 
 # La que declara .github/workflows/tests.yml. Si el CI sube de version, este
 # numero sube con el -- no al reves.
@@ -42,6 +45,20 @@ def _fuentes():
             if "__pycache__" in partes or "worktrees" in partes or "venv" in partes:
                 continue
             yield f
+
+
+# EL DETECTOR SOLO PUEDE FUNCIONAR EN 3.12+, y darse cuenta de eso costo un CI
+# en rojo. `token.FSTRING_START` no existe en 3.11: alli una f-string es un
+# unico token STRING, asi que el detector no ve nada y devolveria siempre una
+# lista vacia -- una guardia muda, otra vez.
+#
+# Y NO PASA NADA, porque en 3.11 no hace falta: el propio interprete rechaza la
+# sintaxis al importar el modulo. El guardian existe para la maquina del
+# desarrollador, donde el codigo SI compila y por eso el fallo llega tarde.
+solo_312 = pytest.mark.skipif(
+    sys.version_info < (3, 12),
+    reason="el tokenizador no emite FSTRING_START antes de 3.12; alli el propio "
+           "interprete ya rechaza esta sintaxis, asi que no hay nada que vigilar")
 
 
 def fstrings_anidadas(fuente: str) -> list:
@@ -63,6 +80,7 @@ def fstrings_anidadas(fuente: str) -> list:
     return fallos
 
 
+@solo_312
 def test_todo_el_codigo_compila_con_la_version_del_CI():
     """EL test. Sin esto, cualquier sintaxis nueva pasa en local y tumba el CI
     -- y el fallo llega DESPUES del push, no antes."""
@@ -86,6 +104,7 @@ def test_la_version_declarada_aqui_es_la_que_usa_el_CI():
         f"VERSION_CI en este fichero para que coincida")
 
 
+@solo_312
 def test_encuentra_de_verdad_una_sintaxis_demasiado_nueva():
     """Que el test pase no significa que sepa detectar nada. Aqui se le pone
     delante el caso exacto que fallo."""
