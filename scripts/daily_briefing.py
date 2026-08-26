@@ -1395,6 +1395,11 @@ def build_prompt(market_data: dict, news: list, major_headlines: list, earnings:
         pct_s  = f"{breadth['pct_above_sma50']}%" if breadth.get('pct_above_sma50') is not None else "N/D"
         mc_s   = f"{breadth['mcclellan']:+.1f}" if breadth.get('mcclellan') is not None else "N/D (histórico insuficiente todavía)"
         abi_s  = f"{breadth['abi']}%" if breadth.get('abi') is not None else "N/D"
+        # El condicional va FUERA de la f-string: anidar la misma comilla
+        # dentro de una f-string solo es legal desde Python 3.12, y el CI
+        # corre 3.11 -- en local (3.13) compilaba y alli reventaba el modulo
+        # entero al importarlo.
+        sp_pct_str = (f" ({breadth['sp500_pct_al_alza']}% al alza)" if breadth.get('sp500_pct_al_alza') is not None else '')
         rsu_breadth_str = (
             f"% S&P 500 sobre SMA50: {pct_s} | "
             f"Oscilador McClellan RSU (S&P 500 + Russell 2000): {mc_s}"
@@ -1405,7 +1410,7 @@ def build_prompt(market_data: dict, news: list, major_headlines: list, earnings:
             # Lo que faltaba: avances y descensos DE HOY, y el S&P por separado.
             f"Avances/descensos de la sesión — S&P 500: {breadth.get('sp500_advances', '?')}/"
             f"{breadth.get('sp500_declines', '?')}"
-            f"{f" ({breadth['sp500_pct_al_alza']}% al alza)" if breadth.get('sp500_pct_al_alza') is not None else ''}"
+            f"{sp_pct_str}"
             f" · universo completo: {breadth.get('advances', '?')}/{breadth.get('declines', '?')}"
         )
     else:
