@@ -83,6 +83,37 @@ def hora_et(item: dict) -> str:
     except Exception:
         return "N/D"
 
+
+# ── ¿La última barra de yfinance es un cierre o una sesión a medias? ──────────
+#
+# EL CASO, 27/08/2026. El cron de las 07:00 UTC no se disparó y el usuario lanzó
+# el Action A MANO, con Wall Street abierto. `yf.history()` devuelve entonces la
+# barra PARCIAL de la sesión viva -- pero el prompt le afirmaba al modelo, en dos
+# reglas distintas, que esos porcentajes eran de cierre. El briefing abrió con
+# «El S&P 500 CIERRA en positivo gracias a Nvidia» sobre una sesión a la que le
+# quedaban horas: NVDA +7% cuando el cierre anterior había sido -1,59%, y XLU
+# -1,23% cuando había cerrado en +0,46% -- el signo cambiado.
+#
+# Ningún dato era falso; lo falso era la etiqueta que les ponía el script.
+HORA_CIERRE_NYSE = 16
+
+
+def sesion_sin_cerrar(fecha_ultima_barra, ahora_et=None) -> bool:
+    """¿La última barra diaria corresponde a una sesión que aún no ha cerrado?
+
+    Con el mercado abierto yfinance ya ha creado la barra de HOY y la va
+    actualizando. Si la última barra es de hoy y en Nueva York todavía no son
+    las 16:00, lo que hay en la mano es una foto a media sesión, no un cierre.
+
+    Se pregunta por la fecha de la BARRA y no por «¿está abierto el mercado?»
+    a propósito: un festivo o un fin de semana no tienen barra de hoy, así que
+    el caso se resuelve solo sin mantener un calendario de festivos."""
+    if fecha_ultima_barra is None:
+        return False
+    ahora = ahora_et or datetime.now(ZoneInfo("America/New_York"))
+    return fecha_ultima_barra == ahora.date() and ahora.hour < HORA_CIERRE_NYSE
+
+
 BRIEFING_HISTORY_FILE = "briefing_history.json"
 BRIEFING_HISTORY_DAYS = 3
 # Presupuesto TOTAL de caracteres del bloque de memoria narrativa dentro del
@@ -270,11 +301,15 @@ def get_market_data() -> dict:
         "USDJPY": "USDJPY=X", # proxy divergencia BoJ vs Fed
     }
 
+    ultima_barra = None       # fecha de la ultima vela del S&P: dice si lo que
+                              # tenemos delante es un cierre o media sesion
     for name, ticker in tickers.items():
         try:
             t    = yf.Ticker(ticker)
             hist = t.history(period="5d", interval="1d").dropna()
             if len(hist) < 2: continue
+            if name == "SPX":
+                ultima_barra = hist.index[-1].date()
             prev  = float(hist["Close"].iloc[-2])
             last  = float(hist["Close"].iloc[-1])
             chg   = round((last - prev) / prev * 100, 2)
@@ -307,6 +342,16 @@ def get_market_data() -> dict:
         except Exception:
             pass
     data["sectors"] = sector_data
+
+    # ¿Estos porcentajes son un CIERRE o una sesion a medias? Con el cron de las
+    # 07:00 UTC siempre son un cierre; en una ejecucion manual con el mercado
+    # abierto, no -- y el 27/08 el briefing llamo "cierre" a una sesion viva.
+    ahora_ny = datetime.now(ZoneInfo("America/New_York"))
+    data["sesion"] = {
+        "fecha":    ultima_barra.isoformat() if ultima_barra else None,
+        "en_curso": sesion_sin_cerrar(ultima_barra, ahora_ny),
+        "hora_et":  ahora_ny.strftime("%H:%M"),
+    }
 
     # Niveles técnicos reales (SMA20/50/200, máx/mín 20d) — para que el LLM no se invente
     # soportes/resistencias sin datos detrás. No son niveles de "price action" discrecional,
@@ -829,7 +874,15 @@ def get_rsu_breadth_signals() -> dict:
         else:
             mc_estado = "NEUTRO"
 
+        # LA FECHA DE LA AMPLITUD. El escaneo del Scanner es NOCTURNO: estos
+        # numeros son SIEMPRE del cierre anterior, no de la sesion que el
+        # briefing narra. El 27/08 el briefing explico un +0,27% del dia 27 con
+        # las tripas del dia 26 -- y nada en el prompt permitia notarlo, porque
+        # el bloque de amplitud no llevaba fecha.
+        fecha_amplitud = breadth_hist[-1].get("date") if breadth_hist else None
+
         return {
+            "fecha": fecha_amplitud,
             "pct_above_sma50": pct_above_sma50,
             "advances": adv,
             "declines": dec,
@@ -1113,7 +1166,7 @@ REGLAS ANTI-ALUCINACIÓN — ESTRICTAS, SIN EXCEPCIONES:
 5. Yields de bonos: la variación viene ya calculada EN PUNTOS BÁSICOS (pb) junto al nivel y al cierre previo. Cítala tal cual, en pb, incluso si es un movimiento pequeño o plano. NO la conviertas a porcentaje ni digas que el bono "cayó un X%": un yield que pasa del 4,70% al 4,64% ha bajado 6 pb, no un 1,3%.
 6. Tipos de bancos centrales: si mencionas la Fed, usa el proxy de Fed Funds ya proporcionado, nunca MRO/discount/prime u otro tipo distinto. No menciones tipos del BCE ni de otro banco central si no aparecen en los datos proporcionados.
 7. Variaciones porcentuales: usa la cifra ya calculada y proporcionada para cada activo — no la recalcules mentalmente ni la redondees de forma distinta a como aparece.
-8. Datos sectoriales (XLE, XLK, etc.): los porcentajes de arriba corresponden al cierre de sesión, no a pre-market/after-hours — no los presentes como datos intradía en tiempo real.
+8. Datos sectoriales (XLE, XLK, etc.): mira la etiqueta ESTADO DE LA SESIÓN que acompaña a los datos de mercado. Si dice CERRADA, esos porcentajes son de cierre y no los presentes como intradía en tiempo real. Si dice EN CURSO, son una foto a media sesión: NO escribas que el índice «cerró» ni des el día por terminado — di que va camino de, y cita la hora.
 9. Futuros pre-market: la hora (ET) del dato ya viene indicada junto al propio dato — cítala si mencionas el gap, no des el número como si fuera "ahora mismo" sin contexto horario.
 
 LONGITUD: 500-700 palabras. Esto no es un informe de 2000 palabras con 11 secciones — es una nota que se lee en 3-4 minutos."""
@@ -1195,7 +1248,7 @@ REGLAS ANTI-ALUCINACIÓN — ESTRICTAS, SIN EXCEPCIONES. Están por encima de cu
 7. Yields: la variación viene ya calculada EN PUNTOS BÁSICOS (pb), junto al nivel y al cierre previo. Cítala en pb, tal cual. NO digas que un bono "cayó un X%": un yield que pasa del 4,70% al 4,64% ha bajado 6 pb, no un 1,3%. Y no la redondees a "sin cambios" ni la infles.
 8. Tipos de bancos centrales: usa el proxy de Fed Funds proporcionado, nunca MRO/discount/prime. No menciones tipos del BCE si no están en los datos.
 9. Variaciones porcentuales: usa la cifra ya calculada, no la recalcules ni la redondees distinto.
-10. Datos sectoriales: son de CIERRE, no intradía.
+10. Datos sectoriales: lo que son lo dice la etiqueta ESTADO DE LA SESIÓN — de CIERRE si dice CERRADA, foto a media sesión si dice EN CURSO. Nunca llames «cierre» a una sesión EN CURSO.
 11. Futuros: la hora (ET) viene junto al dato. Cítala si mencionas el gap.
 12. Indicadores macro: las variaciones (m/m, interanual, cambio en miles de empleos) vienen ya CALCULADAS. Cítalas tal cual y NUNCA el nivel del índice en crudo — "el IPC está en 332,568" no significa nada para quien lee. Respeta la FECHA de cada dato: lo que no está marcado "RECIÉN PUBLICADO" puede tener semanas, así que es contexto de fondo y no puedes presentarlo como si hubiera salido hoy. Y no mezcles un dato ya publicado con una previsión del calendario: son cosas distintas."""
 
@@ -1321,6 +1374,22 @@ def build_prompt(market_data: dict, news: list, major_headlines: list, earnings:
     eurusd_str = fmt_fx('EURUSD') if d.get('EURUSD', {}).get('price') is not None else "Dato no disponible"
     usdjpy_str = fmt_fx('USDJPY') if d.get('USDJPY', {}).get('price') is not None else "Dato no disponible"
 
+    # ESTADO DE LA SESION. Lo que rompio el briefing del 27/08 no fue un dato
+    # falso sino una ETIQUETA falsa: con el mercado abierto yfinance da la barra
+    # parcial del dia y el prompt afirmaba que era un cierre.
+    ses = d.get("sesion") or {}
+    if ses.get("en_curso"):
+        sesion_str = (
+            f"ESTADO DE LA SESION: EN CURSO. Los porcentajes de indices y sectores "
+            f"son una foto INTRADIA de la sesion del {ses.get('fecha', 'de hoy')} "
+            f"tomada a las {ses.get('hora_et', '??:??')} ET, con el mercado todavia "
+            f"abierto. NO son cierres: no escribas que nada 'cerro' ni des la sesion "
+            f"por terminada.")
+    else:
+        sesion_str = (
+            f"ESTADO DE LA SESION: CERRADA. Los porcentajes de indices y sectores son "
+            f"el CIERRE de la sesion del {ses.get('fecha', 'anterior')}.")
+
     # Calendario
     calendar_lines = ""
     eventos = d.get("calendar", [])
@@ -1329,12 +1398,18 @@ def build_prompt(market_data: dict, news: list, major_headlines: list, earnings:
         # ordenar), así que recortar por la cola quita lo menos relevante.
         eventos = eventos[:max_calendario]
     for ev in eventos:
+        # `actual` se recoge en get_market_data() desde siempre y NO llegaba
+        # al prompt: el modelo no podia distinguir un dato YA PUBLICADO de uno
+        # que aun no ha salido, que es la diferencia entre narrar un hecho y
+        # narrar una expectativa. El 27/08 acerto por los titulares, no por aqui.
+        publicado = str(ev.get("actual") or "").strip() or "aún no"
         calendar_lines += (
             f"| {ev['time']} ET | {ev.get('pais', '?')} | {ev['event']} | "
-            f"{ev.get('forecast', 'N/D')} | {ev.get('previous', 'N/D')} | {ev['impact']} |\n"
+            f"{publicado} | {ev.get('forecast', 'N/D')} | {ev.get('previous', 'N/D')} | "
+            f"{ev['impact']} |\n"
         )
     if not calendar_lines:
-        calendar_lines = "| — | — | Sin eventos de alto impacto para Wall Street hoy | — | — | — |\n"
+        calendar_lines = "| — | — | Sin eventos de alto impacto para Wall Street hoy | — | — | — | — |\n"
 
     # Fear & Greed
     fg = d.get("fear_greed")
@@ -1392,6 +1467,22 @@ def build_prompt(market_data: dict, news: list, major_headlines: list, earnings:
     # el índice sube solo por megacaps mientras el resto del mercado no
     # acompaña, algo que el S&P 500 en solitario no puede ver.
     if breadth:
+        # La amplitud NO siempre va por detras de los precios: en la ejecucion
+        # normal del cron (03:00 ET) los precios son el cierre de ayer y el
+        # escaneo del Scanner tambien, o sea la MISMA sesion. Solo se separan
+        # cuando el briefing se lanza con el mercado abierto -- que es lo que
+        # paso el 27/08. Asi que se comparan las dos fechas en vez de afirmar
+        # una de las dos cosas: dar por hecho "va por detras" seria cambiar una
+        # etiqueta falsa por otra.
+        fecha_amp = breadth.get("fecha")
+        fecha_precios = ses.get("fecha")
+        if not fecha_amp:
+            cierre_de = "ultimo escaneo nocturno disponible"
+        elif fecha_precios and fecha_amp != fecha_precios:
+            cierre_de = (f"cierre del {fecha_amp}, una sesion POR DETRAS de los "
+                         f"precios de arriba, que son del {fecha_precios}")
+        else:
+            cierre_de = f"cierre del {fecha_amp}, la MISMA sesion que los precios de arriba"
         pct_s  = f"{breadth['pct_above_sma50']}%" if breadth.get('pct_above_sma50') is not None else "N/D"
         mc_s   = f"{breadth['mcclellan']:+.1f}" if breadth.get('mcclellan') is not None else "N/D (histórico insuficiente todavía)"
         abi_s  = f"{breadth['abi']}%" if breadth.get('abi') is not None else "N/D"
@@ -1401,7 +1492,7 @@ def build_prompt(market_data: dict, news: list, major_headlines: list, earnings:
         # entero al importarlo.
         sp_pct_str = (f" ({breadth['sp500_pct_al_alza']}% al alza)" if breadth.get('sp500_pct_al_alza') is not None else '')
         rsu_breadth_str = (
-            f"% S&P 500 sobre SMA50: {pct_s} | "
+            f"[{cierre_de}] % S&P 500 sobre SMA50: {pct_s} | "
             f"Oscilador McClellan RSU (S&P 500 + Russell 2000): {mc_s}"
             f"{(' (' + breadth['mcclellan_estado'] + '; alcista >+70, bajista <-70)') if breadth.get('mcclellan_estado') else ''} | "
             f"ABI: {abi_s} (dispersión, NO direccional: ≤15% mercado apagado, ≥40% capitulación o cambio de régimen) | "
@@ -1473,6 +1564,7 @@ TU SESGO DE LOS ÚLTIMOS DÍAS (para dar contexto de tendencia, p.ej. "llevamos 
 {bias_history_str}
 
 DATOS REALES DE MERCADO HOY ({d['date']} — {d['time']}):
+{sesion_str}
 
 ÍNDICES:
 - S&P 500: {fmt('SPX')}
@@ -1519,8 +1611,8 @@ INSIDER FLOW — CLUSTERS DE COMPRA RECIENTES:
 |-----------|------------------|-------------|--------|------------|
 {macro_lines}
 CALENDARIO ECONÓMICO HOY:
-| Hora (ET) | País | Evento | Consenso | Previo | Impacto |
-|------|------|--------|----------|--------|---------|
+| Hora (ET) | País | Evento | Publicado | Consenso | Previo | Impacto |
+|------|------|--------|-----------|----------|--------|---------|
 {calendar_lines}
 
 EARNINGS NOTABLES PRÓXIMAS 48H:

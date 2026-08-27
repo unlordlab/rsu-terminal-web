@@ -34,6 +34,7 @@ import os
 import sqlite3
 import sys
 import tempfile
+from datetime import datetime, timedelta
 from unittest.mock import patch
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
@@ -67,8 +68,18 @@ def _serie(tmp, period="4m"):
         return O.get_ticker_flow_simple("XOM", period)
 
 
-HOY = "2026-08-19"
-AYER = "2026-08-18"
+# Las fechas se calculan desde HOY DE VERDAD, no se clavan. Estaban fijas en
+# "2026-08-19", y el 27/08 el test del periodo "1w" empezo a fallar solo: la
+# ventana de una semana ya no alcanzaba a esa fecha, la consulta salia vacia y
+# `get_ticker_flow_simple` devolvia su respuesta de error -- sin `serie_nps`--
+# asi que el fallo aparecia como un KeyError feo en vez de como lo que era.
+# Un test que da por hecho que hoy es un dia concreto caduca sin avisar.
+_HOY = datetime.now()
+HOY  = _HOY.strftime("%Y-%m-%d")
+AYER = (_HOY - timedelta(days=1)).strftime("%Y-%m-%d")
+HACE_UNA_SEMANA = (_HOY - timedelta(days=7)).strftime("%Y-%m-%d")
+HACE_16_DIAS    = (_HOY - timedelta(days=16)).strftime("%Y-%m-%d")
+HACE_3_MESES    = (_HOY - timedelta(days=90)).strftime("%Y-%m-%d")
 
 
 def test_una_entrada_por_sesion_con_su_sesgo_por_prima():
@@ -127,10 +138,11 @@ def test_se_dice_en_cuantas_operaciones_se_apoya_cada_sesion():
 def test_el_periodo_recorta_por_fecha():
     """Pedir una semana no puede devolver sesiones de hace tres meses."""
     d = _serie(_bd([
-        ("2026-05-04", "call", "buy", 5_000, 1_000, 9_000_000),
+        (HACE_3_MESES, "call", "buy", 5_000, 1_000, 9_000_000),
         (HOY,          "call", "buy", 5_000, 1_000, 9_000_000),
     ]), period="1w")
-    assert all(p["fecha"] >= "2026-08-12" for p in d["serie_nps"]), d["serie_nps"]
+    assert all(p["fecha"] >= HACE_UNA_SEMANA for p in d["serie_nps"]), d["serie_nps"]
+    assert [p["fecha"] for p in d["serie_nps"]] == [HOY]
 
 
 def test_la_serie_NO_usa_la_consulta_con_LIMIT_de_la_tabla():
@@ -142,10 +154,10 @@ def test_la_serie_NO_usa_la_consulta_con_LIMIT_de_la_tabla():
     250 operaciones repartidas en dos dias: 249 el dia mas reciente y una el
     mas antiguo. Con el LIMIT de la tabla, esa primera sesion desaparece."""
     filas = [(HOY, "call", "buy", 5_000, 1_000, 9_000_000) for _ in range(249)]
-    filas.append(("2026-08-03", "put", "buy", 5_000, 1_000, 9_000_000))
+    filas.append((HACE_16_DIAS, "put", "buy", 5_000, 1_000, 9_000_000))
     d = _serie(_bd(filas))
     fechas = [p["fecha"] for p in d["serie_nps"]]
-    assert "2026-08-03" in fechas, (
+    assert HACE_16_DIAS in fechas, (
         f"la sesion mas antigua se ha perdido: la serie sale de la consulta "
         f"recortada de la tabla, no de la suya. Fechas: {fechas}")
 
