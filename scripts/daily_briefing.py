@@ -1386,9 +1386,11 @@ def build_prompt(market_data: dict, news: list, major_headlines: list, earnings:
             f"abierto. NO son cierres: no escribas que nada 'cerro' ni des la sesion "
             f"por terminada.")
     else:
-        sesion_str = (
-            f"ESTADO DE LA SESION: CERRADA. Los porcentajes de indices y sectores son "
-            f"el CIERRE de la sesion del {ses.get('fecha', 'anterior')}.")
+        # El caso normal se dice en una linea corta: es el que se paga TODOS los
+        # dias, y este prompt no cabe en el limite de Groq desde hace semanas.
+        # La version larga se reserva para el caso raro, que es el que necesita
+        # que se le expliquen las cosas al modelo.
+        sesion_str = f"ESTADO DE LA SESION: CERRADA (indices y sectores: cierre del {ses.get('fecha', 'anterior')})."
 
     # Calendario
     calendar_lines = ""
@@ -1397,19 +1399,29 @@ def build_prompt(market_data: dict, news: list, major_headlines: list, earnings:
         # Ya vienen ordenados por impacto (ver el fix de events[:10] sin
         # ordenar), así que recortar por la cola quita lo menos relevante.
         eventos = eventos[:max_calendario]
+    # La columna "Publicado" solo se pinta si ALGUN evento trae ya su dato. En
+    # la ejecucion normal (pre-apertura) no ha salido ninguno todavia, y una
+    # columna entera de "aun no" son fichas tiradas en un prompt que ya no cabe.
+    hay_publicados = any(str(ev.get("actual") or "").strip() for ev in eventos)
+    cal_cabecera = ("| Hora (ET) | País | Evento | Publicado | Consenso | Previo | Impacto |" + chr(10) +
+                    "|------|------|--------|-----------|----------|--------|---------|") if hay_publicados else (
+                   "| Hora (ET) | País | Evento | Consenso | Previo | Impacto |" + chr(10) +
+                    "|------|------|--------|----------|--------|---------|")
     for ev in eventos:
         # `actual` se recoge en get_market_data() desde siempre y NO llegaba
         # al prompt: el modelo no podia distinguir un dato YA PUBLICADO de uno
         # que aun no ha salido, que es la diferencia entre narrar un hecho y
         # narrar una expectativa. El 27/08 acerto por los titulares, no por aqui.
         publicado = str(ev.get("actual") or "").strip() or "aún no"
+        col_pub = f"{publicado} | " if hay_publicados else ""
         calendar_lines += (
             f"| {ev['time']} ET | {ev.get('pais', '?')} | {ev['event']} | "
-            f"{publicado} | {ev.get('forecast', 'N/D')} | {ev.get('previous', 'N/D')} | "
+            f"{col_pub}{ev.get('forecast', 'N/D')} | {ev.get('previous', 'N/D')} | "
             f"{ev['impact']} |\n"
         )
     if not calendar_lines:
-        calendar_lines = "| — | — | Sin eventos de alto impacto para Wall Street hoy | — | — | — | — |\n"
+        relleno = " — |" * (cal_cabecera.splitlines()[0].count("|") - 4)
+        calendar_lines = "| — | — | Sin eventos de alto impacto para Wall Street hoy |" + relleno + "\n"
 
     # Fear & Greed
     fg = d.get("fear_greed")
@@ -1482,7 +1494,7 @@ def build_prompt(market_data: dict, news: list, major_headlines: list, earnings:
             cierre_de = (f"cierre del {fecha_amp}, una sesion POR DETRAS de los "
                          f"precios de arriba, que son del {fecha_precios}")
         else:
-            cierre_de = f"cierre del {fecha_amp}, la MISMA sesion que los precios de arriba"
+            cierre_de = f"cierre del {fecha_amp}, misma sesion que los precios"
         pct_s  = f"{breadth['pct_above_sma50']}%" if breadth.get('pct_above_sma50') is not None else "N/D"
         mc_s   = f"{breadth['mcclellan']:+.1f}" if breadth.get('mcclellan') is not None else "N/D (histórico insuficiente todavía)"
         abi_s  = f"{breadth['abi']}%" if breadth.get('abi') is not None else "N/D"
@@ -1611,8 +1623,7 @@ INSIDER FLOW — CLUSTERS DE COMPRA RECIENTES:
 |-----------|------------------|-------------|--------|------------|
 {macro_lines}
 CALENDARIO ECONÓMICO HOY:
-| Hora (ET) | País | Evento | Publicado | Consenso | Previo | Impacto |
-|------|------|--------|-----------|----------|--------|---------|
+{cal_cabecera}
 {calendar_lines}
 
 EARNINGS NOTABLES PRÓXIMAS 48H:

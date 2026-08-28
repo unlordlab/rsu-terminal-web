@@ -167,7 +167,7 @@ def test_si_van_a_LA_PAR_no_se_dice_que_la_amplitud_va_por_detras():
     assert "POR DETRAS" not in p and "POR DETRÁS" not in p, (
         "dice que la amplitud va por detrás de los precios cuando las dos son "
         "de la misma sesión")
-    assert "MISMA sesion" in p or "MISMA sesión" in p
+    assert "misma sesion" in p.lower()
 
 
 def test_sin_fecha_de_amplitud_no_se_inventa_una():
@@ -240,11 +240,29 @@ def test_el_calendario_dice_cuando_un_dato_YA_se_ha_publicado():
     assert "203K" in p, "el dato ya publicado no llega al prompt"
 
 
-def test_un_dato_que_aun_no_ha_salido_se_marca_como_tal():
-    p = _prompt({"en_curso": True, "fecha": "2026-08-27", "hora_et": "09:30"},
-                calendario=[_ev("")])
-    assert "aún no" in p
+def test_sin_ningun_dato_publicado_la_columna_entera_desaparece():
+    """La ejecucion normal es pre-apertura: no ha salido NINGUN dato todavia, y
+    una columna entera de «aún no» son fichas tiradas en un prompt que ya no
+    cabe en el limite de Groq. La columna solo se paga cuando aporta algo."""
+    p = _prompt({"en_curso": False, "fecha": "2026-08-26", "hora_et": "03:00"},
+                calendario=[_ev(""), _ev("")])
+    cabecera = [l for l in p.splitlines() if l.startswith("| Hora (ET)")][0]
+    assert "Publicado" not in cabecera, (
+        "se sigue pintando la columna de dato publicado un dia en que no hay "
+        "ninguno: son fichas tiradas todas las mañanas")
+    assert "aún no" not in p
     assert "208K" in p and "206K" in p, "el consenso y el previo siguen viajando"
+
+
+def test_si_UNO_solo_ya_se_ha_publicado_la_columna_vuelve():
+    """Basta con que haya salido uno: el modelo tiene que poder distinguirlo del
+    resto, que siguen siendo previsiones."""
+    p = _prompt({"en_curso": True, "fecha": "2026-08-27", "hora_et": "09:30"},
+                calendario=[_ev("203K"), _ev("")])
+    cabecera = [l for l in p.splitlines() if l.startswith("| Hora (ET)")][0]
+    assert "Publicado" in cabecera
+    assert "203K" in p and "aún no" in p, (
+        "no se distingue el que ya salió del que todavía no")
 
 
 def test_la_cabecera_de_la_tabla_tiene_la_columna_nueva():
