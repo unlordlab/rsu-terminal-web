@@ -74,6 +74,36 @@ def evento_relevante(item: dict, hoy: str) -> bool:
     return pais in PAISES_QUE_MUEVEN_WALL_STREET and item.get("impact") == "High"
 
 
+SUFIJOS_SOCIETARIOS = (", inc.", " inc.", " inc", ", corp.", " corp.", " corp",
+                       " corporation", ", ltd.", " ltd.", " ltd", " plc",
+                       " co.", " company", " holdings", " group", " s.a.")
+
+
+def nombre_corto(company, max_chars: int = 22) -> str:
+    """El nombre de la empresa, sin el ruido societario y sin partir palabras.
+
+    Existe porque el 31/08/2026 al modelo le llegaron los tickers DESNUDOS y se
+    invento el sector de cada uno. El nombre ya venia en el payload; lo que
+    faltaba era usarlo. Se recorta porque este prompt no cabe en el limite de
+    Groq: "Alpha Metallurgical" basta para saber que no es una petrolera, y
+    "Alpha Metallurgical Resources, Inc." cuesta el triple.
+
+    Cortar a pelo por caracteres dejaba "Dick's Sporting Goods In", que parece
+    un fallo de programa dentro de un texto que lee gente."""
+    nombre = str(company or "").strip()
+    if not nombre:
+        return ""
+    bajo = nombre.lower()
+    for suf in SUFIJOS_SOCIETARIOS:
+        if bajo.endswith(suf):
+            nombre = nombre[: len(nombre) - len(suf)].rstrip(" ,")
+            bajo = nombre.lower()
+    if len(nombre) <= max_chars:
+        return nombre
+    corte = nombre[:max_chars].rsplit(" ", 1)[0].rstrip(" ,")
+    return corte or nombre[:max_chars]
+
+
 def hora_et(item: dict) -> str:
     """Hora del evento en Nueva York. `date[-8:-3]` sobre
     "2026-08-25T21:30:00-04:00" devolvía "0-04:" -- basura rotulada «ET»."""
@@ -1491,8 +1521,14 @@ def build_prompt(market_data: dict, news: list, major_headlines: list, earnings:
         if not fecha_amp:
             cierre_de = "ultimo escaneo nocturno disponible"
         elif fecha_precios and fecha_amp != fecha_precios:
-            cierre_de = (f"cierre del {fecha_amp}, una sesion POR DETRAS de los "
-                         f"precios de arriba, que son del {fecha_precios}")
+            # Descriptiva no bastaba. El 31/08 el prompt decia "una sesion POR
+            # DETRAS de los precios de arriba, que son del 2026-08-31" y el
+            # modelo escribio igualmente "solo el 45,5% de las acciones del S&P
+            # avanzaron HOY" sobre numeros del viernes. La etiqueta tiene que
+            # PROHIBIR el error, no solo describir el desfase -- y de paso sale
+            # mas corta, que en este prompt importa.
+            cierre_de = (f"AMPLITUD del {fecha_amp}, NO de hoy ({fecha_precios}): "
+                         f"no digas «hoy» al citarla")
         else:
             cierre_de = f"cierre del {fecha_amp}, misma sesion que los precios"
         pct_s  = f"{breadth['pct_above_sma50']}%" if breadth.get('pct_above_sma50') is not None else "N/D"
@@ -1522,7 +1558,18 @@ def build_prompt(market_data: dict, news: list, major_headlines: list, earnings:
     # Clusters de insiders (solo si el backend está desplegado — ver nota en get_insider_clusters)
     insider_lines = ""
     for c in insider_clusters:
-        insider_lines += f"- {c.get('ticker','?')}: {c.get('n_insiders','?')} insiders comprando, ${c.get('total_value',0):,.0f} total, señal {c.get('signal','')}\n"
+        # EL NOMBRE DE LA EMPRESA, que el endpoint ya devuelve (`company`) y se
+        # tiraba antes de llegar al prompt -- tercer caso del mismo patron, como
+        # el `actual` del calendario y el desglose del S&P. El 31/08/2026 el
+        # modelo recibio los tickers DESNUDOS (DKS, AMR, AMRC) y les invento un
+        # sector que encajara con la narrativa de Iran que estaba montando:
+        # escribio "compra de insiders en energia (DKS, AMR) y defensa/industrial
+        # (AMRC)". DKS es Dick's Sporting Goods, una tienda de articulos
+        # deportivos. Sobre esa etiqueta inventada construyo la frase "el capital
+        # inteligente esta posicionandose para la duracion del conflicto".
+        nombre = nombre_corto(c.get("company"))
+        et = str(c.get("ticker", "?")) + (f" ({nombre})" if nombre else "")
+        insider_lines += f"- {et}: {c.get('n_insiders','?')} insiders comprando, ${c.get('total_value',0):,.0f} total, señal {c.get('signal','')}\n"
     if not insider_lines:
         insider_lines = "Sin datos de Insider Flow disponibles en este ciclo.\n"
 

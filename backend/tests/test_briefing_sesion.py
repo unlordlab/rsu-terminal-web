@@ -147,13 +147,23 @@ def test_la_amplitud_llega_al_prompt_CON_SU_FECHA():
     assert "2026-08-26" in p, "la amplitud sigue llegando sin fecha"
 
 
-def test_si_la_amplitud_va_por_detras_de_los_precios_SE_DICE():
+def test_si_la_amplitud_va_por_detras_de_los_precios_SE_PROHIBE_llamarla_de_hoy():
     """El caso del 27/08: precios intradía del día 27, amplitud del cierre del
-    26. El briefing explicó un +0,27% del día 27 con las tripas del día 26."""
+    26. El briefing explicó un +0,27% del día 27 con las tripas del día 26.
+
+    Y LA SEGUNDA VUELTA, 31/08: describir el desfase NO bastó. El prompt decía
+    «una sesion POR DETRAS de los precios de arriba, que son del 2026-08-31» y
+    el modelo escribió igualmente «solo el 45,5% de las acciones del S&P 500
+    avanzaron HOY» sobre los números del viernes. Una etiqueta que describe se
+    puede leer por encima; la que prohíbe, no tanto. Por eso ahora es una orden
+    -- y de paso ocupa menos, que en este prompt importa."""
     p = _prompt({"en_curso": True, "fecha": "2026-08-27", "hora_et": "09:30"},
                 breadth=dict(_BREADTH, fecha="2026-08-26"))
-    assert "POR DETRAS" in p or "POR DETRÁS" in p
-    assert "2026-08-27" in p, "no dice de qué sesión son los precios"
+    assert "NO de hoy" in p, (
+        "la etiqueta describe el desfase pero no prohíbe el error: el modelo "
+        "escribió «avanzaron hoy» sobre datos de la sesión anterior")
+    assert "2026-08-26" in p and "2026-08-27" in p, (
+        "tienen que viajar las DOS fechas, la de la amplitud y la de los precios")
 
 
 def test_si_van_a_LA_PAR_no_se_dice_que_la_amplitud_va_por_detras():
