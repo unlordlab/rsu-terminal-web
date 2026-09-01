@@ -333,6 +333,8 @@ def get_market_data() -> dict:
 
     ultima_barra = None       # fecha de la ultima vela del S&P: dice si lo que
                               # tenemos delante es un cierre o media sesion
+    barras = {}               # {ticker: (fecha_prev, fecha_last)} -- para poder
+                              # auditar despues contra que se calculo cada %
     for name, ticker in tickers.items():
         try:
             t    = yf.Ticker(ticker)
@@ -340,6 +342,15 @@ def get_market_data() -> dict:
             if len(hist) < 2: continue
             if name == "SPX":
                 ultima_barra = hist.index[-1].date()
+            # LAS DOS FECHAS QUE SE ESTAN COMPARANDO. El 01/09/2026 el briefing
+            # publico un S&P -0,58%, un Russell -1,92%, un XLU -2,20% y un XLI
+            # -2,05% que no son la variacion de ninguna sesion real: los cuatro
+            # coinciden EXACTAMENTE con el tramo 27/08 -> 31/08, dos sesiones
+            # presentadas como una. No se pudo averiguar la causa porque los
+            # datos de entrada no se guardaban en ningun sitio -- solo el texto
+            # y el diagnostico de recorte. Esto no cuesta ni una ficha del
+            # prompt: va al Gist, no al modelo.
+            barras[name] = (str(hist.index[-2].date()), str(hist.index[-1].date()))
             prev  = float(hist["Close"].iloc[-2])
             last  = float(hist["Close"].iloc[-1])
             chg   = round((last - prev) / prev * 100, 2)
@@ -368,6 +379,7 @@ def get_market_data() -> dict:
             chg  = round((last - prev) / prev * 100, 2)
             # 5 días
             chg5 = round((last - float(hist["Close"].iloc[0])) / float(hist["Close"].iloc[0]) * 100, 2)
+            barras[etf] = (str(hist.index[-2].date()), str(hist.index[-1].date()))
             sector_data[etf] = {"name": name, "chg_1d": chg, "chg_5d": chg5}
         except Exception:
             pass
@@ -377,6 +389,7 @@ def get_market_data() -> dict:
     # 07:00 UTC siempre son un cierre; en una ejecucion manual con el mercado
     # abierto, no -- y el 27/08 el briefing llamo "cierre" a una sesion viva.
     ahora_ny = datetime.now(ZoneInfo("America/New_York"))
+    data["barras"] = barras
     data["sesion"] = {
         "fecha":    ultima_barra.isoformat() if ultima_barra else None,
         "en_curso": sesion_sin_cerrar(ultima_barra, ahora_ny),
@@ -895,6 +908,25 @@ def get_rsu_breadth_signals() -> dict:
         # ellos el modelo recibe un número desnudo y se inventa la escala: leyó
         # -26,7 como prueba bajista cuando la propia terminal lo clasifica
         # NEUTRO. Dos partes del mismo producto diciendo lo contrario.
+        # LA BANDA DEL ABI, por el mismo motivo que la del McClellan. El
+        # 01/09/2026 el briefing recibio "ABI: 39.8%" con la escala al lado y
+        # escribio que "denota dispersion y falta de conviccion" y que "no hay
+        # un lider claro" -- exactamente al reves. El ABI es |avances-descensos|
+        # sobre el total: mide CUANTO SE IMPONE UN LADO, asi que 39,8% esta a
+        # dos decimas de capitulacion, o sea de una venta abrumadoramente
+        # unidireccional. La palabra "dispersion" de la escala invitaba a leerlo
+        # como lo contrario.
+        if abi is None:
+            abi_estado = None
+        elif abi <= 15:
+            abi_estado = "APAGADO"
+        elif abi < 30:
+            abi_estado = "MODERADO"
+        elif abi < 40:
+            abi_estado = "ALTO"
+        else:
+            abi_estado = "CAPITULACION"
+
         if mcclellan is None:
             mc_estado = None
         elif mcclellan > 70:
@@ -920,6 +952,7 @@ def get_rsu_breadth_signals() -> dict:
             "sp500_declines": sp_dec,
             "sp500_pct_al_alza": sp_pct,
             "mcclellan_estado": mc_estado,
+            "abi_estado": abi_estado,
             "new_highs": new_highs,
             "new_lows": new_lows,
             "nh_nl": (new_highs - new_lows) if (new_highs is not None and new_lows is not None) else None,
@@ -1534,6 +1567,7 @@ def build_prompt(market_data: dict, news: list, major_headlines: list, earnings:
         pct_s  = f"{breadth['pct_above_sma50']}%" if breadth.get('pct_above_sma50') is not None else "N/D"
         mc_s   = f"{breadth['mcclellan']:+.1f}" if breadth.get('mcclellan') is not None else "N/D (histórico insuficiente todavía)"
         abi_s  = f"{breadth['abi']}%" if breadth.get('abi') is not None else "N/D"
+        abi_b  = f" ({breadth['abi_estado']})" if breadth.get('abi_estado') else ""
         # El condicional va FUERA de la f-string: anidar la misma comilla
         # dentro de una f-string solo es legal desde Python 3.12, y el CI
         # corre 3.11 -- en local (3.13) compilaba y alli reventaba el modulo
@@ -1543,7 +1577,7 @@ def build_prompt(market_data: dict, news: list, major_headlines: list, earnings:
             f"[{cierre_de}] % S&P 500 sobre SMA50: {pct_s} | "
             f"Oscilador McClellan RSU (S&P 500 + Russell 2000): {mc_s}"
             f"{(' (' + breadth['mcclellan_estado'] + '; alcista >+70, bajista <-70)') if breadth.get('mcclellan_estado') else ''} | "
-            f"ABI: {abi_s} (dispersión, NO direccional: ≤15% mercado apagado, ≥40% capitulación o cambio de régimen) | "
+            f"ABI: {abi_s}{abi_b} — mide CUÁNTO se impone un lado, no cuál (≤15 apagado, ≥40 capitulación) | "
             f"New Highs−New Lows: {breadth.get('nh_nl', 'N/D')} "
             f"({breadth.get('new_highs', '?')} vs {breadth.get('new_lows', '?')}) | "
             # Lo que faltaba: avances y descensos DE HOY, y el S&P por separado.
@@ -2007,6 +2041,50 @@ def evaluar_sesgos(tracking: list, bias_history: list, cierres) -> list:
     return sorted(por_fecha.values(), key=lambda x: x["fecha"])
 
 
+def construir_payload(content: str, market_data: dict, bias, nivel_usado, diag) -> dict:
+    """Lo que se publica en el Gist. Vive fuera de main() a proposito.
+
+    La primera version construia este diccionario inline, y el test que
+    comprobaba que `barras` acaba en el fichero solo podia mirar el TEXTO del
+    fuente -- asi que el sabotaje de poner `"barras": None` se le escapo, porque
+    la cadena `"barras":` seguia estando. Es la tercera vez en esta semana que
+    comprobar una regla contra su propia silueta en el codigo deja pasar el
+    sabotaje; una funcion que se puede ejecutar no tiene ese problema."""
+    return {
+        "text":   content,
+        "date":   market_data["date"],
+        "time":   market_data["time"],
+        "model":  MODEL,
+        "source": "Groq + Qwen3.6 27B",
+        "bias":   bias,
+        # Con que se escribio el briefing de hoy. Hasta ahora esto solo existia
+        # en los registros del GitHub Action, que no lee nadie -- y el nivel de
+        # recorte importa: en "agresivo" el modelo ve 3 titulares por fuente en
+        # vez de 5 y un calendario podado, asi que un briefing mas pobre de lo
+        # normal tiene una explicacion registrada en vez de parecer que el
+        # modelo tuvo un mal dia.
+        "diagnostico": {
+            "nivel_recorte":  (nivel_usado or {}).get("nombre"),
+            "historial_chars": (nivel_usado or {}).get("historial"),
+            "titulares_por_fuente": (nivel_usado or {}).get("titulares"),
+            **(diag or {}),
+        },
+        # CON QUE NUMEROS SE ESCRIBIO. Sin esto, auditar un porcentaje raro al
+        # dia siguiente es adivinar: los precios de yfinance ya han cambiado y
+        # la ventana de `period="5d"` se ha desplazado. `barras` dice las DOS
+        # fechas que se compararon para sacar cada variacion, que es justo el
+        # dato que faltaba el 01/09/2026.
+        "datos": {
+            "sesion":   market_data.get("sesion"),
+            "barras":   market_data.get("barras"),
+            "indices":  {k: market_data.get(k) for k in
+                         ("SPX", "NDX", "RUT", "VIX", "TNX", "TYX", "DXY", "WTI", "GOLD")
+                         if isinstance(market_data.get(k), dict)},
+            "sectores": market_data.get("sectors"),
+        },
+    }
+
+
 def resumen_sesgos(tracking: list) -> dict:
     """Aciertos con la muestra siempre al lado. Por debajo de MIN_MUESTRA_SESGO
     no se presenta como una conclusión: un 70% sobre 7 días no es un 70%."""
@@ -2031,26 +2109,7 @@ def save_to_gist(content: str, market_data: dict, bias: str, bias_history: list,
     if not GIST_TOKEN:
         raise ValueError("GIST_TOKEN no configurado")
 
-    payload = {
-        "text":   content,
-        "date":   market_data["date"],
-        "time":   market_data["time"],
-        "model":  MODEL,
-        "source": "Groq + Qwen3.6 27B",
-        "bias":   bias,
-        # Con qué se escribió el briefing de hoy. Hasta ahora esto solo
-        # existía en los logs del GitHub Action, que no lee nadie -- y el
-        # nivel de recorte importa: en "agresivo" el modelo ve 3 titulares
-        # por fuente en vez de 5 y un calendario podado, así que un briefing
-        # más pobre de lo normal tiene una explicación registrada en vez de
-        # parecer que el modelo tuvo un mal día.
-        "diagnostico": {
-            "nivel_recorte":  (nivel_usado or {}).get("nombre"),
-            "historial_chars": (nivel_usado or {}).get("historial"),
-            "titulares_por_fuente": (nivel_usado or {}).get("titulares"),
-            **(diag or {}),
-        },
-    }
+    payload = construir_payload(content, market_data, bias, nivel_usado, diag)
 
     updated_history = _append_bias(bias_history, market_data["date"], bias or "N/D")
 
