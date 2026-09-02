@@ -1231,6 +1231,7 @@ REGLAS ANTI-ALUCINACIÓN — ESTRICTAS, SIN EXCEPCIONES:
 7. Variaciones porcentuales: usa la cifra ya calculada y proporcionada para cada activo — no la recalcules mentalmente ni la redondees de forma distinta a como aparece.
 8. Datos sectoriales (XLE, XLK, etc.): mira la etiqueta ESTADO DE LA SESIÓN que acompaña a los datos de mercado. Si dice CERRADA, esos porcentajes son de cierre y no los presentes como intradía en tiempo real. Si dice EN CURSO, son una foto a media sesión: NO escribas que el índice «cerró» ni des el día por terminado — di que va camino de, y cita la hora.
 9. Futuros pre-market: la hora (ET) del dato ya viene indicada junto al propio dato — cítala si mencionas el gap, no des el número como si fuera "ahora mismo" sin contexto horario.
+10. SIN HISTÓRICO: solo tienes el precio de hoy y su variación, así que nunca afirmes máximos ni mínimos (históricos, anuales, «desde X») salvo que lo diga un titular, y atribúyelo. Y compara los números antes de decir que uno cae más que otro.
 
 LONGITUD: 500-700 palabras. Esto no es un informe de 2000 palabras con 11 secciones — es una nota que se lee en 3-4 minutos."""
 
@@ -1313,6 +1314,7 @@ REGLAS ANTI-ALUCINACIÓN — ESTRICTAS, SIN EXCEPCIONES. Están por encima de cu
 9. Variaciones porcentuales: usa la cifra ya calculada, no la recalcules ni la redondees distinto.
 10. Datos sectoriales: lo que son lo dice la etiqueta ESTADO DE LA SESIÓN — de CIERRE si dice CERRADA, foto a media sesión si dice EN CURSO. Nunca llames «cierre» a una sesión EN CURSO.
 11. Futuros: la hora (ET) viene junto al dato. Cítala si mencionas el gap.
+12. SIN HISTÓRICO: solo tienes el precio de hoy y su variación, así que nunca afirmes máximos ni mínimos (históricos, anuales, «desde X») salvo que lo diga un titular, y atribúyelo. Y compara los números antes de decir que uno cae más que otro.
 12. Indicadores macro: las variaciones (m/m, interanual, cambio en miles de empleos) vienen ya CALCULADAS. Cítalas tal cual y NUNCA el nivel del índice en crudo — "el IPC está en 332,568" no significa nada para quien lee. Respeta la FECHA de cada dato: lo que no está marcado "RECIÉN PUBLICADO" puede tener semanas, así que es contexto de fondo y no puedes presentarlo como si hubiera salido hoy. Y no mezcles un dato ya publicado con una previsión del calendario: son cosas distintas."""
 
 _CIERRE_V2 = """Escribe la nota de hoy siguiendo la ESTRUCTURA OBLIGATORIA de arriba (titular temático, EN DOS LÍNEAS, 2-3 bloques con encabezado propio, MI CONCLUSIÓN).
