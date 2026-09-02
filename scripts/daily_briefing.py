@@ -79,6 +79,25 @@ SUFIJOS_SOCIETARIOS = (", inc.", " inc.", " inc", ", corp.", " corp.", " corp",
                        " co.", " company", " holdings", " group", " s.a.")
 
 
+def es_dominio_pedido(domain: str, dominios) -> bool:
+    """¿Este articulo viene de verdad de uno de los medios que se pidieron?
+
+    EL CASO, 02/09/2026. `get_major_outlet_headlines()` pide a GDELT
+    `(domain:reuters.com OR domain:bloomberg.com OR ...)` y NO comprobaba lo que
+    volvia. Comprobado ese dia: `domain:reuters.com` devuelve `{}` -- vacio, 200
+    OK-- y la consulta con los cinco dominios devolvio 10 articulos, todos de
+    kelownacapnews.com, un periodico local de Kelowna (Columbia Britanica). Los
+    titulares que llegaban al briefing eran un choque en la autopista 97, un
+    perro salvado con naloxona y un aviso de hervir el agua en Peachland.
+
+    GDELT ignora las clausulas de dominio; el script se fiaba de la consulta.
+    Se acepta el subdominio (uk.reuters.com) porque es el mismo medio."""
+    d = (domain or "").strip().lower()
+    if not d:
+        return False
+    return any(d == x or d.endswith("." + x) for x in dominios)
+
+
 def nombre_corto(company, max_chars: int = 22) -> str:
     """El nombre de la empresa, sin el ruido societario y sin partir palabras.
 
@@ -142,6 +161,41 @@ def sesion_sin_cerrar(fecha_ultima_barra, ahora_et=None) -> bool:
         return False
     ahora = ahora_et or datetime.now(ZoneInfo("America/New_York"))
     return fecha_ultima_barra == ahora.date() and ahora.hour < HORA_CIERRE_NYSE
+
+
+# ── Archivo de auditoria: con que se escribio cada briefing ─────────────────
+#
+# briefing.json guarda el bloque `datos` del dia, pero SE SOBRESCRIBE en cada
+# ejecucion: el 02/09/2026 se pudo auditar el briefing de ese dia y el del 01/09
+# ya no existia. Este fichero conserva los ultimos DATOS_DIAS dias para poder
+# mirar atras -- y se PODA, porque un fichero que solo crece acaba siendo
+# ilegible y pesado de subir en cada ejecucion.
+DATOS_FILE = "briefing_datos.json"
+DATOS_DIAS = 7
+# Tope duro por si un dia entra un bloque anormalmente grande: mas vale perder
+# archivo antiguo que dejar de publicar el briefing por un Gist demasiado
+# pesado. ~40 KB cubre de sobra 7 dias (~5 KB/dia medidos).
+DATOS_MAX_CHARS = 120_000
+
+
+def podar_datos(historial, entrada, max_dias: int = DATOS_DIAS,
+                max_chars: int = DATOS_MAX_CHARS) -> list:
+    """Añade la entrada de hoy y deja solo los ultimos `max_dias` dias.
+
+    Una fecha que ya esta se REEMPLAZA, no se duplica: el Action se relanza a
+    mano con cierta frecuencia (ver el retraso del planificador de GitHub) y dos
+    ejecuciones el mismo dia no pueden dejar dos entradas para esa fecha."""
+    fecha = (entrada or {}).get("fecha")
+    fuera = [e for e in (historial or []) if isinstance(e, dict) and e.get("fecha") != fecha]
+    fuera.append(entrada)
+    fuera.sort(key=lambda e: e.get("fecha") or "")
+    podado = fuera[-max_dias:]
+    # Si aun asi se pasa del tope, se van cayendo los mas antiguos -- pero
+    # nunca el de hoy, que es el que se acaba de escribir.
+    import json as _json
+    while len(podado) > 1 and len(_json.dumps(podado, ensure_ascii=False)) > max_chars:
+        podado.pop(0)
+    return podado
 
 
 BRIEFING_HISTORY_FILE = "briefing_history.json"
@@ -667,12 +721,19 @@ def get_major_outlet_headlines(max_items: int = 8) -> list:
             return []
         data = r.json()
         articles = data.get("articles", [])
-        print(f"🌍 GDELT: {len(articles)} artículos totales recibidos de {domains}")
+        print(f"🌍 GDELT: {len(articles)} artículos recibidos (aún sin comprobar el medio)")
         out = []
+        descartados = 0
         seen_titles = set()
         for a in articles:
             title  = (a.get("title") or "").strip()
             domain = (a.get("domain") or "").strip()
+            # Comprobar de donde viene DE VERDAD, en vez de fiarse de la
+            # consulta: ver es_dominio_pedido(). Sin esto entraba prensa local
+            # canadiense en el bloque de "medios internacionales".
+            if not es_dominio_pedido(domain, domains):
+                descartados += 1
+                continue
             if not title or title.lower() in seen_titles:
                 continue
             seen_titles.add(title.lower())
@@ -689,7 +750,15 @@ def get_major_outlet_headlines(max_items: int = 8) -> list:
             })
             if len(out) >= max_items:
                 break
-        print(f"🌍 GDELT: {len(out)} titulares tras deduplicar")
+        if descartados:
+            print(f"🌍 GDELT: {descartados} artículos DESCARTADOS por no ser de "
+                  f"{domains} — la consulta por dominio no se está respetando")
+        if not out:
+            # Devolver [] hace que main() tire del respaldo RSS. Antes, una
+            # respuesta llena de medios equivocados contaba como éxito y el
+            # respaldo bueno (BBC/CNBC/Al Jazeera) no llegaba a entrar nunca.
+            print("🌍 GDELT: ningún titular de los medios pedidos — se usará el respaldo")
+        print(f"🌍 GDELT: {len(out)} titulares tras deduplicar y filtrar por medio")
         return out
     except Exception as e:
         print(f"⚠️  No se pudieron obtener titulares de medios internacionales (GDELT): {e}")
@@ -2043,7 +2112,31 @@ def evaluar_sesgos(tracking: list, bias_history: list, cierres) -> list:
     return sorted(por_fecha.values(), key=lambda x: x["fecha"])
 
 
-def construir_payload(content: str, market_data: dict, bias, nivel_usado, diag) -> dict:
+def construir_datos(market_data: dict, news=None, major_headlines=None) -> dict:
+    """El bloque auditable: con que numeros y con que titulares se escribio.
+
+    Los TITULARES tambien, y por el mismo motivo que las barras: el 02/09/2026
+    se descubrio que GDELT devolvia prensa local canadiense en el bloque de
+    "medios internacionales", y no habia forma de saber desde cuando porque los
+    titulares no se guardaban en ningun sitio."""
+    def _t(lista):
+        return [{"fuente": x.get("source", ""), "hora": x.get("time", ""),
+                 "titular": x.get("headline", "")} for x in (lista or [])]
+    return {
+        "fecha":    market_data.get("date"),
+        "sesion":   market_data.get("sesion"),
+        "barras":   market_data.get("barras"),
+        "indices":  {k: market_data.get(k) for k in
+                     ("SPX", "NDX", "RUT", "VIX", "TNX", "TYX", "DXY", "WTI", "GOLD")
+                     if isinstance(market_data.get(k), dict)},
+        "sectores": market_data.get("sectors"),
+        "titulares_mercado": _t(news),
+        "titulares_medios":  _t(major_headlines),
+    }
+
+
+def construir_payload(content: str, market_data: dict, bias, nivel_usado, diag,
+                       news=None, major_headlines=None) -> dict:
     """Lo que se publica en el Gist. Vive fuera de main() a proposito.
 
     La primera version construia este diccionario inline, y el test que
@@ -2071,19 +2164,11 @@ def construir_payload(content: str, market_data: dict, bias, nivel_usado, diag) 
             "titulares_por_fuente": (nivel_usado or {}).get("titulares"),
             **(diag or {}),
         },
-        # CON QUE NUMEROS SE ESCRIBIO. Sin esto, auditar un porcentaje raro al
-        # dia siguiente es adivinar: los precios de yfinance ya han cambiado y
-        # la ventana de `period="5d"` se ha desplazado. `barras` dice las DOS
-        # fechas que se compararon para sacar cada variacion, que es justo el
-        # dato que faltaba el 01/09/2026.
-        "datos": {
-            "sesion":   market_data.get("sesion"),
-            "barras":   market_data.get("barras"),
-            "indices":  {k: market_data.get(k) for k in
-                         ("SPX", "NDX", "RUT", "VIX", "TNX", "TYX", "DXY", "WTI", "GOLD")
-                         if isinstance(market_data.get(k), dict)},
-            "sectores": market_data.get("sectors"),
-        },
+        # CON QUE NUMEROS Y QUE TITULARES SE ESCRIBIO. Sin esto, auditar algo
+        # raro al dia siguiente es adivinar: los precios de yfinance ya han
+        # cambiado y la ventana de `period="5d"` se ha desplazado. `barras` dice
+        # las DOS fechas que se compararon para sacar cada variacion.
+        "datos": construir_datos(market_data, news, major_headlines),
     }
 
 
@@ -2106,12 +2191,35 @@ def resumen_sesgos(tracking: list) -> dict:
     return out
 
 
+def leer_datos_archivados() -> list:
+    """El archivo de auditoria que ya hay en el Gist. Si no se puede leer se
+    empieza de cero: perder archivo es malo, pero no publicar el briefing por
+    ello seria peor."""
+    try:
+        r = requests.get(f"https://api.github.com/gists/{GIST_ID}", timeout=10,
+                         headers={"Authorization": f"token {GIST_TOKEN}"} if GIST_TOKEN else {})
+        if r.status_code != 200:
+            print(f"⚠️  No se pudo leer el archivo de datos (HTTP {r.status_code}) — se empieza de cero")
+            return []
+        f = r.json().get("files", {}).get(DATOS_FILE)
+        return json.loads(f["content"]) if f else []
+    except Exception as e:
+        print(f"⚠️  No se pudo leer el archivo de datos: {e} — se empieza de cero")
+        return []
+
+
 def save_to_gist(content: str, market_data: dict, bias: str, bias_history: list, briefing_history: list,
-                  nivel_usado: dict = None, diag: dict = None, bias_tracking: list = None):
+                  nivel_usado: dict = None, diag: dict = None, bias_tracking: list = None,
+                  news: list = None, major_headlines: list = None):
     if not GIST_TOKEN:
         raise ValueError("GIST_TOKEN no configurado")
 
-    payload = construir_payload(content, market_data, bias, nivel_usado, diag)
+    payload = construir_payload(content, market_data, bias, nivel_usado, diag,
+                                news, major_headlines)
+
+    # Archivo de auditoria, podado a los ultimos DATOS_DIAS dias.
+    datos_archivo = podar_datos(leer_datos_archivados(), payload["datos"])
+    print(f"🗃️  Archivo de datos: {len(datos_archivo)} días guardados ({len(json.dumps(datos_archivo, ensure_ascii=False)) // 1024} KB)")
 
     updated_history = _append_bias(bias_history, market_data["date"], bias or "N/D")
 
@@ -2153,6 +2261,9 @@ def save_to_gist(content: str, market_data: dict, bias: str, bias_history: list,
                 },
                 BIAS_TRACKING_FILE: {
                     "content": json.dumps(tracking_actualizado, ensure_ascii=False, indent=2)
+                },
+                DATOS_FILE: {
+                    "content": json.dumps(datos_archivo, ensure_ascii=False, indent=2)
                 }
             }
         },
@@ -2261,7 +2372,7 @@ def main():
     print("💾 Guardando en GitHub Gist...")
     bias_tracking = get_bias_tracking()
     save_to_gist(briefing, market_data, bias, bias_history, briefing_history, nivel_usado, diag,
-                 bias_tracking=bias_tracking)
+                 bias_tracking=bias_tracking, news=news, major_headlines=major_headlines)
 
     print("✅ Briefing completado")
     print(f"📝 Palabras generadas: {len(briefing.split())}")
