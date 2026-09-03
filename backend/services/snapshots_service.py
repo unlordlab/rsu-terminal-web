@@ -16,6 +16,13 @@ llame esta función, o cuándo se reinicie el contenedor.
 """
 import sqlite3
 import os
+import sys
+
+# La regla de cobertura es la MISMA que usan el escáner y el briefing: una
+# copia por consumidor es como se acaba con dos umbrales del mismo número
+# contradiciéndose. Ver shared/cobertura_amplitud.py.
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..', 'shared'))
+from cobertura_amplitud import cobertura_insuficiente, FRACCION_MINIMA  # noqa: E402
 
 DB_PATH = os.path.join(os.path.dirname(__file__), '..', 'snapshots.db')
 
@@ -129,7 +136,16 @@ def maybe_write_daily_snapshot():
 
     conn = _conn()
     try:
-        _maybe_write_mercado(conn, fecha, ultimo)
+        # Antes de escribir nada: reparar lo que ya se guardó mal. Ver
+        # _corregir_amplitud_truncada().
+        _corregir_amplitud_truncada(conn, breadth_hist)
+        # ¿Viene truncada la última sesión? Misma regla que el escáner y el
+        # briefing (shared/cobertura_amplitud.py). Desde el 04/09 el escáner ya
+        # no publica sesiones truncadas, así que esto es la segunda línea: cubre
+        # un Gist escrito por una versión anterior o una descarga rara.
+        incompleto, _, _ = cobertura_insuficiente(
+            _cobertura(ultimo), [_cobertura(h) for h in breadth_hist[:-1]])
+        _maybe_write_mercado(conn, fecha, ultimo, incompleto)
         _maybe_write_ticker(conn, fecha)
         _maybe_write_cartera(conn, fecha)
         _maybe_write_tematico(conn, fecha)
@@ -137,8 +153,81 @@ def maybe_write_daily_snapshot():
         conn.close()
 
 
-def _maybe_write_mercado(conn, fecha, breadth_row):
+def _cobertura(fila):
+    """Cuántos valores entraron en esa sesión. `total_valores` lo emite el
+    escáner desde el 04/09/2026; para las filas anteriores se deduce de
+    avances+descensos, que es lo único que había."""
+    v = (fila or {}).get("total_valores")
+    if v is not None:
+        return v
+    return ((fila or {}).get("advances") or 0) + ((fila or {}).get("declines") or 0)
+
+
+def _corregir_amplitud_truncada(conn, breadth_hist):
+    """Repara las filas de amplitud guardadas desde un escaneo incompleto.
+
+    EL CASO, 02/09/2026. El escaneo nocturno publicó esa sesión con 24 valores
+    de ~2.400 (ver Scanner #22) y esta tabla la guardó como una sesión normal.
+    Con `INSERT OR IGNORE` y la comprobación de "¿ya hay fila para esta fecha?"
+    de más abajo, una ejecución buena posterior NO la corrige: se queda para
+    siempre contaminando cualquier lectura histórica de amplitud.
+
+    Por qué se puede reparar en vez de solo borrar: el historial de amplitud se
+    RECALCULA DESDE CERO cada noche sobre 150 sesiones (ver
+    `_compute_breadth_history`), así que el Gist se cura solo en cuanto la
+    descarga vuelve completa — el 02/09 estaba truncado esa noche y al día
+    siguiente ya no. Aquí solo hay que copiar el valor bueno encima del malo.
+
+    Esto NO es reescribir historia. Se toca únicamente una fila cuya cobertura
+    es una fracción de la mediana -- o sea, demostrablemente rota-- y solo
+    cuando el Gist trae para esa misma fecha una sesión completa con la que
+    sustituirla. Y se dice por el log, siempre."""
+    if not breadth_hist:
+        return
+    coberturas = [_cobertura(h) for h in breadth_hist]
+    rota, _, mediana = cobertura_insuficiente(min(coberturas or [0]), coberturas)
+    if mediana is None:
+        return
+    minimo = mediana * FRACCION_MINIMA
+
+    por_fecha = {h.get("date"): h for h in breadth_hist if _cobertura(h) >= minimo}
+    if not por_fecha:
+        return
+
+    filas = conn.execute(
+        "SELECT fecha, advances, declines FROM snapshot_mercado "
+        "WHERE fecha IN (%s)" % ",".join("?" * len(por_fecha)), tuple(por_fecha)
+    ).fetchall()
+    for fecha, adv, dec in filas:
+        if (adv or 0) + (dec or 0) >= minimo:
+            continue                      # la guardada está bien
+        bueno = por_fecha[fecha]
+        conn.execute(
+            "UPDATE snapshot_mercado SET advances=?, declines=?, "
+            "pct_above_sma50=?, new_highs=?, new_lows=? WHERE fecha=?",
+            (bueno.get("advances"), bueno.get("declines"), bueno.get("pct_above_sma50"),
+             bueno.get("new_highs"), bueno.get("new_lows"), fecha))
+        print(f"[Snapshots] amplitud de {fecha} CORREGIDA: {adv}/{dec} "
+              f"({(adv or 0) + (dec or 0)} valores, escaneo incompleto) -> "
+              f"{bueno.get('advances')}/{bueno.get('declines')} "
+              f"({_cobertura(bueno)} valores)")
+    conn.commit()
+
+
+def _maybe_write_mercado(conn, fecha, breadth_row, incompleto=False):
     if conn.execute("SELECT 1 FROM snapshot_mercado WHERE fecha = ?", (fecha,)).fetchone():
+        return
+    # No guardar una sesión de un escaneo incompleto. La tabla es append-only y
+    # `INSERT OR IGNORE` no reescribe, así que una fila mala aquí es permanente:
+    # más vale un hueco -- que se rellena solo en el próximo tick, cada 4 min--
+    # que un dato falso para siempre.
+    #
+    # OJO: el flag se calcula AQUÍ, en `maybe_write_daily_snapshot`, y llega
+    # como argumento. La primera versión miraba `breadth_row.get(...)`, y esas
+    # filas vienen crudas del Gist y nunca traen el flag -- un guardián que no
+    # puede dispararse es peor que ninguno, porque da confianza falsa.
+    if incompleto:
+        print(f"[Snapshots] {fecha} NO se guarda: el escaneo de amplitud vino incompleto")
         return
     try:
         from services.rsu_algoritmo_service import get_rsu_algoritmo
