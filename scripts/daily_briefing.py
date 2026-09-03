@@ -21,6 +21,11 @@ import pandas as pd
 # importaba directamente en este fichero hasta ahora.
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "shared"))
 from mcclellan import mcclellan_series  # noqa: E402
+# La regla de cobertura vivia aqui dentro y protegia SOLO al briefing. La
+# amplitud la consumen ademas Market, el Algoritmo y los snapshots, asi que
+# el sitio correcto es una casa comun y el origen -- no una copia por
+# consumidor, que es como se acaba con dos umbrales contradiciendose.
+from cobertura_amplitud import cobertura_insuficiente as amplitud_incompleta  # noqa: E402
 
 GROQ_KEY   = os.environ.get("GROQ_API_KEY", "")
 GIST_TOKEN = os.environ.get("GIST_TOKEN", "")
@@ -92,28 +97,6 @@ SUFIJOS_SOCIETARIOS = (", inc.", " inc.", " inc", ", corp.", " corp.", " corp",
 #
 # Misma leccion que la curva de tipos: un dato que no esta no puede convertirse
 # en una afirmacion, y menos en la tranquilizadora o en la alarmante.
-FRACCION_MINIMA_AMPLITUD = 0.5
-
-
-def amplitud_incompleta(total_ultima, totales_previos,
-                        fraccion: float = FRACCION_MINIMA_AMPLITUD):
-    """¿La ultima sesion del escaneo cubre bastantes valores para creerla?
-
-    Se compara con la MEDIANA de las sesiones anteriores en vez de con un
-    numero fijo: el universo cambia de tamano (entradas y salidas del indice) y
-    un umbral escrito a mano se queda obsoleto en silencio. La mediana aguanta
-    que alguna sesion previa tambien viniera rota.
-
-    Devuelve (esta_roto, total, esperado)."""
-    previos = [t for t in (totales_previos or []) if t]
-    if not previos or not total_ultima:
-        return (False, total_ultima, None)
-    previos = sorted(previos)
-    n = len(previos)
-    mediana = previos[n // 2] if n % 2 else (previos[n // 2 - 1] + previos[n // 2]) / 2
-    return (total_ultima < mediana * fraccion, total_ultima, mediana)
-
-
 def es_dominio_pedido(domain: str, dominios) -> bool:
     """¿Este articulo viene de verdad de uno de los medios que se pidieron?
 
@@ -980,10 +963,16 @@ def get_rsu_breadth_signals() -> dict:
         # Si no, se DESCARTA esa sesion entera en vez de publicar ruido: el ABI,
         # el McClellan y el NH-NL salen todos de ella (y el McClellan arrastra el
         # punto malo en sus EMAs durante semanas si se le cuela).
+        # `total_valores` lo emite el escaner desde el 04/09 y es el numero
+        # exacto de tickers con dato ese dia; avances+descensos se queda corto
+        # porque no cuenta los que cerraron planos. Se usa como respaldo para
+        # los historiales escritos antes.
+        def _tot(h):
+            v = h.get("total_valores")
+            return v if v is not None else (h.get("advances", 0) or 0) + (h.get("declines", 0) or 0)
         rota, tot, esperado = amplitud_incompleta(
-            (breadth_hist[-1].get("advances", 0) + breadth_hist[-1].get("declines", 0))
-            if breadth_hist else None,
-            [h.get("advances", 0) + h.get("declines", 0) for h in breadth_hist[:-1]])
+            _tot(breadth_hist[-1]) if breadth_hist else None,
+            [_tot(h) for h in breadth_hist[:-1]])
         if rota:
             print(f"⚠️  Amplitud DESCARTADA: la última sesión del escaneo trae {tot} "
                   f"valores frente a una mediana de {esperado:.0f} — escaneo "

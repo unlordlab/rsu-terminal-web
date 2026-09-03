@@ -243,3 +243,37 @@ def test_el_flag_lo_pone_la_funcion_de_amplitud_no_el_prompt():
     limpio = _amplitud(BUENAS + [_sesion("2026-09-02", 681, 1707)],
                        [{"date": "2026-09-02", "advances": 159, "declines": 336}])
     assert limpio["escaneo_incompleto"] is False
+
+
+# ── total_valores no es lo mismo que avances+descensos ───────────────────────
+
+def test_una_sesion_MUY_PLANA_no_se_confunde_con_una_truncada():
+    """`avances + descensos` NO cuenta los valores que cierran planos, así que
+    en una sesión muy quieta se queda corto y parecería un escaneo roto. Por eso
+    el escáner emite `total_valores` desde el 04/09 y el briefing lo prefiere.
+
+    Sin esa preferencia, una sesión legítima de 2.400 valores con casi todos
+    planos (24 con movimiento) se tiraría por la borda -- justo el mercado
+    apagado que el ABI está para señalar."""
+    plana = _sesion("2026-09-02", 20, 4)
+    plana["total_valores"] = 2400
+    sesiones = BUENAS + [_sesion("2026-09-01", 681, 1707), plana]
+    for h in sesiones[:-1]:
+        h["total_valores"] = h["advances"] + h["declines"]
+    b = _amplitud(sesiones, [{"date": "2026-09-02", "advances": 159, "declines": 336}])
+    assert b["fecha"] == "2026-09-02", (
+        "se ha descartado una sesión completa por mirar avances+descensos en "
+        "vez de `total_valores`: 2.376 valores planos no son un escaneo roto")
+    assert b["escaneo_incompleto"] is False
+
+
+def test_y_una_truncada_con_total_valores_bajo_SI_se_descarta():
+    """El otro lado: si `total_valores` confirma que la muestra es una fracción,
+    se descarta aunque los avances y descensos parezcan razonables."""
+    rota = _sesion("2026-09-02", 20, 4)
+    rota["total_valores"] = 24
+    sesiones = BUENAS + [_sesion("2026-09-01", 681, 1707), rota]
+    for h in sesiones[:-1]:
+        h["total_valores"] = h["advances"] + h["declines"]
+    b = _amplitud(sesiones, [{"date": "2026-09-01", "advances": 159, "declines": 336}])
+    assert b["fecha"] == "2026-09-01" and b["escaneo_incompleto"] is True

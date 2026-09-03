@@ -48,6 +48,7 @@ import yfinance as yf
 # scripts/), sin depender de nada de backend/ -- sigue siendo standalone,
 # compatible con el runner de GitHub Actions.
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "shared"))
+from cobertura_amplitud import cobertura_insuficiente  # noqa: E402
 from sp500_universe import SP500_SECTOR_MAP  # noqa: E402
 from weinstein_phases import classify_phase_debounced, classify_phase_weekly  # noqa: E402
 from l3_banker import calcular_l3  # noqa: E402
@@ -422,6 +423,14 @@ def _compute_breadth_history(close_d: dict, tickers: list, lookback_days: int = 
     diff      = df.diff()
     advances  = (diff > 0).sum(axis=1)
     declines  = (diff < 0).sum(axis=1)
+    # CUANTOS TICKERS TIENEN DATO DE VERDAD ESE DIA. `advances` y `declines` son
+    # recuentos crudos sobre TODAS las columnas: si la descarga vuelve parcial,
+    # pandas crea igualmente la fila del dia con NaN en casi todas y salen 20
+    # avances contra 4 -- que es lo que se publico el 02/09/2026 y consumieron
+    # Market, el Algoritmo, los snapshots y el briefing como si fuera el
+    # mercado entero. `pct_above_sma50` ya se protegia asi desde el 15/08 (ver
+    # `valid_cnt` mas abajo); sus vecinos se quedaron sin proteger.
+    cobertura = diff.notna().sum(axis=1)
 
     sma50     = df.rolling(50, min_periods=50).mean()
     above     = df > sma50
@@ -464,7 +473,26 @@ def _compute_breadth_history(close_d: dict, tickers: list, lookback_days: int = 
             "pct_above_sma50": round(float(pa), 1) if pd.notna(pa) else None,
             "new_highs":       int(new_highs.loc[d]),
             "new_lows":        int(new_lows.loc[d]),
+            # Va en cada fila a proposito: hace el problema DIAGNOSTICABLE para
+            # siempre. El del 02/09 solo se detecto porque alguien auditaba el
+            # briefing a mano y le extrano un ABI de 66,7%.
+            "total_valores":   int(cobertura.loc[d]),
         })
+
+    # NO SE PUBLICA UNA SESION TRUNCADA. Se corta por la cola y no por el medio:
+    # lo que llega parcial es siempre lo mas reciente (la descarga del dia), y
+    # quitar dias del medio dejaria huecos en las EMA del McClellan, que es peor
+    # que un dia menos de serie.
+    while len(history) > 1:
+        rota, tot, esperado = cobertura_insuficiente(
+            history[-1]["total_valores"], [h["total_valores"] for h in history[:-1]])
+        if not rota:
+            break
+        print(f"⚠️  Amplitud: sesión {history[-1]['date']} NO se publica — "
+              f"{tot} valores frente a una mediana de {esperado:.0f}. La descarga "
+              f"vino parcial; publicarla daría un ABI y un McClellan sobre una "
+              f"muestra que no representa al mercado.")
+        history.pop()
     return history
 
 
