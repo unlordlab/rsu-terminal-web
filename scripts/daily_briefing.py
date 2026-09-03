@@ -79,6 +79,41 @@ SUFIJOS_SOCIETARIOS = (", inc.", " inc.", " inc", ", corp.", " corp.", " corp",
                        " co.", " company", " holdings", " group", " s.a.")
 
 
+# El escaneo nocturno del Scanner puede salir INCOMPLETO. El 02/09/2026 escribio
+# 20 avances y 4 descensos -- 24 valores de un universo de ~2.380-- y 0/1 en el
+# S&P 500 de ~495. La parte de RS/fase del mismo escaneo estaba bien (498
+# valores en `stocks`), asi que nada cantaba.
+#
+# El briefing lo consumio tal cual y publico: "el Indice de Amplitud (ABI) marco
+# 66,7%, senal de capitulacion... la inmensa mayoria de los componentes cayeron".
+# El 66,7% es |20-4|/24, ruido; y encima 20 contra 4 es un desequilibrio AL ALZA,
+# lo contrario de lo que escribio. Una seccion entera del briefing sobre 24
+# valores.
+#
+# Misma leccion que la curva de tipos: un dato que no esta no puede convertirse
+# en una afirmacion, y menos en la tranquilizadora o en la alarmante.
+FRACCION_MINIMA_AMPLITUD = 0.5
+
+
+def amplitud_incompleta(total_ultima, totales_previos,
+                        fraccion: float = FRACCION_MINIMA_AMPLITUD):
+    """¿La ultima sesion del escaneo cubre bastantes valores para creerla?
+
+    Se compara con la MEDIANA de las sesiones anteriores en vez de con un
+    numero fijo: el universo cambia de tamano (entradas y salidas del indice) y
+    un umbral escrito a mano se queda obsoleto en silencio. La mediana aguanta
+    que alguna sesion previa tambien viniera rota.
+
+    Devuelve (esta_roto, total, esperado)."""
+    previos = [t for t in (totales_previos or []) if t]
+    if not previos or not total_ultima:
+        return (False, total_ultima, None)
+    previos = sorted(previos)
+    n = len(previos)
+    mediana = previos[n // 2] if n % 2 else (previos[n // 2 - 1] + previos[n // 2]) / 2
+    return (total_ultima < mediana * fraccion, total_ultima, mediana)
+
+
 def es_dominio_pedido(domain: str, dominios) -> bool:
     """¿Este articulo viene de verdad de uno de los medios que se pidieron?
 
@@ -940,6 +975,21 @@ def get_rsu_breadth_signals() -> dict:
 
         mcclellan, abi, new_highs, new_lows, universo_amplitud = None, None, None, None, None
         breadth_hist = gist.get("breadth_history", [])
+
+        # ¿Viene completa la ultima sesion del escaneo? Ver amplitud_incompleta().
+        # Si no, se DESCARTA esa sesion entera en vez de publicar ruido: el ABI,
+        # el McClellan y el NH-NL salen todos de ella (y el McClellan arrastra el
+        # punto malo en sus EMAs durante semanas si se le cuela).
+        rota, tot, esperado = amplitud_incompleta(
+            (breadth_hist[-1].get("advances", 0) + breadth_hist[-1].get("declines", 0))
+            if breadth_hist else None,
+            [h.get("advances", 0) + h.get("declines", 0) for h in breadth_hist[:-1]])
+        if rota:
+            print(f"⚠️  Amplitud DESCARTADA: la última sesión del escaneo trae {tot} "
+                  f"valores frente a una mediana de {esperado:.0f} — escaneo "
+                  f"incompleto, no se publica amplitud en vez de publicar ruido")
+            breadth_hist = breadth_hist[:-1]
+
         if len(breadth_hist) >= 40:
             net_series = pd.Series([h["advances"] - h["declines"] for h in breadth_hist])
             mcclellan  = round(float(mcclellan_series(net_series).iloc[-1]), 1)
@@ -967,7 +1017,25 @@ def get_rsu_breadth_signals() -> dict:
         # de amplitud POSITIVA (+141 neto). La prueba de verdad la tenía al
         # lado y no la recibía: del S&P 500 solo subieron 206 de 496 (41,5%)
         # mientras el índice ganaba un 0,32%.
-        sp = (gist.get("breadth_sp500") or [{}])[-1]
+        sp_hist = gist.get("breadth_sp500") or [{}]
+        sp = sp_hist[-1]
+        sp_rota, sp_tot, sp_esp = amplitud_incompleta(
+            (sp.get("advances", 0) or 0) + (sp.get("declines", 0) or 0),
+            [(h.get("advances", 0) or 0) + (h.get("declines", 0) or 0) for h in sp_hist[:-1]])
+        if sp_rota:
+            # Se RETROCEDE a la ultima sesion buena, igual que hace el historial
+            # de arriba con `breadth_hist[:-1]`. Dejarlo en {} descartaba el
+            # desglose entero mientras el universo si retrocedia, asi que el
+            # prompt habria recibido los avances del dia anterior SIN su
+            # desglose del S&P -- dos mitades de la misma foto descuadradas.
+            print(f"⚠️  Desglose del S&P DESCARTADO: {sp_tot} valores frente a una "
+                  f"mediana de {sp_esp:.0f} — se usa la última sesión completa")
+            previas = [h for h in sp_hist[:-1]
+                       if not amplitud_incompleta(
+                           (h.get("advances", 0) or 0) + (h.get("declines", 0) or 0),
+                           [(x.get("advances", 0) or 0) + (x.get("declines", 0) or 0)
+                            for x in sp_hist if x is not h])[0]]
+            sp = previas[-1] if previas else {}
         sp_adv, sp_dec = sp.get("advances"), sp.get("declines")
         sp_pct = (round(sp_adv / (sp_adv + sp_dec) * 100, 1)
                   if sp_adv is not None and sp_dec is not None and (sp_adv + sp_dec) else None)
@@ -987,14 +1055,23 @@ def get_rsu_breadth_signals() -> dict:
         # como lo contrario.
         if abi is None:
             abi_estado = None
-        elif abi <= 15:
-            abi_estado = "APAGADO"
-        elif abi < 30:
-            abi_estado = "MODERADO"
-        elif abi < 40:
-            abi_estado = "ALTO"
         else:
-            abi_estado = "CAPITULACION"
+            if abi <= 15:
+                abi_estado = "APAGADO"
+            elif abi < 30:
+                abi_estado = "MODERADO"
+            elif abi < 40:
+                abi_estado = "ALTO"
+            else:
+                abi_estado = "CAPITULACION"
+            # CON LA DIRECCION. El ABI mide CUANTO se impone un lado pero no
+            # CUAL, y el 03/09 el briefing recibio "ABI 66,7% (CAPITULACION)"
+            # junto a los avances y descensos, y escribio que "la inmensa
+            # mayoria de los componentes cayeron" cuando el desequilibrio era
+            # AL ALZA. Tenia el dato al lado y lo leyo al reves; decirselo en la
+            # propia etiqueta cuesta 3 fichas.
+            if adv is not None and dec is not None and adv != dec and abi > 15:
+                abi_estado += " al alza" if adv > dec else " a la baja"
 
         if mcclellan is None:
             mc_estado = None
@@ -1014,6 +1091,7 @@ def get_rsu_breadth_signals() -> dict:
 
         return {
             "fecha": fecha_amplitud,
+            "escaneo_incompleto": bool(rota or sp_rota),
             "pct_above_sma50": pct_above_sma50,
             "advances": adv,
             "declines": dec,
@@ -1620,6 +1698,15 @@ def build_prompt(market_data: dict, news: list, major_headlines: list, earnings:
         # paso el 27/08. Asi que se comparan las dos fechas en vez de afirmar
         # una de las dos cosas: dar por hecho "va por detras" seria cambiar una
         # etiqueta falsa por otra.
+        # Si el escaneo nocturno vino incompleto, el modelo tiene que SABERLO.
+        # OJO al texto: el codigo NO deja huecos, RETROCEDE a la ultima sesion
+        # completa -- asi que decir "N/D" aqui seria contradecir a los numeros
+        # que tiene justo debajo. Y callarlo tampoco vale: el 25/08, al llegarle
+        # la amplitud vacia, escribio que "la herramienta no tiene ese dato".
+        aviso_escaneo = (" ⚠️ EL ESCANEO NOCTURNO DE HOY VINO INCOMPLETO: la "
+                         "amplitud de abajo es la de la SESIÓN ANTERIOR (mira su "
+                         "fecha), no la de hoy. No digas que falta."
+                         if breadth.get("escaneo_incompleto") else "")
         fecha_amp = breadth.get("fecha")
         fecha_precios = ses.get("fecha")
         if not fecha_amp:
@@ -1635,7 +1722,16 @@ def build_prompt(market_data: dict, news: list, major_headlines: list, earnings:
                          f"no digas «hoy» al citarla")
         else:
             cierre_de = f"cierre del {fecha_amp}, misma sesion que los precios"
-        pct_s  = f"{breadth['pct_above_sma50']}%" if breadth.get('pct_above_sma50') is not None else "N/D"
+        # DE QUE LADO. El 03/09/2026 el prompt decia "% S&P 500 sobre SMA50:
+        # 46.6%" y el briefing escribio "el 46,6% de las acciones del S&P 500
+        # estan POR DEBAJO de su media movil de 50 dias". Invertido: 46,6% es el
+        # porcentaje que esta POR ENCIMA. Dar las dos cifras cuesta ~10 fichas y
+        # quita la posibilidad de confundirlas.
+        if breadth.get('pct_above_sma50') is not None:
+            _pa = breadth['pct_above_sma50']
+            pct_s = f"{_pa}% POR ENCIMA (o sea {round(100 - _pa, 1)}% por debajo)"
+        else:
+            pct_s = "N/D"
         mc_s   = f"{breadth['mcclellan']:+.1f}" if breadth.get('mcclellan') is not None else "N/D (histórico insuficiente todavía)"
         abi_s  = f"{breadth['abi']}%" if breadth.get('abi') is not None else "N/D"
         abi_b  = f" ({breadth['abi_estado']})" if breadth.get('abi_estado') else ""
@@ -1645,7 +1741,7 @@ def build_prompt(market_data: dict, news: list, major_headlines: list, earnings:
         # entero al importarlo.
         sp_pct_str = (f" ({breadth['sp500_pct_al_alza']}% al alza)" if breadth.get('sp500_pct_al_alza') is not None else '')
         rsu_breadth_str = (
-            f"[{cierre_de}] % S&P 500 sobre SMA50: {pct_s} | "
+            f"[{cierre_de}]{aviso_escaneo} % S&P 500 sobre su SMA50: {pct_s} | "
             f"Oscilador McClellan RSU (S&P 500 + Russell 2000): {mc_s}"
             f"{(' (' + breadth['mcclellan_estado'] + '; alcista >+70, bajista <-70)') if breadth.get('mcclellan_estado') else ''} | "
             f"ABI: {abi_s}{abi_b} — mide CUÁNTO se impone un lado, no cuál (≤15 apagado, ≥40 capitulación) | "

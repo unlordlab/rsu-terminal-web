@@ -74,9 +74,13 @@ def test_el_ABI_del_caso_real_no_se_clasifica_como_mercado_flojo():
     el 39,8% que el briefing llamó «falta de convicción»."""
     b = _amplitud(717, 1666)          # |717-1666| / 2383 = 39,8%
     assert b["abi"] == 39.8
-    assert b["abi_estado"] == "ALTO", (
+    assert b["abi_estado"].startswith("ALTO"), (
         "un ABI de 39,8 está a dos décimas de capitulación; sin banda el modelo "
         "lo leyó como dispersión y falta de convicción")
+    # La dirección se le añadió el 03/09, después de que el briefing leyera un
+    # desequilibrio AL ALZA como «la inmensa mayoría de los componentes
+    # cayeron». Ver test_briefing_amplitud_truncada.py.
+    assert b["abi_estado"] == "ALTO a la baja", "717 avances contra 1.666 es a la baja"
 
 
 def test_un_mercado_de_verdad_apagado_se_llama_apagado():
@@ -88,12 +92,12 @@ def test_un_mercado_de_verdad_apagado_se_llama_apagado():
 
 def test_una_capitulacion_se_llama_capitulacion():
     b = _amplitud(300, 2100)          # 75%
-    assert b["abi_estado"] == "CAPITULACION"
+    assert b["abi_estado"] == "CAPITULACION a la baja"
 
 
 def test_el_tramo_de_en_medio_existe():
     b = _amplitud(900, 1500)          # 25%
-    assert b["abi_estado"] == "MODERADO"
+    assert b["abi_estado"] == "MODERADO a la baja"
 
 
 def test_sin_ABI_no_se_inventa_una_banda():
