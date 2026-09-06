@@ -457,6 +457,36 @@ async def market_cache_warm_loop():
         except Exception as e:
             print(f"[Snapshots] Error: {e}")
 
+        # El scan de CANSLIM se registra para el track record DENTRO de la
+        # lectura del Gist (canslim_service._registrar_scan_para_track_record),
+        # y esa lectura solo ocurria cuando alguien abria el modulo. Medido el
+        # 06/09/2026 en produccion: 13 sesiones registradas de ~24 dias de
+        # mercado entre el 02/08 y el 03/09, con un hueco de cinco sesiones
+        # seguidas. No estaba roto -- dependia del TRAFICO.
+        #
+        # Y lo que importa no es que falten dias, sino CUALES: la gente abre el
+        # escaner mas cuando el mercado hace algo, asi que el track record se
+        # estaba midiendo sobre un subconjunto sesgado hacia sesiones movidas.
+        # Misma familia que el sesgo de seleccion de Options Flow, donde los
+        # contratos sin vencer solo recibian veredicto si ya habian tocado.
+        #
+        # Va aqui y no en un bucle propio de 24h por el mismo motivo que el
+        # snapshot de arriba: `registrar_scan` es idempotente por FECHA DE
+        # SESION, asi que registra en cuanto el Gist trae una sesion nueva sin
+        # importar cuando se reinicio el contenedor. Cadencia desplazada media
+        # ventana respecto a Fed Macro para no juntar dos lecturas de red en el
+        # mismo ciclo.
+        if (tick + 840) % 1680 < 240:      # ~cada 28 min, alternando con Fed Macro
+            try:
+                # `get_canslim_from_gist`, NO `scan_canslim`: el registro vive
+                # dentro de la primera. La primera version de este arreglo
+                # llamaba a la segunda -- que esta 80 lineas mas abajo y no
+                # registra nada-- y habria sido un arreglo que no arregla.
+                from services.canslim_service import get_canslim_from_gist
+                await loop.run_in_executor(None, get_canslim_from_gist)
+            except Exception as e:
+                print(f"[CANSLIMTracking] Error precalentando el scan: {type(e).__name__}: {e}")
+
 
 # Recalcula el RSU Algoritmo en vivo cada 30 min, independientemente de si
 # algún usuario tiene la página abierta — si no existiera esto, un cambio de
