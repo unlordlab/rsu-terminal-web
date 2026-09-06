@@ -109,3 +109,38 @@ a:hover {
     opacity: 0.75;
     text-decoration: underline;
 }
+
+/* ── INDICADOR DE FOCO DE TECLADO ────────────────────────────────────────────
+ *
+ * EL CASO, 06/09/2026. La terminal no definía NI UN estilo de foco: cero
+ * `:focus` y cero `:focus-visible` en los nueve temas y en todo el JavaScript,
+ * con 112 <button>, 42 <input>, 12 <select> y 15 <a> por medio. Quien navega
+ * con el teclado -- por costumbre, por accesibilidad, o rellenando el login--
+ * no veía dónde estaba, o veía el contorno por defecto del navegador, que
+ * sobre estos fondos oscuros es prácticamente invisible.
+ *
+ * POR QUÉ DOS ANILLOS Y NO UNO DEL COLOR DE ACENTO. Medido el contraste del
+ * acento contra el fondo de cada tema: TRES DE NUEVE no llegan al 3:1 que pide
+ * la WCAG para un indicador de foco -- bubblebath 2,45, light 2,65 y octogon
+ * 1,78. Un anillo de un solo color no puede funcionar sobre nueve paletas tan
+ * distintas. Así que va uno de acento (identidad, se ve bien en 6 de 9) y
+ * fuera otro de `--color-text`, que SÍ pasa el 3:1 en los nueve (peor caso
+ * 3,35 en polygon-window, medido contra el fondo y contra la superficie).
+ * Falle el que falle, siempre queda uno visible.
+ *
+ * `:focus-visible` y no `:focus`: el anillo aparece navegando con teclado y no
+ * al hacer clic con el ratón. Y no se anula `:focus`, para que un navegador
+ * que no soporte `:focus-visible` conserve su contorno por defecto en vez de
+ * quedarse sin ninguno -- que es peor que el que había.
+ */
+:where(a, button, input, select, textarea, summary, [tabindex]):focus-visible {
+    outline: 2px solid var(--color-text);
+    outline-offset: 2px;
+    box-shadow: 0 0 0 2px var(--color-accent);
+}
+
+/* El foco no puede quedar tapado por la barra superior al llegar a un control
+ * navegando con el tabulador (WCAG 2.2, «Focus Not Obscured»). */
+:where(a, button, input, select, textarea, summary, [tabindex]) {
+    scroll-margin: 5rem;
+}
