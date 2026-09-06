@@ -34,6 +34,64 @@ LESSONS_FILE = os.path.join(os.path.dirname(__file__), '..', 'frontend', 'pages'
 MODEL = "qwen/qwen3.6-27b"
 
 TIPOS_BLOQUE_PERMITIDOS = ['text', 'tip', 'warning', 'concept', 'steps', 'table', 'divider']
+
+# ── Presupuesto de fichas de Groq ────────────────────────────────────────────
+#
+# EL CASO, 20/08/2026: el cron terminaba con codigo 1 y el error era literal:
+# `Groq error 413: Request too large ... tokens per minute (TPM): Limit 8000,
+# Requested 9308`. Reproducido el 06/09 construyendo el prompt real: el bloque
+# de "lecciones que ya existen" ocupaba 20.847 caracteres -- 149 lecciones con
+# titulo MAS los primeros 100 caracteres de su introduccion-- o sea ~6.900
+# fichas, que con las 3.000 de `max_tokens` se pasan del techo de la cuenta.
+#
+# El intro de cada leccion costaba CINCO VECES lo que el titulo y no servia
+# para nada: ese bloque existe solo para que el modelo no repita un tema, y el
+# titulo ya dice de que va. Agrupando por modulo baja a ~2.000 fichas y encima
+# le da al modelo lo que necesita para elegir `moduleId`.
+#
+# OJO: solo falla la ruta "nueva". "revision" manda UNA leccion y siempre cupo,
+# y el cron usa `random`, asi que fallaba la mitad de los dias -- no todos.
+MAX_TOKENS_SALIDA = 3000
+TPM_LIMITE = 8000
+# Se deja margen a proposito: Groq cuenta con SU tokenizador, no con esta
+# estimacion. Mismo criterio que daily_briefing.py.
+TECHO_PROMPT = TPM_LIMITE - MAX_TOKENS_SALIDA - 500       # 4500
+# 2,9 y no 3,5: calibrado midiendo contra el recuento real de Groq en el
+# briefing (se estimaron 5.744 y Groq conto 6.601). Estimar de MENOS provoca un
+# 413; estimar de mas solo recorta contexto que habria cabido.
+CHARS_POR_FICHA = 2.9
+
+
+def _estimar_fichas(texto: str) -> int:
+    return int(len(texto) / CHARS_POR_FICHA) + 1
+
+
+def _contexto_lecciones(existentes: list, techo: int = TECHO_PROMPT) -> tuple:
+    """Los temas ya cubiertos, agrupados por modulo y SOLO con el titulo.
+
+    Devuelve (texto, omitidas). Si ni asi cabe -- la Academia crece-- se
+    recortan modulos enteros por el final y se le DICE al modelo cuantas
+    lecciones no esta viendo: un listado parcial presentado como completo es
+    peor que uno corto que se declara incompleto, porque el modelo daria por
+    libre un tema que ya existe.
+
+    Cuando esto apriete de verdad (~290 lecciones con el techo actual) el
+    arreglo no es recortar mas, es que el modelo elija primero el modulo y solo
+    se le manden los titulos de ese."""
+    por_modulo = {}
+    for l in existentes:
+        por_modulo.setdefault(l["moduleId"], []).append(l["title"])
+
+    lineas = ["M%s: %s" % (m, " · ".join(t)) for m, t in sorted(por_modulo.items())]
+    omitidas = 0
+    while lineas and _estimar_fichas(chr(10).join(lineas)) > techo:
+        quitada = lineas.pop()
+        omitidas += quitada.count(" · ") + 1
+
+    texto = chr(10).join(lineas)
+    if omitidas:
+        texto += chr(10) + "(y %d lecciones mas de otros modulos que no caben aqui)" % omitidas
+    return texto, omitidas
 # NOTA: se excluye 'chart' a propósito -- Elia no puede generar los SVG
 # de academy_charts.js, así que no debe proponer bloques que dependan de
 # un gráfico que no existe.
@@ -67,7 +125,7 @@ def _llamar_groq(prompt: str) -> str:
         json={
             "model": MODEL,
             "messages": [{"role": "user", "content": prompt}],
-            "max_tokens": 3000,
+            "max_tokens": MAX_TOKENS_SALIDA,
             "temperature": 0.4,
             "reasoning_effort": "none",     # mismo motivo que en daily_briefing.py:
             "reasoning_format": "hidden",   # tarea de redacción, no de razonamiento paso a paso
@@ -155,7 +213,10 @@ def _formatear_bloque_js(leccion: dict) -> str:
 
 
 def proponer_leccion_nueva(existentes: list) -> dict:
-    resumen_existentes = "\n".join(f"- [{l['moduleId']}-{l['lessonIndex']}] {l['title']}: {l['intro'][:100]}" for l in existentes)
+    resumen_existentes, omitidas = _contexto_lecciones(existentes)
+    print(f"[Elia] Contexto: {len(existentes) - omitidas} lecciones listadas "
+          f"({_estimar_fichas(resumen_existentes)} fichas de un techo de {TECHO_PROMPT})"
+          + (f", {omitidas} omitidas por espacio" if omitidas else ""))
 
     prompt = f"""Eres Elia, responsable de contenido educativo de RSU Terminal, una plataforma de análisis bursátil para una comunidad de ~100 traders activos. Escribes en castellano, con tono claro y didáctico, sin jerga innecesaria.
 
