@@ -45,10 +45,27 @@ jobs:
           # sin tocar código ni desplegar.
           BRIEFING_PROMPT_VERSION: ${{ secrets.BRIEFING_PROMPT_VERSION }}
         run: |
-          python scripts/daily_briefing.py
+          # `pipefail` es imprescindible: sin el, `tee` devuelve 0 y un fallo
+          # del script pasaria por ejecucion correcta.
+          set -o pipefail
+          python scripts/daily_briefing.py 2>&1 | tee /tmp/briefing.log
 
+      # EL AVISO LLEVA EL ERROR, no solo el numero de ejecucion.
+      #
+      # EL CASO, 07/09/2026: el briefing fallo y el aviso decia unicamente "ha
+      # fallado (run 34125373118)". Para saber POR QUE hay que abrir el
+      # registro del Action, y la API de GitHub exige permisos de admin para
+      # descargarlo -- asi que el diagnostico costaba una vuelta entera.
+      #
+      # Se recortan las ultimas lineas y se tapan las cadenas largas que
+      # parezcan una credencial: los registros del Action los enmascara GitHub,
+      # pero el fichero de `tee` no, y de ahi sale este mensaje.
       - name: Avisar por Telegram si falló
         if: failure()
         continue-on-error: true
         run: |
-          curl -s -X POST "https://api.telegram.org/bot${{ secrets.TELEGRAM_BOT_TOKEN }}/sendMessage"             -d chat_id="${{ secrets.TELEGRAM_CHAT_ID }}"             -d text="⚠️ Daily Market Briefing: el briefing diario ha fallado. Sin él, el Dashboard muestra el de ayer. (run ${{ github.run_id }})."
+          COLA=$(tail -n 15 /tmp/briefing.log 2>/dev/null                  | sed -E 's/[A-Za-z0-9_-]{24,}/[oculto]/g'                  | tail -c 900)
+          curl -s -X POST "https://api.telegram.org/bot${{ secrets.TELEGRAM_BOT_TOKEN }}/sendMessage"             --data-urlencode "chat_id=${{ secrets.TELEGRAM_CHAT_ID }}"             --data-urlencode "text=⚠️ Daily Market Briefing ha fallado (run ${{ github.run_id }}). Sin él, el Dashboard muestra el de ayer.
+
+          Últimas líneas:
+          ${COLA}"
