@@ -31,7 +31,61 @@ from cobertura_amplitud import cobertura_insuficiente as amplitud_incompleta  # 
 GROQ_KEY   = os.environ.get("GROQ_API_KEY", "")
 GIST_TOKEN = os.environ.get("GIST_TOKEN", "")
 GIST_ID    = os.environ.get("GIST_ID", "715ee0c4e571517c11fa65c5c2376c34")
-MODEL      = "qwen/qwen3.6-27b"
+# ── El modelo, y los parámetros que cada uno acepta ───────────────────────────
+#
+# NO ES UNA CADENA SUELTA, y aprenderlo costó una comprobación el 07/09: cada
+# familia acepta parámetros distintos, así que cambiar el modelo a pelo revienta
+# la llamada. Verificado contra la documentación de Groq ese día:
+#
+#   qwen3.6-27b   reasoning_effort: none | default          reasoning_format: sí
+#   qwen3.8-27b   reasoning_effort: none | default | low…    reasoning_format: sí
+#   gpt-oss-*     reasoning_effort: low | medium | high      reasoning_format: NO
+#   compound      sistema agéntico: ni uno ni otro
+#
+# `reasoning_effort: "none"` no es un capricho: el pensamiento interno cuenta
+# dentro de `max_tokens` aunque se oculte, y con el presupuesto apretado se
+# llegó a gastar entero pensando, dejando un briefing de CERO palabras. Los
+# `gpt-oss` **no admiten "none"** -- siempre razonan--, así que pasar a uno de
+# ellos reintroduce ese riesgo y NO es un cambio de una línea: por eso el
+# modelo por defecto sigue siendo el que está medido y funcionando.
+#
+# ESTADO DE CADA UNO (docs de Groq, 07/09): los dos qwen son **Preview** — "for
+# evaluation purposes only", pueden cambiar o retirarse con poco aviso, que es
+# exactamente lo que pasó con el techo de salida. `gpt-oss-*` y los `compound`
+# son **Production**.
+#
+# Se deja elegible por entorno para poder comparar briefings reales lado a lado
+# (ver scripts/comparar_modelos_briefing.py) sin tocar el código ni desplegar.
+MODEL_POR_DEFECTO = "qwen/qwen3.6-27b"
+MODEL      = os.environ.get("BRIEFING_MODEL", MODEL_POR_DEFECTO)
+
+# Medios que el briefing ya considera fiables para el bloque de prensa
+# internacional. Se reutilizan para acotar la búsqueda de los `compound`: si el
+# modelo va a buscar por su cuenta, que busque donde ya buscamos nosotros.
+DOMINIOS_FIABLES = ["reuters.com", "bloomberg.com", "wsj.com", "apnews.com", "ft.com"]
+
+
+def parametros_del_modelo(modelo: str) -> dict:
+    """Los parámetros que ESE modelo acepta. Mandar los de otro da un 400.
+
+    Devolver un dict en vez de escribirlos en la llamada es lo que hace que
+    cambiar de modelo sea configuración y no una reescritura -- y que un
+    parámetro incompatible no pueda colarse en silencio.
+    """
+    if modelo.startswith("groq/compound"):
+        # Sistema agéntico: la búsqueda web NO se puede apagar (comprobado en
+        # las docs el 07/09, solo hay filtrado por dominio). Se acota a los
+        # medios que ya damos por buenos, porque un briefing que cita una
+        # fuente que no controlamos es justo el fallo que más veces se ha
+        # corregido aquí (#33 IPC de Australia, #40 el oro, #41 Kelowna).
+        return {"search_settings": {"include_domains": DOMINIOS_FIABLES}}
+    if modelo.startswith("openai/gpt-oss"):
+        # No admiten "none" ni reasoning_format. Razonan siempre, así que se
+        # pide el mínimo para que el pensamiento se coma lo menos posible del
+        # presupuesto de salida.
+        return {"reasoning_effort": "low"}
+    return {"reasoning_effort": "none", "reasoning_format": "hidden"}
+
 
 # Fichero adicional dentro del MISMO Gist (GIST_ID) — no hace falta un Gist
 # nuevo, GitHub permite varios ficheros por Gist. Guarda solo un registro
@@ -329,6 +383,21 @@ def instruccion_longitud(max_tokens: int) -> str:
     """La frase que sustituye a [[LONGITUD]] en el cierre del prompt."""
     techo = palabras_que_caben(max_tokens)
     return f"entre {int(techo * 0.8)} y {techo} palabras"
+
+
+def _busqueda_dentro_de_dominios_fiables(herramienta: dict) -> bool:
+    """¿Todo lo que trajo esa llamada a una herramienta viene de la lista?
+
+    Se mira la salida entera como texto: interesa detectar CUALQUIER dominio
+    ajeno citado, no validar la forma exacta de la respuesta, que Groq puede
+    cambiar. Ante la duda se devuelve False -- se prefiere un aviso de más que
+    dar por bueno algo que no se ha sabido leer.
+    """
+    salida = json.dumps(herramienta, ensure_ascii=False)
+    dominios = set(re.findall(r"https?://([^/\s\"']+)", salida))
+    if not dominios:
+        return True          # no citó ninguna URL: no hay nada que auditar
+    return all(es_dominio_pedido(d, DOMINIOS_FIABLES) for d in dominios)
 
 
 def _presupuesto_salida(disponible: int, techo_salida: int = None) -> int:
@@ -2068,26 +2137,10 @@ def generate_briefing(prompt: str, reintento_de_corte: bool = False,
             "messages":         [{"role": "user", "content": prompt}],
             "max_tokens":       max_salida,
             "temperature":      0.45,
-            # Qwen3.6-27B soporta modo "pensador" (reasoning) y modo directo.
-            # Esta tarea es sintetizar datos ya dados en prosa fluida en un
-            # tono concreto — no resolver un problema lógico complejo — así
-            # que no se beneficia de razonamiento paso a paso, y desactivarlo
-            # resuelve DOS problemas a la vez en su raíz, en vez de ir
-            # ajustando max_tokens a ciegas cada vez que falla algo distinto:
-            #   1) El pensamiento interno de este modelo suele salir en
-            #      inglés, y aunque se oculte del texto visible con
-            #      reasoning_format="hidden", sigue contando dentro del
-            #      presupuesto de max_tokens — con un límite bajo, se podía
-            #      agotar todo pensando y no dejar nada para la respuesta
-            #      real (de ahí un briefing de 0 palabras en un intento).
-            #   2) Groq limita a 8000 tokens/minuto (entrada+salida) para
-            #      este modelo en el tier gratuito — sin pensamiento interno
-            #      de por medio no hay que competir por presupuesto entre
-            #      "pensar" y "escribir". (El prompt ha crecido bastante
-            #      desde que se escribió esto: el reparto del presupuesto
-            #      lo lleva ahora max_salida, calculado arriba.)
-            "reasoning_effort": "none",
-            "reasoning_format": "hidden",  # inofensivo con reasoning_effort=none, pero no estorba dejarlo
+            # Los parámetros de razonamiento son POR MODELO, no universales:
+            # mandarle a un `gpt-oss` el `reasoning_effort: "none"` que acepta
+            # Qwen devuelve un 400. Ver parametros_del_modelo().
+            **parametros_del_modelo(MODEL),
         },
         timeout=120,
     )
@@ -2171,6 +2224,24 @@ def generate_briefing(prompt: str, reintento_de_corte: bool = False,
     texto    = eleccion["message"]["content"]
     motivo   = eleccion.get("finish_reason")
     diag["finish_reason"] = motivo
+    diag["modelo"] = MODEL
+
+    # LO QUE EL MODELO HAYA IDO A BUSCAR POR SU CUENTA, si es un `compound`.
+    # La búsqueda web de esos sistemas no se puede apagar, solo acotar por
+    # dominio, así que la salvaguarda es que quede REGISTRADA: `executed_tools`
+    # trae la consulta, el resultado y las fuentes citadas. Sin esto, un número
+    # que el modelo no recibió de nosotros sería indistinguible de uno
+    # inventado -- y ese es el fallo que más veces se ha corregido en este
+    # briefing. Con esto, al menos se puede auditar de dónde salió.
+    herramientas = eleccion.get("message", {}).get("executed_tools")
+    if herramientas:
+        diag["herramientas_usadas"] = herramientas
+        fuera = [t for t in herramientas
+                 if not _busqueda_dentro_de_dominios_fiables(t)]
+        if fuera:
+            print(f"⚠️  El modelo ha consultado {len(fuera)} fuente(s) fuera de la lista "
+                  f"de medios fiables. Queda registrado en briefing.json para auditarlo.")
+            diag["herramientas_fuera_de_lista"] = len(fuera)
 
     # `finish_reason == "length"` significa que el modelo se quedó sin espacio
     # y la respuesta está cortada -- normalmente a mitad de frase, y siempre sin
