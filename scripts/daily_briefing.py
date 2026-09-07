@@ -240,7 +240,32 @@ BRIEFING_HISTORY_CHARS_BUDGET = 3000
 GROQ_TPM_LIMIT     = 8000
 GROQ_TPM_SAFETY    = 350   # colchón: mi estimación por caracteres nunca coincide exactamente con el tokenizador real
 GROQ_MAX_OUTPUT    = 1800  # ~33% por encima del briefing más largo observado
-GROQ_MIN_OUTPUT    = 1200  # por debajo de esto el briefing saldría cortado a medias
+GROQ_MIN_OUTPUT    = 800   # ver la nota del OTPM justo debajo
+# ── OTPM: un techo SOLO de salida, y por debajo de lo que pedíamos ───────────
+#
+# EL CASO, 07/09/2026. El briefing murió con un 429 -- no un 413-- y el mensaje
+# era de un límite que este script no sabía que existía:
+#
+#   Request too large for model `qwen/qwen3.6-27b` in organization `org_...`
+#   service tier `on_demand` on output tokens per minute (OTPM): Limit 1000
+#
+# El registro lo deja clarísimo: «prompt ~6205 tokens · respuesta hasta 1445
+# (límite 8000 TPM) ... restante 8000». Del TPM de 8.000 sobraban las 8.000
+# enteras; lo que no cabía eran las 1.445 fichas de SALIDA contra un techo de
+# 1.000. Por eso la escalera de recorte del prompt no se activó -- y tampoco
+# habría servido: recortar la ENTRADA no reduce la SALIDA.
+#
+# Groq documenta que estos topes separados de entrada y salida son POR
+# ORGANIZACIÓN, no por modelo, así que cambiar de modelo probablemente no los
+# esquiva.
+#
+# CONSECUENCIA DE PRODUCTO, que no es menor: con 950 fichas de salida el
+# briefing pasa de ~547 palabras a ~360. Es un tercio menos, y forzado por una
+# limitación de infraestructura, no por criterio editorial. `GROQ_MIN_OUTPUT`
+# baja de 1200 a 800 por lo mismo: estaba calibrado para el briefing largo, y
+# mantenerlo haría que el script se negara a escribir el corto.
+GROQ_OTPM_LIMIT    = 1000
+GROQ_OTPM_SAFETY   = 50    # el tokenizador de Groq no es esta estimación
 
 # RECALIBRADO el 31/07/2026 contra una medición exacta, no a ojo. Estaba en 3.5
 # y subestimaba un 13%: ese día el script calculó ~5744 tokens de prompt y Groq
@@ -1900,12 +1925,22 @@ def _diagnostico_ratelimit(r) -> dict:
 
     Se lee también en el camino del 413 -- ahí no hay `usage`, pero las
     cabeceras sí vienen, que es justo cuando más interesa saber el límite.
+
+    Y SE GUARDAN TODAS LAS CABECERAS `x-ratelimit-*`, no solo las tres que
+    interesaban en su día. El 07/09/2026 el briefing murió por un tope de
+    fichas de SALIDA (OTPM) del que este script no sabía nada: se leían
+    `limit-tokens`, `remaining-tokens` y `limit-requests`, y el nuevo límite
+    era invisible hasta que mató la ejecución. Recogerlas todas cuesta nada y
+    convierte el próximo cambio de Groq en una línea de `briefing.json` el día
+    que ocurre, en vez de en un incidente.
     """
     h = r.headers
     diag = {
         "tpm_limite_real":    h.get("x-ratelimit-limit-tokens"),
         "tpm_restante":       h.get("x-ratelimit-remaining-tokens"),
         "rpm_limite_real":    h.get("x-ratelimit-limit-requests"),
+        "limites_groq":       {k.lower(): v for k, v in h.items()
+                               if k.lower().startswith("x-ratelimit")},
         "tokens_estimados":   None,
         "tokens_reales":      None,
         "desvio_estimacion":  None,
@@ -1933,9 +1968,17 @@ def generate_briefing(prompt: str, reintento_de_corte: bool = False) -> tuple:
     # límite de 8000 TPM (ver comentario en GROQ_TPM_LIMIT). Si algún día el
     # prompt crece tanto que no cabe ni el mínimo, se falla AQUÍ con un
     # mensaje que dice exactamente qué recortar — no con un 413 opaco de Groq.
+    #
+    # Son TRES topes, no dos, y el tercero es el que mató el briefing del
+    # 07/09: el de fichas de SALIDA por minuto (ver GROQ_OTPM_LIMIT). Va aquí,
+    # en el cálculo inicial, y no solo en el recálculo de más abajo: al
+    # reintentar tras una respuesta cortada el prompt ya no trae la marca de
+    # longitud, así que esa rama no se ejecuta y el reintento volvería a pedir
+    # más salida de la que cabe.
     prompt_tokens = estimar_tokens(prompt)
     disponible    = GROQ_TPM_LIMIT - GROQ_TPM_SAFETY - prompt_tokens
-    max_salida    = min(GROQ_MAX_OUTPUT, disponible)
+    max_salida    = min(GROQ_MAX_OUTPUT, disponible,
+                        GROQ_OTPM_LIMIT - GROQ_OTPM_SAFETY)
 
     # La longitud que se le pide al modelo sale del hueco real, no de una cifra
     # escrita a mano (ver palabras_que_caben). Se sustituye aquí y no en
@@ -1949,10 +1992,11 @@ def generate_briefing(prompt: str, reintento_de_corte: bool = False) -> tuple:
         prompt = prompt.replace(MARCA_LONGITUD, instruccion_longitud(max_salida))
         prompt_tokens = estimar_tokens(prompt)
         disponible    = GROQ_TPM_LIMIT - GROQ_TPM_SAFETY - prompt_tokens
-        max_salida    = min(GROQ_MAX_OUTPUT, disponible)
+        max_salida    = min(GROQ_MAX_OUTPUT, disponible,
+                            GROQ_OTPM_LIMIT - GROQ_OTPM_SAFETY)
 
     print(f"🧮 Presupuesto Groq: prompt ~{prompt_tokens} tokens · respuesta hasta {max_salida} "
-          f"(límite {GROQ_TPM_LIMIT} TPM) · se piden {instruccion_longitud(max_salida)}")
+          f"(TPM {GROQ_TPM_LIMIT}, OTPM {GROQ_OTPM_LIMIT}) · se piden {instruccion_longitud(max_salida)}")
     if max_salida < GROQ_MIN_OUTPUT:
         # Llegar aquí significa que ni el nivel de recorte MÍNIMO ha bastado
         # (main() los prueba todos antes de llamar a esta función), así que ya
@@ -2020,6 +2064,17 @@ def generate_briefing(prompt: str, reintento_de_corte: bool = False) -> tuple:
 
     if r.status_code == 413:
         raise PromptDemasiadoGrande(f"Groq 413: {r.text[:200]}")
+    # Un 429 por OTPM no es "vuelve a intentarlo en un rato": una petición que
+    # pide más fichas de SALIDA de las que caben en un minuto fallará SIEMPRE,
+    # por muchas veces que se reintente. Se distingue del resto para que el
+    # mensaje diga qué hay que cambiar en vez de parecer un problema pasajero.
+    if r.status_code == 429 and "OTPM" in r.text:
+        raise ValueError(
+            f"Groq rechaza la petición por el techo de fichas de SALIDA (OTPM). El script "
+            f"pidió {max_salida} y el límite de la organización es menor. Esto NO se arregla "
+            f"reintentando ni recortando el prompt -- la entrada no cuenta para este tope: hay "
+            f"que bajar GROQ_OTPM_LIMIT (hoy {GROQ_OTPM_LIMIT}), y con ello el briefing se "
+            f"acorta. Respuesta de Groq: {r.text[:200]}")
     if r.status_code != 200:
         raise ValueError(f"Groq error {r.status_code}: {r.text[:200]}")
 
