@@ -75,8 +75,7 @@ def construir_prompt_de_hoy():
     # degradarse sin morirse, asi que un bloque vacio no da error: se nota solo
     # en que el texto sale mas pobre. Para una comparacion da igual --los tres
     # modelos reciben lo mismo-- pero hay que SABERLO al leer el resultado.
-    print("
-Datos recogidos:")
+    print("\nDatos recogidos:")
     for nombre, dato in [("precios", market_data), ("noticias", news),
                          ("medios internacionales", major), ("resultados", earnings),
                          ("amplitud", breadth), ("insiders", insiders),
@@ -110,8 +109,7 @@ def main():
     # entrada, el modelo se lo ha inventado o lo ha ido a buscar por su cuenta.
     with open("prompt_usado.txt", "w", encoding="utf-8") as f:
         f.write(prompt)
-    print(f"
-Prompt exacto guardado en prompt_usado.txt "
+    print(f"\nPrompt exacto guardado en prompt_usado.txt "
           f"({len(prompt)} caracteres) — es contra esto contra lo que hay que "
           f"auditar cada cifra de los briefings")
 
