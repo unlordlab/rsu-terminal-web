@@ -71,6 +71,19 @@ def construir_prompt_de_hoy():
     sesgos           = B.get_bias_history()
     macro            = B.get_macro_indicators()
 
+    # QUE BLOQUES HAN LLEGADO Y CUALES NO. El briefing esta hecho para
+    # degradarse sin morirse, asi que un bloque vacio no da error: se nota solo
+    # en que el texto sale mas pobre. Para una comparacion da igual --los tres
+    # modelos reciben lo mismo-- pero hay que SABERLO al leer el resultado.
+    print("
+Datos recogidos:")
+    for nombre, dato in [("precios", market_data), ("noticias", news),
+                         ("medios internacionales", major), ("resultados", earnings),
+                         ("amplitud", breadth), ("insiders", insiders),
+                         ("historial", historial), ("macro", macro)]:
+        cuantos = len(dato) if isinstance(dato, (list, dict)) else 0
+        print(f"  {nombre:<24} {cuantos if cuantos else 'VACIO'}")
+
     # El nivel de recorte que main() acabaría usando: el primero que quepa.
     for nivel in B.NIVELES_RECORTE:
         prompt = B.build_prompt(market_data, news, major, earnings, breadth,
@@ -91,6 +104,16 @@ def main():
 
     modelos = sys.argv[1:] or CANDIDATOS
     prompt, market_data = construir_prompt_de_hoy()
+
+    # EL PROMPT SE GUARDA. Sin el no se puede hacer la unica comprobacion que
+    # importa de verdad: si un numero del briefing NO esta en los datos de
+    # entrada, el modelo se lo ha inventado o lo ha ido a buscar por su cuenta.
+    with open("prompt_usado.txt", "w", encoding="utf-8") as f:
+        f.write(prompt)
+    print(f"
+Prompt exacto guardado en prompt_usado.txt "
+          f"({len(prompt)} caracteres) — es contra esto contra lo que hay que "
+          f"auditar cada cifra de los briefings")
 
     resultados = {}
     for i, modelo in enumerate(modelos):
