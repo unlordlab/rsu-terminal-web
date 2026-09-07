@@ -140,6 +140,13 @@ def test_el_cambio_no_engorda_el_prompt_de_forma_apreciable():
     versión del cambio costaba +96 fichas porque repetía la prohibición en dos
     sitios; apretada a una sola, cuesta +35."""
     fijo = D.estimar_tokens(D._ESTILO_V2) + D.estimar_tokens(D._CIERRE_V2)
-    assert fijo < 3260, (
+    # 07/09: sube de 3.260 a 3.280 por la regla del consenso inventado (+47),
+    # y se sube A PROPOSITO, no porque estorbara. Compra evitar dos errores
+    # MEDIDOS ese dia sobre el prompt real: «muy por debajo de las
+    # expectativas» y llamar «204k esperadas» a un PREVIO, cuando el prompt no
+    # trae ni una sola previsión. El techo sigue existiendo porque el #28 dice
+    # que las instrucciones fijas ya son el 44% del prompt: cada subida tiene
+    # que pagarse con un fallo real que evite, no con «queda más claro».
+    assert fijo < 3280, (
         f"el bloque fijo se ha ido a {fijo} fichas; antes del cambio eran "
         f"3.183 y el techo del prompt entero es {D.TECHO_PROMPT}")

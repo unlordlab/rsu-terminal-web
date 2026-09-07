@@ -440,7 +440,22 @@ class PromptDemasiadoGrande(Exception):
     """
 
 # Techo del prompt para que quepa una respuesta completa.
-TECHO_PROMPT = GROQ_TPM_LIMIT - GROQ_TPM_SAFETY - GROQ_MIN_OUTPUT   # 6450
+#
+# SALE DE LO QUE QUEREMOS ESCRIBIR, NO DE LO MINIMO PUBLICABLE. Son dos cosas
+# distintas y estuvieron confundidas unas horas el 07/09: al bajar
+# `GROQ_MIN_OUTPUT` de 1200 a 800 --por el techo de salida de Groq-- este techo
+# subio solo de 6450 a 6850, sin que nadie lo decidiera. O sea que main()
+# empezaba a aceptar un prompt 400 fichas mayor, y cada ficha que gana el
+# prompt se la quita al texto: de ~455 palabras disponibles a ~350. Un cambio
+# de producto colado por la puerta de atras.
+#
+#   GROQ_SALIDA_OBJETIVO  lo que se RESERVA para escribir. Manda aqui.
+#   GROQ_MIN_OUTPUT       el suelo por debajo del cual no merece la pena
+#                         publicar. Solo entra en juego cuando Groq impone un
+#                         techo de salida y hay que decidir si se escribe corto
+#                         o no se escribe.
+GROQ_SALIDA_OBJETIVO = 1200
+TECHO_PROMPT = GROQ_TPM_LIMIT - GROQ_TPM_SAFETY - GROQ_SALIDA_OBJETIVO   # 6450
 
 # ── Recorte progresivo del prompt ─────────────────────────────────────────────
 # El 30/07/2026 el briefing NO SE GENERÓ: el prompt salió a ~6578 tokens y el
@@ -1451,8 +1466,24 @@ def get_macro_indicators() -> list:
             cambio      = valor - previo
             cambio_prev = previo - obs[2][1] if len(obs) > 2 else None
             dato  = f"{cambio:+,.0f}k empleos".replace(",", ".")
-            extra = (f"mes anterior {cambio_prev:+,.0f}k".replace(",", ".")
-                     if cambio_prev is not None else "sin mes anterior")
+            # LA DIRECCION, CALCULADA. Medido el 07/09/2026 comparando tres
+            # modelos sobre el MISMO prompt: la fila decia "+162k empleos | mes
+            # anterior +21k" y DOS DE TRES escribieron "desaceleracion" y
+            # "debilidad en las nominas". 162k frente a 21k es multiplicar por
+            # casi ocho. No es un fallo de un modelo concreto -- dos familias
+            # distintas cometieron el mismo error, o sea que el problema es la
+            # fila: da dos numeros sueltos y deja que el modelo elija el
+            # sentido, y por defecto elige el que encaja con el relato bajista.
+            # Decirlo cuesta ~10 fichas, igual que el "(o sea 48.8% por debajo)"
+            # que arreglo la inversion de la SMA50.
+            if cambio_prev is not None:
+                delta   = cambio - cambio_prev
+                sentido = ("SUBE" if delta > 0 else "BAJA" if delta < 0 else "IGUAL")
+                extra = (f"mes anterior {cambio_prev:+,.0f}k".replace(",", ".") +
+                         f" · la creacion de empleo {sentido} "
+                         f"({delta:+,.0f}k respecto al mes anterior)".replace(",", "."))
+            else:
+                extra = "sin mes anterior"
         elif tipo == "mm_aa":
             mm = (valor / previo - 1) * 100
             aa = (valor / obs[12][1] - 1) * 100 if len(obs) > 12 else None
@@ -1511,6 +1542,7 @@ REGLAS ANTI-ALUCINACIÓN — ESTRICTAS, SIN EXCEPCIONES:
 8. Datos sectoriales (XLE, XLK, etc.): mira la etiqueta ESTADO DE LA SESIÓN que acompaña a los datos de mercado. Si dice CERRADA, esos porcentajes son de cierre y no los presentes como intradía en tiempo real. Si dice EN CURSO, son una foto a media sesión: NO escribas que el índice «cerró» ni des el día por terminado — di que va camino de, y cita la hora.
 9. Futuros pre-market: la hora (ET) del dato ya viene indicada junto al propio dato — cítala si mencionas el gap, no des el número como si fuera "ahora mismo" sin contexto horario.
 10. SIN HISTÓRICO: solo tienes el precio de hoy y su variación, así que nunca afirmes máximos ni mínimos (históricos, anuales, «desde X») salvo que lo diga un titular, y atribúyelo. Y compara los números antes de decir que uno cae más que otro.
+11. Indicadores macro: no hay consenso, solo dato y PREVIO — nunca «frente a lo esperado» ni «por debajo de las expectativas», ni llames «esperado» a un previo.
 
 LONGITUD: 500-700 palabras. Esto no es un informe de 2000 palabras con 11 secciones — es una nota que se lee en 3-4 minutos."""
 
@@ -1594,7 +1626,7 @@ REGLAS ANTI-ALUCINACIÓN — ESTRICTAS, SIN EXCEPCIONES. Están por encima de cu
 10. Datos sectoriales: lo que son lo dice la etiqueta ESTADO DE LA SESIÓN — de CIERRE si dice CERRADA, foto a media sesión si dice EN CURSO. Nunca llames «cierre» a una sesión EN CURSO.
 11. Futuros: la hora (ET) viene junto al dato. Cítala si mencionas el gap.
 12. SIN HISTÓRICO: solo tienes el precio de hoy y su variación, así que nunca afirmes máximos ni mínimos (históricos, anuales, «desde X») salvo que lo diga un titular, y atribúyelo. Y compara los números antes de decir que uno cae más que otro.
-13. Indicadores macro: las variaciones (m/m, interanual, cambio en miles de empleos) vienen ya CALCULADAS. Cítalas tal cual y NUNCA el nivel del índice en crudo — "el IPC está en 332,568" no significa nada para quien lee. Respeta la FECHA de cada dato: lo que no está marcado "RECIÉN PUBLICADO" puede tener semanas, así que es contexto de fondo y no puedes presentarlo como si hubiera salido hoy. Y no mezcles un dato ya publicado con una previsión del calendario: son cosas distintas."""
+13. Indicadores macro: no hay consenso, solo dato y PREVIO — nunca «frente a lo esperado» ni «por debajo de las expectativas», ni llames «esperado» a un previo. Las variaciones (m/m, interanual, cambio en miles de empleos) vienen ya CALCULADAS. Cítalas tal cual y NUNCA el nivel del índice en crudo — "el IPC está en 332,568" no significa nada para quien lee. Respeta la FECHA de cada dato: lo que no está marcado "RECIÉN PUBLICADO" puede tener semanas, así que es contexto de fondo y no puedes presentarlo como si hubiera salido hoy. Y no mezcles un dato ya publicado con una previsión del calendario: son cosas distintas."""
 
 _CIERRE_V2 = """Escribe la nota de hoy siguiendo la ESTRUCTURA OBLIGATORIA de arriba (titular temático, EN DOS LÍNEAS, 2-3 bloques con encabezado propio, MI CONCLUSIÓN).
 
