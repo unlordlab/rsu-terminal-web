@@ -35,6 +35,58 @@ from services.rsu_algoritmo_service import (  # noqa: E402
 UMBRAL = 54
 
 
+# ── Estos tests no pueden depender del estado de yfinance ────────────────────
+#
+# EL CASO, 06/09/2026. Cinco tests de aquí empezaron a fallar con
+# `YFRateLimitError: Too Many Requests` después de una sesión entera
+# consultando yfinance para auditar briefings. NO era una regresión --
+# comprobado con `git stash` sobre HEAD limpio, fallaba igual.
+#
+# LA PRIMERA EXPLICACIÓN QUE ME DI ERA FALSA: escribí que estos tests «salían a
+# la red». No salían. `tests/conftest.py` corta cualquier conexión que no sea a
+# localhost desde hace meses, y lo comprobé: con el socket bloqueado,
+# `yf.Ticker("SPY").history()` devuelve 5 filas igualmente, servidas de una
+# caché interna de yfinance.
+#
+# LO QUE PASA DE VERDAD es más sutil y por eso engaña: `procesar_cierre_si_toca()`
+# llama a `yf.Ticker("SPY").history()` en su primera línea, antes de cualquier
+# comprobación, y el resultado depende del ESTADO INTERNO de yfinance -- sirve
+# de su caché, o, si ha registrado un límite de tasa, LANZA. Los tests parchean
+# `_ultima_sesion_cerrada`, que recibe ese DataFrame, pero no la llamada que lo
+# produce. Así que el resultado del test dependía de cuánto hubiera usado
+# yfinance quien lo ejecutaba.
+#
+# Por qué importa: un test que cambia de color según el estado de una librería
+# externa deja de servir de barrera. En verde no dice que el código esté bien y
+# en rojo no dice que esté mal -- y en este proyecto la suite es lo que decide
+# si algo se sube. Encima esconde el fallo de verdad detrás de un mensaje de
+# red: ayer costó media hora separar una cosa de la otra.
+#
+# Va como `autouse` a propósito y no test por test: así lo hereda cualquier
+# test que se añada después, en vez de depender de que quien lo escriba se
+# acuerde.
+@pytest.fixture(autouse=True)
+def sin_yfinance(monkeypatch):
+    """Sustituye yfinance en todo el módulo.
+
+    El DataFrame que devuelve da igual: los tests que llegan hasta aquí
+    parchean `_ultima_sesion_cerrada`, que es quien lo interpreta. Lo que
+    importa es que el resultado del test no dependa de si yfinance tiene algo
+    en su caché o ha decidido lanzar."""
+    import pandas as pd
+    import services.rsu_algoritmo_service as svc
+
+    class _Ticker:
+        def __init__(self, *a, **k):
+            pass
+
+        def history(self, *a, **k):
+            return pd.DataFrame({"Close": [100.0, 101.0]},
+                                index=pd.to_datetime(["2026-07-28", "2026-07-29"]))
+
+    monkeypatch.setattr(svc.yf, "Ticker", _Ticker)
+
+
 # ── Histéresis ───────────────────────────────────────────────────────────────
 
 def test_entrar_en_verde_exige_el_umbral_pleno_sin_rebaja():
