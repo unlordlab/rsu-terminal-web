@@ -1376,6 +1376,23 @@ def _reddit_fallback():
 BRIEFING_GIST_ID = "715ee0c4e571517c11fa65c5c2376c34"
 
 @cache.single_flight("market:briefing")
+def _segunda_lectura_limpia(bloque):
+    """La segunda lectura lista para pintar, o None.
+
+    Se aplica el MISMO desescapado que al briefing principal -- la primera
+    version no lo hacia y el texto salia con los saltos de linea literales en
+    pantalla. Y se descarta un bloque sin texto en vez de devolverlo vacio: en
+    el frontend eso es un titulo con un hueco debajo.
+    """
+    if not isinstance(bloque, dict):
+        return None
+    texto = (bloque.get("text") or "").replace("\\n", "\n").replace("\\*", "*")
+    if not texto.strip():
+        return None
+    return {"text": texto, "bias": bloque.get("bias") or "",
+            "model": bloque.get("model") or ""}
+
+
 def get_nightly_briefing():
     from services.cache import cache, TTL
     cached = cache.get("market:briefing")
@@ -1458,7 +1475,18 @@ def get_nightly_briefing():
                   # Con qué se escribió: si el prompt no cupo en el límite de
                   # tokens, el modelo vio menos titulares y un calendario
                   # podado. Ya se guardaba en el Gist y no lo veía nadie.
-                  "nivel_recorte": (parsed.get("diagnostico") or {}).get("nivel_recorte")}
+                  "nivel_recorte": (parsed.get("diagnostico") or {}).get("nivel_recorte"),
+                  # EL MISMO DIA CONTADO POR OTRO MODELO. Se publica junto al
+                  # briefing, no en su lugar: cuando las dos lecturas discrepan,
+                  # la discrepancia es informacion -- y quien lee ve que hay dos
+                  # interpretaciones posibles en vez de una sola con aire de
+                  # verdad unica. Va aparte y no mezclada en `content` para que
+                  # el modal siga funcionando igual si algun dia no viene.
+                  #
+                  # NO alimenta `sesgo_track`: ese mide si acierta EL briefing,
+                  # y mezclarle una segunda opinion romperia la unica serie de
+                  # aciertos que hay (#34).
+                  "segunda_lectura": _segunda_lectura_limpia(parsed.get("segunda_lectura"))}
         cache.set("market:briefing", result, TTL["briefing"])
         return result
     except Exception as e:

@@ -2104,7 +2104,7 @@ def _diagnostico_ratelimit(r) -> dict:
 
 
 def generate_briefing(prompt: str, reintento_de_corte: bool = False,
-                      techo_salida: int = None) -> tuple:
+                      techo_salida: int = None, modelo: str = None) -> tuple:
     """Devuelve (texto_del_briefing, diagnóstico). El diagnóstico sale de la
     propia respuesta de Groq -- ver _diagnostico_ratelimit.
 
@@ -2113,6 +2113,11 @@ def generate_briefing(prompt: str, reintento_de_corte: bool = False,
     indefinidos si el segundo tampoco cabe."""
     if not GROQ_KEY:
         raise ValueError("GROQ_API_KEY no configurada")
+
+    # El modelo es un PARAMETRO, no el global a secas. Desde que se publica una
+    # segunda lectura con otro modelo hay dos llamadas por manana, y hacerlo
+    # mutando `MODEL` desde fuera dejaba el resultado dependiendo del orden.
+    modelo = modelo or MODEL
 
     # Techo de salida calculado a partir de lo que queda libre tras el prompt,
     # en vez de un 3000 fijo que ignoraba el tamaño del prompt y desbordaba el
@@ -2165,14 +2170,14 @@ def generate_briefing(prompt: str, reintento_de_corte: bool = False,
             "Content-Type":  "application/json",
         },
         json={
-            "model":            MODEL,
+            "model":            modelo,
             "messages":         [{"role": "user", "content": prompt}],
             "max_tokens":       max_salida,
             "temperature":      0.45,
             # Los parámetros de razonamiento son POR MODELO, no universales:
             # mandarle a un `gpt-oss` el `reasoning_effort: "none"` que acepta
             # Qwen devuelve un 400. Ver parametros_del_modelo().
-            **parametros_del_modelo(MODEL),
+            **parametros_del_modelo(modelo),
         },
         timeout=120,
     )
@@ -2222,7 +2227,8 @@ def generate_briefing(prompt: str, reintento_de_corte: bool = False,
                 prompt_corto = prompt.replace(instruccion_longitud(max_salida),
                                               instruccion_longitud(nuevo_max))
                 texto, diag_retry = generate_briefing(
-                    prompt_corto, reintento_de_corte, techo_salida=limite)
+                    prompt_corto, reintento_de_corte, techo_salida=limite,
+                    modelo=modelo)
                 diag_retry["otpm_impuesto"] = limite
                 diag_retry["otpm_salida_recortada_a"] = nuevo_max
                 return texto, diag_retry
@@ -2256,7 +2262,7 @@ def generate_briefing(prompt: str, reintento_de_corte: bool = False,
     texto    = eleccion["message"]["content"]
     motivo   = eleccion.get("finish_reason")
     diag["finish_reason"] = motivo
-    diag["modelo"] = MODEL
+    diag["modelo"] = modelo
 
     # LO QUE EL MODELO HAYA IDO A BUSCAR POR SU CUENTA, si es un `compound`.
     # La búsqueda web de esos sistemas no se puede apagar, solo acotar por
@@ -2306,7 +2312,8 @@ def generate_briefing(prompt: str, reintento_de_corte: bool = False,
             # cambia esa frase por la nueva en vez de volver a construirlo.
             prompt_corto = prompt_corto.replace(instruccion_longitud(max_salida),
                                                 instruccion_longitud(recorte))
-        return generate_briefing(prompt_corto, reintento_de_corte=True)
+        return generate_briefing(prompt_corto, reintento_de_corte=True,
+                                 techo_salida=techo_salida, modelo=modelo)
 
     diag["truncado"] = False
     return texto, diag
@@ -2455,8 +2462,61 @@ def construir_datos(market_data: dict, news=None, major_headlines=None) -> dict:
     }
 
 
+# ── Segunda lectura: el mismo dia contado por otro modelo ────────────────────
+#
+# DE DONDE SALE. El 07/09/2026 se generaron tres briefings con el MISMO prompt
+# y se auditaron cifra a cifra contra los datos de entrada. Ninguno invento un
+# numero, pero cada uno leyo mal algo distinto: `gpt-oss-120b` dijo que el S&P
+# estaba «bajo la SMA20 (7.708,70)» cuando habia cerrado en 7.718,60 --toda su
+# conclusion colgaba de una comparacion invertida--, y `qwen` y `compound`
+# leyeron «+162k empleos frente a +21k» como una desaceleracion.
+#
+# Dos lecturas del mismo dia hechas por modelos distintos no son ruido: cuando
+# discrepan, la discrepancia ES informacion. Y como se publica junto al
+# original, el lector puede ver que un modelo dice una cosa y otro dice otra en
+# vez de recibir una sola version con aire de verdad unica.
+#
+# QUE NO HACE. No alimenta el registro de sesgo (#34): ese mide si acierta EL
+# briefing, y meterle una segunda opinion contaminaria la unica serie de
+# aciertos que hay. Y no puede tumbar la manana: si falla, se publica el
+# principal igual y se dice por que. Hoy mismo se perdio un briefing por un
+# limite de Groq, asi que la leccion esta reciente.
+MODELO_SEGUNDA_LECTURA = os.environ.get("BRIEFING_MODELO_2", "groq/compound")
+
+
+def generar_segunda_lectura(prompt: str, modelo: str = None) -> dict:
+    """El mismo prompt, otro modelo. Devuelve None si no sale — nunca levanta.
+
+    Se le pasa el prompt ORIGINAL, con su marca de longitud sin sustituir, para
+    que el presupuesto se calcule contra su propio modelo: `compound` tiene
+    70.000 fichas por minuto y `qwen` 8.000, medido contra la API el 07/09.
+    """
+    modelo = modelo or MODELO_SEGUNDA_LECTURA
+    if not modelo:
+        return None
+    try:
+        print(f"🧠 Segunda lectura con {modelo}...")
+        texto, diag = generate_briefing(prompt, modelo=modelo)
+        cuerpo, sesgo = extract_bias_tag(texto)
+        if len(cuerpo.split()) < 50:
+            print(f"⚠️  La segunda lectura salio con {len(cuerpo.split())} palabras: se descarta. "
+                  f"El briefing principal se publica igual.")
+            return None
+        herramientas = diag.get("herramientas_usadas")
+        print(f"   {len(cuerpo.split())} palabras · sesgo {sesgo or 'N/D'}"
+              + (f" · consulto {len(herramientas)} fuente(s) por su cuenta"
+                 if herramientas else ""))
+        return {"model": modelo, "text": cuerpo, "bias": sesgo, "diagnostico": diag}
+    except Exception as e:
+        # Aislada a proposito: una segunda opinion nunca puede costar el
+        # briefing de la manana.
+        print(f"⚠️  La segunda lectura ha fallado ({type(e).__name__}: {e}). "
+              f"El briefing principal se publica igual.")
+        return None
+
+
 def construir_payload(content: str, market_data: dict, bias, nivel_usado, diag,
-                       news=None, major_headlines=None) -> dict:
+                       news=None, major_headlines=None, segunda_lectura=None) -> dict:
     """Lo que se publica en el Gist. Vive fuera de main() a proposito.
 
     La primera version construia este diccionario inline, y el test que
@@ -2489,6 +2549,11 @@ def construir_payload(content: str, market_data: dict, bias, nivel_usado, diag,
         # cambiado y la ventana de `period="5d"` se ha desplazado. `barras` dice
         # las DOS fechas que se compararon para sacar cada variacion.
         "datos": construir_datos(market_data, news, major_headlines),
+        # El mismo dia contado por otro modelo. Va como clave APARTE y no
+        # mezclada en `text`: el backend lee por clave, asi que un cliente
+        # viejo sigue viendo exactamente lo de siempre. None cuando no sale --
+        # nunca una cadena vacia, que en el frontend se pinta como un hueco.
+        **({"segunda_lectura": segunda_lectura} if segunda_lectura else {}),
     }
 
 
@@ -2535,7 +2600,7 @@ def save_to_gist(content: str, market_data: dict, bias: str, bias_history: list,
         raise ValueError("GIST_TOKEN no configurado")
 
     payload = construir_payload(content, market_data, bias, nivel_usado, diag,
-                                news, major_headlines)
+                                news, major_headlines, segunda_lectura=segunda)
 
     # Archivo de auditoria, podado a los ultimos DATOS_DIAS dias.
     datos_archivo = podar_datos(leer_datos_archivados(), payload["datos"])
@@ -2677,6 +2742,13 @@ def main():
 
     briefing, bias = extract_bias_tag(raw_briefing)
     print(f"📌 Sesgo detectado hoy: {bias or 'N/D (el modelo no incluyó la etiqueta)'}")
+
+    # El MISMO prompt que acaba de usarse -- el del nivel de recorte que de
+    # verdad cupo, no uno reconstruido: comparar dos textos escritos con datos
+    # distintos no dice nada. `prompt` sigue siendo el original con su marca de
+    # longitud sin sustituir, porque generate_briefing la sustituye en una
+    # copia local.
+    segunda = generar_segunda_lectura(prompt)
 
     # Si el modelo se queda sin presupuesto de tokens pensando (ver nota en
     # generate_briefing) puede devolver un texto vacío o casi vacío — mejor

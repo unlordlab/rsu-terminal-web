@@ -2031,6 +2031,60 @@ async function loadBriefing(el) {
     }
 }
 
+// Los mismos colores de sesgo que usa la tarjeta del Dashboard. Se repiten
+// aqui a proposito y no se importan: son tres constantes y cada pagina de esta
+// terminal es autonoma, sin un modulo compartido de estilos por pagina.
+const BIAS_COLORS = { ALCISTA: 'var(--color-accent)', BAJISTA: '#f23645', NEUTRAL: '#ffb800' };
+
+// EL MISMO DIA CONTADO POR OTRO MODELO.
+//
+// El 07/09/2026 se generaron tres briefings con el MISMO prompt y se auditaron
+// cifra a cifra. Ninguno invento un numero, pero cada uno leyo mal algo
+// distinto: uno dijo que el S&P estaba «bajo la SMA20 (7.708,70)» cuando habia
+// cerrado en 7.718,60 -- toda su conclusion colgaba de una comparacion
+// invertida. Ninguna lectura automatica es de fiar por si sola.
+//
+// POR QUE SE ENSENAN LAS DOS Y NO SOLO LA MEJOR. Porque la pregunta honesta es
+// «¿a cual hago caso?», y la respuesta esta en la propia etiqueta: cuando
+// coinciden, la lectura del dia es mas solida; cuando discrepan, la
+// discrepancia ES el aviso. Esconder la segunda seria vender una sola version
+// con aire de verdad unica, que es justo lo que esta terminal le reprocha a las
+// demas herramientas.
+//
+// El sesgo de abajo NO entra en el registro de aciertos: ese mide si acierta EL
+// briefing, y mezclarle una segunda opinion romperia la unica serie que hay.
+function segundaLecturaHTML(data) {
+    const sl = data && data.segunda_lectura;
+    if (!sl || !sl.text) return '';
+
+    const principal = (data.bias || '').toUpperCase();
+    const otro      = (sl.bias || '').toUpperCase();
+    const color     = BIAS_COLORS[otro] || 'var(--color-muted)';
+
+    let veredicto = '';
+    if (principal && otro && principal === otro) {
+        veredicto = 'Las dos lecturas <strong style="color:var(--color-text);">coinciden</strong> en el sesgo del dia.';
+    } else if (principal && otro) {
+        veredicto = 'Las dos lecturas <strong style="color:#ffb800;">discrepan</strong>: eso no es un fallo, '
+                  + 'es la senal de que el dia no esta claro. Contrasta los numeros de las dos antes de decidir.';
+    }
+
+    return '<div style="margin-top:1.5rem;padding-top:1rem;border-top:1px solid var(--color-border);">'
+        + '<div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:0.5rem;">'
+        + '<div style="color:var(--color-secondary,#00d9ff);font-size:12px;letter-spacing:0.08em;font-family:var(--font-mono);">'
+        +   'SEGUNDA LECTURA</div>'
+        + (otro ? '<span style="color:' + color + ';border:1px solid ' + color + '55;border-radius:3px;padding:1px 8px;font-size:10px;">'
+                + esc(otro) + '</span>' : '')
+        + '</div>'
+        + '<div style="font-size:11px;color:var(--color-muted);margin-bottom:0.9rem;line-height:1.6;">'
+        +   'El mismo dia y los mismos datos, escritos por un segundo modelo'
+        +   (sl.model ? ' (<span style="font-family:var(--font-mono);">' + esc(sl.model) + '</span>)' : '')
+        +   '. ' + veredicto
+        + '</div>'
+        + '<div style="opacity:0.92;">' + renderMarkdown(sl.text) + '</div>'
+        + '</div>';
+}
+
 function openBriefingModal(rawContent, htmlContent, data) {
     let overlay = document.getElementById('briefing-modal-overlay');
     if (!overlay) {
@@ -2088,7 +2142,8 @@ function openBriefingModal(rawContent, htmlContent, data) {
                   así que se escribió con menos titulares y el calendario recortado.
                 </div>`;
     }
-    document.getElementById('briefing-modal-body').innerHTML = htmlContent + pie;
+    document.getElementById('briefing-modal-body').innerHTML =
+        htmlContent + segundaLecturaHTML(data) + pie;
     document.body.style.overflow = 'hidden';
 }
 async function loadLiquidity(el) {
