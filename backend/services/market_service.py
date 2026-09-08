@@ -2768,6 +2768,46 @@ def get_advance_decline():
 # ── VIX NIVELES (gauge + histórico diario) ────────────────────────────────────
 
 @cache.single_flight("market:vix_levels")
+def _historico_vix(dias: int = 190):
+    """Seis meses de VIX diario, pidiendo la ventana por FECHAS y no por alias.
+
+    EL CASO, 08/09/2026: el usuario reportó que el módulo «VIX NIVELES» no
+    funcionaba — salía «✗ Sin histórico de VIX» y el panel entero en blanco.
+    Reproducido en el acto, y el motivo es una rareza de Yahoo con UN alias
+    concreto:
+
+        period=5d    5 filas      period=6mo   0 filas  <-- VACIO
+        period=1mo   22 filas     period=1y    254 filas
+        period=3mo   65 filas     period=2y    503 filas
+
+    O sea que `6mo` --y solo `6mo`-- devolvía vacío mientras sus vecinos por
+    los dos lados funcionaban. No es que el VIX no estuviera: el resto de la
+    terminal lo pintaba sin problema, porque los demás sitios piden `5d` o
+    `3mo`.
+
+    Pedir `start`/`end` calculados aquí quita el alias de en medio: la ventana
+    la decidimos nosotros y no depende de cómo Yahoo interprete una etiqueta.
+    Si aun así viniera vacío, se cae a `period="1y"` recortado -- dos formas
+    distintas de pedir lo mismo, porque la lección de hoy es justo que una
+    puede fallar sola.
+    """
+    fin = datetime.now().date() + timedelta(days=1)
+    ini = fin - timedelta(days=dias)
+    t = yf.Ticker("^VIX")
+    try:
+        hist = t.history(start=ini, end=fin)
+    except Exception:
+        hist = None
+    if hist is None or hist.empty:
+        try:
+            anual = t.history(period="1y")
+            hist = anual.iloc[-130:] if not anual.empty else anual
+        except Exception:
+            import pandas as _pd
+            return _pd.DataFrame()
+    return hist
+
+
 def get_vix_levels():
     """
     VIX spot con gráfico diario de 6 meses y gauge de 5 zonas:
@@ -2779,9 +2819,17 @@ def get_vix_levels():
         return cached
 
     try:
-        hist = yf.Ticker("^VIX").history(period="6mo")
+        hist = _historico_vix()
         if hist.empty:
-            raise ValueError("Sin histórico de VIX")
+            # Sin histórico NO se cae el módulo entero: el gauge de zonas --que
+            # es lo que se mira-- solo necesita el valor de hoy, y ese se pide
+            # aparte con una ventana corta. Lo único que se pierde es la línea
+            # de 6 meses. Devolver ok:False por eso dejaba el panel en blanco
+            # con un aspa roja, que es lo que reportó el usuario.
+            corto = yf.Ticker("^VIX").history(period="5d").dropna()
+            if corto.empty:
+                raise ValueError("Sin datos de VIX en ninguna ventana")
+            hist = corto
 
         current = float(hist['Close'].iloc[-1])
         prev    = float(hist['Close'].iloc[-2]) if len(hist) > 1 else current
