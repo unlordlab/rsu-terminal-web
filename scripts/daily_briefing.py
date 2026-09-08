@@ -373,6 +373,30 @@ PALABRAS_MINIMAS   = 350   # por debajo de esto ya no es una nota, es un titular
 MARCA_LONGITUD     = "[[LONGITUD]]"   # lo que se sustituye en el cierre del prompt
 
 
+DIAS_SEMANA = ("lunes", "martes", "miercoles", "jueves", "viernes", "sabado", "domingo")
+
+
+def con_dia_semana(fecha) -> str:
+    """«2026-09-04 (viernes)». Cuesta 4 fichas y evita un error de dos dias.
+
+    EL CASO, 08/09/2026 y el 07/09 antes: el prompt daba la fecha desnuda y el
+    modelo escribio «el cierre del JUEVES» sobre datos del VIERNES 4, dos dias
+    seguidos. No es cosmetico -- el jueves 3 la amplitud fue 337/159 (67,9% al
+    alza) y el viernes 174/323 (35,0%): casi lo contrario. Atribuir la foto de
+    un dia a otro cambia lo que el briefing dice del mercado.
+
+    Traducir una fecha a dia de la semana es aritmetica, no criterio: hacerlo
+    aqui y darselo hecho es mas barato que cualquier regla que se lo pida.
+    """
+    if not fecha:
+        return ""
+    try:
+        d = datetime.strptime(str(fecha)[:10], "%Y-%m-%d").date()
+    except Exception:
+        return str(fecha)
+    return f"{fecha} ({DIAS_SEMANA[d.weekday()]})"
+
+
 def palabras_que_caben(max_tokens: int) -> int:
     """Cuántas palabras entran de verdad en ese presupuesto de tokens."""
     return max(PALABRAS_MINIMAS,
@@ -1480,8 +1504,8 @@ def get_macro_indicators() -> list:
                 delta   = cambio - cambio_prev
                 sentido = ("SUBE" if delta > 0 else "BAJA" if delta < 0 else "IGUAL")
                 extra = (f"mes anterior {cambio_prev:+,.0f}k".replace(",", ".") +
-                         f" · la creacion de empleo {sentido} "
-                         f"({delta:+,.0f}k respecto al mes anterior)".replace(",", "."))
+                         f" · la creacion de empleo {sentido} RESPECTO AL MES ANTERIOR "
+                         f"({delta:+,.0f}k; no hay consenso con el que compararla)".replace(",", "."))
             else:
                 extra = "sin mes anterior"
         elif tipo == "mm_aa":
@@ -1757,7 +1781,7 @@ def build_prompt(market_data: dict, news: list, major_headlines: list, earnings:
     if ses.get("en_curso"):
         sesion_str = (
             f"ESTADO DE LA SESION: EN CURSO. Los porcentajes de indices y sectores "
-            f"son una foto INTRADIA de la sesion del {ses.get('fecha', 'de hoy')} "
+            f"son una foto INTRADIA de la sesion del {con_dia_semana(ses.get('fecha')) or 'de hoy'} "
             f"tomada a las {ses.get('hora_et', '??:??')} ET, con el mercado todavia "
             f"abierto. NO son cierres: no escribas que nada 'cerro' ni des la sesion "
             f"por terminada.")
@@ -1766,7 +1790,9 @@ def build_prompt(market_data: dict, news: list, major_headlines: list, earnings:
         # dias, y este prompt no cabe en el limite de Groq desde hace semanas.
         # La version larga se reserva para el caso raro, que es el que necesita
         # que se le expliquen las cosas al modelo.
-        sesion_str = f"ESTADO DE LA SESION: CERRADA (indices y sectores: cierre del {ses.get('fecha', 'anterior')})."
+        sesion_str = (f"ESTADO DE LA SESION: CERRADA. Indices, sectores y amplitud son el cierre "
+                      f"del {con_dia_semana(ses.get('fecha')) or 'anterior'}: citalo por ESE dia, no por hoy. "
+                      f"Materias primas, futuros y divisas SI son de hoy.")
 
     # Calendario
     calendar_lines = ""
@@ -2319,6 +2345,126 @@ def generate_briefing(prompt: str, reintento_de_corte: bool = False,
     return texto, diag
 
 
+# ── REVISAR LO QUE SE VA A PUBLICAR ──────────────────────────────────────────
+#
+# POR QUE EXISTE, 08/09/2026. El briefing de ese dia rompio TRES reglas del
+# prompt, y una llevaba cuatro dias escrita con todas las letras:
+#
+#   1. «No entro en largo hasta que el VIX baje de 15» -- la frase esta
+#      prohibida LITERALMENTE desde el #44 del 04/09.
+#   2. «un cierre por encima de 7.750» como nivel de invalidacion, cuando el
+#      prompt da SMA20 7.708,70 / SMA50 7.591,71 / SMA200 7.141,76 / rango 20d
+#      7.611,20-7.816,70 y dice «nunca uno inventado».
+#   3. «cerca de maximos historicos», que la regla 12 prohibe salvo que lo diga
+#      un titular -- y el propio rango de 20 dias lo desmentia.
+#
+# LA LECCION NO ES «afinar la regla». Las tres reglas estaban ahi, en el prompt
+# que se envio, comprobado. Pedirle a un modelo que no haga algo no garantiza
+# que no lo haga; comprobar la SALIDA si. Y ademas cuesta CERO fichas de
+# prompt, que en un briefing que lleva semanas en modo «minimo» no es menor.
+#
+# QUE PASA CUANDO ENCUENTRA ALGO. Se reintenta UNA vez diciendole exactamente
+# que ha roto. Si en el reintento sigue habiendo una ORDEN DE OPERAR, se falla:
+# publicar «no entro en largo» a ~100 personas que pagan es el unico fallo de
+# esta lista que vale perder el briefing del dia. Lo demas se publica y queda
+# anotado en el diagnostico, porque medio briefing es mejor que ninguno (julio)
+# y porque un dato mal atribuido se corrige leyendo, una orden no.
+
+# Ordenes de operar en primera persona. Es la LISTA DE ACCIONES, no de
+# opiniones: «mi lectura», «mi postura es bajista» y «me preocupa» se quedan a
+# proposito -- lo valioso del briefing es que SE MOJA, y el #44 fue explicito
+# en no convertirlo en un informe neutro. Lo que se va es la ORDEN.
+ORDENES_DE_OPERAR = [
+    (r"\bno entro en (largo|corto)\b",              "«no entro en largo/corto»"),
+    (r"(?<!no )\bentro en (largo|corto)\b",         "«entro en largo/corto»"),
+    (r"\b(vender[ée]|comprar[ée]|vendo|compro)\b",  "una operacion en primera persona"),
+    (r"\bmi cartera\b",                             "«mi cartera»"),
+    (r"\bhe (cerrado|comprado|vendido|abierto)\b",  "una operacion ya hecha"),
+    (r"\bmantengo (mi|la) posici[óo]n\b",           "«mantengo la posicion»"),
+]
+
+# Consenso que el prompt NO trae. Ver #47: el briefing del 08/09 escribio
+# «mejores de lo esperado» sobre unas nominas de las que solo tenia el dato y
+# el mes anterior.
+FRASES_DE_CONSENSO = [
+    (r"\bde lo (esperado|previsto|estimado)\b",      "«de lo esperado»"),
+    (r"\b(el|del) consenso\b",                       "«el consenso»"),
+    (r"\bfrente a (lo|las) (esperado|expectativas|previsiones)\b", "«frente a lo esperado»"),
+]
+
+# Superlativos que la regla 12 solo permite si lo dice un titular.
+SUPERLATIVOS = r"(m[áa]ximos?|m[íi]nimos?) (hist[óo]ricos?|anuales?)|r[ée]cord hist[óo]rico|all-?time"
+
+
+def _numeros(texto: str) -> list:
+    """Los numeros de un texto, como floats, en cualquiera de los dos formatos.
+
+    El briefing escribe 7.718,60 (europeo) y el prompt 7,718.60 (americano), asi
+    que compararlos como cadenas no vale para nada.
+    """
+    fuera = []
+    for bruto in re.findall(r"\d[\d.,]*\d|\d", texto):
+        t = bruto
+        if "," in t and "." in t:
+            t = t.replace(".", "").replace(",", ".") if t.rfind(",") > t.rfind(".")                 else t.replace(",", "")
+        elif "," in t:
+            # Coma decimal si deja 1-2 cifras detras; si no, separador de miles.
+            t = t.replace(",", ".") if len(t.split(",")[-1]) <= 2 else t.replace(",", "")
+        elif t.count(".") == 1 and len(t.split(".")[-1]) == 3:
+            t = t.replace(".", "")          # 7.750 son siete mil setecientos cincuenta
+        else:
+            t = t.replace(".", "") if t.count(".") > 1 else t
+        try:
+            fuera.append(float(t))
+        except ValueError:
+            pass
+    return fuera
+
+
+def _esta_en(valor: float, referencia: list, tolerancia: float = 0.001) -> bool:
+    """¿Ese numero sale de los datos? Con margen del 0,1% para el redondeo."""
+    return any(abs(valor - r) <= tolerancia * max(1.0, abs(r)) for r in referencia)
+
+
+def revisar_briefing(texto: str, prompt: str, titulares: str = "") -> dict:
+    """Lo que el briefing ha roto, antes de publicarlo.
+
+    Devuelve {"ordenes": [...], "otros": [...]} -- separados porque no cuestan
+    lo mismo: una orden de operar es la unica que vale perder el briefing.
+    """
+    bajo = (texto or "").lower()
+    ordenes, otros = [], []
+
+    for patron, nombre in ORDENES_DE_OPERAR:
+        if re.search(patron, bajo):
+            ordenes.append(f"ORDEN DE OPERAR: {nombre} (prohibido desde el 04/09)")
+
+    for patron, nombre in FRASES_DE_CONSENSO:
+        if re.search(patron, bajo):
+            otros.append(f"CONSENSO INVENTADO: {nombre} — el prompt solo trae el dato y el PREVIO")
+
+    if re.search(SUPERLATIVOS, bajo):
+        respaldo = re.search(r"record|all-?time|m[áa]ximo hist", (titulares or "").lower())
+        if not respaldo:
+            otros.append("MAXIMOS/MINIMOS sin titular que los respalde (regla 12)")
+
+    # EL NIVEL DE INVALIDACION. Solo se miran las frases que hablan de
+    # invalidar: ahi es donde el prompt exige un nivel REAL, y acotarlo asi
+    # evita perseguir cada cifra del texto (que daria falsos avisos a diario).
+    del_prompt = _numeros(prompt)
+    for frase in re.split(r"(?<=[.!?])\s+", texto or ""):
+        if not re.search(r"invalida", frase, re.IGNORECASE):
+            continue
+        for n in _numeros(frase):
+            if n < 100:            # porcentajes, VIX, dias: no son niveles
+                continue
+            if not _esta_en(n, del_prompt):
+                otros.append(f"NIVEL INVENTADO: {n:g} no sale de los datos "
+                             f"(el prompt da SMA20/SMA50/SMA200 y el rango de 20 dias)")
+
+    return {"ordenes": ordenes, "otros": otros}
+
+
 def extract_bias_tag(text: str) -> tuple:
     """Separa la etiqueta final 'SESGO: ALCISTA/BAJISTA/NEUTRAL' del cuerpo
     del briefing. Devuelve (texto_sin_etiqueta, sesgo). Se pide al modelo en
@@ -2516,7 +2662,8 @@ def generar_segunda_lectura(prompt: str, modelo: str = None) -> dict:
 
 
 def construir_payload(content: str, market_data: dict, bias, nivel_usado, diag,
-                       news=None, major_headlines=None, segunda_lectura=None) -> dict:
+                       news=None, major_headlines=None, segunda_lectura=None,
+                       revision=None) -> dict:
     """Lo que se publica en el Gist. Vive fuera de main() a proposito.
 
     La primera version construia este diccionario inline, y el test que
@@ -2542,6 +2689,9 @@ def construir_payload(content: str, market_data: dict, bias, nivel_usado, diag,
             "nivel_recorte":  (nivel_usado or {}).get("nombre"),
             "historial_chars": (nivel_usado or {}).get("historial"),
             "titulares_por_fuente": (nivel_usado or {}).get("titulares"),
+            # Lo que la revision previa dejo pasar, si algo. Va al fichero para
+            # que un briefing con un dato mal atribuido no parezca limpio.
+            **({"revision": revision} if revision else {}),
             **(diag or {}),
         },
         # CON QUE NUMEROS Y QUE TITULARES SE ESCRIBIO. Sin esto, auditar algo
@@ -2600,7 +2750,8 @@ def save_to_gist(content: str, market_data: dict, bias: str, bias_history: list,
         raise ValueError("GIST_TOKEN no configurado")
 
     payload = construir_payload(content, market_data, bias, nivel_usado, diag,
-                                news, major_headlines, segunda_lectura=segunda)
+                                news, major_headlines, segunda_lectura=segunda,
+                                revision=revision)
 
     # Archivo de auditoria, podado a los ultimos DATOS_DIAS dias.
     datos_archivo = podar_datos(leer_datos_archivados(), payload["datos"])
@@ -2742,6 +2893,43 @@ def main():
 
     briefing, bias = extract_bias_tag(raw_briefing)
     print(f"📌 Sesgo detectado hoy: {bias or 'N/D (el modelo no incluyó la etiqueta)'}")
+
+    # ── REVISION ANTES DE PUBLICAR ──────────────────────────────────────────
+    # Ver revisar_briefing(). El 08/09 salieron tres reglas rotas, una de ellas
+    # escrita con todas las letras en el prompt cuatro dias antes. Se reintenta
+    # UNA vez diciendole exactamente que ha roto -- y si en el reintento sigue
+    # habiendo una ORDEN DE OPERAR, se falla el Action: publicar «no entro en
+    # largo» a ~100 personas que pagan es el unico fallo que vale perder el dia.
+    titulares_txt = json.dumps((news or []) + (major_headlines or []), ensure_ascii=False)
+    revision = revisar_briefing(briefing, prompt, titulares_txt)
+    if revision["ordenes"] or revision["otros"]:
+        print("🔎 La revision previa a publicar ha encontrado:")
+        for x in revision["ordenes"] + revision["otros"]:
+            print(f"   - {x}")
+        fallos = "; ".join(revision["ordenes"] + revision["otros"])
+        try:
+            reintento, diag_rev = generate_briefing(
+                prompt + f"\n\nAVISO: tu version anterior incumplia esto y se rechazo — {fallos}. "
+                         f"Reescribe el briefing entero SIN eso. El nivel de invalidacion tiene que ser "
+                         f"uno de los que aparecen arriba, copiado tal cual.")
+            b2, s2 = extract_bias_tag(reintento)
+            r2 = revisar_briefing(b2, prompt, titulares_txt)
+            if len(r2["ordenes"]) + len(r2["otros"]) < len(revision["ordenes"]) + len(revision["otros"]):
+                print(f"   ✅ El reintento corrige "
+                      f"{len(revision['ordenes']) + len(revision['otros']) - len(r2['ordenes']) - len(r2['otros'])} "
+                      f"de {len(revision['ordenes']) + len(revision['otros'])}")
+                briefing, bias, diag, revision = b2, s2, diag_rev, r2
+            else:
+                print("   ⚠️  El reintento no mejora: se queda la version original")
+        except Exception as e:
+            print(f"   ⚠️  El reintento ha fallado ({type(e).__name__}: {e}); se sigue con la original")
+
+    if revision["ordenes"]:
+        raise ValueError(
+            "El briefing contiene una ORDEN DE OPERAR y no se publica: "
+            + "; ".join(revision["ordenes"])
+            + ". La prohibicion lleva en el prompt desde el 04/09 (#44) y el reintento tampoco la "
+              "ha respetado. Publicar esto a ~100 suscriptores es peor que no publicar hoy.")
 
     # El MISMO prompt que acaba de usarse -- el del nivel de recorte que de
     # verdad cupo, no uno reconstruido: comparar dos textos escritos con datos
