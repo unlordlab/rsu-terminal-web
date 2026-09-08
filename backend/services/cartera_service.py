@@ -1,6 +1,8 @@
 import pandas as pd
 import unicodedata
+import os
 import re
+import sys
 import time
 import math
 from datetime import datetime, timezone, timedelta
@@ -9,6 +11,13 @@ from concurrent.futures import ThreadPoolExecutor
 from services.yf_pool import yf_executor
 import pytz
 from config import settings
+
+# Los festivos del NYSE viven en shared/ y no aqui: la pregunta «cual fue la
+# ultima sesion» no es solo de Cartera -- el briefing, los snapshots y el
+# escaner se la hacen igual, y una copia por consumidor es como se acaba con
+# dos calendarios que no coinciden.
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "..", "shared"))
+from festivos_mercado import sesion_anterior, sesion_habil  # noqa: E402
 
 _price_cache: dict = {}
 _CACHE_TTL = 60
@@ -165,18 +174,32 @@ def _get_daily_bars(tk_obj, ticker: str) -> tuple[float, float, object]:
 def _ultima_sesion_esperada() -> "object":
     """Qué sesión de mercado debería ser la última con datos, ahora mismo.
 
-    Retrocede desde hoy (Nueva York) saltando sábados y domingos, y si el
-    mercado aún no ha cerrado hoy, retrocede un día más: durante la sesión
-    en curso la última barra COMPLETA sigue siendo la de ayer. No conoce
-    los festivos, y por eso el llamador da un día de margen antes de gritar
-    -- vale más callarse el 4 de julio que avisar en falso cada festivo."""
+    Retrocede desde hoy (Nueva York) saltando fines de semana Y FESTIVOS, y si
+    el mercado aún no ha cerrado hoy retrocede una sesión más: durante la
+    sesión en curso la última barra COMPLETA sigue siendo la anterior.
+
+    AHORA CONOCE LOS FESTIVOS, y hasta el 08/09/2026 no. Ese día el usuario
+    reportó que la Cartera no enseñaba NINGÚN «HOY %». Reproducido con tickers
+    reales, las tres primeras posiciones daban `chg=None`, `sin_datos_hoy=True`
+    y `prev_fecha=2026-09-04`: siendo martes, esta función esperaba que la
+    última sesión cerrada fuese el lunes 07/09 — que era **Labor Day**, con la
+    bolsa cerrada. La última barra real era la del viernes 04/09, así que el
+    guardia de «faltan sesiones» la tomó por un proveedor degradado y prefirió
+    callarse.
+
+    La versión anterior lo asumía a propósito: «vale más callarse el 4 de julio
+    que avisar en falso cada festivo». El razonamiento era bueno pero la cuenta
+    estaba mal: el fallo NO cae el día del festivo — cae el día DESPUÉS, con el
+    mercado abierto y la cartera entera sin su dato principal.
+
+    Los festivos se calculan por regla (ver shared/festivos_mercado.py), no de
+    una lista: una lista caduca en silencio, y así es como se llega aquí."""
     d = datetime.now(ZoneInfo("America/New_York"))
-    dia = d.date()
-    if not (d.hour > 16 or (d.hour == 16 and d.minute >= 5)):
-        dia -= timedelta(days=1)
-    while dia.weekday() >= 5:          # 5 sábado, 6 domingo
-        dia -= timedelta(days=1)
-    return dia
+    hoy = d.date()
+    cerrada_la_de_hoy = d.hour > 16 or (d.hour == 16 and d.minute >= 5)
+    if cerrada_la_de_hoy and sesion_habil(hoy):
+        return hoy
+    return sesion_anterior(hoy)
 
 
 def _estado_de_los_precios(filas: list) -> dict:
@@ -371,9 +394,32 @@ def _fetch_price_single(ticker: str) -> dict | None:
                 #
                 # No salta en el caso normal: a primera hora de una sesión
                 # corriente `fecha_ultima` ES la sesión anterior y todo sigue
-                # igual. Solo salta si de verdad falta alguna. En un festivo
-                # que _ultima_sesion_esperada() no conoce puede saltar de más
-                # y mostrar "—" un día: es la dirección segura del error.
+                # igual. Solo salta si de verdad falta alguna — desde el
+                # 08/09/2026 también los festivos cuentan como sesión que no
+                # existió, así que ya no salta el día siguiente a uno.
+                #
+                # ANTES DE RENDIRSE, FINNHUB. Su /quote trae precio Y cierre
+                # anterior en la MISMA llamada, así que no depende de que
+                # yfinance tenga las barras que le faltan — que es justo el
+                # agujero de esta rama.
+                #
+                # Esto ya lo hacía la rama de arriba y esta se quedó sin ello:
+                # el mismo arreglo aplicado a una rama y no a su hermana, que
+                # es como el 08/09 la cartera entera se quedó a "—" sin
+                # siquiera intentar la otra fuente.
+                try:
+                    from services.finnhub_stream_service import quote as _fh_quote
+                    q = _fh_quote(ticker)
+                except Exception:
+                    q = None
+                if q:
+                    entry = {"ticker": ticker, "price": q["price"], "prev": q["prev"],
+                             "chg": q["chg"], "chg_fecha": str(hoy_ny),
+                             "prev_fecha": str(_ultima_sesion_esperada()),
+                             "sin_datos_hoy": False, "fuente": "finnhub-quote",
+                             "updated": now}
+                    _price_cache[ticker] = entry
+                    return entry
                 entry = {"ticker": ticker, "price": round(price or last_bar, 2),
                          "prev": round(last_bar, 2), "chg": None,
                          "chg_fecha": None, "sin_datos_hoy": True,
