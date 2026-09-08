@@ -187,6 +187,45 @@ def test_el_backend_descarta_lo_que_no_se_puede_pintar():
         assert _segunda_lectura_limpia(basura) is None, basura
 
 
+def test_la_cache_del_endpoint_sigue_donde_estaba():
+    """UN BUG MIO, cazado por el despliegue y no por esta suite.
+
+    `get_nightly_briefing` lleva `@cache.single_flight("market:briefing")` en la
+    linea de encima. Al insertar `_segunda_lectura_limpia` justo ahi, la funcion
+    nueva SE QUEDO EL DECORADOR: devolvia el briefing entero en vez de limpiar
+    un bloque, y --lo grave-- el endpoint que ven ~100 usuarios se quedo SIN
+    cache, con cada peticion yendo directa a la API de GitHub.
+
+    POR QUE NO LO VIO ESTA SUITE Y SI EL VPS: en local la cache estaba vacia, el
+    envoltorio llamaba a la funcion de todos modos y el resultado era el
+    correcto por casualidad. En el VPS la cache tenia el briefing del dia y
+    salio a la luz. Un test que solo mira el valor devuelto depende de si la
+    cache esta caliente; mirar la DECORACION no depende de nada."""
+    from services import market_service as M
+    assert hasattr(M.get_nightly_briefing, "__wrapped__"), (
+        "get_nightly_briefing ha perdido su @cache.single_flight: cada peticion "
+        "de cada usuario ira directa a la API de GitHub")
+    assert not hasattr(M._segunda_lectura_limpia, "__wrapped__"), (
+        "_segunda_lectura_limpia esta decorada: le ha robado la cache a la "
+        "funcion de al lado, que es exactamente lo que paso el 08/09")
+
+
+def test_limpiar_un_bloque_no_depende_de_la_cache():
+    """El mismo fallo por el otro lado: con la cache CALIENTE, la funcion
+    decorada devolvia lo cacheado ignorando su argumento. Se comprueba con algo
+    guardado bajo esa clave, que es la condicion en la que salto en el VPS."""
+    from services import market_service as M
+    from services.cache import cache
+    cache.set("market:briefing", {"content": "el briefing de hoy", "bias": "BAJISTA"}, 60)
+    try:
+        assert M._segunda_lectura_limpia(None) is None
+        limpia = M._segunda_lectura_limpia({"text": "hola", "bias": "ALCISTA", "model": "m"})
+        assert limpia["text"] == "hola", limpia
+    finally:
+        cache.delete("market:briefing") if hasattr(cache, "delete") else cache.set(
+            "market:briefing", None, 0)
+
+
 # ── El frontend ──────────────────────────────────────────────────────────────
 
 def test_el_modal_pinta_la_segunda_lectura():

@@ -1375,7 +1375,15 @@ def _reddit_fallback():
 
 BRIEFING_GIST_ID = "715ee0c4e571517c11fa65c5c2376c34"
 
-@cache.single_flight("market:briefing")
+# OJO AL COLOCAR NADA DEBAJO DE ESTA FUNCION: `get_nightly_briefing` lleva un
+# decorador `@cache.single_flight` en la linea de encima, y meter una funcion
+# nueva entre los dos SE LO ROBA. Paso el 08/09/2026: `_segunda_lectura_limpia`
+# quedo envuelta en la cache con la clave "market:briefing" --asi que devolvia
+# el briefing entero en vez de limpiar un bloque-- y, lo grave, el endpoint que
+# ven ~100 usuarios se quedo SIN cache, con cada peticion yendo directa a la
+# API de GitHub. Lo cazo el despliegue, que corre la suite antes de recrear el
+# contenedor; en local paso porque la cache estaba vacia y el envoltorio
+# llamaba a la funcion de todos modos.
 def _segunda_lectura_limpia(bloque):
     """La segunda lectura lista para pintar, o None.
 
@@ -1393,6 +1401,7 @@ def _segunda_lectura_limpia(bloque):
             "model": bloque.get("model") or ""}
 
 
+@cache.single_flight("market:briefing")
 def get_nightly_briefing():
     from services.cache import cache, TTL
     cached = cache.get("market:briefing")
