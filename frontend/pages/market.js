@@ -1103,6 +1103,36 @@ async function loadBreadth(el) {
         const breadthBadge  = isRealBreadth
             ? '<span style="color:#00ffad;font-size:9px;">[S&amp;P 500 REAL]</span>'
             : '<span style="color:#ff9800;font-size:9px;">[PROXY 11 ETFs]</span>';
+        // «Amplitud del viernes 4 de septiembre», o nada si el backend no manda
+        // la fecha (versión anterior del servidor, o el camino de error).
+        const DIAS  = ['domingo', 'lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábado'];
+        const MESES = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio',
+                       'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'];
+        let fechaAmplitudHtml = '';
+        if (data.breadth_fecha) {
+            const [a, m, d] = data.breadth_fecha.split('-').map(Number);
+            const f = new Date(Date.UTC(a, m - 1, d));
+            // Sesiones de mercado que han pasado desde entonces, sin contar
+            // fines de semana. No sabe de festivos: por eso dice «o más», en vez
+            // de afirmar un número que puede quedarse corto justo el día
+            // siguiente a uno (que es como se rompió la Cartera el 08/09).
+            let sesiones = 0;
+            for (const t = new Date(f); t < new Date(new Date().toDateString()); t.setUTCDate(t.getUTCDate() + 1)) {
+                const wd = t.getUTCDay();
+                if (wd !== 0 && wd !== 6) sesiones++;
+            }
+            const viejo = sesiones >= 2;
+            fechaAmplitudHtml =
+                '<div style="font-size:10px;color:' + (viejo ? '#ff9800' : 'var(--color-muted)')
+                + ';margin-bottom:8px;padding:6px 10px;background:var(--color-bg);'
+                + 'border-left:2px solid ' + (viejo ? '#ff9800' : 'var(--color-border)') + ';">'
+                + (viejo ? '⚠ ' : '')
+                + 'Amplitud del <strong>' + DIAS[f.getUTCDay()] + ' ' + d + ' de ' + MESES[m - 1]
+                + '</strong> — última sesión cerrada del escáner nocturno. '
+                + 'El precio, las medias y el RSI de arriba sí son de hoy.'
+                + '</div>';
+        }
+
         const nhNlAvailable = data.nh_nl != null;
         const nhNlColor     = nhNlAvailable ? (data.nh_nl >= 0 ? '#00ffad' : '#f23645') : 'var(--color-muted)';
 
@@ -1131,7 +1161,20 @@ async function loadBreadth(el) {
             + '<span style="color:' + goldenColor + ';font-size:12px;font-weight:600;">' + goldenText + '</span>'
             + '</div>'
 
-            // McClellan (real cuando A/D es real — EMA19/EMA39 sobre avance/declive neto NYSE)
+                // DE QUÉ SESIÓN ES LA AMPLITUD, dicho donde se ve.
+            //
+            // El precio del SPY, sus medias y el RSI de arriba son de HOY. Todo
+            // lo que viene a partir de aquí sale del scan NOCTURNO, o sea de la
+            // última sesión CERRADA -- que un martes después de un lunes
+            // festivo son DOS sesiones atrás. Hasta el 08/09/2026 no se decía
+            // en ninguna parte, y las variaciones «sem.» de cada fila daban a
+            // entender lo contrario.
+            //
+            // Es el mismo desfase que obligó a poner «AMPLITUD del X, NO de
+            // hoy» en el prompt del briefing (#35/#36). Se había arreglado para
+            // el consumidor que habla y no para el que pinta.
+            + fechaAmplitudHtml
+        // McClellan (real cuando A/D es real — EMA19/EMA39 sobre avance/declive neto NYSE)
             + '<div style="background:var(--color-bg);border:1px solid var(--color-border);border-radius:6px;padding:8px 12px;margin-bottom:6px;">'
             + '<div style="display:flex;justify-content:space-between;margin-bottom:4px;">'
             + '<span style="color:var(--color-muted);font-size:11px;">Oscilador McClellan ' + tt('mcclellan-oscillator') + '</span>'

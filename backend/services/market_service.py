@@ -1384,6 +1384,27 @@ BRIEFING_GIST_ID = "715ee0c4e571517c11fa65c5c2376c34"
 # API de GitHub. Lo cazo el despliegue, que corre la suite antes de recrear el
 # contenedor; en local paso porque la cache estaba vacia y el envoltorio
 # llamaba a la funcion de todos modos.
+def _fuente_amplitud(fila: dict) -> str:
+    """De que universo son estos numeros de amplitud, DEDUCIDO del propio dato.
+
+    Esta decision ya se ha quedado vieja DOS veces por estar escrita a mano:
+    primero decia "[NYSE REAL]" sobre el scan del S&P 500, y tras corregirla a
+    "sp500" volvio a mentir cuando el escaner crecio de 525 a 2.422 valores
+    (S&P 500 + Russell 2000). El 08/09/2026 el usuario audito el panel y salio.
+
+    El corte en 1.000 separa los dos universos reales --~500 y ~2.400-- con
+    muchisimo margen a los dos lados, asi que no depende de un numero exacto
+    que tambien podria moverse.
+
+    Vive FUERA de `get_market_breadth` a proposito: dentro no se podia probar
+    sin salir a la red, y los tests acabaron comprobando una COPIA de la logica
+    escrita en el propio fichero de test. Con la copia, sabotear el backend no
+    rompia nada -- tres sabotajes se escaparon justo asi.
+    """
+    total = (fila or {}).get("total_valores") or 0
+    return "sp500_r2k" if total > 1000 else "sp500"
+
+
 def _segunda_lectura_limpia(bloque):
     """La segunda lectura lista para pintar, o None.
 
@@ -2412,6 +2433,9 @@ def get_market_breadth():
         nh_nl_week_ago = None
         ad_history_out, current_adv, current_dec, current_net = [], 0, 0, 0
         ad_ok, ad_real_data, ad_source = False, False, "n/d"
+        # De qué SESIÓN es la amplitud. El precio del SPY que se pinta al lado
+        # es de hoy y esto puede ser de hace días -- ver el bloque del payload.
+        ad_fecha = None
 
         WEEK_LOOKBACK = 5  # sesiones de mercado ≈ 1 semana natural
 
@@ -2453,14 +2477,28 @@ def get_market_breadth():
             current_net = current_adv - current_dec
             ad_ok = True
             ad_real_data = True
-            # BUG CORREGIDO: antes esto compartía el mismo booleano ad_real_data=True
-            # que la rama de abajo (Yahoo ^ADV/^DEC, NYSE de verdad, ~2800 valores),
-            # y el frontend mostraba siempre "[NYSE REAL]" sin distinguir — pero esta
-            # rama usa el scan nocturno del S&P 500 (525 tickers), no NYSE completo.
-            # Detectado comparando avanzan+declinan (~486) contra "tickers evaluados"
-            # de % S&P500 (~487) en la propia UI — prácticamente idénticos, confirma
-            # que es el mismo universo, mal etiquetado como NYSE.
-            ad_source = "sp500"
+            ad_fecha = last.get("date")
+            # DE DÓNDE SALEN ESTOS NÚMEROS, DERIVADO DEL PROPIO DATO.
+            #
+            # Esta línea ya se ha equivocado DOS VECES, y las dos por lo mismo:
+            # estaba escrita a mano. Primero decía "[NYSE REAL]" sobre el scan
+            # del S&P 500; se corrigió poniendo "sp500"... y el 08/09/2026 el
+            # usuario auditó el panel y salió que se había vuelto a quedar
+            # vieja: el universo del escáner creció a 2.422 valores (S&P 500 +
+            # Russell 2000) y el panel seguía diciendo "[S&P 500 REAL]".
+            #
+            # Lo delataba la propia pantalla: la fila de NH-NL lee EXACTAMENTE
+            # este mismo array y sí ponía "[S&P 500 + RUSSELL 2000 REAL]", así
+            # que una misma respuesta se contradecía a sí misma.
+            #
+            # Ahora sale de `total_valores`, que viene en cada fila del dato.
+            # Una etiqueta calculada no se queda vieja cuando el universo
+            # cambia; una escrita a mano se queda vieja siempre, es cuestión
+            # de cuándo. El corte en 1.000 separa "solo el S&P 500" (~500) de
+            # "S&P 500 + Russell 2000" (~2.400) con muchísimo margen a los dos
+            # lados, así que no depende de un número exacto que también podría
+            # moverse.
+            ad_source = _fuente_amplitud(last)
 
         else:
             # Fallback: Scanner sin histórico suficiente todavía (recién
@@ -2596,7 +2634,22 @@ def get_market_breadth():
             # Datos de Línea A/D fusionados (antes en el widget separado /market/ad-line)
             "ad_ok": ad_ok,
             "ad_real_data": ad_real_data,
-            "ad_source": ad_source,  # "sp500" (scan nocturno, 525 tickers) | "nyse_yahoo" (^ADV/^DEC real) | "proxy_spy"
+            "ad_source": ad_source,  # "sp500_r2k" | "sp500" | "nyse_yahoo" (^ADV/^DEC real) | "n/d" — DERIVADO de total_valores, no escrito a mano
+            # DE QUÉ SESIÓN ES LA AMPLITUD, y no es un detalle de diagnóstico.
+            #
+            # El precio del SPY, sus medias y el RSI que se pintan justo encima
+            # son de HOY, en vivo. McClellan, ABI, % sobre SMA50, NH-NL y la
+            # línea A/D salen del scan NOCTURNO, o sea de la última sesión
+            # CERRADA -- que un martes después de un lunes festivo son DOS
+            # sesiones atrás. Hasta el 08/09/2026 este payload no traía ninguna
+            # fecha, así que la pantalla no podía decirlo aunque quisiera, y las
+            # variaciones "sem." de cada fila reforzaban la impresión contraria.
+            #
+            # Es el mismo desfase que obligó a poner "AMPLITUD del X, NO de hoy"
+            # en el prompt del briefing (#35/#36) después de que escribiera "el
+            # 45,5% de las acciones avanzaron HOY" sobre números del viernes. Se
+            # arregló para el consumidor que habla y no para el que pinta.
+            "breadth_fecha": ad_fecha,
             "ad_history": ad_history_out,
             "current_adv": current_adv,
             "current_dec": current_dec,
@@ -2620,6 +2673,7 @@ def get_market_breadth():
             "sectors_checked": 0, "breadth_source": "n/d",
             "new_highs": None, "new_lows": None, "nh_nl": None, "nh_nl_source": "n/d", "nh_nl_wow": None,
             "ad_ok": False, "ad_real_data": False, "ad_source": "n/d", "ad_history": [],
+            "breadth_fecha": None,
             "current_adv": 0, "current_dec": 0, "current_net": 0,
             "timestamp": get_timestamp(),
         }
