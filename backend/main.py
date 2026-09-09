@@ -63,19 +63,23 @@ async def lifespan(app: FastAPI):
     # ws.retencion_datos_loop().
     task13 = asyncio.create_task(ws.supervisar("retencion_datos_loop", ws.retencion_datos_loop))
     yield
-    task13.cancel()
-    task1.cancel()
-    task2.cancel()
-    task3.cancel()
-    task4.cancel()
-    task5.cancel()
-    task6.cancel()
-    task7.cancel()
-    task8.cancel()
-    task9.cancel()
-    task10.cancel()
-    task11.cancel()
-    task12.cancel()
+
+    # APAGADO: cancelar Y ESPERAR.
+    #
+    # Hasta el 09/09/2026 solo se llamaba a `.cancel()` y se salia. Cancelar no
+    # para nada por si solo: marca la tarea y el bucle no se entera hasta que
+    # vuelve al `await`, asi que el proceso se cerraba con trece tareas a
+    # medias. Una que estuviera escribiendo en SQLite se quedaba a mitad, y
+    # Python remataba con "Task was destroyed but it is pending!".
+    #
+    # `gather` con `return_exceptions=True` porque una tarea cancelada levanta
+    # CancelledError POR DISENO: sin eso, la primera cancelacion abortaria la
+    # espera de las otras doce.
+    tareas = [task1, task2, task3, task4, task5, task6,
+              task7, task8, task9, task10, task11, task12, task13]
+    for t in tareas:
+        t.cancel()
+    await asyncio.gather(*tareas, return_exceptions=True)
 
 app = FastAPI(
     title=settings.app_name,
