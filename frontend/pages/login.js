@@ -106,7 +106,10 @@ export async function render(container) {
                      Sin ello, quien usa un lector de pantalla escribe mal la
                      contrasena, no entra, y NO OYE POR QUE: el lector lee lo
                      que habia cuando llego, no lo que cambia despues. El
-                     `min-height` ya estaba y aqui importa el doble -- evita que
+                     "min-height" ya estaba y aqui importa el doble -- evita que
+                     (comillas y NO acentos graves: este HTML vive dentro de un
+                     template literal, y un acento grave aqui lo CIERRA. Asi
+                     tumbe la pagina de login entera el 09/09/2026.)
                      el formulario salte al aparecer el mensaje. -->
                 <div id="login-error" role="alert" aria-live="assertive" style="
                     color: var(--color-danger);

@@ -36,6 +36,16 @@ jobs:
             requirements.txt
             requirements-dev.txt
 
+      # Node NO es para ejecutar nada del producto: es para PARSEAR los .js del
+      # frontend (tests/test_javascript_compila.py). La suite es de Python y
+      # por eso no podía detectar un error de sintaxis en JavaScript -- el
+      # 09/09/2026 un acento grave de más en un comentario dejó la pantalla de
+      # login sin cargar, con la suite y el CI en verde.
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
       - name: Install dependencies
         run: |
           pip install -r requirements.txt
