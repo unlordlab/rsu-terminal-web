@@ -30,6 +30,11 @@ HEAVY_ENDPOINTS = {
     "/api/v1/algoritmo/backtest",
 }
 
+# El nombre de la cookie se IMPORTA, no se copia: una constante duplicada aqui
+# es exactamente como este limite se volveria a desincronizar de la sesion.
+from auth import COOKIE_NAME as COOKIE_SESION  # noqa: E402
+
+
 def _get_key(request: Request) -> str:
     # Hash del token COMPLETO, no los primeros 20 chars -- "Bearer eyJhbGciOiJI"
     # (la cabecera JWT en base64) es idéntico para cualquier usuario con el
@@ -38,8 +43,20 @@ def _get_key(request: Request) -> str:
     # personas en la misma oficina, o el mismo usuario en varios
     # dispositivos, compartían la misma cuota). El hash del token entero sí
     # distingue una cuenta de otra.
-    auth = request.headers.get("Authorization", "")
-    token = hashlib.sha256(auth.encode()).hexdigest()[:16] if auth else ""
+    #
+    # Y LA COOKIE MANDA SOBRE LA CABECERA, igual que en verify_token. Este
+    # arreglo se deshizo solo el 08/08/2026 al pasar la sesion a cookie
+    # httpOnly: desde entonces el navegador ya no manda `Authorization`, asi
+    # que `auth` venia vacio, la clave quedaba en "ip:" y el limite volvio a
+    # ser POR IP para todos los usuarios de navegador -- que es exactamente el
+    # hallazgo que esta funcion existe para cerrar. Verificado el 09/09/2026.
+    #
+    # Se arreglo una capa y se deshizo desde otra un mes despues, sin que nada
+    # lo dijera: no hay error, solo dos personas en la misma red compartiendo
+    # cuota otra vez.
+    credencial = (request.cookies.get(COOKIE_SESION)
+                  or request.headers.get("Authorization", ""))
+    token = hashlib.sha256(credencial.encode()).hexdigest()[:16] if credencial else ""
     ip    = request.client.host if request.client else "unknown"
     return f"{ip}:{token}"
 
