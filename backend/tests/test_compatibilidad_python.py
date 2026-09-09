@@ -35,7 +35,7 @@ import pytest
 VERSION_CI = (3, 11)
 
 RAIZ = pathlib.Path(__file__).resolve().parents[2]
-CARPETAS = ("backend", "scripts", "shared")
+CARPETAS = ("backend", "scripts", "shared", "agents")
 
 
 def _fuentes():
@@ -59,6 +59,52 @@ solo_312 = pytest.mark.skipif(
     sys.version_info < (3, 12),
     reason="el tokenizador no emite FSTRING_START antes de 3.12; alli el propio "
            "interprete ya rechaza esta sintaxis, asi que no hay nada que vigilar")
+
+
+def fstrings_multilinea(fuente: str) -> list:
+    """Lineas con una f-string cuya EXPRESION se parte en varias lineas.
+
+    EL SEGUNDO CASO, 09/09/2026, y este guardian no lo veia. Escribi esto en
+    `comparar_modelos_briefing.py`:
+
+        print(f"BUSCO POR SU CUENTA: {len(herramientas)} llamada(s)"
+              f"{', ' + str(diag['fuera']) + ' FUERA de la lista'
+                if diag.get('fuera') else ' (todas dentro)'}")
+
+    Partir la expresion de dentro en dos lineas tambien es PEP 701, o sea 3.12+.
+    En 3.13 compila; en el 3.11 del CI es `SyntaxError: unterminated string
+    literal`. La deteccion de anidadas no lo veia porque no hay dos
+    FSTRING_START: hay uno solo que ABARCA varias lineas.
+
+    Y `ast.parse(fuente, feature_version=(3, 11))` volvio a decir que todo
+    bien, igual que con las anidadas. Es la segunda vez que esa comprobacion me
+    da confianza falsa: NO sirve para f-strings, y sin embargo la segui usando
+    como si sirviera.
+    """
+    COMILLAS_TRIPLES = ('"' * 3, "'" * 3)
+    fallos, prof, inicio, triple = [], 0, None, False
+    try:
+        for tk in tokenize.generate_tokens(io.StringIO(fuente).readline):
+            if tk.type == getattr(token, "FSTRING_START", -1):
+                prof += 1
+                if prof == 1:
+                    inicio = tk.start[0]
+                    # SOLO las de comilla simple. Una f-string de TRIPLE comilla
+                    # abarca varias líneas desde siempre y es legal en 3.11 --
+                    # mi primera versión las marcaba y salieron SIETE falsos
+                    # positivos en ficheros que llevan meses en producción con
+                    # el CI verde. Un guardián que marca código bueno se
+                    # desactiva el primer día.
+                    triple = tk.string.endswith(COMILLAS_TRIPLES)
+            elif tk.type == getattr(token, "FSTRING_END", -1):
+                prof = max(0, prof - 1)
+                if prof == 0:
+                    if inicio is not None and not triple and tk.end[0] != inicio:
+                        fallos.append(inicio)
+                    inicio = None
+    except (tokenize.TokenError, SyntaxError):
+        pass
+    return fallos
 
 
 def fstrings_anidadas(fuente: str) -> list:
@@ -86,8 +132,11 @@ def test_todo_el_codigo_compila_con_la_version_del_CI():
     -- y el fallo llega DESPUES del push, no antes."""
     malos = []
     for f in _fuentes():
-        for linea in fstrings_anidadas(f.read_text(encoding="utf-8")):
+        fuente = f.read_text(encoding="utf-8")
+        for linea in fstrings_anidadas(fuente):
             malos.append(f"{f.relative_to(RAIZ)}:{linea}: f-string anidada con la misma comilla")
+        for linea in fstrings_multilinea(fuente):
+            malos.append(f"{f.relative_to(RAIZ)}:{linea}: expresión de f-string partida en varias líneas")
     assert not malos, (
         f"sintaxis no soportada por Python {VERSION_CI[0]}.{VERSION_CI[1]} "
         f"(la del CI):\n  " + "\n  ".join(malos))
@@ -117,3 +166,31 @@ def test_encuentra_de_verdad_una_sintaxis_demasiado_nueva():
         "feature_version, que deja pasar este caso")
     bueno = 'x = f"{y} hola {z}"' + chr(10)
     assert fstrings_anidadas(bueno) == [], "esta marcando codigo correcto"
+
+
+@solo_312
+def test_encuentra_la_expresion_de_f_string_PARTIDA_EN_LINEAS():
+    """El segundo caso, el del 09/09/2026, y este guardian no lo veia.
+
+    `comparar_modelos_briefing.py` tenia una f-string cuya EXPRESION se partia
+    en dos lineas. Tambien es PEP 701 (3.12+) y tumbo el CI con «unterminated
+    string literal». No hay dos FSTRING_START, asi que la deteccion de anidadas
+    lo dejaba pasar -- y `ast.parse(feature_version=(3,11))` volvio a decir que
+    todo bien, que es la segunda vez que esa comprobacion me da confianza falsa.
+    """
+    C10 = chr(10)
+    malo = 'x = f"{a' + C10 + '        if b else c}"' + C10
+    assert fstrings_multilinea(malo) == [1], (
+        "no detecta una expresion de f-string partida en varias lineas: es lo "
+        "que tumbo el CI el 09/09")
+
+    # Y lo que NO puede marcar, que es la mitad del trabajo.
+    triple = 'x = f"""hola' + C10 + '{y} adios"""' + C10
+    assert fstrings_multilinea(triple) == [], (
+        "marca una f-string de triple comilla, que abarca varias lineas desde "
+        "siempre y es legal en 3.11 -- salieron siete falsos positivos asi")
+    concatenadas = 'x = (f"hola {y} "' + C10 + '     f"adios {z}")' + C10
+    assert fstrings_multilinea(concatenadas) == [], (
+        "marca dos f-strings concatenadas, que es el estilo normal de todo "
+        "este repositorio")
+    assert fstrings_multilinea('x = f"{y} hola"' + C10) == []

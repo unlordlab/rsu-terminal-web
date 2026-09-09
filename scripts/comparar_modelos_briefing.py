@@ -139,9 +139,14 @@ def main():
               f"{tardanza}s · cortado: {diag.get('truncado')}")
         herramientas = diag.get("herramientas_usadas")
         if herramientas:
-            print(f"BUSCO POR SU CUENTA: {len(herramientas)} llamada(s) a herramientas"
-                  f"{', ' + str(diag['herramientas_fuera_de_lista']) + ' FUERA de la lista de medios'
-                    if diag.get('herramientas_fuera_de_lista') else ' (todas dentro de la lista)'}")
+            # El sufijo se calcula ANTES. Meterlo dentro de la f-string obliga a
+            # partir la expresion en dos lineas, y eso solo compila en 3.12+
+            # (PEP 701): el CI corre 3.11 y se cayo con "unterminated string
+            # literal". Ver test_compatibilidad_python.py.
+            fuera = diag.get("herramientas_fuera_de_lista")
+            detalle = (f", {fuera} FUERA de la lista de medios" if fuera
+                       else " (todas dentro de la lista)")
+            print(f"BUSCO POR SU CUENTA: {len(herramientas)} llamada(s) a herramientas{detalle}")
         print()
         print(cuerpo[:900] + ("..." if len(cuerpo) > 900 else ""))
 
