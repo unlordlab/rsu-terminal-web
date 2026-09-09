@@ -31,6 +31,7 @@ Uso:
 import io
 import os
 import re
+import shutil
 import subprocess
 
 import pytest
@@ -60,6 +61,48 @@ EXCLUIDOS = {os.path.basename(__file__)}
 
 BINARIOS = (".png", ".jpg", ".jpeg", ".gif", ".ico", ".webp", ".woff", ".woff2",
             ".ttf", ".pdf", ".zip", ".db", ".sqlite", ".xlsx")
+
+
+def hay_repositorio():
+    """¿Se le puede preguntar a git qué ficheros sigue?
+
+    En el CONTENEDOR de despliegue no: `deploy.sh` corre la suite dentro de la
+    imagen, que lleva `/app` copiado pero NI git instalado NI el `.git`. Estos
+    dos tests reventaban ahí con `FileNotFoundError: 'git'` y **abortaban el
+    despliegue entero** — el 09/09/2026 dejaron sin desplegar el arreglo de la
+    pantalla de login, que era justo lo urgente.
+
+    No se cambia a recorrer el disco: la versión original lo hacía y marcaba
+    las credenciales del `.env` LOCAL, que está en `.gitignore` y nunca ha
+    salido de la máquina. En el contenedor sería peor todavía, porque ahí el
+    `.env` es el de PRODUCCIÓN.
+
+    Sin git la pregunta «¿esto está commiteado?» no se puede responder, así que
+    el test se salta. Se responde antes, en local y en CI, mucho antes de que
+    el código llegue al VPS.
+    """
+    if shutil.which("git") is None:
+        return False
+    r = subprocess.run(["git", "rev-parse", "--is-inside-work-tree"],
+                       cwd=RAIZ, capture_output=True, text=True)
+    return r.returncode == 0
+
+
+sin_git = pytest.mark.skipif(
+    not hay_repositorio(),
+    reason="no hay repositorio git aquí (p.ej. el contenedor de despliegue): "
+           "sin git no se puede saber qué está commiteado")
+
+
+def test_en_CI_tiene_que_haber_repositorio():
+    """El salto de arriba es correcto en el contenedor y sería un desastre en
+    CI: dejaría el barrido de credenciales desactivado en el único sitio donde
+    corre ANTES de que nada se publique, y en verde. Mismo guardarraíl que el
+    de Node en test_javascript_compila.py."""
+    if os.environ.get("CI", "").lower() in ("true", "1"):
+        assert hay_repositorio(), (
+            "sin git en CI el barrido de credenciales no se ejecuta y el CI "
+            "seguiría en verde con el repositorio sin comprobar")
 
 
 def _ficheros():
@@ -133,6 +176,7 @@ def test_el_barrido_SI_mira_el_contenido_de_los_ficheros():
         os.unlink(ruta)
 
 
+@sin_git
 def test_no_hay_ninguna_credencial_en_TODO_el_repositorio():
     """EL test. Antes esto solo se comprobaba en `.env.example`, asi que una
     clave en cualquier otro fichero se subia sin que nada chistara."""
@@ -143,6 +187,7 @@ def test_no_hay_ninguna_credencial_en_TODO_el_repositorio():
           "en el historial, en los clones y en los forks.")
 
 
+@sin_git
 def test_se_barre_el_repositorio_ENTERO_no_un_fichero():
     """Si el recorrido dejara de encontrar ficheros, el test de arriba pasaría
     sin mirar nada — que es exactamente lo que hacía la versión anterior, con
