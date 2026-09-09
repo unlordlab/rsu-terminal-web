@@ -170,6 +170,51 @@ def test_se_puede_apagar_sin_desplegar():
     post.assert_not_called()
 
 
+def test_save_to_gist_PUBLICA_la_segunda_lectura_y_la_revision():
+    """EL CABLEADO, que es lo que costó el briefing del 09/09.
+
+    Mis tests llamaban a `construir_payload()` directamente, así que el camino
+    de `main()` a `save_to_gist()` no lo ejercitaba nadie -- y ahí es donde
+    metí `segunda_lectura=segunda` leyendo una variable que se calcula en otra
+    función. `NameError`, con los dos briefings ya escritos y pagados, en la
+    última línea antes de publicar.
+
+    Aquí se llama a `save_to_gist` DE VERDAD, con la red parcheada, y se mira
+    lo que habría subido al Gist."""
+    subido = {}
+
+    def _patch(url, **kw):
+        subido.update(json.loads(kw["json"]["files"]["briefing.json"]["content"]))
+        return MagicMock(status_code=200)
+
+    segunda = {"model": "groq/compound", "text": "la otra lectura", "bias": "ALCISTA"}
+    revision = {"ordenes": [], "otros": ["MAXIMOS sin titular"]}
+    with patch.object(D, "GIST_TOKEN", "token-de-prueba"),          patch.object(D, "leer_datos_archivados", return_value=[]),          patch.object(D.requests, "patch", _patch):
+        D.save_to_gist("el briefing", {"date": "2026-09-09", "time": "07:00"},
+                       "BAJISTA", [], [], None, {},
+                       segunda_lectura=segunda, revision=revision)
+
+    assert subido.get("segunda_lectura") == segunda, (
+        "la segunda lectura no llega al Gist: se genera, se paga y se tira")
+    assert subido["diagnostico"]["revision"] == revision
+
+
+def test_main_le_PASA_las_dos_a_save_to_gist():
+    """Que `save_to_gist` sepa recibirlas no basta si main() no se las manda.
+    Se comprueba por AST, no por texto: es la llamada lo que importa."""
+    import ast
+    import inspect
+    import textwrap
+    arbol = ast.parse(textwrap.dedent(inspect.getsource(D.main)))
+    llamadas = [n for n in ast.walk(arbol)
+                if isinstance(n, ast.Call) and getattr(n.func, "id", "") == "save_to_gist"]
+    assert llamadas, "main() no llama a save_to_gist"
+    pasados = {k.arg for k in llamadas[0].keywords}
+    assert {"segunda_lectura", "revision"} <= pasados, (
+        f"main() no le pasa {sorted({'segunda_lectura', 'revision'} - pasados)} "
+        f"a save_to_gist: se calculan y se pierden")
+
+
 # ── El backend: lo que llega al navegador ────────────────────────────────────
 
 def test_el_backend_desescapa_los_saltos_de_linea():

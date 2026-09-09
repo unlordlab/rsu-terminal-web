@@ -569,6 +569,14 @@ def run_scan() -> dict:
             # Farmer & Lillo 2008).
             dias_absorcion = 0
             try:
+                # `vol_d.get(ticker)`, no `vols`: ese nombre no existe aqui --
+                # es el PARAMETRO de _rvol(), y colarlo aqui hacia que el
+                # NameError se lo tragara el `except` de abajo y `dias_absorcion`
+                # saliera 0 para TODOS los valores, todos los dias. Comprobado
+                # el 09/09/2026 contra el scan publicado: 497 valores, cero
+                # distintos de cero. La senal de absorcion llevaba muerta desde
+                # que se escribio, sin un solo aviso.
+                vols       = vol_d.get(ticker, pd.Series(dtype=float))
                 returns    = prices.pct_change()
                 dollar_vol = prices * vols.reindex(prices.index).fillna(0)
                 amihud     = (returns.abs() / (dollar_vol / 1_000_000)).replace([float("inf"), float("-inf")], None)

@@ -540,7 +540,7 @@ def _extraer_ticker_de_instruccion(mensaje: str) -> str | None:
     return None
 
 
-def procesar_meeting_room(provider: str, max_mensajes: int = 3) -> int:
+def procesar_meeting_room(provider: str, max_mensajes: int = 3, fallback: str = "") -> int:
     """Revisa el buzón del Meeting Room antes del escaneo automático de
     siempre -- si Marc ha dejado instrucciones para Gael, se procesan
     con prioridad. Devuelve cuántas tesis se generaron así, para
@@ -566,6 +566,12 @@ def procesar_meeting_room(provider: str, max_mensajes: int = 3) -> int:
 
         print(f"[Bull] Instrucción del Meeting Room: generar tesis de {ticker} (pedido por Marc).")
         try:
+            # `fallback` llega como PARÁMETRO. Hasta el 09/09/2026 se leía aquí
+            # sin estar definido --se calcula en main()-- así que cada petición
+            # de tesis desde el Meeting Room reventaba con NameError, lo tragaba
+            # el `except` de abajo y Gael contestaba «No he podido generar la
+            # tesis de X: NameError». Un fallo permanente con cara de fallo
+            # puntual del proveedor.
             resultado = generar_tesis(ticker, provider, fallback)
             tesis_id = create_tesis(
                 ticker=ticker,
@@ -628,7 +634,7 @@ def main():
         print("[Bull] Falta GROQ_API_KEY en el .env — abortando.")
         sys.exit(1)
 
-    generadas_meeting_room = procesar_meeting_room(provider)
+    generadas_meeting_room = procesar_meeting_room(provider, fallback=fallback)
     cupo_restante = max(0, args.max - generadas_meeting_room)
 
     if cupo_restante == 0:

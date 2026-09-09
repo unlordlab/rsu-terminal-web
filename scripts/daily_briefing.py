@@ -2745,13 +2745,25 @@ def leer_datos_archivados() -> list:
 
 def save_to_gist(content: str, market_data: dict, bias: str, bias_history: list, briefing_history: list,
                   nivel_usado: dict = None, diag: dict = None, bias_tracking: list = None,
-                  news: list = None, major_headlines: list = None):
+                  news: list = None, major_headlines: list = None,
+                  segunda_lectura: dict = None, revision: dict = None):
     if not GIST_TOKEN:
         raise ValueError("GIST_TOKEN no configurado")
 
+    # LOS DOS ULTIMOS LLEGAN COMO PARAMETRO, y el 09/09/2026 no llegaban.
+    #
+    # Al conectar la segunda lectura y la revision previa, meti
+    # `segunda_lectura=segunda` y `revision=revision` en ESTA llamada -- pero
+    # las dos variables se calculan en main(), no aqui. `NameError: name
+    # 'segunda' is not defined`, con los dos briefings ya escritos y pagados,
+    # en la ultima linea antes de publicar. El briefing del dia se perdio.
+    #
+    # Mi comprobacion al editar fue `assert count == 1` sobre el texto de la
+    # llamada, y era CIERTA: solo hay una llamada a construir_payload en todo
+    # el fichero. Lo que no miré es en que funcion estaba.
     payload = construir_payload(content, market_data, bias, nivel_usado, diag,
-                                news, major_headlines, segunda_lectura=segunda,
-                                revision=revision)
+                                news, major_headlines,
+                                segunda_lectura=segunda_lectura, revision=revision)
 
     # Archivo de auditoria, podado a los ultimos DATOS_DIAS dias.
     datos_archivo = podar_datos(leer_datos_archivados(), payload["datos"])
@@ -2952,7 +2964,8 @@ def main():
     print("💾 Guardando en GitHub Gist...")
     bias_tracking = get_bias_tracking()
     save_to_gist(briefing, market_data, bias, bias_history, briefing_history, nivel_usado, diag,
-                 bias_tracking=bias_tracking, news=news, major_headlines=major_headlines)
+                 bias_tracking=bias_tracking, news=news, major_headlines=major_headlines,
+                 segunda_lectura=segunda, revision=revision)
 
     print("✅ Briefing completado")
     print(f"📝 Palabras generadas: {len(briefing.split())}")
