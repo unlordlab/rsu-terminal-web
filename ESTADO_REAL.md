@@ -102,32 +102,35 @@ reponderación 4.5 del RSU Score, la longitud del briefing diario.
 
 ## Lo que hay que atacar, por orden
 
-De los críticos y altos verificados como ABIERTOS. Lista regenerada desde
-las propias filas del documento (09/09), no escrita a mano — así no vuelve a
-citar hallazgos ya cerrados, que es justo lo que le había pasado.
+De los críticos y altos verificados como ABIERTOS. Lista regenerada desde las
+propias filas del documento (09/09, segunda regeneración del día), no escrita a
+mano — así no vuelve a citar hallazgos ya cerrados, que es justo lo que le había
+pasado. **12 hallazgos abiertos ❌ en total**; los que no aparecen aquí son los
+🟡/🔵 de la cola.
 
 **Bloqueados por una decisión del usuario, no por código:**
 
-1. **INFRAESTRUCTURA #26** 🔴 — **Login y datos de cartera por HTTP en claro.** Necesita un DOMINIO (Let's Encrypt no emite para IPs). Con dominio: certbot + 301 + HSTS + `COOKIE_SECURE=true`, media hora. Es lo único de la lista que afecta a la seguridad de gente que paga
-2. **INFRAESTRUCTURA #23** 🔴 — **El briefing llega a las 13:50 en vez de a las 09:00.** Medido el 09/09: 288 min de retraso a las 07:00 UTC frente a 7–27 min entre las 13:00 y las 21:00 — no es el minuto ni el repositorio, es la hora. Salida: cron en el VPS lanzando `workflow_dispatch`, que no pasa por la cola. Necesita un token con permiso `workflow` allí
+1. **INFRAESTRUCTURA #26** 🔴 — **Login y datos de cartera por HTTP en claro.** Necesita un DOMINIO (Let's Encrypt no emite para IPs). Con dominio: certbot + 301 + HSTS + `COOKIE_SECURE=true`, media hora. Es lo único de la lista que afecta a la seguridad
+2. **INFRAESTRUCTURA #23** 🔴 — **El briefing llega a las 13:50 en vez de a las 09:00.** Medido el 09/09: 288 min de retraso a las 07:00 UTC frente a 7–27 min entre las 13:00 y las 21:00 — no es el minuto ni el repositorio, es la hora. Salida: cron en el VPS que llame a `workflow_dispatch`, que no pasa por la cola. Necesita un token con permiso `workflow` puesto en el VPS
 
 **Listos para trabajar:**
 
 3. **INFRAESTRUCTURA #25** 🔴 — **Elia no cabe en el techo de Groq.** Pide 3.000 fichas contra 1.000, y una lección son 1.586 de mediana: no se arregla bajando la constante, hay que escribirla por partes
-4. **ACCESIBILIDAD #2** 🟠 — Siete huecos de UX medidos. Lo barato: `prefers-reduced-motion` (1 de 9 temas) y `aria-live` (cero en todo el frontend)
-5. **NEWSFEED #28** 🟠 — Las instrucciones fijas son el 44% del prompt, y por eso el briefing lleva semanas en modo «mínimo» sin memoria narrativa
-6. **OPTIONS FLOW #31** 🟠 — El umbral rebajado para la cartera no se activa nunca: `MIN_VOLUME`/`MIN_OI` cortan antes. **Es una decisión de producto, no un arreglo mecánico**
-7. **CARTERA #A4** 🟠 — Cripto con el precio congelado 16 horas al día
-8. **INFRAESTRUCTURA #12** 🟠 — La configuración de Nginx solo existe en el VPS: si se pierde el servidor, hay que reconstruirla de memoria
-9. **OPTIONS FLOW #23** 🟢 — **Aviso por Telegram del flow en Cartera/Watchlist.** Funcionalidad nueva, no un fallo: cero menciones a Telegram en `options_service.py`, no hay ninguna vía de aviso. **Encaja con el #31 que se acaba de cerrar**: ahora se sabe exactamente qué tickers de la cartera pueden generar señal (`oi_max >= MIN_OI`), así que el aviso no prometería algo que no puede cumplir
+4. **NEWSFEED #28** 🟠 — Las instrucciones fijas son el 44% del prompt, y por eso el briefing lleva semanas en modo «mínimo» sin memoria narrativa
+5. **CARTERA #A4** 🟠 — Cripto con el precio congelado 16 horas al día
+6. **INFRAESTRUCTURA #12** 🟠 — La configuración de Nginx solo existe en el VPS: si se pierde el servidor, hay que reconstruirla de memoria
+7. **ACCESIBILIDAD #2** 🟠 — Quedan cinco de los siete huecos: labels frente a 42 `<input>`, `alt` en 3 de 4 `<img>`, cero `overflow-wrap` con tickers y nombres largos, ningún control con los 44px táctiles, y cero *skip links*. **Las dos primeras —movimiento reducido y anuncios a lector— se cerraron el 09/09**
+8. **OPTIONS FLOW #23** 🟢 — **Aviso por Telegram del flow en Cartera/Watchlist.** Funcionalidad nueva, no un fallo: cero menciones a Telegram en `options_service.py`. **Encaja con el #31 cerrado el 09/09**: ahora se sabe qué posiciones pueden generar señal y cuáles no llegan al mínimo de contratos abiertos, así que el aviso no promete lo que no puede dar
+9. **RSU ALGORITMO #12** 🟡 — El backtest recalcula el baseline completo en cada ejecución
+10. **BTC STRATUM #16** 🟡 — `_get_zone` es la salida más prescriptiva de toda la terminal
+11. **SCANNER #13** 🔵 — Enriquecimiento on-demand con el RSU Score v2
 
 **Esperando datos, no se puede avanzar todavía:**
 
-10. **CANSLIM #23** 🔴 — Bases y pivot points. Necesita 3–4 semanas de muestra, que empezó a acumularse el 06/09 al arreglar el registro
-11. **NEWSFEED #39** 🔴 — Los cuatro porcentajes que no son de ninguna sesión. Instrumentado, esperando que se repita
+12. **CANSLIM #23** 🔴 — Bases y pivot points. Necesita 3–4 semanas de muestra, que empezó a acumularse el 06/09 al arreglar el registro
+13. **NEWSFEED #39** 🔴 — Los cuatro porcentajes que no son de ninguna sesión. Instrumentado, esperando que se repita
 
-**La bolsa de verificación: 99 hallazgos ❓** — Watchlist Community 19, Páginas Contenido 17, Tesis Admin 13, Módulos 10, y el resto repartido. Infraestructura bajó de 14 a 4 el 09/09: **dos eran bugs vivos** (#5 el límite por IP, #16 el apagado sin esperar) y seis ya estaban hechos o no procedían.
-
+**La bolsa de verificación: 98 hallazgos ❓** — Watchlist Community 19, Páginas Contenido 17, Tesis Admin 13, Módulos 10, Cartera 7, Newsfeed 7, Research 6, SPXL 5, Infraestructura 4, Insider Flow 4, y el resto repartido. Infraestructura bajó de 14 a 4 el 09/09: **dos eran bugs vivos** (#5 el límite por IP, #16 el apagado sin esperar a las tareas) y seis ya estaban hechos o no procedían.
 ---
 
 ## Accesibilidad  (2 hallazgos — ❌1 · ✅1)
