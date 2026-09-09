@@ -145,6 +145,34 @@ function renderDashboard(data) {
         ? `<div style="color:var(--color-muted);font-size:11px;margin-bottom:10px;">📊 Datos del escaneo: <span style="color:var(--color-text);font-weight:600;">${esc(_fmtFecha(data.scan_date))}</span>${coberturaTxt}</div>`
         : '';
 
+    // CUANTAS DE TUS POSICIONES PUEDEN APARECER AQUI SIQUIERA.
+    //
+    // Medido el 09/09/2026 sobre las 470 senales guardadas: ni una baja de
+    // 100.000 de prima. MIN_VOLUME (200) y MIN_OI (100) cortan ANTES que el
+    // umbral de prima, asi que una posicion iliquida no llega nunca -- da
+    // igual el dia. Sin decirlo, el silencio es ambiguo: quien tiene una small
+    // cap lee "no hay flujo" como "no ha pasado nada", cuando lo cierto es que
+    // ese ticker no puede salir aqui.
+    //
+    // No se rebajan los minimos: MIN_VOLUME subio de 10 a 200 justamente
+    // porque 10 metia ruido. Se dice, que es lo que faltaba.
+    const cc = data.cobertura_cartera;
+    let carteraTxt = '';
+    if (cc && cc.total) {
+        const invis = (cc.invisibles || []);
+        carteraTxt = '<div style="color:var(--color-muted);font-size:11px;margin-bottom:10px;'
+            + 'padding:6px 10px;background:var(--color-bg);border-left:2px solid var(--color-border);">'
+            + 'De tus <strong style="color:var(--color-text);">' + esc(cc.total) + '</strong> posiciones, '
+            + '<strong style="color:var(--color-text);">' + esc(cc.visibles) + '</strong> tienen opciones '
+            + 'lo bastante líquidas para aparecer aquí.'
+            + (invis.length
+                ? ' Las otras ' + esc(invis.length) + ' no van a salir ningún día '
+                  + '—no es que no haya actividad, es que no llegan al mínimo de contratos abiertos—: '
+                  + '<span style="font-family:var(--font-mono);">' + esc(invis.join(', ')) + '</span>.'
+                : '')
+            + '</div>';
+    }
+
     // Tres motivos distintos por los que un escaneo no sirve, y se explican por
     // separado porque no significan lo mismo: uno es no haber podido leer los
     // valores, otro es haberlos leído y que vinieran vacíos, y el tercero es
@@ -239,7 +267,7 @@ function renderDashboard(data) {
                 ? `<div style="color:var(--color-muted);font-size:11px;margin-top:10px;">Comparados ${esc(data.oi_comparados)} contratos entre las dos últimas sesiones.</div>`
                 : ''));
 
-    return fechaDatos + avisoCobertura + notaRutina + biasBanner + topBoxes + flowTables + oiTables + nota;
+    return fechaDatos + carteraTxt + avisoCobertura + notaRutina + biasBanner + topBoxes + flowTables + oiTables + nota;
 }
 
 function flowTable(title, rows, color) {

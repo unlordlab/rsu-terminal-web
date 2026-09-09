@@ -1743,6 +1743,48 @@ def _detectar_repeticion_en_cadena(entries_by_exp: dict) -> set:
 
 # ── SCAN ENGINE ───────────────────────────────────────────────────────────────
 
+def cobertura_de_cartera(resultados: list, de_cartera: set) -> dict:
+    """De tus posiciones, cuantas pueden APARECER aqui siquiera.
+
+    EL PORQUE, medido el 09/09/2026 sobre las 470 senales guardadas: **ni una
+    sola baja de 100.000 de prima**. Cero por debajo de 25.000, cero entre
+    25.000 y 100.000. O sea que `MIN_PREMIUM_CARTERA = 25_000` --puesto para
+    que las small caps de la cartera pudieran salir pese al corte general--
+    **no ha producido nunca nada**, y no es cuestion de muestra: son 470
+    registros, siete veces la medicion del 18/08.
+
+    LA RAZON ES EL ORDEN DE LOS FILTROS: `MIN_VOLUME`(200) y `MIN_OI`(100)
+    cortan ANTES de mirar la prima, asi que una posicion iliquida se descarta
+    mucho antes de llegar al umbral que se rebajo para ella.
+
+    NO SE REBAJAN ESOS MINIMOS. `MIN_VOLUME` subio de 10 a 200 justamente
+    porque 10 metia ruido (esta muy por debajo del estandar: Barchart usa 500),
+    y `MIN_OI` existe porque un contrato con OI=5 y volumen 20 no dice nada de
+    la intencion de nadie. Bajarlos para un subconjunto deshace un arreglo
+    deliberado y devuelve el ruido que quitaron. Y una "actividad inusual"
+    sobre 20 contratos no es accionable aunque se pinte.
+
+    LO QUE SI SE HACE ES DECIRLO. Un ticker cuyo `oi_max` no llega a `MIN_OI`
+    no puede generar una senal jamas -- da igual el dia, la prima o el
+    mercado. Que la pantalla diga cuantas de tus posiciones estan en ese caso
+    convierte un silencio ambiguo ("no hay flujo en mi small cap") en un dato
+    ("esa posicion no puede aparecer aqui"). Es la diferencia entre no saber y
+    saber que no se sabe.
+    """
+    if not de_cartera:
+        return {"total": 0, "visibles": 0, "invisibles": []}
+    por_ticker = {r["ticker"]: r for r in resultados if r.get("ok")}
+    visibles, invisibles = [], []
+    for t in sorted(de_cartera):
+        r = por_ticker.get(t)
+        if r is None:
+            continue                      # no se pudo leer la cadena: otro problema
+        (visibles if (r.get("oi_max") or 0) >= MIN_OI else invisibles).append(t)
+    return {"total": len(visibles) + len(invisibles),
+            "visibles": len(visibles),
+            "invisibles": invisibles}
+
+
 def _process_chain(ticker: str, min_premium: float = 100_000, min_score: int = 4) -> dict:
     try:
         tk    = yf.Ticker(ticker)
@@ -2206,6 +2248,10 @@ def get_options_flow(min_premium: float = 100_000, min_score: int = 4, tickers: 
         "scan_ts":      scan_ts,
         "scan_date":    scan_date,
         "respondidos":  respondidos,
+        # CUANTAS DE TUS POSICIONES PUEDEN APARECER AQUI SIQUIERA. Ver
+        # cobertura_de_cartera(): las que no llegan a MIN_OI no van a salir
+        # ningun dia, y sin decirlo el silencio es ambiguo.
+        "cobertura_cartera": cobertura_de_cartera(resultados, de_cartera),
         "oi_cero":      oi_cero,
         "sin_direccion": sin_direccion,
         "oi_filas":     oi_filas,
