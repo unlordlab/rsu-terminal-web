@@ -203,10 +203,41 @@ export async function addToWatchlist(ticker) {
  * Se carga aquí y no en index.html a propósito: la mayoría de páginas de la
  * terminal no tienen ningún gráfico y no deben pagar ~250 KB por si acaso.
  */
+// LOS GRAFICOS SE ANIMAN EN CANVAS, no con CSS.
+//
+// La regla `prefers-reduced-motion` de `themes/base.css` frena las 46
+// transiciones y las 12 animaciones CSS de la terminal, pero no puede tocar lo
+// que Chart.js dibuja dentro de un `<canvas>`: eso es JavaScript pintando
+// fotogramas, y el CSS no llega ahi. Y son el movimiento MAS grande de la
+// pantalla -- una linea de seis meses dibujandose de izquierda a derecha.
+//
+// Asi que se apaga aqui, una sola vez al cargar la libreria y para todos los
+// graficos, en vez de en cada uno de los sitios que crean uno.
+function _sinMovimiento() {
+    try {
+        return window.matchMedia
+            && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    } catch (e) {
+        return false;   // navegador sin matchMedia: se deja como estaba
+    }
+}
+
 export function cargarChartJs(cb) {
-    if (window.Chart) { cb(); return; }
+    const listo = () => {
+        if (window.Chart && _sinMovimiento()) {
+            // `false`, no una duracion corta: Chart.js entiende false como
+            // "pinta el resultado final y ya", que es exactamente lo que se
+            // pide. Se aplica a los graficos NUEVOS; los ya creados se
+            // redibujan solos en la siguiente carga de la seccion.
+            window.Chart.defaults.animation = false;
+            window.Chart.defaults.animations = window.Chart.defaults.animations || {};
+            window.Chart.defaults.transitions = window.Chart.defaults.transitions || {};
+        }
+        cb();
+    };
+    if (window.Chart) { listo(); return; }
     const script  = document.createElement('script');
     script.src    = 'https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js';
-    script.onload = cb;
+    script.onload = listo;
     document.head.appendChild(script);
 }

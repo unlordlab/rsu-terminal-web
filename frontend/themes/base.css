@@ -144,3 +144,45 @@ a:hover {
 :where(a, button, input, select, textarea, summary, [tabindex]) {
     scroll-margin: 5rem;
 }
+
+/* ── «REDUCIR MOVIMIENTO»: respetar lo que el usuario ya ha pedido ────────────
+ *
+ * Windows, macOS, iOS y Android tienen una casilla de «reducir movimiento».
+ * La activa gente con migraña, vértigo, trastorno vestibular o epilepsia
+ * fotosensible -- y también quien simplemente no soporta las animaciones. El
+ * navegador se lo cuenta a cada web con `prefers-reduced-motion`.
+ *
+ * MEDIDO EL 09/09/2026: esta terminal tenía 46 transiciones y 12 animaciones
+ * CSS, y de los nueve temas solo `octogon` respetaba la preferencia -- y solo
+ * para sus propios adornos. Alguien con vértigo abría Cartera, llegaba un tick
+ * por WebSocket, la fila pulsaba, y se mareaba. Lo había pedido y se ignoraba.
+ *
+ * VA EN `base.css` PORQUE LO CARGAN LOS NUEVE TEMAS. Ponerlo tema a tema es
+ * como se llegó a tener uno de nueve.
+ *
+ * POR QUÉ 0.01ms Y NO 0: con duración cero, algunos navegadores NO disparan
+ * `transitionend` / `animationend`, y el código que espera esos eventos para
+ * continuar se quedaría colgado. 0.01ms es instantáneo para el ojo y sigue
+ * disparándolos.
+ *
+ * POR QUÉ `!important`: este código lleva 16 transiciones escritas en
+ * atributos `style=` en línea. Sin `!important` la regla no las alcanza. Un
+ * `!important` de hoja de estilos sí gana a un estilo en línea normal.
+ *
+ * `animation-iteration-count: 1` corta los bucles infinitos -- el pulso de las
+ * filas al llegar un precio -- que son justo los que marean.
+ *
+ * LO QUE NO CAMBIA: el dato, el color, el contenido. Solo desaparece el
+ * movimiento. Quien no tenga la casilla activada no nota absolutamente nada.
+ *
+ * LO QUE ESTO NO ALCANZA: los gráficos de Chart.js se animan en canvas, no con
+ * CSS, así que se apagan aparte en `core/ui.js::cargarChartJs`.
+ */
+@media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after {
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.01ms !important;
+        scroll-behavior: auto !important;
+    }
+}

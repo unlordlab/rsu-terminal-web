@@ -2802,13 +2802,29 @@ function escMD(text) {
         .replace(/>/g, '&gt;');
 }
 function loading()        { return '<div style="padding:1rem;color:var(--color-muted);font-size:12px;">Cargando...</div>'; }
+// `role="alert"` = «lee esto en cuanto aparezca».
+//
+// Este widget se pinta cuando un modulo falla, y hasta el 09/09/2026 lo hacia
+// en SILENCIO para quien usa un lector de pantalla: el lector lee lo que hay
+// cuando llega, no lo que cambia despues. El panel se quedaba con el texto de
+// «Cargando...» que oyo al principio, asi que un modulo caido y un modulo
+// lento sonaban exactamente igual.
+//
+// Se marca AQUI y no en cada widget porque los ~20 paneles de Market pasan por
+// esta funcion: una linea cubre todos.
+//
+// LO QUE NO SE MARCA, A PROPOSITO: los precios que cambian solos por
+// WebSocket. Marcar la tabla de Cartera haria que el lector recitara las 46
+// posiciones en cada tick -- eso es peor que el silencio, y es como se acaba
+// desactivando el lector en una web entera. Se anuncian los ERRORES y los
+// CAMBIOS DE ESTADO, no el flujo continuo.
 function widgetError(msg) {
     const isRateLimit = /demasiadas peticiones|rate limit|máximo \d+ requests/i.test(msg || '');
     if (isRateLimit) {
-        return '<div style="padding:1rem;color:#ffb800;font-size:12px;display:flex;align-items:center;gap:6px;">'
+        return '<div role="alert" style="padding:1rem;color:#ffb800;font-size:12px;display:flex;align-items:center;gap:6px;">'
             + '<span style="font-size:14px;">⏱</span><span>' + msg + '</span></div>';
     }
-    return '<div style="padding:1rem;color:#f23645;font-size:12px;">✗ ' + msg + '</div>';
+    return '<div role="alert" style="padding:1rem;color:#f23645;font-size:12px;">✗ ' + msg + '</div>';
 }
 
 function errorRow(ticker, name) {

@@ -102,7 +102,13 @@ export async function render(container) {
                     >
                 </div>
 
-                <div id="login-error" style="
+                <!-- role="alert" = "lee esto en cuanto aparezca".
+                     Sin ello, quien usa un lector de pantalla escribe mal la
+                     contrasena, no entra, y NO OYE POR QUE: el lector lee lo
+                     que habia cuando llego, no lo que cambia despues. El
+                     `min-height` ya estaba y aqui importa el doble -- evita que
+                     el formulario salte al aparecer el mensaje. -->
+                <div id="login-error" role="alert" aria-live="assertive" style="
                     color: var(--color-danger);
                     font-size: 12px;
                     margin-bottom: 1rem;
