@@ -103,18 +103,30 @@ reponderación 4.5 del RSU Score, la longitud del briefing diario.
 ## Lo que hay que atacar, por orden
 
 De los críticos y altos verificados como ABIERTOS. Lista regenerada desde
-las propias filas del documento (08/09), no escrita a mano — así no vuelve a
+las propias filas del documento (09/09), no escrita a mano — así no vuelve a
 citar hallazgos ya cerrados, que es justo lo que le había pasado.
 
-1. **INFRAESTRUCTURA Y VALORACION GLOBAL #26** 🔴 — **La terminal sirve login y datos de pago por HTTP en claro** (bloqueado: hace falta un dominio, que es decisión del usuario)
-2. **CANSLIM #23** 🔴 — **Detección de bases y pivot points — LA PIEZA QUE FALTA DEL MÉTODO**
-3. **INFRAESTRUCTURA Y VALORACION GLOBAL #23** 🔴 — **El briefing llega a las 13:50 en vez de a las 09:00** — medido el 09/09: 288 min de retraso a las 07:00 UTC frente a 7–27 min entre las 13:00 y las 21:00. **La salida es disparar por `workflow_dispatch` desde un cron del VPS**, que no pasa por la cola de GitHub
-4. **INFRAESTRUCTURA Y VALORACION GLOBAL #25** 🔴 — **Elia pide 3.000 fichas de salida contra un techo de 1.000: no cabe ni de lejos, y una lección son 1.586 de mediana**
-5. **NEWSFEED #39** 🔴 — **Cuatro porcentajes publicados que no son la variación de ninguna sesión real, y no se pudo averiguar por qué**
-6. **ACCESIBILIDAD #2** 🟠 — **Barrido de las 119 reglas de UX: siete huecos más, medidos**
-7. **CARTERA #A4** 🟠 — Cripto en cartera: precio congelado 16 horas al día
-8. **NEWSFEED #28** 🟠 — Las instrucciones fijas del prompt son el 44% de su tamaño
-9. **OPTIONS FLOW #31** 🟠 — El umbral rebajado para lo que tienes en cartera no hace nada: el volumen y el open interest cortan antes
+**Bloqueados por una decisión del usuario, no por código:**
+
+1. **INFRAESTRUCTURA #26** 🔴 — **Login y datos de cartera por HTTP en claro.** Necesita un DOMINIO (Let's Encrypt no emite para IPs). Con dominio: certbot + 301 + HSTS + `COOKIE_SECURE=true`, media hora. Es lo único de la lista que afecta a la seguridad de gente que paga
+2. **INFRAESTRUCTURA #23** 🔴 — **El briefing llega a las 13:50 en vez de a las 09:00.** Medido el 09/09: 288 min de retraso a las 07:00 UTC frente a 7–27 min entre las 13:00 y las 21:00 — no es el minuto ni el repositorio, es la hora. Salida: cron en el VPS lanzando `workflow_dispatch`, que no pasa por la cola. Necesita un token con permiso `workflow` allí
+
+**Listos para trabajar:**
+
+3. **INFRAESTRUCTURA #25** 🔴 — **Elia no cabe en el techo de Groq.** Pide 3.000 fichas contra 1.000, y una lección son 1.586 de mediana: no se arregla bajando la constante, hay que escribirla por partes
+4. **ACCESIBILIDAD #2** 🟠 — Siete huecos de UX medidos. Lo barato: `prefers-reduced-motion` (1 de 9 temas) y `aria-live` (cero en todo el frontend)
+5. **NEWSFEED #28** 🟠 — Las instrucciones fijas son el 44% del prompt, y por eso el briefing lleva semanas en modo «mínimo» sin memoria narrativa
+6. **OPTIONS FLOW #31** 🟠 — El umbral rebajado para la cartera no se activa nunca: `MIN_VOLUME`/`MIN_OI` cortan antes. **Es una decisión de producto, no un arreglo mecánico**
+7. **CARTERA #A4** 🟠 — Cripto con el precio congelado 16 horas al día
+8. **INFRAESTRUCTURA #12** 🟠 — La configuración de Nginx solo existe en el VPS: si se pierde el servidor, hay que reconstruirla de memoria
+9. **OPTIONS FLOW #23** 🟢 — Aviso por Telegram del flow en Cartera/Watchlist. Funcionalidad nueva, no un fallo
+
+**Esperando datos, no se puede avanzar todavía:**
+
+10. **CANSLIM #23** 🔴 — Bases y pivot points. Necesita 3–4 semanas de muestra, que empezó a acumularse el 06/09 al arreglar el registro
+11. **NEWSFEED #39** 🔴 — Los cuatro porcentajes que no son de ninguna sesión. Instrumentado, esperando que se repita
+
+**La bolsa de verificación: 99 hallazgos ❓** — Watchlist Community 19, Páginas Contenido 17, Tesis Admin 13, Módulos 10, y el resto repartido. Infraestructura bajó de 14 a 4 el 09/09: **dos eran bugs vivos** (#5 el límite por IP, #16 el apagado sin esperar) y seis ya estaban hechos o no procedían.
 
 ---
 
