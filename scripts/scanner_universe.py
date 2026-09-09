@@ -340,6 +340,37 @@ def _rvol(vols) -> float:
     return round(vol_today / vol_avg, 2)
 
 
+# Cuántas sesiones hay detrás de cada etiqueta. Son sesiones de BOLSA, no días
+# de calendario: es lo que mide el propio dato descargado, y es como cuenta
+# todo el mundo que publica estas tablas (Finviz incluido). "Semana" = 5
+# sesiones, "mes" = 21, "trimestre" = 63.
+VENTANAS_VARIACION = {"1d": 1, "1w": 5, "1m": 21, "3m": 63}
+
+
+def _variacion(prices, sesiones: int):
+    """Cuánto se ha movido el precio en las últimas N sesiones, en %.
+
+    Se compara el último cierre contra el de hace N sesiones. NO es intradía:
+    el escaneo corre una vez de madrugada, así que el número es siempre el de
+    la última sesión CERRADA. El módulo entero está construido sobre esa
+    premisa (ver el docstring de services/scanner_service.py: ninguna petición
+    de usuario dispara descargas), y decir "hoy" a un dato del cierre anterior
+    sería el mismo tipo de etiqueta equivocada que ya costó dos auditorías en
+    Amplitud de Mercado.
+
+    Devuelve None -- no 0 -- cuando la serie no llega. Un 0 significaría "no se
+    ha movido" y colaría el ticker dentro de cualquier filtro de caída, que es
+    exactamente el fallo que ya se documentó en `l3_fundtrend`.
+    """
+    if prices is None or len(prices) < sesiones + 1:
+        return None
+    antes  = float(prices.iloc[-1 - sesiones])
+    ahora  = float(prices.iloc[-1])
+    if not (antes > 0) or ahora != ahora:  # <= 0, NaN
+        return None
+    return round((ahora / antes - 1) * 100, 2)
+
+
 def _rvol_pts(rvol: float) -> float:
     """Puntos por volumen relativo, 0-20.
 
@@ -638,6 +669,10 @@ def run_scan() -> dict:
                 "new_high":          new_high,
                 "new_low":           new_low,
                 "dias_absorcion":    dias_absorcion,
+                # Variación de precio por ventanas. Sale de `prices`, que ya
+                # está descargado para todo lo demás: cero llamadas nuevas.
+                **{f"chg_{k}": _variacion(prices, n)
+                   for k, n in VENTANAS_VARIACION.items()},
             })
         except Exception:
             continue
@@ -707,6 +742,13 @@ def run_scan() -> dict:
             # todos los tickers (no solo era el umbral, el dato ni siquiera
             # se guardaba). Ver conversación 20/07/2026.
             "dias_absorcion": int(r.get("dias_absorcion", 0)),
+            # Variación por ventanas (sesión, semana, mes, trimestre). Se
+            # copian con el MISMO patrón `pd.isna` que los de arriba: sin él,
+            # un ticker sin serie suficiente viajaría al Gist como NaN, que
+            # `json.dumps` escribe como `NaN` -- literal inválido en JSON, y
+            # rompería la lectura del Gist entera, no solo esa fila.
+            **{f"chg_{k}": (None if pd.isna(r.get(f"chg_{k}")) else float(r.get(f"chg_{k}")))
+               for k in VENTANAS_VARIACION},
         }
 
     return {

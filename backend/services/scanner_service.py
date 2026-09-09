@@ -80,6 +80,127 @@ def _freshness(generated_at: str) -> str:
 L3_ZONA_BAJA = (10.0, 20.0)
 
 
+# ── Variación de precio ──────────────────────────────────────────────────────
+#
+# Los "movers": qué se ha movido y cuánto, en la ventana que se elija. Pedido
+# por el usuario el 09/09/2026 con la captura del desplegable de Finviz.
+#
+# UNA COSA QUE NO ES, Y HAY QUE DECIRLA: no es intradía. Este módulo no
+# descarga nada bajo demanda -- es su regla de diseño, escrita arriba del todo
+# -- así que el número sale del escaneo nocturno y es siempre el de la última
+# sesión CERRADA. Por eso la etiqueta dice "Sesión" y no "Hoy": llamarlo "hoy"
+# a media tarde sería afirmar algo falso sobre un dato de anoche, y ya costó
+# dos auditorías en Amplitud de Mercado hacer exactamente eso.
+# (En Finviz el intradía de verdad es de pago, y su propio desplegable lo
+# marca como "Elite only".)
+#
+# Los umbrales son los de la captura, y crecen con la ventana: un −15% en una
+# sesión es un suceso; en un mes es un mal mes. Poner los mismos cortes en
+# todas las ventanas daría listas vacías arriba y de 300 valores abajo.
+VARIACION_VENTANAS = {
+    "1d": ("Sesión",    "la última sesión cerrada"),
+    "1w": ("Semana",    "las últimas 5 sesiones"),
+    "1m": ("Mes",       "las últimas 21 sesiones"),
+    "3m": ("Trimestre", "las últimas 63 sesiones"),
+}
+_UMBRALES_VARIACION = {
+    "1d": (5, 10, 15),
+    "1w": (10, 20, 30),
+    "1m": (10, 20, 30, 50),
+    "3m": (20, 50),
+}
+
+
+def _construir_presets_variacion() -> dict:
+    """Genera la tabla de opciones a partir de las ventanas y sus umbrales.
+
+    Generada y no escrita a mano a propósito: son 30 entradas, y una tabla
+    literal de 30 filas con `chg_1w` copiado en cada una es justo donde se cuela
+    un `chg_1m` mal pegado que nadie ve hasta que un filtro devuelve la lista
+    equivocada -- sin fallar, que es lo peor.
+    """
+    presets = {}
+    for ventana, (nombre, _) in VARIACION_VENTANAS.items():
+        campo = f"chg_{ventana}"
+        presets[f"{ventana}_up"] = {
+            "campo": campo, "op": ">", "valor": 0.0,
+            "etiqueta": f"{nombre}: sube"}
+        presets[f"{ventana}_down"] = {
+            "campo": campo, "op": "<", "valor": 0.0,
+            "etiqueta": f"{nombre}: baja"}
+        for u in _UMBRALES_VARIACION[ventana]:
+            presets[f"{ventana}_+{u}"] = {
+                "campo": campo, "op": ">=", "valor": float(u),
+                "etiqueta": f"{nombre}: +{u}% o más"}
+            presets[f"{ventana}_-{u}"] = {
+                "campo": campo, "op": "<=", "valor": float(-u),
+                "etiqueta": f"{nombre}: −{u}% o peor"}
+    return presets
+
+
+VARIACION_PRESETS = _construir_presets_variacion()
+
+
+def _cumple_variacion(row: dict, codigo: str) -> bool:
+    """Un ticker SIN el dato no pasa nunca.
+
+    `or 0` aquí sería un fallo silencioso y grave: convertiría "no sé cuánto se
+    ha movido" en "no se ha movido", y un filtro de «baja» o de «sube» lo
+    dejaría fuera pero uno de rango lo metería. Es literalmente el mismo error
+    que ya se documentó en `l3_zona_baja` unas líneas más abajo.
+    """
+    p = VARIACION_PRESETS.get(codigo)
+    if p is None:
+        return False
+    v = row.get(p["campo"])
+    if v is None:
+        return False
+    op, u = p["op"], p["valor"]
+    if op == ">":   return v > u
+    if op == "<":   return v < u
+    if op == ">=":  return v >= u
+    return v <= u
+
+
+def opciones_de_variacion() -> list:
+    """La lista para el desplegable, EN ORDEN y con su etiqueta ya escrita.
+
+    El orden es el de la captura que pidió el usuario: de la caída más fuerte a
+    la subida más fuerte dentro de cada ventana, y las ventanas de más corta a
+    más larga. Ordenarlo en el frontend obligaría a saber allí que "1w_-30" va
+    antes que "1w_-20", que es conocimiento de esta tabla.
+    """
+    fuera = []
+    for ventana, (nombre, explicacion) in VARIACION_VENTANAS.items():
+        umbrales = _UMBRALES_VARIACION[ventana]
+        codigos = ([f"{ventana}_-{u}" for u in sorted(umbrales, reverse=True)]
+                   + [f"{ventana}_down", f"{ventana}_up"]
+                   + [f"{ventana}_+{u}" for u in sorted(umbrales)])
+        for c in codigos:
+            fuera.append({
+                "codigo":   c,
+                "etiqueta": VARIACION_PRESETS[c]["etiqueta"],
+                "grupo":    nombre,
+                "mide":     explicacion,
+            })
+    return fuera
+
+
+def hay_datos_de_variacion(stocks: dict) -> bool:
+    """¿Trae el escaneo publicado las columnas de variación?
+
+    El escaneo corre una vez por la noche, así que entre desplegar esto y el
+    siguiente escaneo el Gist vivo es el ANTERIOR y no las trae. Sin esta
+    comprobación el filtro devolvería cero resultados y la pantalla diría
+    «ningún valor cumple» -- que es mentira y además es indistinguible de un
+    mercado tranquilo. Se prefiere decir «todavía no hay dato».
+    """
+    return any(
+        any(row.get(f"chg_{v}") is not None for v in VARIACION_VENTANAS)
+        for row in stocks.values()
+    )
+
+
 def _embudo(stocks: dict, active_criteria: dict) -> list:
     """Cuántos valores del universo cumple CADA criterio por separado.
 
@@ -159,6 +280,9 @@ def _passes_filters(row: dict, criteria: dict) -> bool:
             return False
     if criteria.get("absorcion_min") is not None:
         if (row.get("dias_absorcion") or 0) < criteria["absorcion_min"]:
+            return False
+    if criteria.get("variacion"):
+        if not _cumple_variacion(row, criteria["variacion"]):
             return False
     return True
 
@@ -300,6 +424,16 @@ def get_scanner_data() -> dict:
         "generated_at":  data.get("generated_at", ""),
         "universe_size": data.get("universe_size", len(stocks)),
         "sectors":       sectors,
+        # El desplegable de variación se sirve desde aquí, igual que los
+        # sectores. Escribir las 30 opciones otra vez en el frontend sería una
+        # segunda lista que mantener a mano -- y este fichero ya tiene escrito
+        # arriba cómo acabó eso: cuatro listas paralelas que se desincronizaron
+        # y dejaron dos filtros inservibles en producción.
+        "variaciones":   opciones_de_variacion(),
+        # Si el escaneo publicado todavía no trae las columnas, el frontend
+        # puede decirlo en la propia tarjeta en vez de dejar elegir algo que
+        # va a fallar.
+        "hay_variacion": hay_datos_de_variacion(stocks),
         "meta":          data.get("meta", {}),
     }
 
@@ -313,6 +447,7 @@ def run_filter(
     new_high_only: bool = None,
     absorcion_min: int = None,
     l3_zona_baja: bool = None,
+    variacion: str = None,
     limit: int = 100,
 ) -> dict:
     cached = cache.get(CACHE_KEY)
@@ -335,8 +470,19 @@ def run_filter(
         "new_high_only": new_high_only,
         "absorcion_min": absorcion_min,
         "l3_zona_baja":  l3_zona_baja,
+        "variacion":     variacion,
     }
     active_criteria = {k: v for k, v in criteria.items() if v is not None}
+
+    # El escaneo anterior a este cambio no trae las columnas de variación. Se
+    # dice ANTES de filtrar: si no, la respuesta sería una lista vacía con un
+    # embudo que marca 0 de 497, indistinguible de un mercado plano.
+    if variacion and not hay_datos_de_variacion(data.get("stocks", {})):
+        return {
+            "ok": False,
+            "error": "El filtro de variación necesita datos que el escaneo nocturno todavía "
+                     "no ha publicado. Aparecerá tras el próximo escaneo (de madrugada).",
+        }
 
     from services.cartera_service import get_cartera_tickers
     cartera_tickers = get_cartera_tickers()
@@ -370,6 +516,11 @@ def run_filter(
                 "l3_linea":      row.get("l3_linea"),
                 "l3_estado":     row.get("l3_estado"),
                 "en_cartera":    ticker in cartera_tickers,
+                # Las cuatro ventanas viajan siempre, se filtre o no por ellas:
+                # la tabla pinta una columna con la que esté seleccionada, y
+                # poder ordenar por «lo que más se ha movido» sin activar
+                # ningún filtro es la mitad de la utilidad.
+                **{f"chg_{v}": row.get(f"chg_{v}") for v in VARIACION_VENTANAS},
             })
 
     matches.sort(key=lambda r: r.get("score_tecnico") or 0, reverse=True)

@@ -1,8 +1,8 @@
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from typing import Optional
 from auth import verify_token
 from services import users_service, watchlist_service
-from services.scanner_service import get_scanner_data, run_filter
+from services.scanner_service import VARIACION_PRESETS, get_scanner_data, run_filter
 
 router = APIRouter(prefix="/api/v1/scanner", tags=["scanner"])
 
@@ -38,13 +38,25 @@ async def scanner_filter(
     new_high_only: Optional[bool] = Query(None),
     absorcion_min: Optional[int] = Query(None, ge=0, le=10),
     l3_zona_baja: Optional[bool] = Query(None),
+    variacion: Optional[str] = Query(None),
     limit: int = Query(100, ge=1, le=500),
     user=Depends(verify_token),
 ):
+    # Un código desconocido se rechaza en vez de ignorarse. Ignorarlo
+    # devolvería el universo entero con cara de haber filtrado, que es la
+    # forma más silenciosa posible de mentir: la pantalla diría «Variación
+    # 1w_-20» sobre una lista que no la cumple.
+    if variacion is not None and variacion not in VARIACION_PRESETS:
+        raise HTTPException(
+            status_code=422,
+            detail=f"Variación desconocida: {variacion!r}. Válidas: "
+                   + ", ".join(sorted(VARIACION_PRESETS)),
+        )
     result = run_filter(
         rvol_min=rvol_min, rs_min=rs_min, score_min=score_min,
         phase=phase, sector=sector, new_high_only=new_high_only,
-        absorcion_min=absorcion_min, l3_zona_baja=l3_zona_baja, limit=limit,
+        absorcion_min=absorcion_min, l3_zona_baja=l3_zona_baja,
+        variacion=variacion, limit=limit,
     )
     # in_watchlist se añade aquí, fuera de cualquier caché compartida --
     # es por usuario, a diferencia de en_cartera (Cartera es única/global,

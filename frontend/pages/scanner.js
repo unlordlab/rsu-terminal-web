@@ -38,6 +38,13 @@ const CRITERIOS = [
       opciones: () => PHASE_OPTIONS.map(o => '<option value="' + o.value + '">' + o.label + '</option>').join('') },
     { id: 'sector',    tipo: 'select', param: 'sector',        etiqueta: 'SECTOR',
       opciones: () => '<option value="">Cargando sectores...</option>' },
+    // Los "movers". Las opciones NO se escriben aquí: llegan de
+    // /scanner/universe, que las genera desde la misma tabla que aplica el
+    // filtro. Escribirlas a mano sería otra lista paralela, y este fichero ya
+    // sabe cómo acaba eso (ver el comentario de arriba).
+    { id: 'variacion', tipo: 'select', param: 'variacion',     etiqueta: 'VARIACIÓN DE PRECIO', tip: 'scanner-variacion',
+      opciones: () => '<option value="">Cargando...</option>',
+      nota: 'Del último cierre, no intradía · en 500 grandes los extremos casi no saltan' },
     { id: 'newhigh',   tipo: 'toggle', param: 'new_high_only', etiqueta: '🔥 MÁXIMOS 52 SEMANAS', tip: 'new-high-52w',    nota: 'Aprox. a ATH' },
     { id: 'l3zona',    tipo: 'toggle', param: 'l3_zona_baja',  etiqueta: 'ZONA BAJA DEL INDICADOR RSU', tip: 'rsu-flow',  nota: 'Entre 10 y 20' },
 ];
@@ -513,6 +520,7 @@ function setupPanel(container) {
 async function loadUniverseMeta(container) {
     const metaEl   = container.querySelector('#scanner-meta');
     const sectorEl = container.querySelector('#scanner-sector-value');
+    const varEl    = container.querySelector('#scanner-variacion-value');
     try {
         const res   = await fetch('/api/v1/scanner/universe', { headers: authHeader() });
         const data  = await res.json();
@@ -526,6 +534,33 @@ async function loadUniverseMeta(container) {
         }
         if (sectorEl && data.sectors) {
             sectorEl.innerHTML = data.sectors.map(s => '<option value="' + esc(s) + '">' + esc(s) + '</option>').join('');
+        }
+        if (data.variaciones) {
+            _variacionEtiquetas = {};
+            data.variaciones.forEach(o => { _variacionEtiquetas[o.codigo] = o.etiqueta; });
+        }
+        if (varEl && data.variaciones) {
+            // Agrupadas por ventana con <optgroup>, como en la captura: son 32
+            // opciones y sin separar no se encuentra nada.
+            const grupos = [];
+            data.variaciones.forEach(o => {
+                const ult = grupos[grupos.length - 1];
+                if (!ult || ult.nombre !== o.grupo) grupos.push({ nombre: o.grupo, mide: o.mide, ops: [o] });
+                else ult.ops.push(o);
+            });
+            varEl.innerHTML = grupos.map(g =>
+                '<optgroup label="' + esc(g.nombre) + ' — ' + esc(g.mide) + '">'
+                + g.ops.map(o => '<option value="' + esc(o.codigo) + '">' + esc(o.etiqueta) + '</option>').join('')
+                + '</optgroup>').join('');
+            // El escaneo publicado puede ser anterior a que existiera el dato.
+            // Se deja UNA opción con valor vacío: `buildQuery` solo manda los
+            // valores no vacíos, así que activar la tarjeta no envía nada y no
+            // se puede pedir un filtro que va a fallar. No se pone
+            // `disabled = true` porque `setActive()` lo revierte al pulsar la
+            // tarjeta -- quedaría un campo que se reactiva solo.
+            if (data.hay_variacion === false) {
+                varEl.innerHTML = '<option value="">Disponible tras el próximo escaneo nocturno</option>';
+            }
         }
     } catch (e) {
         if (metaEl) metaEl.innerHTML = '<span style="color:#f23645;">' + esc(e.message) + '</span>';
@@ -635,6 +670,18 @@ function etiquetaCriterio(param) {
     return c ? c.etiqueta.replace(/ ≥$/, '') : param;
 }
 
+// El valor de `variacion` es un código ("1w_-20"), no un número. Enseñarlo tal
+// cual en la línea de criterios activos y en el embudo obligaría al usuario a
+// descifrarlo. Las etiquetas llegan del backend junto con las opciones, así que
+// aquí no hay ninguna copia de la tabla.
+let _variacionEtiquetas = {};
+
+function valorCriterio(param, valor) {
+    if (valor === true) return '';
+    if (param === 'variacion') return ' ' + (_variacionEtiquetas[valor] || valor);
+    return ' ' + valor;
+}
+
 // Cuántos valores deja pasar cada criterio POR SEPARADO.
 //
 // Una lista vacía no distinguía dos situaciones muy distintas: «no hay nada
@@ -647,7 +694,7 @@ function renderEmbudo(data) {
     const max = Math.max(...filas.map(f => f.pasan), 1);
     const cuerpo = filas.map(f => {
         const c = f.pasan === 0 ? '#f23645' : f.pct < 10 ? '#ffb800' : 'var(--color-muted)';
-        const valor = f.valor === true ? '' : ' ' + esc(f.valor);
+        const valor = esc(valorCriterio(f.criterio, f.valor));
         return '<div style="display:grid;grid-template-columns:1fr 90px 46px;gap:8px;align-items:center;padding:3px 0;font-size:11px;">'
             + '<span style="color:var(--color-muted);">' + esc(etiquetaCriterio(f.criterio)) + valor + '</span>'
             + '<div style="background:var(--color-surface2);border-radius:2px;height:5px;">'
@@ -664,10 +711,41 @@ function renderEmbudo(data) {
         + cuerpo + '</div>';
 }
 
+// ── Variación de precio en la tabla ─────────────────────────────────────────
+
+const ETIQUETA_VENTANA = { '1d': 'SESIÓN', '1w': 'SEMANA', '1m': 'MES', '3m': 'TRIM.' };
+
+function ventanaDeVariacion(activos) {
+    // El código del filtro es "<ventana>_<lo que sea>": la ventana es lo que
+    // hay antes del primer "_". Se comprueba contra ETIQUETA_VENTANA para que
+    // un código que no reconozcamos caiga en la sesión en vez de pedir una
+    // columna `chg_loquesea` que no existe y pintar 500 guiones.
+    const cod = (activos || {}).variacion;
+    if (typeof cod === 'string') {
+        const v = cod.split('_')[0];
+        if (ETIQUETA_VENTANA[v]) return v;
+    }
+    return '1d';
+}
+
+function textoVariacion(v) {
+    // Sin dato es "—", NO "0,00%": este escáner ya tuvo el fallo de convertir
+    // "no sé" en un número, y un 0% se lee como "no se ha movido".
+    if (v == null) return '—';
+    return (v > 0 ? '+' : '') + v.toFixed(2) + '%';
+}
+
+function colorVariacion(v) {
+    if (v == null) return 'var(--color-muted)';
+    if (v > 0) return 'var(--color-accent)';
+    if (v < 0) return '#f23645';
+    return 'var(--color-muted)';   // plano exacto: ni verde ni rojo
+}
+
 function renderResults(el, data) {
     _scannerData = data;
     const activeLabels = Object.entries(data.active_criteria || {})
-        .map(([k, v]) => etiquetaCriterio(k) + (v === true ? '' : ' ' + v));
+        .map(([k, v]) => etiquetaCriterio(k) + valorCriterio(k, v));
     const criteriaLine = activeLabels.length
         ? esc(activeLabels.join(' · '))
         : 'Sin criterios activos — mostrando universo completo ordenado por Score Técnico';
@@ -678,9 +756,15 @@ function renderResults(el, data) {
         + '</div>'
         + renderEmbudo(data);
 
+    // Qué ventana pinta la columna de variación: la que se esté filtrando, y
+    // la sesión si no se filtra por ninguna. Enseñar siempre la sesión mientras
+    // se filtra por «Mes −10%» dejaría una tabla en la que las cifras no
+    // explican por qué está ahí cada valor.
+    const ventana = ventanaDeVariacion(data.active_criteria);
     const cols = [
         { label: 'TICKER', key: 'ticker' },
         { label: 'PRECIO',  key: 'precio' },
+        { label: ETIQUETA_VENTANA[ventana], key: 'chg_' + ventana },
         { label: 'RVOL',    key: 'rvol' },
         { label: 'RS%',     key: 'rs_pct' },
         { label: 'SCORE TÉC. ' + tt('score-tecnico'), key: 'score_tecnico' },
@@ -690,7 +774,7 @@ function renderResults(el, data) {
         { label: 'SECTOR',  key: 'sector' },
         { label: '',        key: null },
     ];
-    const tableHeader = '<div style="display:grid;grid-template-columns:70px 90px 60px 60px 70px 60px 62px 1fr 1fr 34px;gap:6px;padding:7px 12px;border-bottom:1px solid var(--color-border);font-size:10px;color:var(--color-muted);letter-spacing:0.05em;">'
+    const tableHeader = '<div style="display:grid;grid-template-columns:70px 82px 66px 58px 56px 66px 58px 60px 1fr 1fr 34px;gap:6px;padding:7px 12px;border-bottom:1px solid var(--color-border);font-size:10px;color:var(--color-muted);letter-spacing:0.05em;">'
         + cols.map(c => c.key
             ? '<div onclick="window.__scannerSort(\'' + c.key + '\')" style="cursor:pointer;user-select:none;">' + c.label + sortArrow(c.key) + '</div>'
             : '<div></div>'
@@ -700,6 +784,7 @@ function renderResults(el, data) {
     const sortedResults = sortRows(data.results || [], _scannerSort);
 
     const rows = sortedResults.map(r => {
+        const chg      = r['chg_' + ventana];
         const rvolClr  = (r.rvol || 0) >= 1.5 ? 'var(--color-accent)' : 'var(--color-muted)';
         const rsClr    = (r.rs_pct || 0) >= 70 ? 'var(--color-accent)' : (r.rs_pct || 0) <= 30 ? '#f23645' : '#ffb800';
         const scoreClr = (r.score_tecnico || 0) >= 70 ? 'var(--color-accent)' : (r.score_tecnico || 0) >= 40 ? '#ffb800' : '#f23645';
@@ -716,9 +801,10 @@ function renderResults(el, data) {
                     : l3 >= 80 ? '#c77dff'
                     : 'var(--color-muted)';
 
-        return '<div style="display:grid;grid-template-columns:70px 90px 60px 60px 70px 60px 62px 1fr 1fr 34px;gap:6px;padding:8px 12px;border-bottom:1px solid var(--color-border);font-size:11px;align-items:center;' + (r.new_high ? 'background:rgba(255,152,0,0.04);' : '') + '">'
+        return '<div style="display:grid;grid-template-columns:70px 82px 66px 58px 56px 66px 58px 60px 1fr 1fr 34px;gap:6px;padding:8px 12px;border-bottom:1px solid var(--color-border);font-size:11px;align-items:center;' + (r.new_high ? 'background:rgba(255,152,0,0.04);' : '') + '">'
             + '<div onclick="goToResearch(\'' + esc(r.ticker || '') + '\')" class="ticker-link" style="color:var(--color-accent);font-weight:500;cursor:pointer;">' + esc(r.ticker || '') + athTag + carteraTag + watchlistTag + '</div>'
             + '<div style="color:var(--color-muted);">' + (r.precio != null ? '$' + r.precio.toFixed(2) : '—') + '</div>'
+            + '<div style="color:' + colorVariacion(chg) + ';font-weight:500;">' + textoVariacion(chg) + '</div>'
             + '<div style="color:' + rvolClr + ';">' + (r.rvol != null ? r.rvol.toFixed(2) + 'x' : '—') + '</div>'
             + '<div style="color:' + rsClr + ';font-weight:500;">' + (r.rs_pct != null ? r.rs_pct.toFixed(0) : '—') + '</div>'
             + '<div style="color:' + scoreClr + ';font-weight:500;">' + (r.score_tecnico != null ? r.score_tecnico.toFixed(0) : '—') + '</div>'

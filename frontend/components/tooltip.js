@@ -2877,6 +2877,22 @@ Cada día se marca como "de absorción" si coinciden dos cosas: actividad de vol
 Cuantos más días, más sostenida (y más creíble) es la señal — 1 o 2 días puede ser ruido, 5 o más empieza a ser un patrón real digno de mirar con calma en Research, donde puedes ver el detalle completo de ese valor en concreto.`
     },
 
+    "scanner-variacion": {
+        title: "Variación de Precio",
+        short: "Cuánto se ha movido cada valor en la ventana que elijas: la última sesión, la semana, el mes o el trimestre.",
+        long: `Sirve para lo contrario que el resto de filtros del escáner: en vez de buscar estructura (fase, fuerza relativa, volumen), busca MOVIMIENTO. Es lo que se usa para encontrar lo que se ha desplomado hoy, lo que lleva un mes cayendo, o lo que acaba de dispararse.
+
+NO ES INTRADÍA, y conviene tenerlo claro. El escáner no descarga precios cuando tú lo abres — lee el escaneo que corre una vez de madrugada, para no consumir la cuota de datos con cada visita. Así que "Sesión" es la última sesión CERRADA, no lo que va de día. Si necesitas el movimiento de ahora mismo, el precio en vivo está en Cartera y en Research.
+
+LAS CUATRO VENTANAS son sesiones de bolsa, no días de calendario: Sesión = 1, Semana = 5, Mes = 21, Trimestre = 63. Es como cuenta todo el mundo que publica estas tablas.
+
+LOS UMBRALES CRECEN CON LA VENTANA a propósito: un −15% en una sesión es un suceso, y en un trimestre es un mal trimestre. Poner los mismos cortes en las cuatro daría listas vacías en unas y de trescientos valores en otras.
+
+POR QUÉ MUCHAS OPCIONES SALEN VACÍAS. Este escáner cubre las ~500 mayores empresas de EE.UU., y una empresa de ese tamaño casi nunca se mueve un 15% en un día. Medido sobre una cuarta parte del universo en una sesión normal: "Sesión −5%" dejó pasar 1 valor, y "Sesión ±15%" ninguno. No está roto — es que ese día no había nada así. Justo por eso sirve como aviso: el día que "Sesión −10%" devuelva algo, ha pasado algo.
+
+Un valor sin histórico suficiente sale con un guion, nunca con un 0%: no saber cuánto se ha movido no es lo mismo que no haberse movido.`
+    },
+
     // ── GENERAL ───────────────────────────────────────────────────────────────
     "market-cap": {
         title: "Market Cap — Capitalización bursátil",
