@@ -119,7 +119,7 @@ citar hallazgos ya cerrados, que es justo lo que le había pasado.
 6. **OPTIONS FLOW #31** 🟠 — El umbral rebajado para la cartera no se activa nunca: `MIN_VOLUME`/`MIN_OI` cortan antes. **Es una decisión de producto, no un arreglo mecánico**
 7. **CARTERA #A4** 🟠 — Cripto con el precio congelado 16 horas al día
 8. **INFRAESTRUCTURA #12** 🟠 — La configuración de Nginx solo existe en el VPS: si se pierde el servidor, hay que reconstruirla de memoria
-9. **OPTIONS FLOW #23** 🟢 — Aviso por Telegram del flow en Cartera/Watchlist. Funcionalidad nueva, no un fallo
+9. **OPTIONS FLOW #23** 🟢 — **Aviso por Telegram del flow en Cartera/Watchlist.** Funcionalidad nueva, no un fallo: cero menciones a Telegram en `options_service.py`, no hay ninguna vía de aviso. **Encaja con el #31 que se acaba de cerrar**: ahora se sabe exactamente qué tickers de la cartera pueden generar señal (`oi_max >= MIN_OI`), así que el aviso no prometería algo que no puede cumplir
 
 **Esperando datos, no se puede avanzar todavía:**
 
