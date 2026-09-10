@@ -52,6 +52,61 @@ export const FRASES = [
         autor: 'Karl Marx',
         fuente: 'carta a su tío Lion Philips, 25 de junio de 1864',
     },
+    {
+        texto: 'Rara vez se reúnen los del mismo oficio, ni siquiera para divertirse, sin que la conversación acabe en una conspiración contra el público o en alguna maquinación para subir los precios.',
+        autor: 'Adam Smith',
+        fuente: '«La riqueza de las naciones» (1776), libro I, capítulo 10',
+    },
+    {
+        texto: 'Simplemente intentamos tener miedo cuando los demás son codiciosos, y ser codiciosos solo cuando los demás tienen miedo.',
+        autor: 'Warren Buffett',
+        fuente: 'carta a los accionistas de Berkshire Hathaway, 1986',
+    },
+    {
+        texto: 'Cuando el desarrollo del capital de un país se convierte en un subproducto de las actividades de un casino, es probable que el trabajo se haga mal.',
+        autor: 'John Maynard Keynes',
+        fuente: '«Teoría general del empleo, el interés y el dinero» (1936), capítulo 12',
+    },
+    {
+        texto: 'Octubre: uno de los meses especialmente peligrosos para especular en bolsa. Los otros son julio, enero, septiembre, abril, noviembre, mayo, marzo, junio, diciembre, agosto y febrero.',
+        autor: 'Mark Twain',
+        fuente: '«Pudd’nhead Wilson» (1894), capítulo 13',
+    },
+    {
+        texto: '¡Après moi le déluge! es el lema de todo capitalista y de toda nación capitalista.',
+        autor: 'Karl Marx',
+        fuente: '«El capital», volumen I (1867), capítulo 10',
+    },
+    {
+        texto: 'El mundo de las finanzas aclama la invención de la rueda una y otra vez, a menudo en una versión algo más inestable.',
+        autor: 'John Kenneth Galbraith',
+        fuente: '«Breve historia de la euforia financiera» (1990)',
+    },
+    {
+        texto: 'Solo cuando baja la marea se descubre quién estaba nadando desnudo.',
+        autor: 'Warren Buffett',
+        fuente: 'carta a los accionistas de Berkshire Hathaway, 2001',
+    },
+    {
+        texto: 'La bolsa tiende a concentrar toda la producción, industrial y agrícola, y todo el comercio […] en manos de los operadores de bolsa, de modo que se convierte en la representante más destacada de la propia producción capitalista.',
+        autor: 'Friedrich Engels',
+        fuente: '«La Bolsa», suplemento al volumen III de «El capital» (1895)',
+    },
+    {
+        texto: 'En Wall Street no hay nada nuevo. No puede haberlo, porque la especulación es tan vieja como las montañas.',
+        autor: 'Edwin Lefèvre',
+        fuente: '«Reminiscences of a Stock Operator» (1923), la vida de Jesse Livermore novelada',
+    },
+    {
+        texto: 'El sistema de crédito […] desarrolla el motor de la producción capitalista, el enriquecimiento mediante la explotación del trabajo ajeno, hasta la forma más pura y colosal de juego y estafa.',
+        autor: 'Karl Marx',
+        fuente: '«El capital», volumen III (1894), capítulo 27',
+    },
+    {
+        texto: 'Los mercados alcistas nacen en el pesimismo, crecen en el escepticismo, maduran en el optimismo y mueren en la euforia.',
+        autor: 'John Templeton',
+        fuente: 'atribuida; no se ha localizado dónde lo dijo o lo escribió',
+    },
 ];
 
 // Número de día en el calendario de Madrid: la frase cambia a medianoche de

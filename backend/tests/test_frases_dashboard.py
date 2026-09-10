@@ -63,18 +63,29 @@ FUENTES_COMPROBADAS = {
     ("Edwin Lefèvre", "«Reminiscences of a Stock Operator» (1923), la vida de Jesse Livermore novelada"),
     ("A. Gary Shilling", "economista, 1986. Se suele atribuir a Keynes, pero no hay constancia de que él la dijera ni la escribiera"),
     ("Karl Marx", "carta a su tío Lion Philips, 25 de junio de 1864"),
+    # Añadidas a petición del usuario el 10/09, cada una comprobada en el original.
+    ("Adam Smith", "«La riqueza de las naciones» (1776), libro I, capítulo 10"),
+    ("Warren Buffett", "carta a los accionistas de Berkshire Hathaway, 1986"),
+    ("John Maynard Keynes", "«Teoría general del empleo, el interés y el dinero» (1936), capítulo 12"),
+    ("Mark Twain", "«Pudd’nhead Wilson» (1894), capítulo 13"),
+    ("Karl Marx", "«El capital», volumen I (1867), capítulo 10"),
+    ("John Kenneth Galbraith", "«Breve historia de la euforia financiera» (1990)"),
+    ("Warren Buffett", "carta a los accionistas de Berkshire Hathaway, 2001"),
+    ("Friedrich Engels", "«La Bolsa», suplemento al volumen III de «El capital» (1895)"),
+    ("Karl Marx", "«El capital», volumen III (1894), capítulo 27"),
 }
 
 # Las que se buscaron y NO se encontraron. Salen con nombre porque así lo
 # decidió el usuario, pero la pantalla dice que son atribuidas.
 ATRIBUIDAS_SIN_FUENTE = {
     ("Friedrich Engels", "atribuida; no se ha localizado en sus obras"),
+    ("John Templeton", "atribuida; no se ha localizado dónde lo dijo o lo escribió"),
 }
 
 
 def test_las_frases_se_han_leido_enteras():
     """Si el patrón se saltara alguna, los tests de abajo no la mirarían."""
-    assert len(FRASES) == FRASES_JS.count("texto:") >= 10
+    assert len(FRASES) == FRASES_JS.count("texto:") >= 21
 
 
 def test_cada_autor_lleva_la_fuente_que_se_comprobo():
@@ -103,7 +114,9 @@ def test_una_frase_sin_autor_no_lleva_fuente():
 
 def test_no_vuelven_las_atribuciones_falsas():
     autores = {a for _, a, _ in FRASES}
-    assert "John Maynard Keynes" not in autores
+    # Keynes sí sale, con la del casino, que es suya. La de «irracional… solvente» no.
+    irracional = [a for t, a, _ in FRASES if "irracional" in t]
+    assert irracional == ["A. Gary Shilling"], irracional
     # El pasaje es del libro de Lefèvre, no de algo que escribiera Livermore.
     assert "Jesse Livermore" not in autores
     textos = " ".join(t for t, _, _ in FRASES)
