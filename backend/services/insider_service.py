@@ -8,6 +8,7 @@ from concurrent.futures import ThreadPoolExecutor
 import time
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "..", "shared"))
 from time_utils import get_timestamp  # noqa: E402
+from tickers import normalizar_ticker  # noqa: E402
 
 EDGAR_BASE  = "https://efts.sec.gov/LATEST/search-index"
 EDGAR_FULL  = "https://www.sec.gov"
@@ -362,7 +363,12 @@ def _read_transactions(days: int = FEED_WINDOW_DAYS) -> list:
             "OR (tx_date = '' AND ingested_at >= ?) ORDER BY value DESC",
             (cutoff, cutoff)
         ).fetchall()
-        return [dict(r) for r in rows]
+        filas = [dict(r) for r in rows]
+        # Lo YA guardado antes de validar en la ingesta tambien sale
+        # normalizado: la validacion nueva no limpia la base.
+        for f in filas:
+            f["ticker"] = normalizar_ticker(f.get("ticker")) or ""
+        return filas
     finally:
         conn.close()
 
@@ -495,7 +501,11 @@ def _parse_form4(filing_url: str) -> dict:
             el = root.find('.//' + tag)
             return el.text.strip() if el is not None and el.text else ''
 
-        ticker   = find('issuerTradingSymbol')
+        # Texto libre que escribe cada empresa en su Form 4: en la base
+        # real hay «GEF, GEF-B» y «MOGA/MOGB». Acaba dentro de un
+        # onclick en la pantalla de todos, donde escapar HTML no
+        # protege. Ver shared/tickers.py.
+        ticker   = normalizar_ticker(find('issuerTradingSymbol')) or ''
         company  = find('issuerName')
         name     = find('rptOwnerName')
         title    = find('officerTitle') or find('reportingOwnerRelationship')

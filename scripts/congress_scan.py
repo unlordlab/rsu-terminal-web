@@ -19,6 +19,10 @@ from datetime import datetime, timedelta, timezone
 
 import requests
 
+import sys
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "shared"))
+from tickers import normalizar_ticker, url_segura  # noqa: E402
+
 KADOA_TRADES_URL = "https://raw.githubusercontent.com/kadoa-org/congress-trading-monitor/main/public/data/trades.json"
 GIST_TOKEN  = os.environ.get("GIST_TOKEN", "")
 GIST_ID     = os.environ.get("CONGRESS_GIST_ID", "")
@@ -53,10 +57,16 @@ def run_scan() -> dict:
     trades = []
     for t in recent:
         direction = _direction(t.get("transaction_type"))
-        if not t.get("ticker") or not direction:
+        # El dataset es un repositorio PUBLICO de terceros, y el ticker acaba
+        # dentro de un onclick y la URL dentro de un href en la pantalla de
+        # todos los usuarios. Se validan aqui, en el origen: ver
+        # shared/tickers.py. Una operacion sin ticker valido no se puede
+        # enlazar a Research y no se publica.
+        ticker = normalizar_ticker(t.get("ticker"))
+        if not ticker or not direction:
             continue
         trades.append({
-            "ticker":             t["ticker"],
+            "ticker":             ticker,
             "asset_name":         t.get("asset_name"),
             "filer_name":         t.get("filer_name"),
             "chamber":            t.get("chamber"),      # "senate" | "house"
@@ -71,7 +81,7 @@ def run_scan() -> dict:
             "amount_range_label": t.get("amount_range_label"),
             "days_to_file":       t.get("days_to_file"),
             "is_late":            bool(t.get("is_late")),
-            "doc_url":            t.get("doc_url"),
+            "doc_url":            url_segura(t.get("doc_url")),
             "ret_since":          t.get("ret_since"),
         })
 

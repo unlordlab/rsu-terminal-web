@@ -24,6 +24,10 @@ MAX_ACTIVE_ALERTS   = 30
 VALID_CONDITIONS = ("above", "below")
 VALID_METRICS    = ("price", "rvol", "ema_touch")
 EMA_PERIODS      = (10, 20, 50, 200)
+# % de distancia a la EMA que cuenta como tocarla. El 0,5% es el que había
+# antes del 25/07 y el que proponía la auditoría: más ancho dispararía con el
+# precio simplemente cerca, más estrecho perdería toques reales entre pasadas.
+EMA_TOUCH_TOLERANCE_PCT = 0.5
 
 
 def _conn():
@@ -271,7 +275,10 @@ _RVOL_CACHE_TTL = 300
 # necesita también el volumen relativo de Reddit Pulse (Market #27), y una
 # sola copia evita que las dos puedan divergir.
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "..", "shared"))
-from time_utils import session_fraction_elapsed as _session_fraction_elapsed  # noqa: E402
+# La CURVA real del volumen del día, no la recta de session_fraction_elapsed():
+# con la recta, «RVOL ≥ 2» saltaba en el 61% de las mañanas NORMALES a las
+# 9:35 (medido el 10/09/2026). Ver fraccion_de_volumen_esperada().
+from time_utils import fraccion_de_volumen_esperada as _fraccion_volumen  # noqa: E402
 
 
 def _fetch_rvol_single(ticker: str):
@@ -294,7 +301,14 @@ def _fetch_rvol_single(ticker: str):
         # estructuralmente bajo por la mañana aunque el ritmo real de
         # negociación sea anómalo. Se normaliza el promedio esperado a "lo
         # que llevaría acumulado a estas horas" antes de dividir.
-        frac = _session_fraction_elapsed()
+        frac = _fraccion_volumen()
+        if frac is not None:
+            # EN SESIÓN, LA ÚLTIMA BARRA TIENE QUE SER LA DE HOY. Si Yahoo aún
+            # no la trae, `iloc[-1]` es el volumen ENTERO de ayer, y dividirlo
+            # por la fracción de hoy (un 4% a las 9:31) daría un RVOL de 25.
+            hoy_et = datetime.now(ZoneInfo("America/New_York")).date()
+            if hist.index[-1].date() != hoy_et:
+                return None
         vol_avg_esperado = vol_avg * frac if frac is not None else vol_avg
         if vol_avg_esperado <= 0:
             return None
@@ -488,13 +502,23 @@ def check_all_active_alerts() -> list:
                 return
             current_side = "above" if live_price >= ema_value else "below"
             prev_side = a.get("last_side")
-            # prev_side=None (primera pasada tras crear la alerta) solo
-            # "arma" el estado -- no hay cruce que detectar todavía, solo
-            # se sabe dónde está el precio ahora. A partir de la SIGUIENTE
-            # pasada, un cambio de lado es un cruce real -- ya no basta con
-            # estar cerca del valor de la EMA (hallazgo #2, auditoría
-            # Watchlist 21/07/2026: antes disparaba por proximidad).
-            if prev_side is not None and prev_side != current_side:
+            # prev_side=None (primera pasada tras crear o rearmar la alerta)
+            # solo "arma" el estado: se sabe dónde está el precio, no de dónde
+            # viene. A partir de la SIGUIENTE pasada salta por CUALQUIERA de
+            # las dos cosas:
+            #   - CRUCE: el precio ha cambiado de lado entre dos pasadas. Caza
+            #     el cruce rápido que, muestreando cada 90 s, nunca se ve dentro
+            #     de la banda (hallazgo #2, auditoría 21/07/2026).
+            #   - TOQUE: está a menos de EMA_TOUCH_TOLERANCE_PCT de la EMA. Caza
+            #     el REBOTE -- baja hasta la EMA, la roza y vuelve a subir sin
+            #     cruzarla --, que es el toque de soporte clásico.
+            # El arreglo del 25/07 SUSTITUYÓ la proximidad por el cruce, cuando
+            # la auditoría proponía las dos, y desde entonces una alerta que se
+            # llama «Toque de EMA» no avisaba de un toque que no cruzara.
+            distancia_pct = abs(live_price - ema_value) / ema_value * 100
+            cruce = prev_side is not None and prev_side != current_side
+            toque = prev_side is not None and distancia_pct <= EMA_TOUCH_TOLERANCE_PCT
+            if cruce or toque:
                 conn.execute(
                     "UPDATE alerts SET status = 'triggered', triggered_at = ?, "
                     "triggered_price = ?, seen = 0, last_side = ? WHERE id = ?",

@@ -78,9 +78,23 @@ export function errorMessage(msg, opts = {}) {
  */
 export function esc(str) {
     if (str == null) return '';
-    const d = document.createElement('div');
-    d.textContent = String(str);
-    return d.innerHTML;
+    // LAS COMILLAS TAMBIÉN. La versión anterior hacía `textContent` →
+    // `innerHTML`, que solo escapa &, < y >. Eso basta entre etiquetas, pero
+    // esc() se usa en 17 sitios DENTRO de atributos (`title="…"`, `href="…"`,
+    // `data-ticker="…"`), y ahí una comilla doble cierra el atributo y deja
+    // escribir otro — `onmouseover=`, por ejemplo. Encontrado el 10/09/2026:
+    // la URL de Congreso llega cruda de un repositorio público de terceros.
+    //
+    // OJO, lo que esto NO arregla: un valor dentro de un `onclick="f('…')"`.
+    // El navegador descodifica `&#39;` ANTES de ejecutar el JavaScript del
+    // atributo, así que la comilla vuelve a aparecer. Para eso el dato tiene
+    // que llegar ya validado (ver _TICKER_RE en el backend).
+    return String(str)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
 }
 
 /**

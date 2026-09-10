@@ -1,6 +1,6 @@
 import { authHeader } from '/core/api.js';
 import { tt } from '/components/tooltip.js';
-import { errorMessage, esc, fmtFecha, panel } from '/core/ui.js';
+import { errorMessage, esc, fmtFecha, panel, safeUrl } from '/core/ui.js';
 
 export async function render(container) {
     container.innerHTML = pageShell();
@@ -191,7 +191,7 @@ function renderTickerResult(ticker, data) {
             + '<div style="background:' + (isBuy ? 'rgba(0,255,173,0.1)' : 'rgba(242,54,69,0.1)') + ';color:' + (isBuy ? 'var(--color-accent)' : '#f23645') + ';border-radius:3px;padding:2px 6px;font-size:10px;text-align:center;">' + esc(isBuy ? 'COMPRA' : 'VENTA') + '</div>'
             + '<div style="color:' + (isBuy ? 'var(--color-accent)' : '#f23645') + ';font-weight:500;">' + esc(t.amount_range_label || '—') + '</div>'
             + '<div style="color:' + (t.is_late ? '#f23645' : 'var(--color-muted)') + ';">' + daysLabel(t) + '</div>'
-            + '<div>' + (t.doc_url ? '<a href="' + esc(t.doc_url) + '" target="_blank" rel="noopener noreferrer" style="color:var(--color-muted);">↗</a>' : '—') + '</div>'
+            + '<div>' + (safeUrl(t.doc_url) !== '#' ? '<a href="' + esc(safeUrl(t.doc_url)) + '" target="_blank" rel="noopener noreferrer" style="color:var(--color-muted);">↗</a>' : '—') + '</div>'
             + '</div>';
     }).join('');
 
