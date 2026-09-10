@@ -1,7 +1,7 @@
 // ── FRASE DEL DÍA ────────────────────────────────────────────────────────────
-// Cada frase con autor lleva su fuente, rastreada hasta el original. Una frase
-// que no se pueda rastrear no entra con nombre: o va sin autor, como dicho de
-// mercado, o no entra. Las que no tienen autor son dichos de mercado.
+// Cada frase con autor lleva su fuente, rastreada hasta el original. La que no
+// se ha podido rastrear lleva su nombre, pero dice que es atribuida. Las que
+// no tienen autor son dichos de mercado.
 //
 // Módulo aparte y sin imports para poder ejecutarlo fuera del navegador.
 
@@ -41,6 +41,11 @@ export const FRASES = [
     {
         texto: 'El éxito en el trading consiste en comprarles a los pesimistas y venderles a los optimistas.',
         autor: '', fuente: '',
+    },
+    {
+        texto: 'La bolsa es un lugar donde las crisis se preparan... es el árbol donde los pequeños inversores son sacudidos para que sus ahorros caigan en los bolsillos de los grandes especuladores.',
+        autor: 'Friedrich Engels',
+        fuente: 'atribuida; no se ha localizado en sus obras',
     },
     {
         texto: 'He estado especulando, en parte con fondos americanos, pero sobre todo con acciones inglesas […]. Es un tipo de operación que exige poco tiempo, y merece la pena correr algún riesgo para aliviar al enemigo de su dinero.',

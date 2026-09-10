@@ -16,7 +16,8 @@ EL CASO, Páginas Contenido #8, 10/09/2026. Dos problemas:
      bolsa es un «centro de reubicación» donde el dinero pasa «de los activos a
      los pacientes».
    - La de «Engels» (la bolsa como árbol que se sacude) no aparece en ninguna
-     fuente, ni en inglés ni en alemán. Fuera.
+     fuente, ni en inglés ni en alemán. Se quitó y el usuario pidió volver a
+     ponerla: va con su nombre y con «atribuida» en pantalla.
    - Marx: real (carta a su tío Lion Philips, 25/06/1864) pero recortada sin
      avisar y con «sus enemigos» donde el original dice «el enemigo».
    - Buffett, «guerra de clases»: real (a Ben Stein, NYT, 26/11/2006).
@@ -29,7 +30,7 @@ EL CASO, Páginas Contenido #8, 10/09/2026. Dos problemas:
 
 Verificado en el navegador: el Dashboard pinta la frase de hoy con su fuente;
 a las 23:59 y a las 00:01 de Madrid salen días distintos, en verano y en
-invierno; nueve días seguidos dan las nueve frases.
+invierno; diez días seguidos dan las diez frases.
 
 Uso:
     cd backend
@@ -64,21 +65,35 @@ FUENTES_COMPROBADAS = {
     ("Karl Marx", "carta a su tío Lion Philips, 25 de junio de 1864"),
 }
 
+# Las que se buscaron y NO se encontraron. Salen con nombre porque así lo
+# decidió el usuario, pero la pantalla dice que son atribuidas.
+ATRIBUIDAS_SIN_FUENTE = {
+    ("Friedrich Engels", "atribuida; no se ha localizado en sus obras"),
+}
+
 
 def test_las_frases_se_han_leido_enteras():
     """Si el patrón se saltara alguna, los tests de abajo no la mirarían."""
-    assert len(FRASES) == FRASES_JS.count("texto:") >= 9
+    assert len(FRASES) == FRASES_JS.count("texto:") >= 10
 
 
 def test_cada_autor_lleva_la_fuente_que_se_comprobo():
-    """EL test de las atribuciones."""
-    sin_comprobar = [(a, f) for _, a, f in FRASES if a and (a, f) not in FUENTES_COMPROBADAS]
+    """EL test de las atribuciones: cada autor, o con la fuente que se
+    comprobó, o apuntado como atribuido sin fuente."""
+    conocidas = FUENTES_COMPROBADAS | ATRIBUIDAS_SIN_FUENTE
+    sin_comprobar = [(a, f) for _, a, f in FRASES if a and (a, f) not in conocidas]
     assert not sin_comprobar, f"autor sin fuente comprobada: {sin_comprobar}"
 
 
-def test_ninguna_fuente_comprobada_se_queda_huerfana():
+def test_una_atribuida_lo_dice_en_pantalla():
+    assert all(f.startswith("atribuida") for _, f in ATRIBUIDAS_SIN_FUENTE)
+    assert not FUENTES_COMPROBADAS & ATRIBUIDAS_SIN_FUENTE
+
+
+def test_ninguna_fuente_apuntada_se_queda_huerfana():
     usadas = {(a, f) for _, a, f in FRASES if a}
-    assert not FUENTES_COMPROBADAS - usadas, FUENTES_COMPROBADAS - usadas
+    sobran = (FUENTES_COMPROBADAS | ATRIBUIDAS_SIN_FUENTE) - usadas
+    assert not sobran, sobran
 
 
 def test_una_frase_sin_autor_no_lleva_fuente():
@@ -89,11 +104,9 @@ def test_una_frase_sin_autor_no_lleva_fuente():
 def test_no_vuelven_las_atribuciones_falsas():
     autores = {a for _, a, _ in FRASES}
     assert "John Maynard Keynes" not in autores
-    assert "Friedrich Engels" not in autores
     # El pasaje es del libro de Lefèvre, no de algo que escribiera Livermore.
     assert "Jesse Livermore" not in autores
     textos = " ".join(t for t, _, _ in FRASES)
-    assert "pequeños inversores son sacudidos" not in textos
     assert "controlar tus emociones" not in textos
     assert "de los impacientes a los pacientes" not in textos
 
