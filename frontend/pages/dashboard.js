@@ -1,5 +1,6 @@
 import { api, authHeader } from '/core/api.js';
-import { errorMessage } from '/core/ui.js';
+import { errorMessage, esc } from '/core/ui.js';
+import { fraseDelDia } from '/pages/dashboard_frases.js';
 
 export async function render(container) {
     container.innerHTML = `
@@ -228,43 +229,24 @@ function renderShortcutsTip(el) {
 }
 
 // ── FRASE DEL DÍA ────────────────────────────────────────────────────────────
-// Adaptado del header de la antigua RSU Terminal (Streamlit). La frase se fija
-// una vez por sesión de navegador (sessionStorage), igual que hacía session_state.
-
-const DAILY_QUOTES = [
-    ["En un mercado alcista, las malas noticias se ignoran y las buenas noticias se celebran; en un mercado bajista, las buenas noticias se ignoran y las malas noticias se exageran.", ""],
-    ["Hay una guerra de clases, de acuerdo, pero es mi clase, la clase rica, la que está haciendo la guerra, y la estamos ganando.", "Warren Buffett"],
-    ["El mercado de valores es un mecanismo para transferir dinero de los impacientes a los pacientes.", "Warren Buffett"],
-    ["El mercado no te gana; te ganas tú mismo al no poder controlar tus emociones.", "Jesse Livermore"],
-    ["Las manos fuertes no compran en la euforia, compran cuando las manos débiles ya no pueden soportar más dolor.", ""],
-    ["Cuando el último escéptico se vuelve alcista, es hora de vender.", ""],
-    ["El mercado puede permanecer irracional más tiempo del que tú puedes permanecer solvente.", "John Maynard Keynes"],
-    ["El éxito en el trading consiste en comprarle a los pesimistas y venderle a los optimistas.", ""],
-    ["La bolsa es un lugar donde las crisis se preparan... es el árbol donde los pequeños inversores son sacudidos para que sus ahorros caigan en los bolsillos de los grandes especuladores.", "Friedrich Engels"],
-    ["He estado especulando... en acciones americanas, pero sobre todo en las inglesas... No requiere mucho tiempo y uno puede correr algún riesgo para quitarle el dinero a sus enemigos.", "Karl Marx"],
-];
+// Adaptado del header de la antigua RSU Terminal (Streamlit). Las frases y cómo
+// se elige la de hoy viven en dashboard_frases.js.
 
 function renderDailyQuote(el) {
     if (!el) return;
 
-    let stored = null;
-    try { stored = JSON.parse(sessionStorage.getItem('rsu_daily_quote') || 'null'); } catch {}
-
-    let quote = stored;
-    if (!quote || !Array.isArray(quote) || quote.length !== 2) {
-        quote = DAILY_QUOTES[Math.floor(Math.random() * DAILY_QUOTES.length)];
-        try { sessionStorage.setItem('rsu_daily_quote', JSON.stringify(quote)); } catch {}
-    }
-
-    const [text, author] = quote;
-    const attribution = author ? ' — ' + author : '';
+    const { texto, autor, fuente } = fraseDelDia();
+    const firma = autor
+        ? ' — ' + esc(autor)
+          + (fuente ? '<div style="font-style:normal;font-size:10px;opacity:0.75;margin-top:4px;">' + esc(fuente) + '</div>' : '')
+        : '';
 
     el.innerHTML = '<div style="background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius);padding:14px 20px;text-align:center;">'
         + '<div style="display:inline-block;font-family:var(--font-mono);font-size:12px;color:var(--color-muted);'
         + 'letter-spacing:0.02em;font-style:italic;line-height:1.6;max-width:760px;'
         + 'border-left:2px solid var(--color-accent);border-right:2px solid var(--color-accent);'
         + 'padding:4px 16px;">'
-        + '\u201C' + text + '\u201D' + attribution
+        + '“' + esc(texto) + '”' + firma
         + '</div>'
         + '</div>';
 }
