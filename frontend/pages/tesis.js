@@ -56,6 +56,18 @@ function header() {
     return '<div style="margin-bottom:1.5rem;">'
         + '<div style="color:var(--color-accent);font-size:18px;letter-spacing:0.1em;text-shadow:var(--glow-text);margin-bottom:4px;">TESIS</div>'
         + '<div style="color:var(--color-muted);font-size:12px;">Base de datos de análisis · Tesis de inversión RSU</div>'
+        + avisoLegal()
+        + '</div>';
+}
+
+// El descargo DONDE SE LEE EL ANÁLISIS (Páginas Contenido #10, «en Roadmap y
+// en Tesis, por el mismo motivo»). Cada tesis lleva rating y precio objetivo
+// sobre un valor concreto, y hasta el 10/09/2026 la página no tenía ningún
+// aviso: solo el PDF descargado lo llevaba.
+function avisoLegal() {
+    return '<div style="color:var(--color-muted);font-size:11px;margin-top:6px;">'
+        + 'Análisis con fines educativos, no recomendación de inversión — '
+        + '<span onclick="window.__navigate(\'/disclaimer\')" style="color:var(--color-accent);cursor:pointer;text-decoration:underline;">ver descargo completo</span>'
         + '</div>';
 }
 
@@ -304,6 +316,7 @@ function renderDetail(data) {
         + '<button id="btn-volver" style="background:transparent;border:1px solid var(--color-border);color:var(--color-muted);border-radius:var(--radius);padding:6px 14px;font-family:var(--font-mono);font-size:12px;cursor:pointer;margin-bottom:1rem;">← VOLVER</button>'
         + '<div style="font-family:var(--font-mono);color:var(--color-muted);font-size:11px;letter-spacing:0.1em;margin-bottom:4px;">[LOADING ANALYSIS // TICKER: ' + data.ticker + ']</div>'
         + '<div style="color:var(--color-accent);font-size:22px;letter-spacing:0.08em;margin-bottom:4px;">' + data.nombre + ' <span style="color:var(--color-muted);font-size:14px;">// ' + data.ticker + '</span></div>'
+        + avisoLegal()
         + '</div>'
 
         // Métricas header

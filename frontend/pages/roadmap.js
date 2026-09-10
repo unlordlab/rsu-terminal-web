@@ -3,7 +3,69 @@ export async function render(container) {
 }
 
 function pageContent() {
-    return header() + sections() + footer();
+    return header() + revision() + sections() + footer();
+}
+
+// ── REVISIÓN: LO QUE PASÓ (Páginas Contenido #9 y #10) ──────────────────────
+//
+// El texto de abajo es la previsión ORIGINAL y no se toca: una previsión
+// retocada después de conocer el resultado deja de valer como previsión.
+// Encima va lo que pasó, con cifras y con su fecha. Hasta el 10/09/2026 la
+// página seguía hablando en futuro de una primavera que ya había pasado, sin
+// decir que la corrección se había producido tal como estaba escrita.
+//
+// LAS CIFRAS son una FOTO FECHADA, no un dato vivo: cierres diarios de Yahoo
+// Finance, medidos el 10/09/2026 con datos hasta el 09/09. Máximo del año
+// anterior al suelo → suelo → cierre del 09/09.
+//
+// CUÁNDO SE ESCRIBIÓ: el 20/12/2025, según su autor (10/09/2026). Es lo que
+// da valor al acierto: tres meses y diez días antes del suelo del 30/03. Ojo:
+// en ESTE repositorio el texto aparece por primera vez el 12/06/2026, en la
+// migración desde la versión anterior de la terminal, así que la fecha es la
+// que declara el autor. Si existe una publicación de entonces, enlazarla
+// aquí la convertiría en comprobable.
+const ESCRITO_EL = '20 de diciembre de 2025';
+const REVISION_FECHA = '9 de septiembre de 2026';
+const REVISION_INDICES = [
+    // [índice, caída, desde, hasta, rebote desde el suelo, en el año]
+    ['S&P 500',      '−9,1%',  '27/01', '30/03', '+20,4%', '+11,6%'],
+    ['Nasdaq 100',   '−11,8%', '28/01', '30/03', '+28,2%', '+16,5%'],
+    ['Russell 2000', '−11,2%', '22/01', '30/03', '+21,0%', '+17,7%'],
+];
+
+function revision() {
+    const celda = 'padding:6px 10px;border-bottom:1px solid var(--color-border);font-size:12px;';
+    const filas = REVISION_INDICES.map(([n, caida, desde, hasta, rebote, anio]) =>
+        '<tr><td style="' + celda + 'color:var(--color-text);">' + n + '</td>'
+        + '<td style="' + celda + 'color:#f23645;">' + caida + ' <span style="color:var(--color-muted);font-size:11px;">(' + desde + ' → ' + hasta + ')</span></td>'
+        + '<td style="' + celda + 'color:var(--color-accent);">' + rebote + '</td>'
+        + '<td style="' + celda + 'color:var(--color-muted);">' + anio + '</td></tr>').join('');
+    return '<div style="border:1px solid var(--color-accent);background:rgba(0,255,173,0.04);border-radius:var(--radius);padding:1.25rem;margin:1rem 0 2rem;">'
+        + '<div style="color:var(--color-accent);font-size:14px;letter-spacing:0.1em;margin-bottom:8px;">🔎 REVISIÓN · SEPTIEMBRE 2026 · LO QUE PASÓ</div>'
+        + '<p style="color:var(--color-muted);font-size:13px;margin-bottom:12px;">La previsión es la original, escrita el ' + ESCRITO_EL + ', y se deja tal cual, sin retocar, para poder compararla con lo que ocurrió. Estas son las cifras, con los cierres diarios de Yahoo Finance a ' + REVISION_FECHA + ':</p>'
+        + '<div style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;font-family:var(--font-mono);">'
+        + '<tr><th style="' + celda + 'color:var(--color-muted);text-align:left;font-weight:normal;"></th>'
+        + '<th style="' + celda + 'color:var(--color-muted);text-align:left;font-weight:normal;">CORRECCIÓN</th>'
+        + '<th style="' + celda + 'color:var(--color-muted);text-align:left;font-weight:normal;">REBOTE DESDE EL SUELO</th>'
+        + '<th style="' + celda + 'color:var(--color-muted);text-align:left;font-weight:normal;">EN EL AÑO</th></tr>'
+        + filas + '</table></div>'
+        + list([
+            '<b style="color:var(--color-accent)">✅ La corrección del 8% al 15%:</b> se produjo, entre el 9% y el 12% en los tres índices.',
+            '<b style="color:var(--color-accent)">✅ El rebote fuerte y la recuperación en la segunda mitad:</b> entre un 20% y un 28% desde el suelo.',
+            '<b style="color:#ffb800">◐ El calendario:</b> el máximo llegó a finales de enero y el suelo el 30 de marzo, justo al empezar la primavera. La caída se adelantó unas semanas, y el «inicio constructivo de enero–febrero» duró solo enero.',
+        ])
+        + '<p style="color:var(--color-muted);font-size:11px;margin-top:10px;">Puedes comprobarlas en el histórico de <a href="https://finance.yahoo.com/quote/%5EGSPC/history/" target="_blank" rel="noopener noreferrer" style="color:var(--color-accent);">S&amp;P 500 en Yahoo Finance</a> (y del mismo modo con ^NDX y ^RUT).</p>'
+        + '</div>';
+}
+
+// El descargo DONDE SE LEE LA PREVISIÓN (Páginas Contenido #10): la página da
+// cifras y fases concretas de mercado, y el descargo vivía en otra página sin
+// ningún enlace desde aquí.
+function avisoLegal() {
+    return '<div style="color:var(--color-muted);font-size:11px;text-align:center;margin:0.5rem 0 1rem;">'
+        + 'Escenario personal, no recomendación de inversión — '
+        + '<span onclick="window.__navigate(\'/disclaimer\')" style="color:var(--color-accent);cursor:pointer;text-decoration:underline;">ver descargo completo</span>'
+        + '</div>';
 }
 
 function header() {
@@ -14,6 +76,8 @@ function header() {
         + '<div style="color:var(--color-accent);font-size:24px;letter-spacing:0.12em;text-shadow:var(--glow-text);margin-bottom:6px;">🗺️ 2026 ROADMAP</div>'
         + '<div style="color:var(--color-secondary);font-size:13px;letter-spacing:0.2em;">PROTOCOLO DE NAVEGACIÓN ESTRATÉGICA // CICLO 2026</div>'
         + '</div>'
+        + avisoLegal()
+        + '<div style="color:var(--color-muted);font-size:11px;text-align:center;margin-bottom:0.5rem;">📅 Texto original escrito el ' + ESCRITO_EL + ' · revisado en septiembre de 2026</div>'
 
         + box('default',
             'Cuando pienso en 2026 no veo un año lineal. No veo una tendencia limpia ni un mercado que simplemente continúe lo iniciado en 2025. Lo que visualizo es un año con <b style="color:var(--color-accent)">fases muy definidas</b>, con tensión política creciente, con volatilidad cíclica marcada y, sobre todo, con una <b style="color:var(--color-accent)">ventana táctica extremadamente importante en primavera</b>.'
@@ -40,7 +104,10 @@ function sections() {
         ),
 
         section('03 // LA CAÍDA DE PRIMAVERA: NÚCLEO TÁCTICO DEL AÑO',
-            quote('No como posibilidad remota. Como elemento central del año.', '#f23645')
+            // Marca de la revisión, para quien llegue directamente aquí. El
+            // texto original de la sección sigue igual debajo.
+            '<div style="color:var(--color-accent);font-size:12px;margin-bottom:10px;">🔎 Revisión septiembre 2026: se cumplió — corrección del 9% al 12% con el suelo el 30/03, y rebote del 20% al 28% desde ahí. Detalle arriba.</div>'
+            + quote('No como posibilidad remota. Como elemento central del año.', '#f23645')
             + '<p style="color:var(--color-muted);margin:10px 0;">Porque ahí confluyen:</p>'
             + list(['Ajustes de expectativas macro','Repricing de política monetaria','Ruido político creciente','Fatiga tras el impulso inicial','Liquidez más irregular'])
             + box('warning',
@@ -149,8 +216,9 @@ function footer() {
     return '<div style="text-align:center;margin-top:3rem;padding:1.5rem;border-top:1px solid var(--color-border);">'
         + '<div style="color:var(--color-muted);font-size:10px;letter-spacing:0.15em;">'
         + '[END OF TRANSMISSION // ROADMAP_2026_v1.0]<br>'
-        + '[STATUS: ACTIVE]'
+        + '[STATUS: ACTIVE] · [REVISADO: SEPTIEMBRE 2026]'
         + '</div>'
+        + avisoLegal()
         + '</div>';
 }
 
