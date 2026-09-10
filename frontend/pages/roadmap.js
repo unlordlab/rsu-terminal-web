@@ -54,6 +54,11 @@ function revision() {
             '<b style="color:var(--color-accent)">✅ El rebote fuerte y la recuperación en la segunda mitad:</b> entre un 20% y un 28% desde el suelo.',
             '<b style="color:#ffb800">◐ El calendario:</b> el máximo llegó a finales de enero y el suelo el 30 de marzo, justo al empezar la primavera. La caída se adelantó unas semanas, y el «inicio constructivo de enero–febrero» duró solo enero.',
         ])
+        // Lo que aprendió el autor, en SU voz: aprobado por él el 10/09/2026.
+        + '<div style="border-left:3px solid var(--color-accent);padding:0.75rem 1rem;margin-top:14px;background:var(--color-surface);border-radius:0 var(--radius) var(--radius) 0;">'
+        + '<div style="color:var(--color-accent);font-size:12px;letter-spacing:0.08em;margin-bottom:6px;">LO QUE ME LLEVO</div>'
+        + '<p style="color:var(--color-text);font-size:13px;line-height:1.6;">Acerté el tamaño y la forma: una corrección de un dígito alto que asustó sin romper nada, y un rebote que devolvió más de lo que quitó. Fallé en el reloj: la caída empezó en febrero, antes de lo que había escrito, y quien esperara al calendario exacto para acumular llegó tarde a los mejores precios. La lección que me llevo es que un escenario sirve para saber qué hacer cuando llegue, no para saber cuándo llegará.</p>'
+        + '</div>'
         + '<p style="color:var(--color-muted);font-size:11px;margin-top:10px;">Puedes comprobarlas en el histórico de <a href="https://finance.yahoo.com/quote/%5EGSPC/history/" target="_blank" rel="noopener noreferrer" style="color:var(--color-accent);">S&amp;P 500 en Yahoo Finance</a> (y del mismo modo con ^NDX y ^RUT).</p>'
         + '</div>';
 }

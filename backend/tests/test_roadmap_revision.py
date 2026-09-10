@@ -97,6 +97,14 @@ def test_dice_tambien_lo_que_NO_salio_como_estaba_escrito():
     assert "duró solo enero" in ROADMAP
 
 
+def test_lleva_lo_que_aprendio_el_autor_en_su_voz():
+    """Texto aprobado por el autor el 10/09/2026. Incluye el fallo, no solo el
+    acierto."""
+    assert "LO QUE ME LLEVO" in ROADMAP
+    assert "Fallé en el reloj" in ROADMAP
+    assert "no para saber cuándo llegará" in ROADMAP
+
+
 def test_la_seccion_de_la_caida_remite_a_la_revision():
     i = ROADMAP.index("03 // LA CAÍDA DE PRIMAVERA")
     assert "Revisión septiembre 2026: se cumplió" in ROADMAP[i:i + 600]
