@@ -153,5 +153,5 @@ def test_la_regla_llega_al_prompt_que_se_ENVIA():
     """Que esté en la constante no basta: hay que comprobar que build_prompt la
     mete. Es la diferencia entre un test de fuente y uno de comportamiento."""
     prompt = D.build_prompt({"date": "2026-09-07", "time": "08:00"},
-                            [], [], [], {}, [], [], [], [])
+                            [], [], [], {}, [], [], [])
     assert "por debajo de las expectativas" in prompt

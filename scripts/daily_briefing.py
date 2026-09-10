@@ -134,11 +134,6 @@ def evento_relevante(item: dict, hoy: str) -> bool:
     return pais in PAISES_QUE_MUEVEN_WALL_STREET and item.get("impact") == "High"
 
 
-SUFIJOS_SOCIETARIOS = (", inc.", " inc.", " inc", ", corp.", " corp.", " corp",
-                       " corporation", ", ltd.", " ltd.", " ltd", " plc",
-                       " co.", " company", " holdings", " group", " s.a.")
-
-
 # El escaneo nocturno del Scanner puede salir INCOMPLETO. El 02/09/2026 escribio
 # 20 avances y 4 descensos -- 24 valores de un universo de ~2.380-- y 0/1 en el
 # S&P 500 de ~495. La parte de RS/fase del mismo escaneo estaba bien (498
@@ -169,31 +164,6 @@ def es_dominio_pedido(domain: str, dominios) -> bool:
     if not d:
         return False
     return any(d == x or d.endswith("." + x) for x in dominios)
-
-
-def nombre_corto(company, max_chars: int = 22) -> str:
-    """El nombre de la empresa, sin el ruido societario y sin partir palabras.
-
-    Existe porque el 31/08/2026 al modelo le llegaron los tickers DESNUDOS y se
-    invento el sector de cada uno. El nombre ya venia en el payload; lo que
-    faltaba era usarlo. Se recorta porque este prompt no cabe en el limite de
-    Groq: "Alpha Metallurgical" basta para saber que no es una petrolera, y
-    "Alpha Metallurgical Resources, Inc." cuesta el triple.
-
-    Cortar a pelo por caracteres dejaba "Dick's Sporting Goods In", que parece
-    un fallo de programa dentro de un texto que lee gente."""
-    nombre = str(company or "").strip()
-    if not nombre:
-        return ""
-    bajo = nombre.lower()
-    for suf in SUFIJOS_SOCIETARIOS:
-        if bajo.endswith(suf):
-            nombre = nombre[: len(nombre) - len(suf)].rstrip(" ,")
-            bajo = nombre.lower()
-    if len(nombre) <= max_chars:
-        return nombre
-    corte = nombre[:max_chars].rsplit(" ", 1)[0].rstrip(" ,")
-    return corte or nombre[:max_chars]
 
 
 def hora_et(item: dict) -> str:
@@ -397,6 +367,93 @@ def con_dia_semana(fecha) -> str:
     return f"{fecha} ({DIAS_SEMANA[d.weekday()]})"
 
 
+# ── DE QUE DIA ES CADA FILA DEL BLOQUE DE MERCADO ────────────────────────────
+#
+# EL CASO, 10/09/2026. Cada variacion se calcula con la ultima barra de CADA
+# ticker contra su penultima, cada uno en su calendario. A las 07:54 ET, para lo
+# que solo cotiza en sesion (S&P, Nasdaq, Russell, bonos) la ultima barra es la
+# del miercoles; para lo que cotiza de noche (VIX, dolar, oro, crudo, bitcoin) ya
+# es el JUEVES EN CURSO. El prompt los pintaba los diez bajo "INDICES:" y la
+# linea de estado afirmaba que eran el cierre. El briefing publico:
+#
+#     «el VIX sube un 1,03%»                    -> el miercoles subio +4,71%
+#     «el dolar sube un 0,14%… comprando refugio» -> el miercoles BAJO un 0,07%
+#     «el WTI gana un 1,46%» (motor de Energia) -> el miercoles subio +3,25%
+#
+# Una lista a mano de "que es de hoy y que del cierre" ya existia -- era la
+# frase de la linea de estado -- y fallo con el VIX, que es un indice. Aqui las
+# filas se agrupan por las FECHAS DE SUS BARRAS, que `get_market_data()` ya
+# guarda para auditar: si un dia Yahoo aun no tiene la barra del jueves del oro,
+# el oro cae solo en el grupo del miercoles.
+FILAS_MERCADO = (
+    ("SPX", "S&P 500"), ("NDX", "Nasdaq 100"), ("RUT", "Russell 2000"),
+    ("VIX", "VIX"), ("DXY", "Dólar Index (DXY)"),
+    ("TNX", "Yield 10Y"), ("TYX", "Yield 30Y"),
+    ("GOLD", "Oro"), ("WTI", "Petróleo WTI"), ("BTC", "Bitcoin"),
+)
+
+
+def variacion_en_la_sesion(cierres: dict, sesion: str):
+    """Lo que hizo un ticker DURANTE la sesion `sesion`: su cierre de ese dia
+    contra el del dia anterior que tenga barra.
+
+    `cierres` es {fecha_iso: cierre}. Devuelve None si esa sesion no esta en la
+    serie -- nunca la variacion de otro dia en su lugar, que es justo el error
+    que esto viene a quitar.
+    """
+    fechas = sorted(cierres)
+    if sesion not in fechas:
+        return None
+    i = fechas.index(sesion)
+    if i == 0:
+        return None
+    prev, cierre = float(cierres[fechas[i - 1]]), float(cierres[sesion])
+    if not prev:
+        return None
+    return {"desde": fechas[i - 1], "prev": round(prev, 2), "cierre": round(cierre, 2),
+            "chg_pct": round((cierre - prev) / prev * 100, 2)}
+
+
+def agrupar_por_sesion(barras: dict, sesion: str, claves) -> list:
+    """Agrupa las filas por la fecha de su ULTIMA barra.
+
+    Devuelve [(fecha, "cierre" | "hoy" | "atrasado", [claves])], con el grupo
+    de la sesion primero, luego lo posterior (lo que ya cotiza hoy) y al final
+    lo que se quedo atras. Una clave sin barras (la descarga fallo) va con la
+    sesion: no hay fecha que afirmar y la fila dira "Dato no disponible".
+    """
+    por_fecha = {}
+    for k in claves:
+        ultima = (barras.get(k) or (None, None))[1] or sesion
+        por_fecha.setdefault(ultima, []).append(k)
+    grupos = []
+    for fecha in sorted(por_fecha, key=lambda f: (f != sesion, f < sesion, f)):
+        tipo = "cierre" if fecha == sesion else ("hoy" if fecha > sesion else "atrasado")
+        grupos.append((fecha, tipo, por_fecha[fecha]))
+    return grupos
+
+
+def salta_mas_de_una_sesion(barras: dict, clave: str) -> bool:
+    """¿La variacion de esta fila abarca MAS de una sesion?
+
+    Es el mecanismo que mejor explica Newsfeed #39: el 01/09 el briefing
+    publico un S&P, un Russell, un XLU y un XLI que coincidian exactamente con
+    el tramo 27/08 -> 31/08. Si a un ticker le falta la barra del 28/08 al
+    descargar, su penultima barra es la del 27 y la "variacion del dia" son dos
+    sesiones. Solo se aplica a lo que cotiza en sesion NYSE: el bitcoin tiene
+    barra en fin de semana y su dia anterior no es el de la bolsa.
+    """
+    prev, ultima = (barras.get(clave) or (None, None))
+    if not prev or not ultima:
+        return False
+    try:
+        from festivos_mercado import sesion_anterior
+        esperada = sesion_anterior(datetime.strptime(ultima, "%Y-%m-%d").date())
+    except Exception:
+        return False
+    return prev != esperada.isoformat()
+
+
 def palabras_que_caben(max_tokens: int) -> int:
     """Cuántas palabras entran de verdad en ese presupuesto de tokens."""
     return max(PALABRAS_MINIMAS,
@@ -530,16 +587,7 @@ FINNHUB_KEY = os.environ.get("FINNHUB_API_KEY", "")
 # dice de Alpha Vantage "eliminar, no mejorar". Sigue en uso en
 # backend/services/research_service.py (earnings trimestrales), eso no se toca.
 
-# Insider Flow vive en SQLite dentro del backend (insider_history.db), no
-# en un Gist -- así que solo es alcanzable desde este script contactando
-# al backend en producción. RSU_BACKEND_URL apunta a la IP del VPS
-# (sin HTTPS todavía); BRIEFING_AUTH_TOKEN es un token de servicio de
-# larga duración emitido vía POST /api/v1/auth/admin/mint-token (ver
-# sesión 23/07/2026) -- el endpoint exige Authorization: Bearer, así que
-# sin el token la llamada da 403 aunque la URL esté bien configurada.
-RSU_BACKEND_URL     = os.environ.get("RSU_BACKEND_URL", "").rstrip("/")
 FRED_KEY = os.environ.get("FRED_API_KEY", "")
-BRIEFING_AUTH_TOKEN = os.environ.get("BRIEFING_AUTH_TOKEN", "")
 
 # Tickers de mega/large-cap conocidos — para filtrar el calendario de earnings
 # a solo nombres con peso real de mercado, en vez de listar cientos de small
@@ -589,11 +637,14 @@ def get_market_data() -> dict:
                               # tenemos delante es un cierre o media sesion
     barras = {}               # {ticker: (fecha_prev, fecha_last)} -- para poder
                               # auditar despues contra que se calculo cada %
+    cierres = {}              # {ticker: {fecha_iso: cierre}} -- para sacar lo que
+                              # hizo cada uno EN la sesion, ver mas abajo
     for name, ticker in tickers.items():
         try:
             t    = yf.Ticker(ticker)
             hist = t.history(period="5d", interval="1d").dropna()
             if len(hist) < 2: continue
+            cierres[name] = {d.date().isoformat(): float(c) for d, c in hist["Close"].items()}
             if name == "SPX":
                 ultima_barra = hist.index[-1].date()
             # LAS DOS FECHAS QUE SE ESTAN COMPARANDO. El 01/09/2026 el briefing
@@ -626,13 +677,21 @@ def get_market_data() -> dict:
     for etf, name in sectors.items():
         try:
             t    = yf.Ticker(etf)
-            hist = t.history(period="5d", interval="1d").dropna()
+            # 10 dias y no 5: con `period="5d"` llegan CINCO barras, y comparar
+            # la ultima con `iloc[0]` son CUATRO sesiones de distancia, no cinco.
+            # Recalculado el 10/09/2026 contra Yahoo para los 11 sectores:
+            # cuadraban 11 de 11 con 4 sesiones y 0 de 11 con 5 (XLB -2,95%
+            # publicado frente a -1,31% real; XLC -1,41% frente a -0,05%).
+            hist = t.history(period="10d", interval="1d").dropna()
             if len(hist) < 2: continue
             prev = float(hist["Close"].iloc[-2])
             last = float(hist["Close"].iloc[-1])
             chg  = round((last - prev) / prev * 100, 2)
-            # 5 días
-            chg5 = round((last - float(hist["Close"].iloc[0])) / float(hist["Close"].iloc[0]) * 100, 2)
+            # 5 SESIONES: la barra de hace cinco es iloc[-6]. Sin ella no se
+            # pone nada -- una cifra de 3 o 4 sesiones con la etiqueta "5D" es
+            # peor que un hueco.
+            chg5 = (round((last - float(hist["Close"].iloc[-6])) / float(hist["Close"].iloc[-6]) * 100, 2)
+                    if len(hist) >= 6 else None)
             barras[etf] = (str(hist.index[-2].date()), str(hist.index[-1].date()))
             sector_data[etf] = {"name": name, "chg_1d": chg, "chg_5d": chg5}
         except Exception:
@@ -649,6 +708,19 @@ def get_market_data() -> dict:
         "en_curso": sesion_sin_cerrar(ultima_barra, ahora_ny),
         "hora_et":  ahora_ny.strftime("%H:%M"),
     }
+
+    # LO QUE HIZO EN LA SESION lo que ya va por delante. Para el VIX, el dolar,
+    # el oro o el crudo, `chg_pct` es su movimiento desde el cierre de ayer hasta
+    # ahora mismo; pero la sesion que narra el briefing es la de ayer, y en ella
+    # el VIX subio +4,71% y el dolar BAJO. Sin esta cifra el modelo no tiene
+    # forma de contarlo.
+    if ultima_barra:
+        sesion_iso = ultima_barra.isoformat()
+        for name, (_, ultima) in barras.items():
+            if name in data and ultima > sesion_iso and name in cierres:
+                en_sesion = variacion_en_la_sesion(cierres[name], sesion_iso)
+                if en_sesion:
+                    data[name]["en_sesion"] = en_sesion
 
     # Niveles técnicos reales (SMA20/50/200, máx/mín 20d) — para que el LLM no se invente
     # soportes/resistencias sin datos detrás. No son niveles de "price action" discrecional,
@@ -1284,31 +1356,6 @@ def get_rsu_breadth_signals() -> dict:
         return {}
 
 
-# ── CLUSTERS DE INSIDERS (solo si el backend ya está desplegado) ─────────────
-
-def get_insider_clusters() -> list:
-    """Insider Flow vive en SQLite dentro del backend, no en un Gist --
-    esto solo funciona si RSU_BACKEND_URL apunta al backend en producción
-    Y BRIEFING_AUTH_TOKEN trae un token de servicio válido (el endpoint
-    exige Authorization: Bearer, ver backend/routers/insider.py). Si
-    falta cualquiera de los dos, devuelve vacío sin romper el resto del
-    briefing -- mismo criterio que el resto de fuentes opcionales."""
-    if not RSU_BACKEND_URL or not BRIEFING_AUTH_TOKEN:
-        return []
-    try:
-        r = requests.get(
-            f"{RSU_BACKEND_URL}/api/v1/insider/clusters",
-            headers={"Authorization": f"Bearer {BRIEFING_AUTH_TOKEN}"},
-            timeout=10,
-        )
-        if r.status_code != 200:
-            return []
-        return r.json().get("clusters", [])[:5]
-    except Exception as e:
-        print(f"⚠️  No se pudo leer Insider Flow del backend: {e}")
-        return []
-
-
 # ── MEMORIA DE LOS ÚLTIMOS DÍAS (texto completo, no un caché de rendimiento) ─
 
 def get_briefing_history() -> list:
@@ -1593,8 +1640,8 @@ SESGO: ALCISTA
 #
 # Lo que NO se copia, a proposito: su ensayo tematico de seis sub-secciones
 # sobre macro. Yardeni lo escribe citando discursos concretos de gobernadores
-# de la Fed; nuestro script alimenta al modelo con precios, sectores, amplitud
-# e insiders, y CERO declaraciones. Pedirle seis bloques de teoria monetaria
+# de la Fed; nuestro script alimenta al modelo con precios, sectores y
+# amplitud, y CERO declaraciones. Pedirle seis bloques de teoria monetaria
 # con eso es pedirle que se invente las citas -- exactamente el fallo que este
 # proyecto lleva meses eliminando (el DXY fijo en 103, el yield 2Y sintetico,
 # los tickers de Reddit fabricados).
@@ -1611,7 +1658,7 @@ ESTRUCTURA OBLIGATORIA. Escribe estas cuatro partes, en este orden. Donde se ind
 
 2. El resumen, justo debajo del titular y sin encabezado propio. Exactamente dos frases: qué ha pasado y qué implica. Quien solo lea esto tiene que quedarse con lo esencial. Sin cifras de adorno — las que pongas aquí son las que mandan.
 
-3. EL DESARROLLO, en 2 o 3 bloques con encabezado propio. Cada bloque es UNA idea desarrollada, y los eliges según lo que digan los datos de hoy: no hay secciones fijas. Ejemplos válidos: "Rotación sectorial", "La curva y el dólar", "Amplitud vs índice", "Lo que dicen los insiders". Dentro de cada bloque:
+3. EL DESARROLLO, en 2 o 3 bloques con encabezado propio. Cada bloque es UNA idea desarrollada, y los eliges según lo que digan los datos de hoy: no hay secciones fijas. Ejemplos válidos: "Rotación sectorial", "La curva y el dólar", "Amplitud vs índice". Dentro de cada bloque:
    - Abre con la afirmación, no con el dato: primero qué está pasando, después el número que lo respalda.
    - Cita cifras EXACTAS de los bloques de datos, nunca redondeadas a ojo.
    - Si un dato contradice tu tesis, dilo. Un briefing que solo cita lo que le conviene no vale nada.
@@ -1674,7 +1721,7 @@ def _cierre_y_estructura() -> str:
 
 
 def build_prompt(market_data: dict, news: list, major_headlines: list, earnings: list, breadth: dict,
-                  insider_clusters: list, briefing_history: list, bias_history: list,
+                  briefing_history: list, bias_history: list,
                   macro_indicators: list = None, recorte: dict = None) -> str:
     # `recorte` es uno de NIVELES_RECORTE: cuántos titulares y eventos de
     # calendario entran, y cuánto historial narrativo. Se llama en bucle desde
@@ -1731,8 +1778,11 @@ def build_prompt(market_data: dict, news: list, major_headlines: list, earnings:
     sector_lines = ""
     for etf, sv in d.get("sectors", {}).items():
         chg1 = sv.get("chg_1d", 0) or 0
-        chg5 = sv.get("chg_5d", 0) or 0
-        sector_lines += f"| {etf} | {sv['name']} | {chg1:+.2f}% | {chg5:+.2f}% |\n"
+        # `or 0` aqui pintaba "+0,00%" cuando no habia 5 sesiones de serie: un
+        # «no se» convertido en «no se ha movido».
+        chg5 = sv.get("chg_5d")
+        chg5_s = f"{chg5:+.2f}%" if chg5 is not None else "n/d"
+        sector_lines += f"| {etf} | {sv['name']} | {chg1:+.2f}% | {chg5_s} |\n"
 
     # Futuros (gap pre-market real, no inventado) -- con hora ET real, para
     # que el modelo no describa un dato pre-market como si fuera del cierre.
@@ -1790,9 +1840,62 @@ def build_prompt(market_data: dict, news: list, major_headlines: list, earnings:
         # dias, y este prompt no cabe en el limite de Groq desde hace semanas.
         # La version larga se reserva para el caso raro, que es el que necesita
         # que se le expliquen las cosas al modelo.
-        sesion_str = (f"ESTADO DE LA SESION: CERRADA. Indices, sectores y amplitud son el cierre "
-                      f"del {con_dia_semana(ses.get('fecha')) or 'anterior'}: citalo por ESE dia, no por hoy. "
-                      f"Materias primas, futuros y divisas SI son de hoy.")
+        # ANTES decia «Indices, sectores y amplitud son el cierre del X…
+        # Materias primas, futuros y divisas SI son de hoy». El 10/09/2026 eso
+        # era FALSO dos veces: el VIX es un indice y su barra era del jueves, y
+        # la amplitud era del martes -- con su propia etiqueta correcta dos
+        # lineas mas abajo, que el modelo ignoro porque esta frase general
+        # decia otra cosa. Ahora cada bloque lleva la fecha de SU dato.
+        sesion_str = (f"ESTADO DE LA SESION: CERRADA. La ultima sesion cerrada es la del "
+                      f"{con_dia_semana(ses.get('fecha')) or 'anterior'}: citala por ESE dia, no por hoy. "
+                      f"Cada bloque de abajo dice de que dia es su dato.")
+
+    # ── BLOQUE DE MERCADO, POR FECHA DE BARRA ──────────────────────────────
+    # Ver FILAS_MERCADO y agrupar_por_sesion(). Sin `barras` (tests antiguos o
+    # una descarga que no las trajo) no se puede afirmar nada fila a fila, y
+    # entonces va un bloque unico sin fecha: lo que no se hace es inventarla.
+    barras_d = d.get("barras") or {}
+    ses_fecha = ses.get("fecha")
+    claves_mercado = [k for k, _ in FILAS_MERCADO]
+    if ses_fecha and barras_d:
+        grupos_mercado = agrupar_por_sesion(barras_d, ses_fecha, claves_mercado)
+    else:
+        grupos_mercado = [(ses_fecha, "cierre", claves_mercado)]
+    nombres_mercado = dict(FILAS_MERCADO)
+    dia_sesion = con_dia_semana(ses_fecha) or "la ultima sesion"
+
+    def fila_mercado(k, con_sesion):
+        txt = fmt_yield(k) if k in ("TNX", "TYX") else fmt(k)
+        extra = ""
+        en_ses = (d.get(k) or {}).get("en_sesion")
+        if con_sesion and en_ses:
+            if k in ("TNX", "TYX"):
+                pb = (en_ses["cierre"] - en_ses["prev"]) * 100
+                extra = f" [sesion {'+' if pb >= 0 else '−'}{abs(pb):.0f} pb]"
+            else:
+                c = en_ses["chg_pct"]
+                extra = f" [sesion {'▲' if c >= 0 else '▼'}{abs(c):.2f}%]"
+        if k != "BTC" and salta_mas_de_una_sesion(barras_d, k):
+            extra += (f" [OJO: variacion desde el {con_dia_semana(barras_d[k][0])}, "
+                      f"abarca MAS de una sesion: no la cuentes como la de un dia]")
+        return f"- {nombres_mercado[k]}: {txt}{extra}"
+
+    trozos_mercado = []
+    for fecha_g, tipo_g, claves_g in grupos_mercado:
+        if tipo_g == "cierre":
+            if ses.get("en_curso"):
+                cab = f"SESION EN CURSO, foto de las {ses.get('hora_et', '??:??')} ET (NO es cierre):"
+            else:
+                cab = "CIERRE DE ESA SESION:" if fecha_g else "MERCADO:"
+        elif tipo_g == "hoy":
+            cab = (f"EN CURSO HOY {con_dia_semana(fecha_g)} {ses.get('hora_et', '??:??')} ET, "
+                   f"vs ese cierre; [sesion X] = lo que hizo EN la sesion que cuentas:")
+        else:
+            cab = (f"SIN DATO DE ESA SESION, ultimo del {con_dia_semana(fecha_g)}: "
+                   f"no lo atribuyas al {dia_sesion}:")
+        filas = [fila_mercado(k, tipo_g == "hoy") for k in claves_g]
+        trozos_mercado.append(cab + "\n" + "\n".join(filas))
+    bloque_mercado = "\n\n".join(trozos_mercado)
 
     # Calendario
     calendar_lines = ""
@@ -1824,6 +1927,23 @@ def build_prompt(market_data: dict, news: list, major_headlines: list, earnings:
     if not calendar_lines:
         relleno = " — |" * (cal_cabecera.splitlines()[0].count("|") - 4)
         calendar_lines = "| — | — | Sin eventos de alto impacto para Wall Street hoy |" + relleno + "\n"
+
+    # LO QUE AUN NO HA SALIDO, DICHO ENCIMA DE LA TABLA. El 10/09/2026 el
+    # briefing se escribio a las 07:54 ET, el BCE decidia a las 08:15 y el PPI
+    # salia a las 08:30. La tabla solo decia «Consenso» en la cabecera, y la
+    # segunda lectura escribio «el Core PPI SUBIO 0,3%… señal de inflacion
+    # subyacente persistente», «los subsidios CAYERON a 205.000» y «el BCE
+    # ELEVO su tasa al 2,65%»: tres publicaciones que no habian ocurrido,
+    # narradas con conclusiones. La primera lectura dio el BCE por hecho.
+    pendientes = [ev for ev in eventos if not str(ev.get("actual") or "").strip()]
+    if pendientes:
+        hora_dato = ses.get("hora_et") or datetime.now(ZoneInfo("America/New_York")).strftime("%H:%M")
+        cal_aviso = ((f"A las {hora_dato} ET NADA de esta tabla ha salido: "
+                      if len(pendientes) == len(eventos) else
+                      f"A las {hora_dato} ET lo marcado «aún no» no ha salido: ")
+                     + "es CONSENSO, nunca «subió/cayó/elevó» sobre ello.\n")
+    else:
+        cal_aviso = ""
 
     # Fear & Greed
     fg = d.get("fear_greed")
@@ -1908,8 +2028,10 @@ def build_prompt(market_data: dict, news: list, major_headlines: list, earnings:
             # avanzaron HOY" sobre numeros del viernes. La etiqueta tiene que
             # PROHIBIR el error, no solo describir el desfase -- y de paso sale
             # mas corta, que en este prompt importa.
-            cierre_de = (f"AMPLITUD del {fecha_amp}, NO de hoy ({fecha_precios}): "
-                         f"no digas «hoy» al citarla")
+            # Con el DIA: «NO de hoy» a secas dejaba abierta la lectura «no es
+            # del jueves, luego sera del miercoles» -- y era del martes.
+            cierre_de = (f"AMPLITUD del {con_dia_semana(fecha_amp)}: NO de hoy ni de la sesion "
+                         f"de los indices, citala por ESE dia")
         else:
             cierre_de = f"cierre del {fecha_amp}, misma sesion que los precios"
         # DE QUE LADO. El 03/09/2026 el prompt decia "% S&P 500 sobre SMA50:
@@ -1946,23 +2068,6 @@ def build_prompt(market_data: dict, news: list, major_headlines: list, earnings:
     else:
         rsu_breadth_str = "Dato no disponible (Scanner sin datos frescos)"
 
-    # Clusters de insiders (solo si el backend está desplegado — ver nota en get_insider_clusters)
-    insider_lines = ""
-    for c in insider_clusters:
-        # EL NOMBRE DE LA EMPRESA, que el endpoint ya devuelve (`company`) y se
-        # tiraba antes de llegar al prompt -- tercer caso del mismo patron, como
-        # el `actual` del calendario y el desglose del S&P. El 31/08/2026 el
-        # modelo recibio los tickers DESNUDOS (DKS, AMR, AMRC) y les invento un
-        # sector que encajara con la narrativa de Iran que estaba montando:
-        # escribio "compra de insiders en energia (DKS, AMR) y defensa/industrial
-        # (AMRC)". DKS es Dick's Sporting Goods, una tienda de articulos
-        # deportivos. Sobre esa etiqueta inventada construyo la frase "el capital
-        # inteligente esta posicionandose para la duracion del conflicto".
-        nombre = nombre_corto(c.get("company"))
-        et = str(c.get("ticker", "?")) + (f" ({nombre})" if nombre else "")
-        insider_lines += f"- {et}: {c.get('n_insiders','?')} insiders comprando, ${c.get('total_value',0):,.0f} total, señal {c.get('signal','')}\n"
-    if not insider_lines:
-        insider_lines = "Sin datos de Insider Flow disponibles en este ciclo.\n"
 
     # Memoria de los últimos días — continuidad narrativa real, con texto
     # completo (no solo el sesgo, eso lo cubre bias_history_str aparte)
@@ -2016,17 +2121,7 @@ TU SESGO DE LOS ÚLTIMOS DÍAS (para dar contexto de tendencia, p.ej. "llevamos 
 DATOS REALES DE MERCADO HOY ({d['date']} — {d['time']}):
 {sesion_str}
 
-ÍNDICES:
-- S&P 500: {fmt('SPX')}
-- Nasdaq 100: {fmt('NDX')}
-- Russell 2000: {fmt('RUT')}
-- VIX: {fmt('VIX')}
-- Dólar Index (DXY): {fmt('DXY')}
-- Yield 10Y: {fmt_yield('TNX')}
-- Yield 30Y: {fmt_yield('TYX')}
-- Oro: {fmt('GOLD')}
-- Petróleo WTI: {fmt('WTI')}
-- Bitcoin: {fmt('BTC')}
+{bloque_mercado}
 
 FUTUROS PRE-MARKET (gap real vs cierre anterior, hora del dato indicada arriba):
 {futures_str}
@@ -2053,15 +2148,13 @@ SENTIMIENTO:
 SEÑALES PROPIAS DE RSU (amplitud calculada sobre vuestro propio universo — S&P 500 + Russell 2000 para McClellan/ABI/NH-NL, S&P 500 para el % sobre SMA50 — dales protagonismo, es lo que os diferencia de cualquier newsletter macro genérica):
 {rsu_breadth_str}
 
-INSIDER FLOW — CLUSTERS DE COMPRA RECIENTES:
-{insider_lines}
 
 ÚLTIMOS INDICADORES MACRO PUBLICADOS (FRED — datos REALES ya publicados, no previsiones). Las variaciones vienen ya calculadas: cítalas tal cual, nunca el nivel del índice en crudo. Ojo a las DOS fechas, que no son lo mismo: el PERIODO al que se refiere el dato y el día en que se PUBLICÓ. El IPC de junio salió a mediados de julio. Lo marcado "RECIÉN PUBLICADO" es noticia reciente y puedes tratarlo como tal; el resto es contexto de fondo y NO puedes presentarlo como si acabara de salir:
 | Indicador | Periodo del dato | Publicación | Último | Referencia |
 |-----------|------------------|-------------|--------|------------|
 {macro_lines}
 CALENDARIO ECONÓMICO HOY:
-{cal_cabecera}
+{cal_aviso}{cal_cabecera}
 {calendar_lines}
 
 EARNINGS NOTABLES PRÓXIMAS 48H:
@@ -2395,6 +2488,96 @@ FRASES_DE_CONSENSO = [
 # Superlativos que la regla 12 solo permite si lo dice un titular.
 SUPERLATIVOS = r"(m[áa]ximos?|m[íi]nimos?) (hist[óo]ricos?|anuales?)|r[ée]cord hist[óo]rico|all-?time"
 
+# DE QUE HABLA CADA EVENTO DEL CALENDARIO, en castellano. El calendario llega
+# en ingles («Core PPI m/m», «Main Refinancing Rate») y el briefing escribe «el
+# PPI», «el BCE». Sin este puente, la regla de abajo tendria que fiarse solo del
+# numero, y un «0,3%» sale en cualquier parrafo de mercado: el dia que el PPI
+# esperado es 0,3 marcaria «el S&P cayo un 0,3%». Es una tabla de traduccion, y
+# por eso es a mano; un evento que no este aqui simplemente no se vigila.
+TEMAS_CALENDARIO = [
+    (r"\bppi\b",                                   r"\bppi\b|precios? (de|a la|al) produc|productores"),
+    (r"\bcpi\b",                                   r"\bipc\b|\bcpi\b|precios al consumo"),
+    (r"refinancing|deposit facility|\becb\b",      r"\bbce\b|banco central europeo"),
+    (r"federal funds|\bfomc\b",                    r"\bfed\b|reserva federal|\bfomc\b"),
+    (r"claims",                                    r"subsidios?|solicitudes|peticiones de desempleo"),
+    (r"non-farm|payroll",                          r"n[óo]minas|creaci[óo]n de empleo"),
+    (r"unemployment rate",                         r"tasa de (paro|desempleo)"),
+    (r"\bgdp\b",                                   r"\bpib\b|\bgdp\b"),
+    (r"retail sales",                              r"ventas minoristas"),
+    (r"\bpce\b",                                   r"\bpce\b"),
+    (r"\bism\b",                                   r"\bism\b"),
+    (r"\bpmi\b",                                   r"\bpmi\b"),
+    (r"bank rate|\bboe\b",                         r"banco de inglaterra|\bboe\b"),
+    (r"\bboj\b|policy rate",                       r"banco de jap[óo]n|\bboj\b"),
+]
+
+# Lo que convierte una cifra del calendario en una EXPECTATIVA dicha como tal.
+MARCAS_DE_EXPECTATIVA = (r"consenso|se espera|esperad[oa]s?|previsi[óo]n|previst[oa]s?|"
+                         r"\bprev[ée]n?\b|estimad|apunta a|si (sale|se publica|llega|supera|queda)|"
+                         r"saldr[áa]|se publicar[áa]|a las \d|pendiente|todav[íi]a no")
+
+
+def _cifras_del_evento(valor) -> list:
+    """«0.3%» -> [0.3]; «205K» -> [205, 205000]; «1.2M» -> [1.2, 1200000].
+
+    El briefing puede escribir «205.000», «205 000» o «205K», y `_numeros()`
+    lee «205 000» como 205 y 0: hay que aceptar las dos escalas.
+    """
+    t = str(valor or "").strip().upper().replace("%", "").replace(",", "")
+    m = re.match(r"^[-+−]?(\d+(?:\.\d+)?)([KMB]?)$", t)
+    if not m:
+        return []
+    base = float(m.group(1))
+    mult = {"K": 1e3, "M": 1e6, "B": 1e9}.get(m.group(2))
+    return [base, base * mult] if mult else [base]
+
+
+def _tema_del_evento(nombre: str):
+    bajo = (nombre or "").lower()
+    for patron_ingles, patron_castellano in TEMAS_CALENDARIO:
+        if re.search(patron_ingles, bajo):
+            return patron_castellano
+    return None
+
+
+def _frases(texto: str) -> list:
+    """Frases Y lineas: un encabezado de bloque («**Calendario macro**») no
+    acaba en punto, y sin partir por el salto de linea se pegaba a la frase
+    siguiente."""
+    return [f for f in re.split(r"(?<=[.!?])\s+|\n+", texto or "") if f.strip()]
+
+
+def previsiones_contadas_como_hechos(texto: str, eventos: list) -> list:
+    """Frases que dan como PUBLICADO un dato del calendario que no ha salido.
+
+    EL CASO, 10/09/2026: a las 07:54 ET, con el BCE a las 08:15 y el PPI a las
+    08:30, la segunda lectura escribio «el Core PPI subio 0,3%… señal de
+    inflacion subyacente persistente» y «el BCE elevo su tasa a 2,65%». Las
+    cifras eran exactamente las del consenso.
+
+    Una frase cae si habla del evento (por su tema en castellano), da una cifra
+    que es su consenso, y NO lleva ninguna marca de expectativa. Las cifras se
+    comparan en valor absoluto: `_numeros()` no lee signos.
+    """
+    fuera = []
+    for ev in eventos or []:
+        if str(ev.get("actual") or "").strip():
+            continue                       # ya salio: contarlo como hecho es correcto
+        tema = _tema_del_evento(ev.get("event"))
+        cifras = [abs(c) for c in _cifras_del_evento(ev.get("forecast"))]
+        if not tema or not cifras:
+            continue
+        for frase in _frases(texto):
+            bajo = frase.lower()
+            if not re.search(tema, bajo) or re.search(MARCAS_DE_EXPECTATIVA, bajo):
+                continue
+            if any(_esta_en(n, cifras) for n in _numeros(frase)):
+                fuera.append(f"PREVISION CONTADA COMO HECHO: «{ev.get('event')}» no ha salido "
+                             f"(consenso {ev.get('forecast')}) y el texto lo da por publicado: "
+                             f"«{' '.join(frase.replace('**', '').split())[:90]}»")
+                break                      # una vez por evento basta para el aviso
+    return fuera
+
 
 def _numeros(texto: str) -> list:
     """Los numeros de un texto, como floats, en cualquiera de los dos formatos.
@@ -2426,11 +2609,17 @@ def _esta_en(valor: float, referencia: list, tolerancia: float = 0.001) -> bool:
     return any(abs(valor - r) <= tolerancia * max(1.0, abs(r)) for r in referencia)
 
 
-def revisar_briefing(texto: str, prompt: str, titulares: str = "") -> dict:
+def revisar_briefing(texto: str, prompt: str, titulares: str = "", eventos: list = None) -> dict:
     """Lo que el briefing ha roto, antes de publicarlo.
 
-    Devuelve {"ordenes": [...], "otros": [...]} -- separados porque no cuestan
-    lo mismo: una orden de operar es la unica que vale perder el briefing.
+    Devuelve {"ordenes": [...], "hechos": [...], "otros": [...]} -- separados
+    porque no cuestan lo mismo. Una orden de operar es la unica que vale perder
+    el briefing principal. Un dato que no ha salido contado como publicado
+    («hechos») no tumba el principal, pero SI descarta la segunda lectura, que
+    es opcional: mejor ausente que equivocada.
+
+    `eventos` es el calendario tal como llego al prompt. Sin el, las dos reglas
+    que dependen de el se comportan como antes.
     """
     bajo = (texto or "").lower()
     ordenes, otros = [], []
@@ -2439,9 +2628,34 @@ def revisar_briefing(texto: str, prompt: str, titulares: str = "") -> dict:
         if re.search(patron, bajo):
             ordenes.append(f"ORDEN DE OPERAR: {nombre} (prohibido desde el 04/09)")
 
+    hechos = previsiones_contadas_como_hechos(texto, eventos)
+
+    # «EL CONSENSO» SOLO ES SOSPECHOSO SI SU CIFRA NO ESTA EN EL CALENDARIO. La
+    # regla se escribio para el 08/09 (el empleo de FRED, que no trae
+    # consenso), y como busqueda de la palabra suelta salto el 10/09 con un
+    # «consenso del 0,3%» del PPI que salia literalmente de la columna Consenso
+    # del calendario: falso positivo, y un reintento contra Groq gastado en eso
+    # con 1.021 fichas de margen.
+    #
+    # Y no solo por la cifra: lo que salto de verdad fue «si el PPI de hoy
+    # SUPERA EL CONSENSO», una frase sin numero. Es igual de legitima, porque
+    # nombra un evento del calendario que SI trae consenso.
+    con_consenso = [ev for ev in (eventos or []) if _cifras_del_evento(ev.get("forecast"))]
+    cifras_consenso = [abs(c) for ev in con_consenso for c in _cifras_del_evento(ev.get("forecast"))]
+    temas_consenso = [t for t in (_tema_del_evento(ev.get("event")) for ev in con_consenso) if t]
+
+    def _consenso_respaldado(frase):
+        bajo_f = frase.lower()
+        return (any(_esta_en(n, cifras_consenso) for n in _numeros(frase))
+                or any(re.search(t, bajo_f) for t in temas_consenso))
+
     for patron, nombre in FRASES_DE_CONSENSO:
-        if re.search(patron, bajo):
-            otros.append(f"CONSENSO INVENTADO: {nombre} — el prompt solo trae el dato y el PREVIO")
+        frases = [f for f in _frases(texto) if re.search(patron, f.lower())]
+        if not frases:
+            continue
+        if eventos is not None and all(_consenso_respaldado(f) for f in frases):
+            continue
+        otros.append(f"CONSENSO INVENTADO: {nombre} — el prompt solo trae el dato y el PREVIO")
 
     if re.search(SUPERLATIVOS, bajo):
         respaldo = re.search(r"record|all-?time|m[áa]ximo hist", (titulares or "").lower())
@@ -2462,7 +2676,13 @@ def revisar_briefing(texto: str, prompt: str, titulares: str = "") -> dict:
                 otros.append(f"NIVEL INVENTADO: {n:g} no sale de los datos "
                              f"(el prompt da SMA20/SMA50/SMA200 y el rango de 20 dias)")
 
-    return {"ordenes": ordenes, "otros": otros}
+    return {"ordenes": ordenes, "hechos": hechos, "otros": otros}
+
+
+def fallos_de(revision: dict) -> list:
+    """Todo lo encontrado, en orden de gravedad. `.get` porque una revision
+    guardada antes de que existiera «hechos» no la trae."""
+    return [x for clave in ("ordenes", "hechos", "otros") for x in (revision or {}).get(clave, [])]
 
 
 def extract_bias_tag(text: str) -> tuple:
@@ -2630,12 +2850,21 @@ def construir_datos(market_data: dict, news=None, major_headlines=None) -> dict:
 MODELO_SEGUNDA_LECTURA = os.environ.get("BRIEFING_MODELO_2", "groq/compound")
 
 
-def generar_segunda_lectura(prompt: str, modelo: str = None) -> dict:
+def generar_segunda_lectura(prompt: str, modelo: str = None, titulares: str = "",
+                            eventos: list = None) -> dict:
     """El mismo prompt, otro modelo. Devuelve None si no sale — nunca levanta.
 
     Se le pasa el prompt ORIGINAL, con su marca de longitud sin sustituir, para
     que el presupuesto se calcule contra su propio modelo: `compound` tiene
     70.000 fichas por minuto y `qwen` 8.000, medido contra la API el 07/09.
+
+    PASA POR EL MISMO VERIFICADOR QUE LA PRIMERA (Newsfeed #58). Hasta el
+    10/09 no pasaba por ninguno, y ese dia fue justo donde salieron los peores
+    fallos: el PPI, los subsidios y el BCE narrados como publicados a las 07:54
+    ET, antes de que salieran. Si tras un reintento sigue habiendo una orden de
+    operar o un dato inventado como publicado, NO se publica: es opcional, y
+    ausente es mejor que equivocada. Lo menor (un «consenso», un nivel) se
+    publica y queda anotado, igual que en la primera.
     """
     modelo = modelo or MODELO_SEGUNDA_LECTURA
     if not modelo:
@@ -2648,11 +2877,27 @@ def generar_segunda_lectura(prompt: str, modelo: str = None) -> dict:
             print(f"⚠️  La segunda lectura salio con {len(cuerpo.split())} palabras: se descarta. "
                   f"El briefing principal se publica igual.")
             return None
+        revision = revisar_briefing(cuerpo, prompt, titulares, eventos)
+        if revision["ordenes"] or revision["hechos"]:
+            fallos = "; ".join(fallos_de(revision))
+            print(f"🔎 Segunda lectura rechazada en la revision: {fallos}")
+            texto, diag = generate_briefing(
+                prompt + f"\n\nAVISO: tu version anterior incumplia esto y se rechazo — {fallos}. "
+                         f"Reescribe el briefing entero SIN eso.", modelo=modelo)
+            cuerpo, sesgo = extract_bias_tag(texto)
+            revision = revisar_briefing(cuerpo, prompt, titulares, eventos)
+            if revision["ordenes"] or revision["hechos"] or len(cuerpo.split()) < 50:
+                print(f"⚠️  El reintento de la segunda lectura sigue fallando "
+                      f"({'; '.join(fallos_de(revision)) or 'texto demasiado corto'}): no se "
+                      f"publica. El briefing principal sale igual.")
+                return None
+            print("   ✅ El reintento de la segunda lectura pasa la revision")
         herramientas = diag.get("herramientas_usadas")
         print(f"   {len(cuerpo.split())} palabras · sesgo {sesgo or 'N/D'}"
               + (f" · consulto {len(herramientas)} fuente(s) por su cuenta"
                  if herramientas else ""))
-        return {"model": modelo, "text": cuerpo, "bias": sesgo, "diagnostico": diag}
+        return {"model": modelo, "text": cuerpo, "bias": sesgo, "diagnostico": diag,
+                **({"revision": revision} if fallos_de(revision) else {})}
     except Exception as e:
         # Aislada a proposito: una segunda opinion nunca puede costar el
         # briefing de la manana.
@@ -2852,8 +3097,6 @@ def main():
     print("📈 Leyendo señales de amplitud propias de RSU (Scanner Gist)...")
     breadth = get_rsu_breadth_signals()
 
-    print("🔍 Leyendo clusters de Insider Flow (si el backend está desplegado)...")
-    insider_clusters = get_insider_clusters()
 
     print("🤖 Construyendo prompt...")
     print("📈 Descargando indicadores macro publicados (FRED)...")
@@ -2876,7 +3119,7 @@ def main():
     raw_briefing, nivel_usado, diag = None, None, {}
     for i, nivel in enumerate(NIVELES_RECORTE):
         prompt = build_prompt(market_data, news, major_headlines, earnings, breadth,
-                              insider_clusters, briefing_history, bias_history,
+                              briefing_history, bias_history,
                               macro_indicators, recorte=nivel)
         tokens = estimar_tokens(prompt)
         if tokens > TECHO_PROMPT and i < len(NIVELES_RECORTE) - 1:
@@ -2913,23 +3156,26 @@ def main():
     # habiendo una ORDEN DE OPERAR, se falla el Action: publicar «no entro en
     # largo» a ~100 personas que pagan es el unico fallo que vale perder el dia.
     titulares_txt = json.dumps((news or []) + (major_headlines or []), ensure_ascii=False)
-    revision = revisar_briefing(briefing, prompt, titulares_txt)
-    if revision["ordenes"] or revision["otros"]:
+    # El calendario tal como llego al prompt: sin el, el verificador no puede
+    # saber que un dato no ha salido todavia (#57) ni que un «consenso» si
+    # estaba en la tabla (#59).
+    eventos = market_data.get("calendar") or []
+    revision = revisar_briefing(briefing, prompt, titulares_txt, eventos)
+    if fallos_de(revision):
         print("🔎 La revision previa a publicar ha encontrado:")
-        for x in revision["ordenes"] + revision["otros"]:
+        for x in fallos_de(revision):
             print(f"   - {x}")
-        fallos = "; ".join(revision["ordenes"] + revision["otros"])
+        fallos = "; ".join(fallos_de(revision))
         try:
             reintento, diag_rev = generate_briefing(
                 prompt + f"\n\nAVISO: tu version anterior incumplia esto y se rechazo — {fallos}. "
                          f"Reescribe el briefing entero SIN eso. El nivel de invalidacion tiene que ser "
                          f"uno de los que aparecen arriba, copiado tal cual.")
             b2, s2 = extract_bias_tag(reintento)
-            r2 = revisar_briefing(b2, prompt, titulares_txt)
-            if len(r2["ordenes"]) + len(r2["otros"]) < len(revision["ordenes"]) + len(revision["otros"]):
+            r2 = revisar_briefing(b2, prompt, titulares_txt, eventos)
+            if len(fallos_de(r2)) < len(fallos_de(revision)):
                 print(f"   ✅ El reintento corrige "
-                      f"{len(revision['ordenes']) + len(revision['otros']) - len(r2['ordenes']) - len(r2['otros'])} "
-                      f"de {len(revision['ordenes']) + len(revision['otros'])}")
+                      f"{len(fallos_de(revision)) - len(fallos_de(r2))} de {len(fallos_de(revision))}")
                 briefing, bias, diag, revision = b2, s2, diag_rev, r2
             else:
                 print("   ⚠️  El reintento no mejora: se queda la version original")
@@ -2948,7 +3194,7 @@ def main():
     # distintos no dice nada. `prompt` sigue siendo el original con su marca de
     # longitud sin sustituir, porque generate_briefing la sustituye en una
     # copia local.
-    segunda = generar_segunda_lectura(prompt)
+    segunda = generar_segunda_lectura(prompt, titulares=titulares_txt, eventos=eventos)
 
     # Si el modelo se queda sin presupuesto de tokens pensando (ver nota en
     # generate_briefing) puede devolver un texto vacío o casi vacío — mejor

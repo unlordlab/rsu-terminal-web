@@ -1,138 +1,110 @@
 """
-El modelo recibió los tickers desnudos y les inventó un sector.
+Insider Flow sale del briefing: decisión del usuario el 10/09/2026.
 
-EL CASO, 31/08/2026. El briefing del día montaba su tesis sobre una escalada
-entre Estados Unidos e Irán, y la remataba así:
+POR QUÉ, en lo que se había visto. El bloque llegó a producir el peor
+invento documentado del briefing. El 31/08/2026 al modelo le llegaron los
+tickers desnudos (DKS, AMR, AMRC) y escribió:
 
     «la compra de insiders en energía (DKS, AMR) y defensa/industrial (AMRC)
      confirma que el capital inteligente está posicionándose para la duración
      del conflicto»
 
-Ninguna de las tres etiquetas es cierta:
+DKS es Dick's Sporting Goods, una tienda de artículos deportivos. Se arregló
+pasando el nombre de la empresa (`nombre_corto`), pero el fondo seguía ahí: un
+puñado de compras de directivos en cinco valores sueltos no dice nada del
+mercado del día, y el modelo las usaba para CONFIRMAR la narrativa que ya
+estaba montando. El 10/09 la segunda lectura volvió a citarlas —LILA, INBX,
+GME— para concluir que «no son suficientes para revertir la tendencia», que
+tampoco dice nada.
 
-    DKS   Dick's Sporting Goods  -> Consumer Cyclical / Specialty Retail
-    AMR   Alpha Metallurgical    -> Basic Materials / Coking Coal
-    AMRC  Ameresco               -> Industrials / Engineering & Construction
+Y cuestan fichas en un prompt que lleva semanas sin caber en el nivel normal
+(Newsfeed #28).
 
-DKS es una tienda de artículos deportivos presentada como una petrolera. Y no
-es un número mal copiado: sobre esas etiquetas inventadas se construye una
-frase causal («el capital inteligente se posiciona para la duración del
-conflicto») que el lector no tiene forma de contrastar.
+LO QUE ESTE FICHERO ATA:
 
-LA CAUSA, otra vez la misma. `insider_lines` mandaba al prompt el ticker, el
-número de insiders, el importe y la señal. Nada más. Pero el endpoint YA
-devuelve `company` -- se tiraba antes de llegar al prompt, igual que el
-`actual` del calendario (#36) y el desglose del S&P (#35). Tercer caso del
-mismo patrón: el dato estaba, no viajaba, y el modelo rellenó el hueco.
+  1. Que no llegue NADA de insiders al prompt, en las dos versiones del estilo.
+  2. Que tampoco quede ninguna INVITACIÓN a hablar de ellos. El estilo ponía
+     «Lo que dicen los insiders» como ejemplo de bloque: quitar el dato y dejar
+     el ejemplo es pedirle al modelo que se lo invente, que es exactamente el
+     fallo del 31/08 elevado al cuadrado.
+  3. Que el script no siga llamando al backend para leerlos: sería una llamada
+     con un token de servicio para tirar el resultado.
 
-LA LECCIÓN: un ticker desnudo es una invitación a inventar. Cuatro letras no
-dicen a qué se dedica una empresa, y un modelo que está construyendo una
-narrativa las interpretará a favor de esa narrativa.
+Insider Flow sigue existiendo como módulo de la terminal; lo que se quita es
+su paso por el briefing.
 
 Uso:
     cd backend
     python -m pytest tests/test_briefing_insiders.py -v
 """
+import inspect
+import io
 import os
 import sys
+
+import pytest
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..', 'scripts'))
 
 import daily_briefing as D  # noqa: E402
 
-# Los tres del caso real, con el nombre tal y como lo devuelve el endpoint.
-CLUSTERS = [
-    {"ticker": "DKS",  "company": "Dick's Sporting Goods Inc",
-     "n_insiders": 3, "total_value": 1_200_000, "signal": "FUERTE"},
-    {"ticker": "AMR",  "company": "Alpha Metallurgical Resources, Inc.",
-     "n_insiders": 2, "total_value": 800_000, "signal": "MODERADA"},
-    {"ticker": "AMRC", "company": "Ameresco, Inc.",
-     "n_insiders": 2, "total_value": 400_000, "signal": "MODERADA"},
-]
+RAIZ = os.path.join(os.path.dirname(__file__), "..", "..")
+MD = {"date": "10/09/2026", "time": "07:54", "sectors": {}, "calendar": [],
+      "sesion": {"en_curso": False, "fecha": "2026-09-09", "hora_et": "07:54"}}
 
 
-def _prompt(clusters):
-    d = {"date": "31/08/2026", "time": "10:30", "sectors": {}, "calendar": [],
-         "sesion": {"en_curso": True, "fecha": "2026-08-31", "hora_et": "10:30"}}
-    return D.build_prompt(d, [], [], [], {}, clusters, [], [])
+@pytest.fixture(params=["v1", "v2"])
+def version(request, monkeypatch):
+    """Las DOS versiones del estilo: una regla quitada solo en la activa vuelve
+    en cuanto alguien cambia `BRIEFING_PROMPT_VERSION`."""
+    monkeypatch.setattr(D, "PROMPT_VERSION", request.param)
+    return request.param
 
 
-# ── El caso real ─────────────────────────────────────────────────────────────
-
-def test_el_nombre_de_la_empresa_llega_al_prompt():
-    """EL test. Con «Dick's Sporting Goods» delante, llamarlo energía cuesta
-    mucho más que con un «DKS» a secas."""
-    p = _prompt(CLUSTERS)
-    assert "Dick's Sporting Goods" in p, (
-        "el ticker sigue viajando desnudo: es lo que dejó al modelo inventarse "
-        "que DKS era una empresa de energía")
-    assert "Alpha Metallurgical" in p
-    assert "Ameresco" in p
+def test_el_prompt_no_menciona_insiders_en_ninguna_forma(version):
+    """EL test. Sobre el prompt RENDERIDO, no sobre las constantes: si algún
+    bloque se colara por otro camino, mirar las constantes no lo vería."""
+    p = D.build_prompt(MD, [], [], [], {}, [], []).lower()
+    assert "insider" not in p, (
+        "el prompt sigue hablando de insiders: o llega el dato o queda una "
+        "invitación a inventarlo")
 
 
-def test_el_ticker_NO_desaparece():
-    """El nombre se añade, no sustituye: el ticker es lo que el lector puede
-    buscar."""
-    p = _prompt(CLUSTERS)
-    for t in ("DKS", "AMR", "AMRC"):
-        assert t in p
+def test_no_queda_el_ejemplo_de_bloque_que_invitaria_a_inventarlos(version):
+    """La mitad que se olvida. Sin el dato, «Lo que dicen los insiders» como
+    ejemplo de sección es una orden de rellenar el hueco."""
+    p = D.build_prompt(MD, [], [], [], {}, [], [])
+    assert "Lo que dicen los insiders" not in p
 
 
-def test_siguen_viajando_los_datos_de_siempre():
-    p = _prompt(CLUSTERS)
-    assert "3 insiders" in p and "FUERTE" in p and "1,200,000" in p
+def test_build_prompt_ya_no_acepta_insiders():
+    """Si el parámetro siguiera ahí, alguien volvería a pasarle algo y nada lo
+    pintaría -- o peor, alguien volvería a pintarlo."""
+    params = inspect.signature(D.build_prompt).parameters
+    assert not any("insider" in n for n in params), list(params)
 
 
-def test_un_cluster_sin_nombre_no_rompe_ni_inventa():
-    """El endpoint devuelve `company` vacío en algunos casos. Sin nombre se
-    manda el ticker solo, que es lo que había -- pero sin paréntesis vacíos."""
-    p = _prompt([{"ticker": "XYZ", "company": "", "n_insiders": 2,
-                  "total_value": 100, "signal": "MODERADA"}])
-    assert "- XYZ:" in p
-    assert "XYZ ()" not in p
+def test_el_script_ya_no_lee_insiders_del_backend():
+    """Una llamada al backend con un token de servicio para tirar el resultado
+    es coste y superficie sin nada a cambio."""
+    assert not hasattr(D, "get_insider_clusters")
+    assert not hasattr(D, "BRIEFING_AUTH_TOKEN")
 
 
-# ── El recorte del nombre ────────────────────────────────────────────────────
-#
-# Se recorta porque este prompt NO CABE en el límite de Groq desde hace
-# semanas: cada ficha que se gasta aquí sale de otro sitio.
-
-def test_no_parte_palabras_por_la_mitad():
-    """Cortar a pelo por caracteres dejaba «Dick's Sporting Goods In», que
-    parece un fallo de programa dentro de un texto que lee gente."""
-    assert D.nombre_corto("Dick's Sporting Goods Inc") == "Dick's Sporting Goods"
-    assert not D.nombre_corto("Alpha Metallurgical Resources, Inc.").endswith(" Reso")
+def test_el_workflow_ya_no_pasa_el_token_de_servicio():
+    """El YAML ES la configuración: aquí comprobar el texto es comprobar el
+    comportamiento. Una línea comentada no cuenta como uso."""
+    yml = io.open(os.path.join(RAIZ, ".github", "workflows", "daily_briefing.yml"),
+                  encoding="utf-8").read()
+    activas = [l for l in yml.splitlines() if not l.strip().startswith("#")]
+    assert not any("BRIEFING_AUTH_TOKEN" in l for l in activas)
+    assert not any("RSU_BACKEND_URL" in l for l in activas)
 
 
-def test_quita_el_ruido_societario():
-    """«Inc.», «Corporation» o «Ltd» no dicen a qué se dedica nadie, y en un
-    prompt que no cabe son fichas tiradas."""
-    assert D.nombre_corto("NVIDIA Corporation") == "NVIDIA"
-    assert D.nombre_corto("Ameresco, Inc.") == "Ameresco"
-    assert D.nombre_corto("Exxon Mobil Corp") == "Exxon Mobil"
-
-
-def test_conserva_lo_que_identifica_a_la_empresa():
-    """El recorte no puede dejar el nombre irreconocible: «Alpha» solo no
-    distingue nada, «Alpha Metallurgical» ya dice que no es una petrolera."""
-    assert D.nombre_corto("Alpha Metallurgical Resources, Inc.") == "Alpha Metallurgical"
-
-
-def test_un_nombre_vacio_o_ausente_devuelve_cadena_vacia():
-    assert D.nombre_corto("") == "" and D.nombre_corto(None) == ""
-    assert D.nombre_corto("   ") == ""
-
-
-def test_una_sola_palabra_larguisima_no_desaparece():
-    """Si no hay espacio por donde cortar, es mejor un nombre truncado que
-    ninguno -- el `or` del final existe por esto."""
-    assert D.nombre_corto("Supercalifragilisticoexpialidoso") != ""
-
-
-def test_el_prompt_usa_la_funcion_y_no_recorta_a_pelo():
-    """Que la función esté bien no sirve si build_prompt corta por su cuenta."""
-    import inspect
-    fuente = inspect.getsource(D.build_prompt)
-    assert "nombre_corto(" in fuente, (
-        "build_prompt no usa el recortador: el nombre volvería a partirse por "
-        "la mitad o a viajar entero")
+def test_el_comparador_de_modelos_tampoco_los_pide():
+    """Construye el prompt real con los datos reales para comparar modelos: si
+    siguiera pidiéndolos, reventaría al importar o compararía otro prompt."""
+    fuente = io.open(os.path.join(RAIZ, "scripts", "comparar_modelos_briefing.py"),
+                     encoding="utf-8").read()
+    codigo = "\n".join(l for l in fuente.splitlines() if not l.strip().startswith("#"))
+    assert "insider" not in codigo.lower()

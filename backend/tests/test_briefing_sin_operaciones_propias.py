@@ -50,7 +50,7 @@ MD = {"date": "05/09/2026", "time": "07:47", "sectors": {}, "calendar": [],
 def _prompt():
     """El prompt RENDERIDO, no la constante: si algún día el bloque dejara de
     incluirse, mirar la constante no lo detectaría."""
-    return D.build_prompt(MD, [], [], [], {}, [], [], [])
+    return D.build_prompt(MD, [], [], [], {}, [], [])
 
 
 @pytest.fixture(params=["v1", "v2"])

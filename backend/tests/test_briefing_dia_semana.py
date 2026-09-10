@@ -41,7 +41,7 @@ import daily_briefing as D  # noqa: E402
 
 def _prompt(sesion):
     return D.build_prompt({"date": "2026-09-08", "time": "11:49", "sesion": sesion},
-                          [], [], [], {}, [], [], [], [])
+                          [], [], [], {}, [], [], [])
 
 
 # ── El día de la semana, dado hecho ──────────────────────────────────────────
@@ -94,15 +94,43 @@ def test_se_dice_que_hay_que_citarla_por_ESE_dia():
 
 def test_se_separa_lo_que_es_del_CIERRE_de_lo_que_es_de_HOY():
     """El briefing del 08/09 explicó el cierre del viernes con la subida del
-    petróleo del martes. Índices, sectores y amplitud son del cierre; materias
-    primas, futuros y divisas sí son de hoy — y hasta ahora el prompt no lo
-    decía en ninguna parte."""
+    petróleo del martes, y se arregló con una FRASE: «Índices, sectores y
+    amplitud son el cierre; materias primas, futuros y divisas SÍ son de hoy».
+
+    El 10/09 esa frase fue falsa dos veces. El VIX es un índice y su barra era
+    del jueves en curso; la amplitud era del martes. El briefing publicó «el VIX
+    sube un 1,03%» (el miércoles subió +4,71%) y «el dólar sube… refugio» (el
+    miércoles BAJÓ). Ahora el día de cada fila sale de la fecha de SU barra, y
+    este test lo comprueba con el caso real: dos grupos de fechas."""
+    barras = {"SPX": ("2026-09-08", "2026-09-09"), "VIX": ("2026-09-09", "2026-09-10"),
+              "DXY": ("2026-09-09", "2026-09-10")}
+    md = {"date": "2026-09-10", "time": "11:54", "barras": barras,
+          "sesion": {"fecha": "2026-09-09", "en_curso": False, "hora_et": "07:54"},
+          "SPX": {"price": 7636.36, "chg_pct": -0.48, "prev": 7673.52},
+          "VIX": {"price": 16.63, "chg_pct": 1.03, "prev": 16.46,
+                  "en_sesion": {"desde": "2026-09-08", "prev": 15.72, "cierre": 16.46, "chg_pct": 4.71}},
+          "DXY": {"price": 98.91, "chg_pct": 0.14, "prev": 98.77,
+                  "en_sesion": {"desde": "2026-09-08", "prev": 98.84, "cierre": 98.77, "chg_pct": -0.07}}}
+    p = D.build_prompt(md, [], [], [], {}, [], [], [])
+    # La fecha de la sesion la da la linea de estado; el bloque remite a ella.
+    assert "la del 2026-09-09 (miercoles)" in p
+    cierre = p.index("CIERRE DE ESA SESION")
+    hoy = p.index("EN CURSO HOY 2026-09-10 (jueves)")
+    # El S&P va con el cierre; el VIX y el dólar, con hoy -- y con lo que
+    # hicieron EN la sesión, que es la que cuenta el briefing.
+    assert cierre < p.index("- S&P 500:") < hoy
+    assert p.index("- VIX:") > hoy and p.index("- Dólar Index (DXY):") > hoy
+    assert "[sesion ▲4.71%]" in p, "falta lo que hizo el VIX el miércoles"
+    assert "[sesion ▼0.07%]" in p, "falta que el dólar BAJÓ el miércoles"
+
+
+def test_la_linea_de_estado_ya_no_afirma_de_que_dia_es_cada_cosa():
+    """La frase general era la que se contradecía con la etiqueta correcta de
+    la amplitud dos líneas más abajo, y el modelo creyó a la frase general."""
     p = _prompt({"fecha": "2026-09-04", "en_curso": False})
-    assert "Materias primas, futuros y divisas SI son de hoy" in p, (
-        "el prompt no distingue qué datos son del cierre y cuáles de hoy, que "
-        "es lo que permitió explicar un cierre del viernes con una noticia del "
-        "martes")
-    assert "Indices, sectores y amplitud son el cierre" in p
+    assert "Indices, sectores y amplitud son el cierre" not in p
+    assert "SI son de hoy" not in p
+    assert "Cada bloque de abajo dice de que dia es su dato" in p
 
 
 def test_la_sesion_EN_CURSO_sigue_prohibiendo_decir_que_cerro():

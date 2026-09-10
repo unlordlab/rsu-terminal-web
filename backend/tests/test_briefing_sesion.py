@@ -87,7 +87,7 @@ def _prompt(sesion, breadth=None, calendario=None):
         "date": "27/08/2026", "time": "09:30", "sesion": sesion,
         "sectors": {}, "calendar": calendario or [],
     }
-    return D.build_prompt(d, [], [], [], breadth or {}, [], [], [])
+    return D.build_prompt(d, [], [], [], breadth or {}, [], [])
 
 
 def test_una_sesion_en_curso_se_rotula_como_tal_en_el_prompt():

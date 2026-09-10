@@ -222,5 +222,5 @@ def test_los_titulares_no_se_cuelan_en_el_prompt_por_esta_via():
     semanas sin caber en el límite de Groq."""
     md = {"date": "02/09/2026", "time": "08:00", "sectors": {}, "calendar": [],
           "sesion": {"en_curso": False, "fecha": "2026-09-01", "hora_et": "08:00"}}
-    p = D.build_prompt(md, [], [], [], {}, [], [], [])
+    p = D.build_prompt(md, [], [], [], {}, [], [])
     assert "titulares_medios" not in p and "briefing_datos" not in p

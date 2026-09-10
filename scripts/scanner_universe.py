@@ -371,6 +371,66 @@ def _variacion(prices, sesiones: int):
     return round((ahora / antes - 1) * 100, 2)
 
 
+def diagnosticar_ultima_sesion(close_d: dict, umbral: float = 0.9, muestra: int = 5) -> dict:
+    """¿Cuántos valores traen la barra de la sesión más reciente?
+
+    EL CASO, Scanner #25 (10/09/2026). En 4 de las 6 últimas noches la última
+    sesión llegó con 21, 26, 22 y 30 valores de ~2.400, y la protección de
+    cobertura la descartó: el escaneo va casi siempre una sesión por detrás, y
+    las filas por ticker mezclan las dos (los ~21 con barra nueva y el resto
+    sin ella). CANSLIM, RS/RW y Temáticos leen la misma caché de precios.
+
+    NO SE SABE TODAVÍA POR QUÉ, y arreglarlo a ciegas —mover el cron, por
+    ejemplo— podría no arreglar nada. Esto deja la prueba en el registro la
+    noche que pase: QUIÉNES traen la barra, y para una muestra de los que no,
+    cómo viene la fila en crudo —ausente o con el cierre vacío— por dos caminos
+    de yfinance distintos. Con eso se decide el arreglo.
+
+    Solo pide datos cuando la sesión viene incompleta: las noches normales no
+    cuesta ninguna llamada. Nunca levanta: un diagnóstico no puede tumbar el
+    escaneo que diagnostica.
+    """
+    ultimas = {}
+    for t, s in close_d.items():
+        if s is not None and len(s):
+            f = str(s.index[-1].date())
+            ultimas[f] = ultimas.get(f, 0) + 1
+    if not ultimas:
+        return {}
+    fecha = max(ultimas)
+    total = sum(ultimas.values())
+    info = {"fecha": fecha, "con_barra": ultimas[fecha], "total": total,
+            "completa": ultimas[fecha] >= umbral * total}
+    if info["completa"]:
+        return info
+
+    print(f"🔬 Sesión {fecha}: solo {ultimas[fecha]} de {total} valores la traen "
+          f"(últimas fechas: {dict(sorted(ultimas.items())[-3:])})")
+    con = sorted(t for t, s in close_d.items() if len(s) and str(s.index[-1].date()) == fecha)
+    sin = sorted(t for t, s in close_d.items() if len(s) and str(s.index[-1].date()) != fecha)
+    print(f"🔬 La traen: {con[:40]}{' ...' if len(con) > 40 else ''}")
+    info["la_traen"] = con[:40]
+    try:
+        crudo = yf.download(sin[:muestra] + con[:2], period="5d", auto_adjust=True,
+                            progress=False, threads=True)
+        cierres = crudo["Close"] if "Close" in crudo else crudo
+        print("🔬 yf.download en crudo, SIN dropna (NaN = la fila llega vacía; "
+              "sin fila = no llega):")
+        print(cierres.tail(3).to_string())
+    except Exception as e:
+        print(f"🔬 yf.download de diagnóstico falló: {type(e).__name__}: {e}")
+    if sin:
+        try:
+            h = yf.Ticker(sin[0]).history(period="5d")
+            print(f"🔬 Ticker('{sin[0]}').history(period='5d'): últimas fechas "
+                  f"{[str(d.date()) for d in h.index[-3:]]}")
+        except Exception as e:
+            print(f"🔬 Ticker.history de diagnóstico falló: {type(e).__name__}: {e}")
+    print(f"🔬 yfinance {getattr(yf, '__version__', '?')} · "
+          f"{datetime.now(timezone.utc):%Y-%m-%d %H:%M} UTC")
+    return info
+
+
 def _rvol_pts(rvol: float) -> float:
     """Puntos por volumen relativo, 0-20.
 
@@ -541,6 +601,8 @@ def run_scan() -> dict:
     close_d, vol_d, hl_d = _fetch_batch(all_syms)
     if BENCHMARK not in close_d:
         raise ValueError("Sin datos de SPY — cancelado")
+    # Scanner #25: la prueba de por qué la última sesión llega casi vacía.
+    ultima_sesion = diagnosticar_ultima_sesion(close_d)
 
     # Tickers del universo (sobre todo RUSSELL2000_TICKERS, la lista más
     # propensa a quedarse desactualizada) que no devolvieron datos --
@@ -762,6 +824,10 @@ def run_scan() -> dict:
         "meta": {
             "rvol_window": RVOL_WINDOW,
             "score_note":  "score_tecnico = RS_pct(50%) + Fase(30%) + RVOL(20%), sin componente fundamental — ver docstring",
+            # Cuántos valores trajeron la última sesión (Scanner #25). En el
+            # Gist y no solo en el registro del Action: el registro caduca a
+            # los 90 días y esto sirve para contar noches.
+            "ultima_sesion": {k: v for k, v in (ultima_sesion or {}).items() if k != "la_traen"},
         },
     }
 

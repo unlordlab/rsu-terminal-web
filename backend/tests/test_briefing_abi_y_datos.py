@@ -117,7 +117,7 @@ def test_la_banda_viaja_al_prompt_y_la_escala_ya_no_dice_dispersion():
                      "new_lows": 43, "nh_nl": -19, "sp500_advances": 135,
                      "sp500_declines": 358, "sp500_pct_al_alza": 27.4,
                      "universo_amplitud": 2383, "universe_size": 497,
-                     "fecha": "2026-08-31"}, [], [], [])
+                     "fecha": "2026-08-31"}, [], [])
     assert "ABI: 39.8% (ALTO)" in p, "el ABI sigue viajando sin su banda"
     assert "dispersión" not in p, (
         "la escala sigue empezando por «dispersión», que es la palabra que "
@@ -196,7 +196,7 @@ def test_guardarlo_no_cuesta_fichas_del_prompt():
         {"date": "01/09/2026", "time": "08:09", "sectors": {}, "calendar": [],
          "barras": {"SPX": ("2026-08-28", "2026-08-31")},
          "sesion": {"en_curso": False, "fecha": "2026-08-31", "hora_et": "08:09"}},
-        [], [], [], {}, [], [], [])
+        [], [], [], {}, [], [])
     assert "2026-08-28" not in p, (
         "las fechas de las barras se están colando en el prompt: son para "
         "auditar después, no para el modelo")

@@ -189,7 +189,7 @@ def test_la_direccion_llega_al_prompt():
                      "new_highs": 24, "new_lows": 43, "nh_nl": -19,
                      "sp500_advances": 300, "sp500_declines": 196,
                      "sp500_pct_al_alza": 60.5, "universo_amplitud": 2400,
-                     "universe_size": 498, "fecha": "2026-09-02"}, [], [], [])
+                     "universe_size": 498, "fecha": "2026-09-02"}, [], [])
     assert "ABI: 66.7% (CAPITULACION al alza)" in p
 
 
@@ -199,7 +199,7 @@ def _prompt(breadth):
     return D.build_prompt(
         {"date": "03/09/2026", "time": "07:47", "sectors": {}, "calendar": [],
          "sesion": {"en_curso": False, "fecha": "2026-09-02", "hora_et": "07:47"}},
-        [], [], [], breadth, [], [], [])
+        [], [], [], breadth, [], [])
 
 
 _B = {"abi": 41.2, "abi_estado": "CAPITULACION a la baja", "mcclellan": -125.8,

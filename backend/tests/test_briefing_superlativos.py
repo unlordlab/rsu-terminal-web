@@ -51,7 +51,7 @@ def _prompt():
     return D.build_prompt(
         {"date": "02/09/2026", "time": "07:47", "sectors": {}, "calendar": [],
          "sesion": {"en_curso": False, "fecha": "2026-09-01", "hora_et": "07:47"}},
-        [], [], [], {}, [], [], [])
+        [], [], [], {}, [], [])
 
 
 def test_el_prompt_prohibe_afirmar_maximos_y_minimos():

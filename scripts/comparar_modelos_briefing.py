@@ -66,7 +66,6 @@ def construir_prompt_de_hoy():
     major            = B.get_major_outlet_headlines()
     earnings         = B.get_notable_earnings()
     breadth          = B.get_rsu_breadth_signals()
-    insiders         = B.get_insider_clusters()
     historial        = B.get_briefing_history()
     sesgos           = B.get_bias_history()
     macro            = B.get_macro_indicators()
@@ -78,7 +77,7 @@ def construir_prompt_de_hoy():
     print("\nDatos recogidos:")
     for nombre, dato in [("precios", market_data), ("noticias", news),
                          ("medios internacionales", major), ("resultados", earnings),
-                         ("amplitud", breadth), ("insiders", insiders),
+                         ("amplitud", breadth),
                          ("historial", historial), ("macro", macro)]:
         cuantos = len(dato) if isinstance(dato, (list, dict)) else 0
         print(f"  {nombre:<24} {cuantos if cuantos else 'VACIO'}")
@@ -86,7 +85,7 @@ def construir_prompt_de_hoy():
     # El nivel de recorte que main() acabaría usando: el primero que quepa.
     for nivel in B.NIVELES_RECORTE:
         prompt = B.build_prompt(market_data, news, major, earnings, breadth,
-                                insiders, historial, sesgos, macro, recorte=nivel)
+                                historial, sesgos, macro, recorte=nivel)
         if B.estimar_tokens(prompt) <= B.TECHO_PROMPT:
             print(f"Nivel de recorte '{nivel['nombre']}' "
                   f"(~{B.estimar_tokens(prompt)} fichas de prompt)")

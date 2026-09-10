@@ -34,8 +34,10 @@ jobs:
           # configuró, así que el respaldo de titulares que dependía de él
           # nunca funcionó. Sustituido por RSS directo de los medios, sin
           # clave (ver get_rss_fallback_headlines en daily_briefing.py).
-          RSU_BACKEND_URL:      ${{ secrets.RSU_BACKEND_URL }}
-          BRIEFING_AUTH_TOKEN:  ${{ secrets.BRIEFING_AUTH_TOKEN }}
+          # RSU_BACKEND_URL y BRIEFING_AUTH_TOKEN retirados (10/09/2026): solo
+          # servian para leer Insider Flow del backend, y los insiders salieron
+          # del briefing por decision del usuario. Un secreto que el job no usa
+          # es superficie expuesta sin nada a cambio.
           # Indicadores macro ya publicados (IPC, paro, nóminas, ventas
           # minoristas...). Sin esta clave el briefing se genera igual, solo
           # que sin esa sección -- ver get_macro_indicators().
