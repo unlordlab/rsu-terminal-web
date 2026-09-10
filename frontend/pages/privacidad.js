@@ -16,7 +16,7 @@ import { esc } from '/core/ui.js';
 // escrito en un fichero queda publicado para siempre en el historial de git.
 // Se piden a /api/v1/legal/titular, que los lee del .env del servidor.
 
-const ACTUALIZADA = '18 de agosto de 2026';
+const ACTUALIZADA = '10 de septiembre de 2026';
 
 export async function render(container) {
     let titular = null;
@@ -69,6 +69,8 @@ function cuerpo() {
                 aceptación del aviso legal. Sin esto no hay forma de que entres.</li>
             <li><strong>Lo que has configurado</strong>: tu watchlist, tus alertas y tu progreso
                 en la Academia. Son la razón de tener cuenta.</li>
+            <li><strong>Tu certificado de la Academia</strong>, solo si lo pides: el nombre que
+                escribas para que figure en él, su código y la fecha en que se emitió.</li>
             <li><strong>Telegram</strong>, solo si lo vinculas: el identificador de tu chat, para
                 poder mandarte tus alertas. Al desvincularlo se borra.</li>
             <li><strong>Tus mensajes al chat</strong> de la terminal, para dar continuidad a la
@@ -87,8 +89,9 @@ function cuerpo() {
 
     + seccion('Cuánto tiempo', `
         <ul style="margin:0 0 0 18px;">
-            <li><strong>Tu cuenta y lo que has configurado</strong>: mientras la tengas. Si la
-                borras, desaparece en el momento.</li>
+            <li><strong>Tu cuenta, lo que has configurado y tu certificado</strong>: mientras la
+                tengas. Si la borras, desaparece en el momento — el certificado incluido, y su
+                código deja de poder verificarse.</li>
             <li><strong>Uso de la terminal</strong>: 90 días.</li>
             <li><strong>Mensajes del chat</strong>: 30 días.</li>
             <li><strong>Feedback</strong>: 1 año, por si hay que darle seguimiento.</li>

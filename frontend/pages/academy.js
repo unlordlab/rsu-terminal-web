@@ -222,7 +222,8 @@ function injectStyles() {
 
 export async function render(container) {
     injectStyles();
-    container.innerHTML = header() + searchBox() + `<div id="ac-search-results"></div>`
+    container.innerHTML = header() + `<div id="ac-certificado"></div>` + searchBox()
+                        + `<div id="ac-search-results"></div>`
                         + `<div id="ac-index">${phases()}${outcome()}${footer()}</div>`;
     attachCardListeners(container);
     attachSearch(container);
@@ -231,6 +232,146 @@ export async function render(container) {
     // actualizan las barras en su sitio (una petición no debe retrasar la
     // primera pintura de una página que no depende de ella).
     cargarProgreso().then(() => actualizarBarras(container));
+    cargarCertificado(container);
+}
+
+// ── CERTIFICADO DE FINALIZACIÓN ──────────────────────────────────────────────
+// Quién lo ha completado lo decide el SERVIDOR contra el catálogo real (ver
+// backend/services/academy_certificado.py): aquí solo se pinta lo que diga.
+// Calcularlo también aquí sería una segunda regla que podría no coincidir con
+// la que emite el certificado.
+
+async function cargarCertificado(container) {
+    const el = container.querySelector('#ac-certificado');
+    if (!el) return;
+    try {
+        const res  = await fetch('/api/v1/academy/certificado', { headers: authHeader() });
+        const data = await res.json();
+        if (!data || !data.ok) return;          // sin dato no se inventa una tarjeta
+        el.innerHTML = certificadoHTML(data);
+        attachCertificado(container, data);
+    } catch (_) { /* la Academy se usa igual sin la tarjeta */ }
+}
+
+const _CERT_CAJA = 'background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius);padding:12px 14px;margin-bottom:1.25rem;';
+const _CERT_BOTON = 'background:var(--color-accent);color:#000;border:none;border-radius:var(--radius);padding:8px 16px;font-family:var(--font-mono);font-size:12px;font-weight:600;cursor:pointer;';
+
+function _fechaCorta(iso) {
+    const d = new Date(iso);
+    return isNaN(d) ? '' : d.toLocaleDateString('es-ES', { day: 'numeric', month: 'long', year: 'numeric' });
+}
+
+function certificadoHTML(d) {
+    const emitido = d.emitido;
+    if (emitido) {
+        return `<div style="${_CERT_CAJA}border-color:var(--color-accent);">
+            <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;">
+                <div>
+                    <div style="color:var(--color-accent);font-size:12px;letter-spacing:.08em;">🎓 CERTIFICADO DE FINALIZACIÓN</div>
+                    <div style="color:var(--color-text);font-size:13px;margin-top:4px;">${esc(emitido.nombre)}</div>
+                    <div style="color:var(--color-muted);font-size:11px;margin-top:2px;">Emitido el ${esc(_fechaCorta(emitido.emitido_at))} · código <b>${esc(emitido.codigo)}</b></div>
+                </div>
+                <div style="display:flex;gap:8px;flex-wrap:wrap;">
+                    <button id="ac-cert-nombre-btn" style="background:transparent;border:1px solid var(--color-border);color:var(--color-muted);border-radius:var(--radius);padding:8px 12px;font-family:var(--font-mono);font-size:11px;cursor:pointer;">Corregir nombre</button>
+                    <button id="ac-cert-pdf" style="${_CERT_BOTON}">DESCARGAR PDF</button>
+                </div>
+            </div>
+            <div id="ac-cert-form" hidden>${formularioNombre(emitido.nombre, 'GUARDAR')}</div>
+        </div>`;
+    }
+    const hechos = d.modulos_completos, total = d.modulos_total;
+    const pct = total ? Math.round(hechos / total * 100) : 0;
+    if (d.elegible) {
+        return `<div style="${_CERT_CAJA}border-color:var(--color-accent);">
+            <div style="color:var(--color-accent);font-size:12px;letter-spacing:.08em;">🎓 HAS COMPLETADO RSU ACADEMY</div>
+            <div style="color:var(--color-text);font-size:12px;margin:6px 0 10px;">Los ${total} módulos, con todas sus lecciones y sus quizzes superados. Escribe tu nombre tal como quieres que aparezca en el certificado.</div>
+            ${formularioNombre('', 'OBTENER CERTIFICADO')}
+        </div>`;
+    }
+    const lista = (d.pendientes || []).map(p => {
+        const falta = [];
+        if (p.lecciones_faltan) falta.push(p.lecciones_faltan === 1 ? '1 lección' : p.lecciones_faltan + ' lecciones');
+        if (p.quiz) falta.push('quiz: ' + p.quiz);
+        const titulo = (MODULES[p.modulo] && MODULES[p.modulo].title) || ('Módulo ' + p.modulo);
+        return `<li style="margin:3px 0;"><span style="color:var(--color-text);">${esc(titulo)}</span> <span style="color:var(--color-muted);">— ${esc(falta.join(' · '))}</span></li>`;
+    }).join('');
+    return `<div style="${_CERT_CAJA}">
+        <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;">
+            <div style="color:var(--color-muted);font-size:12px;">🎓 CERTIFICADO · <span style="color:var(--color-text);">${hechos} de ${total} módulos completos</span></div>
+            <button id="ac-cert-ver" aria-expanded="false" style="background:transparent;border:none;color:var(--color-accent);font-family:var(--font-mono);font-size:11px;cursor:pointer;">Ver qué falta ▾</button>
+        </div>
+        <div class="ac-progress" style="margin-top:8px;"><div class="ac-progress-bar" style="width:${pct}%"></div></div>
+        <div id="ac-cert-pendientes" hidden style="margin-top:10px;font-size:11px;">
+            <div style="color:var(--color-muted);margin-bottom:6px;">Cada módulo cuenta con todas sus lecciones leídas hasta el final y su quiz con un 70% o más de aciertos a la primera (vale el mejor intento).</div>
+            <ul style="margin:0;padding-left:18px;">${lista}</ul>
+        </div>
+    </div>`;
+}
+
+function formularioNombre(valor, boton) {
+    return `<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px;">
+        <input id="ac-cert-input" type="text" maxlength="60" autocomplete="name" aria-label="Nombre para el certificado"
+               placeholder="Nombre y apellidos" value="${esc(valor)}"
+               style="flex:1;min-width:200px;background:var(--color-bg);border:1px solid var(--color-border);border-radius:var(--radius);padding:8px 10px;color:var(--color-text);font-family:var(--font-mono);font-size:12px;">
+        <button id="ac-cert-enviar" style="${_CERT_BOTON}">${boton}</button>
+    </div>
+    <div id="ac-cert-error" role="alert" style="color:#f23645;font-size:11px;margin-top:6px;"></div>`;
+}
+
+function attachCertificado(container, d) {
+    const q = sel => container.querySelector(sel);
+    q('#ac-cert-ver')?.addEventListener('click', e => {
+        const lista = q('#ac-cert-pendientes');
+        lista.hidden = !lista.hidden;
+        e.target.setAttribute('aria-expanded', String(!lista.hidden));
+        e.target.textContent = lista.hidden ? 'Ver qué falta ▾' : 'Ocultar ▴';
+    });
+    q('#ac-cert-nombre-btn')?.addEventListener('click', () => {
+        const f = q('#ac-cert-form');
+        f.hidden = !f.hidden;
+        if (!f.hidden) q('#ac-cert-input')?.focus();
+    });
+    q('#ac-cert-enviar')?.addEventListener('click', async () => {
+        const btn = q('#ac-cert-enviar'), err = q('#ac-cert-error');
+        btn.disabled = true;
+        err.textContent = '';
+        try {
+            const res = await fetch('/api/v1/academy/certificado', {
+                method: 'POST', headers: authHeader(),
+                body: JSON.stringify({ nombre: q('#ac-cert-input').value })
+            });
+            const data = await res.json();
+            if (!data.ok) { err.textContent = data.error || 'No se pudo emitir el certificado'; return; }
+            await cargarCertificado(container);
+        } catch (_) {
+            err.textContent = 'No se pudo conectar. Inténtalo de nuevo.';
+        } finally {
+            btn.disabled = false;
+        }
+    });
+    q('#ac-cert-pdf')?.addEventListener('click', async () => {
+        const btn = q('#ac-cert-pdf'), texto = btn.textContent;
+        btn.textContent = 'Generando...';
+        btn.disabled = true;
+        try {
+            const res = await fetch('/api/v1/academy/certificado/pdf', { headers: authHeader() });
+            if (!res.ok) throw new Error(res.status);
+            const url = URL.createObjectURL(await res.blob());
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = 'RSU_Academy_' + d.emitido.codigo + '.pdf';
+            document.body.appendChild(a);
+            a.click();
+            a.remove();
+            URL.revokeObjectURL(url);
+        } catch (_) {
+            btn.textContent = 'Error al generar el PDF';
+            setTimeout(() => { btn.textContent = texto; }, 2500);
+        } finally {
+            btn.disabled = false;
+            if (btn.textContent === 'Generando...') btn.textContent = texto;
+        }
+    });
 }
 
 // El router destruye la página al navegar fuera (ver core/router.js): aquí se

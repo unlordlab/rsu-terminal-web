@@ -60,6 +60,8 @@ def init_db():
             PRIMARY KEY (user_id, module_id)
         )
     ''')
+    from services.academy_certificado import init_db as _init_certificado
+    _init_certificado(conn)
     conn.commit()
     conn.close()
 
@@ -129,6 +131,46 @@ def obtener_progreso(user_id: int) -> dict:
         return {"ok": True, "lessons": lecciones, "quizzes": quizzes}
     finally:
         conn.close()
+
+
+def estado_certificado(user_id: int) -> dict:
+    """Qué le falta para el certificado y, si ya lo tiene, cuál es. Ver
+    services/academy_certificado.py para las reglas y por qué son esas."""
+    from services import academy_certificado as C
+    prog = obtener_progreso(user_id)
+    evaluacion = C.evaluar(prog["lessons"], prog["quizzes"])
+    conn = _conn()
+    try:
+        emitido = C.leer(conn, user_id)
+    finally:
+        conn.close()
+    return {"ok": True, **evaluacion, "emitido": emitido}
+
+
+def emitir_certificado(user_id: int, nombre: str) -> dict:
+    from services import academy_certificado as C
+    prog = obtener_progreso(user_id)
+    evaluacion = C.evaluar(prog["lessons"], prog["quizzes"])
+    conn = _conn()
+    try:
+        cert = C.emitir(conn, user_id, nombre, evaluacion)
+        conn.commit()
+        return {"ok": True, "emitido": cert}
+    except (ValueError, PermissionError) as e:
+        return {"ok": False, "error": str(e)}
+    finally:
+        conn.close()
+
+
+def pdf_certificado(user_id: int):
+    """Los bytes del PDF, o None si esa persona no tiene certificado."""
+    from services import academy_certificado as C
+    conn = _conn()
+    try:
+        cert = C.leer(conn, user_id)
+    finally:
+        conn.close()
+    return (C.generar_pdf(cert), cert) if cert else (None, None)
 
 
 def reiniciar_progreso(user_id: int) -> dict:

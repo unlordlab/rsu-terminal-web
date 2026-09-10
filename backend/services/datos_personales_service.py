@@ -52,6 +52,10 @@ INVENTARIO = [
     (DB_USERS,     'alerts',           'user_id',    'user_id'),
     (DB_USERS,     'academy_progress', 'user_id',    'user_id'),
     (DB_USERS,     'academy_quiz',     'user_id',    'user_id'),
+    # El certificado lleva el NOMBRE de la persona. Se exporta con lo demás y
+    # se borra con la cuenta: el código deja de poder verificarse, que es lo
+    # que pide el derecho de supresión.
+    (DB_USERS,     'academy_certificado', 'user_id', 'user_id'),
     (DB_COMMUNITY, 'feedback',         'user_id',    'user_id'),
     (DB_CHAT,      'mensajes',         'usuario',    'email'),
     (DB_ANALYTICS, 'events',           'usuario_hash', 'seudonimo'),

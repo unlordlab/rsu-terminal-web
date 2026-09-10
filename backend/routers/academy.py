@@ -58,3 +58,32 @@ async def completar_quiz(req: QuizCompletado, user=Depends(verify_token)):
 @router.delete("/progress")
 async def reiniciar(user=Depends(verify_token)):
     return academy_service.reiniciar_progreso(_user_id(user))
+
+
+# ── Certificado de finalización (Páginas Contenido #23) ──────────────────────
+# Reiniciar el progreso NO borra un certificado ya emitido: certifica lo que se
+# completó, y no caduca.
+
+class PedirCertificado(BaseModel):
+    nombre: str = Field(..., max_length=120)
+
+
+@router.get("/certificado")
+async def estado_certificado(user=Depends(verify_token)):
+    return academy_service.estado_certificado(_user_id(user))
+
+
+@router.post("/certificado")
+async def pedir_certificado(req: PedirCertificado, user=Depends(verify_token)):
+    return academy_service.emitir_certificado(_user_id(user), req.nombre)
+
+
+@router.get("/certificado/pdf")
+async def certificado_pdf(user=Depends(verify_token)):
+    from fastapi.responses import Response
+    pdf, cert = academy_service.pdf_certificado(_user_id(user))
+    if pdf is None:
+        raise HTTPException(status_code=404, detail="Todavía no tienes certificado")
+    return Response(content=pdf, media_type="application/pdf",
+                    headers={"Content-Disposition":
+                             f'attachment; filename="RSU_Academy_{cert["codigo"]}.pdf"'})
