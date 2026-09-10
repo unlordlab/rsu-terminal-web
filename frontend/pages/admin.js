@@ -80,6 +80,7 @@ export async function render(container) {
                 <button data-tab="peticiones" class="admin-tab-btn">PETICIONES</button>
                 <button data-tab="tesis" class="admin-tab-btn">TESIS PENDIENTES</button>
                 <button data-tab="academy" class="admin-tab-btn">ACADEMY PENDIENTE</button>
+                <button data-tab="certificados" class="admin-tab-btn">🎓 CERTIFICADOS</button>
                 <button data-tab="laia" class="admin-tab-btn">⚖️ LAIA</button>
                 <button data-tab="meetingroom" class="admin-tab-btn">🏢 MEETING ROOM</button>
                 <button data-tab="feedback" class="admin-tab-btn">FEEDBACK</button>
@@ -129,6 +130,8 @@ export async function render(container) {
             await renderTesisPanel(content);
         } else if (activeTab === 'academy') {
             await renderAcademyReviewPanel(content);
+        } else if (activeTab === 'certificados') {
+            await renderCertificadosPanel(content);
         } else if (activeTab === 'laia') {
             await renderLaiaPanel(content);
         } else if (activeTab === 'meetingroom') {
@@ -1067,6 +1070,82 @@ function statCard(label, value) {
 }
 
 const FB_TYPE_LABEL = { bug: '🐞 Bug', sugerencia: '💡 Sugerencia', otro: '✉️ Otro' };
+
+// ── CERTIFICADOS DE ACADEMY ─────────────────────────────────────────────────
+// Dos cosas: verificar un código (alguien enseña un certificado y hay que saber
+// si es auténtico) y ver quién lo ha obtenido. Mientras no haya página pública
+// de verificación —pendiente de dominio y HTTPS—, este es el ÚNICO sitio donde
+// el código del certificado sirve para algo.
+
+function _fechaCert(iso) {
+    const d = new Date(iso);
+    return isNaN(d) ? esc(iso || '') : esc(d.toLocaleDateString('es-ES', { day: 'numeric', month: 'short', year: 'numeric' }));
+}
+
+async function renderCertificadosPanel(content) {
+    content.innerHTML = '<div style="color:var(--color-muted);font-size:12px;">Cargando...</div>';
+    let data;
+    try {
+        data = await keyFetch('/api/v1/academy/admin/certificados');
+    } catch (e) {
+        if (e.isAuthError) {
+            sessionStorage.removeItem(ADMIN_SESSION_FLAG);
+            renderKeyPrompt(content, () => renderCertificadosPanel(content));
+            return;
+        }
+        content.innerHTML = `<div style="color:#f23645;font-size:12px;">${esc(e.message)}</div>`;
+        return;
+    }
+    const filas = (data.items || []).map(c => `
+        <tr>
+            <td style="padding:7px 10px;border-bottom:1px solid var(--color-border);color:var(--color-text);">${esc(c.nombre)}</td>
+            <td style="padding:7px 10px;border-bottom:1px solid var(--color-border);color:var(--color-muted);">${esc(c.email || '(cuenta borrada)')}</td>
+            <td style="padding:7px 10px;border-bottom:1px solid var(--color-border);color:var(--color-accent);font-family:var(--font-mono);">${esc(c.codigo)}</td>
+            <td style="padding:7px 10px;border-bottom:1px solid var(--color-border);color:var(--color-muted);">${_fechaCert(c.emitido_at)}</td>
+            <td style="padding:7px 10px;border-bottom:1px solid var(--color-border);color:var(--color-muted);">${esc(c.modulos)} mód. · ${esc(c.lecciones)} lecc.</td>
+        </tr>`).join('');
+    content.innerHTML = `
+        <div style="background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius);padding:1rem;margin-bottom:1rem;">
+            <div style="color:var(--color-accent);font-size:12px;letter-spacing:0.08em;margin-bottom:8px;">VERIFICAR UN CÓDIGO</div>
+            <div style="display:flex;gap:8px;flex-wrap:wrap;">
+                <input id="cert-codigo" type="text" maxlength="40" placeholder="RSU-XXXX-XXXX" aria-label="Código del certificado"
+                       style="flex:1;min-width:180px;background:var(--color-bg);border:1px solid var(--color-border);border-radius:var(--radius);padding:8px 10px;color:var(--color-text);font-family:var(--font-mono);font-size:12px;">
+                <button id="cert-verificar" style="background:var(--color-accent);color:#000;border:none;border-radius:var(--radius);padding:8px 16px;font-family:var(--font-mono);font-size:12px;font-weight:600;cursor:pointer;">VERIFICAR</button>
+            </div>
+            <div id="cert-resultado" role="status" style="margin-top:10px;font-size:12px;"></div>
+            <div style="color:var(--color-muted);font-size:10px;margin-top:6px;">Da igual cómo lo escriba: en minúsculas, con espacios o sin guiones.</div>
+        </div>
+        <div style="color:var(--color-muted);font-size:11px;margin-bottom:0.5rem;">${esc(data.total)} ${data.total === 1 ? 'certificado emitido' : 'certificados emitidos'}</div>
+        ${data.total ? `<div style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;font-size:12px;">
+            <tr style="color:var(--color-muted);font-size:10px;letter-spacing:0.06em;text-align:left;">
+                <th style="padding:6px 10px;font-weight:normal;">NOMBRE</th><th style="padding:6px 10px;font-weight:normal;">EMAIL</th>
+                <th style="padding:6px 10px;font-weight:normal;">CÓDIGO</th><th style="padding:6px 10px;font-weight:normal;">EMITIDO</th>
+                <th style="padding:6px 10px;font-weight:normal;">EXIGÍA</th></tr>
+            ${filas}</table></div>`
+          : '<div style="color:var(--color-muted);font-size:12px;padding:1rem 0;">Nadie ha completado todavía la Academy.</div>'}`;
+
+    const verificar = async () => {
+        const out = content.querySelector('#cert-resultado');
+        const codigo = content.querySelector('#cert-codigo').value;
+        if (!codigo.trim()) { out.textContent = ''; return; }
+        try {
+            const r = await keyFetch('/api/v1/academy/admin/certificados?codigo=' + encodeURIComponent(codigo));
+            if (r.encontrado) {
+                const c = r.certificado;
+                out.innerHTML = `<span style="color:var(--color-accent);">✅ Auténtico · ${esc(r.codigo)}</span>
+                    <div style="color:var(--color-text);margin-top:4px;">${esc(c.nombre)} <span style="color:var(--color-muted);">· ${esc(c.email || '(cuenta borrada)')} · emitido el ${_fechaCert(c.emitido_at)}</span></div>`;
+            } else {
+                out.innerHTML = `<span style="color:#f23645;">❌ ${r.codigo
+                    ? 'No existe ningún certificado con el código ' + esc(r.codigo)
+                    : esc(r.motivo || 'Código no válido')}</span>`;
+            }
+        } catch (e) {
+            out.innerHTML = `<span style="color:#f23645;">${esc(e.message)}</span>`;
+        }
+    };
+    content.querySelector('#cert-verificar').addEventListener('click', verificar);
+    content.querySelector('#cert-codigo').addEventListener('keydown', e => { if (e.key === 'Enter') verificar(); });
+}
 
 async function renderFeedbackPanel(content) {
     content.innerHTML = '<div style="color:var(--color-muted);font-size:12px;">Cargando...</div>';

@@ -335,3 +335,107 @@ def test_la_pantalla_pinta_lo_que_decide_el_servidor():
     assert "/api/v1/academy/certificado" in js
     codigo = "\n".join(l for l in js.splitlines() if not l.strip().startswith("//"))
     assert "0.7" not in codigo and "70 /" not in codigo, "la pantalla calcula el umbral por su cuenta"
+
+
+# ── El panel de admin: verificar un código y ver quién lo tiene ──────────────
+#
+# Pedido por el usuario el 10/09/2026: el código del certificado no servía para
+# nada mientras no hubiera página pública de verificación. Ahora el admin puede
+# comprobarlo desde su panel, sin exponer nombres al público.
+
+@pytest.mark.parametrize("tecleado", ["RSU-FRXY-YGKB", "rsu-frxy-ygkb", "rsu frxy ygkb",
+                                      "FRXYYGKB", "frxy-ygkb", " RSU FRXY YGKB "])
+def test_el_codigo_se_encuentra_lo_escriba_como_lo_escriba(tecleado):
+    """Se lee en un papel y se teclea a mano: minúsculas, espacios, sin guiones
+    o sin el RSU- delante."""
+    assert C.normalizar_codigo(tecleado) == "RSU-FRXY-YGKB"
+
+
+@pytest.mark.parametrize("basura", ["", "hola", "RSU-FRXY", "RSU-FRXY-YGKB-XX", "RSU-0000-0000"])
+def test_lo_que_no_es_un_codigo_no_se_normaliza(basura):
+    """«RSU-0000-0000» tiene la longitud pero lleva ceros, que el alfabeto no
+    usa: no puede ser un código emitido."""
+    assert C.normalizar_codigo(basura) is None
+
+
+@pytest.fixture
+def admin(monkeypatch, tmp_path):
+    """Base temporal con dos usuarios con certificado y la clave de admin
+    concedida; devuelve el cliente y el código de cada uno."""
+    from fastapi.testclient import TestClient
+    from auth import verify_admin_key
+    from main import app
+    from services import academy_service as A
+    db = str(tmp_path / "u.db")
+    monkeypatch.setattr(A, "DB_PATH", db)
+    A.init_db()
+    c = sqlite3.connect(db)
+    c.execute("CREATE TABLE IF NOT EXISTS users (id INTEGER PRIMARY KEY, email TEXT UNIQUE NOT NULL, "
+              "password_hash TEXT NOT NULL, tier TEXT NOT NULL DEFAULT 'free', created_at TEXT NOT NULL)")
+    c.executemany("INSERT INTO users (id, email, password_hash, created_at) VALUES (?, ?, 'x', '2026')",
+                  [(1, "ana@ejemplo.com"), (2, "joan@ejemplo.com")])
+    c.commit()
+    c.close()
+    monkeypatch.setattr(C, "catalogo", lambda: _cat((0, 1)))
+    codigos = {}
+    for uid, nombre in ((1, "Ana López"), (2, "Joan Puig")):
+        A.marcar_leccion(uid, "0-1")
+        A.marcar_quiz(uid, 0, 7, 7)
+        codigos[uid] = A.emitir_certificado(uid, nombre)["emitido"]["codigo"]
+    app.dependency_overrides[verify_admin_key] = lambda: None
+    try:
+        with TestClient(app) as cliente:
+            yield cliente, codigos
+    finally:
+        app.dependency_overrides.clear()
+
+
+def test_el_admin_ve_TODOS_los_certificados_con_su_email(admin):
+    c, codigos = admin
+    r = c.get("/api/v1/academy/admin/certificados").json()
+    assert r["total"] == 2
+    por_email = {i["email"]: (i["nombre"], i["codigo"]) for i in r["items"]}
+    assert por_email == {"ana@ejemplo.com": ("Ana López", codigos[1]),
+                         "joan@ejemplo.com": ("Joan Puig", codigos[2])}
+
+
+def test_verifica_un_codigo_autentico_tecleado_a_mano(admin):
+    c, codigos = admin
+    tecleado = codigos[2].lower().replace("-", " ")
+    r = c.get("/api/v1/academy/admin/certificados", params={"codigo": tecleado}).json()
+    assert r["encontrado"] and r["certificado"]["nombre"] == "Joan Puig"
+    assert r["codigo"] == codigos[2]
+
+
+def test_un_codigo_inventado_NO_se_da_por_bueno(admin):
+    c, _ = admin
+    r = c.get("/api/v1/academy/admin/certificados", params={"codigo": "RSU-AAAA-BBBB"}).json()
+    assert r["encontrado"] is False and r["certificado"] is None
+
+
+def test_un_usuario_normal_NO_puede_ver_la_lista(monkeypatch, tmp_path):
+    """EL test de seguridad: la lista lleva nombres y emails. Sin la clave de
+    admin, aunque haya sesión de usuario, fuera."""
+    from fastapi.testclient import TestClient
+    from auth import verify_token
+    from main import app
+    app.dependency_overrides[verify_token] = lambda: {"sub": "a@b.c", "tier": "premium"}
+    try:
+        with TestClient(app) as c:
+            r = c.get("/api/v1/academy/admin/certificados")
+            r2 = c.get("/api/v1/academy/admin/certificados", params={"codigo": "RSU-AAAA-BBBB"})
+    finally:
+        app.dependency_overrides.clear()
+    assert r.status_code in (401, 403), r.status_code
+    assert r2.status_code in (401, 403), "la verificación de códigos también es solo de admin"
+
+
+def test_el_panel_de_admin_tiene_la_pestana_y_la_pinta():
+    """El comportamiento se verificó en el navegador con el admin.js real
+    (lista, código tecleado a mano, inventado, y no-código). Aquí se ata que
+    la pestaña existe y que el despachador la pinta."""
+    js = io.open(os.path.join(os.path.dirname(__file__), "..", "..", "frontend", "pages", "admin.js"),
+                 encoding="utf-8").read()
+    assert 'data-tab="certificados"' in js
+    assert re.search(r"activeTab === 'certificados'\)\s*\{\s*await renderCertificadosPanel\(content\)", js)
+    assert "/api/v1/academy/admin/certificados" in js

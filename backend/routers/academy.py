@@ -1,7 +1,9 @@
-from fastapi import APIRouter, Depends, HTTPException
+from typing import Optional
+
+from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field, field_validator
 
-from auth import verify_token
+from auth import verify_admin_key, verify_token
 from services import academy_service, users_service
 
 router = APIRouter(prefix="/api/v1/academy", tags=["academy"])
@@ -76,6 +78,15 @@ async def estado_certificado(user=Depends(verify_token)):
 @router.post("/certificado")
 async def pedir_certificado(req: PedirCertificado, user=Depends(verify_token)):
     return academy_service.emitir_certificado(_user_id(user), req.nombre)
+
+
+@router.get("/admin/certificados")
+async def admin_certificados(codigo: Optional[str] = Query(None, max_length=40),
+                             _admin: None = Depends(verify_admin_key)):
+    """Panel de admin, pestaña CERTIFICADOS. SOLO la clave de admin, sin
+    sesión de usuario: misma lección que academy_review.py, para que caducar
+    la sesión normal no expulse al admin del panel."""
+    return academy_service.certificados_admin(codigo)
 
 
 @router.get("/certificado/pdf")

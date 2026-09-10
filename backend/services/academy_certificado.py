@@ -175,6 +175,31 @@ def nuevo_codigo(existe) -> str:
     raise RuntimeError("No se pudo generar un código único")
 
 
+def normalizar_codigo(texto):
+    """El código tal como alguien lo teclea al leerlo en un papel —«rsu ufyy
+    nw3n», «UFYYNW3N»— en su forma canónica, o None si no puede serlo."""
+    limpio = re.sub(r"[^A-Za-z0-9]", "", str(texto or "")).upper()
+    if limpio.startswith("RSU"):
+        limpio = limpio[3:]
+    if len(limpio) != 8:
+        return None
+    codigo = f"RSU-{limpio[:4]}-{limpio[4:]}"
+    return codigo if CODIGO_RE.match(codigo) else None
+
+
+def listar(conn, codigo=None) -> list:
+    """Los certificados emitidos con el email de cada persona, del más reciente
+    al más antiguo; o solo el de ese código. Para el panel de admin: es lo que
+    hace verificable el código mientras no haya página pública."""
+    sql = ("SELECT c.codigo, c.nombre, c.emitido_at, c.modulos, c.lecciones, u.email "
+           "FROM academy_certificado c LEFT JOIN users u ON u.id = c.user_id")
+    if codigo is not None:
+        filas = conn.execute(sql + " WHERE c.codigo = ?", (codigo,)).fetchall()
+    else:
+        filas = conn.execute(sql + " ORDER BY c.emitido_at DESC").fetchall()
+    return [dict(f) for f in filas]
+
+
 def leer(conn, user_id):
     fila = conn.execute("SELECT * FROM academy_certificado WHERE user_id = ?", (user_id,)).fetchone()
     return dict(fila) if fila else None

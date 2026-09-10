@@ -162,6 +162,27 @@ def emitir_certificado(user_id: int, nombre: str) -> dict:
         conn.close()
 
 
+def certificados_admin(codigo: str = None) -> dict:
+    """Panel de admin: todos los certificados, o la comprobación de un código.
+    Con código, dice si existe — que es lo que hace falta cuando alguien
+    enseña un certificado y hay que saber si es auténtico."""
+    from services import academy_certificado as C
+    conn = _conn()
+    try:
+        if codigo is None:
+            items = C.listar(conn)
+            return {"ok": True, "total": len(items), "items": items}
+        canonico = C.normalizar_codigo(codigo)
+        if canonico is None:
+            return {"ok": True, "encontrado": False, "codigo": None,
+                    "motivo": "Eso no tiene la forma de un código de certificado (RSU-XXXX-XXXX)"}
+        items = C.listar(conn, canonico)
+        return {"ok": True, "encontrado": bool(items), "codigo": canonico,
+                "certificado": items[0] if items else None}
+    finally:
+        conn.close()
+
+
 def pdf_certificado(user_id: int):
     """Los bytes del PDF, o None si esa persona no tiene certificado."""
     from services import academy_certificado as C
