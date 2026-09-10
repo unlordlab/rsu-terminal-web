@@ -221,6 +221,13 @@ function injectStyles() {
 // ── VISTA PRINCIPAL (grid de módulos) ─────────────────────────────────────────
 
 export async function render(container) {
+    // ENLACE DIRECTO A UNA LECCIÓN (`/academy?leccion=20-2`), para los tooltips
+    // de los módulos (Páginas Contenido #19). Se lee AQUÍ, antes de cualquier
+    // await: una navegación en medio —un redirect a /login si la sesión ha
+    // caducado— reescribiría la URL y se lo llevaría (misma lección que el
+    // deep-link del Scanner). Solo vale una clave que EXISTA en el manifiesto:
+    // cualquier otra cosa se ignora y se enseña el índice.
+    const leccionPedida = new URLSearchParams(window.location.search).get('leccion');
     injectStyles();
     container.innerHTML = header() + `<div id="ac-certificado"></div>` + searchBox()
                         + `<div id="ac-search-results"></div>`
@@ -233,6 +240,17 @@ export async function render(container) {
     // primera pintura de una página que no depende de ella).
     cargarProgreso().then(() => actualizarBarras(container));
     cargarCertificado(container);
+
+    if (leccionPedida && Object.prototype.hasOwnProperty.call(LESSON_INDEX, leccionPedida)) {
+        const m = MODULES.find(x => x.id === Number(leccionPedida.split('-')[0]));
+        if (m) {
+            // La URL vuelve a /academy: si no, al volver al índice desde la
+            // lección y recargar, se reabriría la lección. «Atrás» sigue
+            // llevando al módulo del que se vino, que es lo natural.
+            history.replaceState(history.state, '', '/academy');
+            await abrirLeccion(container, leccionPedida, m);
+        }
+    }
 }
 
 // ── CERTIFICADO DE FINALIZACIÓN ──────────────────────────────────────────────

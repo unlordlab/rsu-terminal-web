@@ -2,6 +2,76 @@
 // Uso: Tooltip.init() en cualquier página
 // HTML: <span data-tooltip="key">?</span>
 
+import { LESSON_INDEX } from '/pages/academy_manifest.js';
+import { esc } from '/core/ui.js';
+
+// ── DE CADA TOOLTIP A SU LECCIÓN DE ACADEMY (Páginas Contenido #19) ─────────
+//
+// Al pulsar el «?», la ventana con la explicación completa termina con un
+// enlace a la lección que desarrolla ese concepto. Una duda puntual («¿qué es
+// este número?») se convierte en una puerta a la formación, en el momento en
+// que el usuario la tiene.
+//
+// HECHA A MANO, y a propósito. Se probó a emparejar por nombre: de los 179
+// tooltips solo 10 aparecían tal cual en el título de alguna lección, y 3 de
+// esos 10 salían mal (el «Score» de Options se iba a la lección del RSU
+// Score, que es otra cosa). El criterio es estricto: SOLO se enlaza cuando la
+// lección EXPLICA el concepto, comprobado en su texto — no cuando lo menciona.
+// Sin lección, sin enlace.
+//
+// ALCANCE, decidido por el usuario el 10/09/2026: primero Research, Options y
+// el Algoritmo (42 tooltips, 31 con lección). El resto de los 179 queda
+// pendiente. Once conceptos de estos tres módulos no tienen lección que los
+// explique: son huecos de contenido de Academy, no olvidos de esta tabla.
+export const LECCION_ACADEMY = {
+    // RSU Algoritmo
+    'rsu-algoritmo':          '26-1',
+    'algoritmo-bloques':      '26-2',
+    'algoritmo-gatekeepers':  '26-3',
+    'algoritmo-candidatos':   '26-5',
+    'algoritmo-backtest':     '26-6',
+    'algoritmo-baseline':     '26-6',
+    'abi-absolute-breadth':   '26-8',
+    // Options Flow
+    'options-flow':           '22-2',
+    'options-prima':          '22-2',
+    // Research
+    'rsu-score':              '20-1',
+    'piotroski-score':        '20-2',
+    'sector-valuation':       '20-3',
+    'sector-growth':          '20-3',
+    'income-statement':       '21-1',
+    'sector-profitability':   '21-2',
+    'fcf-yield':              '21-2',
+    'pe-ratio':               '21-3',
+    'research-options-flow':  '22-2',
+    'short-interest-pct':     '22-3',
+    'squeeze-gauge':          '22-3',
+    'analyst-ratings-history':'32-3',
+    'n-analysts':             '32-3',
+    'insider-summary':        '32-3',
+    'insider-monthly-volume': '32-3',
+    'institutional-ref-price':'32-3',
+    'ema-slope':              '1-5',
+    'asset-trend':            '3-1',
+    'market-phase':           '16-1',
+    'relative-strength':      '29-1',
+    'rsu-flow':               '31-1',
+    'rsu-flow-volumen':       '31-5',
+};
+
+// La línea del enlace, o '' si ese tooltip no tiene lección — o si la lección
+// ya no existe en el manifiesto (renombrada o retirada): un enlace a una
+// lección que no abre sería peor que ninguno.
+export function enlaceAcademy(key) {
+    const leccion = LECCION_ACADEMY[key];
+    const info = leccion && LESSON_INDEX[leccion];
+    if (!info) return '';
+    return '<div class="tt-academy">'
+        + '<a class="tt-academy-link" href="/academy?leccion=' + leccion + '" data-leccion="' + leccion + '">'
+        + '📚 Aprender más en Academy: <b>' + esc(info.title) + '</b> →</a></div>';
+}
+
 export const TOOLTIPS = {
 
     // ── MARKET ────────────────────────────────────────────────────────────────
@@ -3323,6 +3393,18 @@ export const Tooltip = {
             .tt-modal-body b, .tt-modal-body strong {
                 color: var(--color-accent);
             }
+            .tt-academy {
+                margin-top: 14px;
+                padding-top: 10px;
+                border-top: 1px solid var(--color-border);
+                white-space: normal;
+            }
+            .tt-academy-link {
+                color: var(--color-accent);
+                text-decoration: none;
+                font-size: 12px;
+            }
+            .tt-academy-link:hover { text-decoration: underline; }
         `;
         document.head.appendChild(style);
     },
@@ -3343,6 +3425,17 @@ export const Tooltip = {
 
         document.getElementById('tt-modal-close').addEventListener('click', () => this.closeModal());
         overlay.addEventListener('click', e => { if (e.target === overlay) this.closeModal(); });
+        // El enlace a Academy navega DENTRO de la terminal (sin recargar la
+        // página) y cierra la ventana: si no, al volver con «atrás» seguiría
+        // abierta encima del módulo.
+        overlay.addEventListener('click', e => {
+            const a = e.target.closest('.tt-academy-link');
+            if (!a) return;
+            e.preventDefault();
+            this.closeModal();
+            if (window.__navigate) window.__navigate(a.getAttribute('href'));
+            else window.location.href = a.getAttribute('href');
+        });
         document.addEventListener('keydown', e => { if (e.key === 'Escape') this.closeModal(); });
 
         const popup = document.createElement('div');
@@ -3373,7 +3466,7 @@ export const Tooltip = {
             const data = TOOLTIPS[key];
             if (!data) return;
             this._hidePopup();
-            this.openModal(data);
+            this.openModal(data, key);
         });
     },
 
@@ -3396,13 +3489,15 @@ export const Tooltip = {
         if (popup) popup.classList.remove('visible');
     },
 
-    openModal(data) {
+    openModal(data, key) {
         const overlay = document.getElementById('tt-overlay');
         const title   = document.getElementById('tt-modal-title');
         const body    = document.getElementById('tt-modal-body');
         if (!overlay || !title || !body) return;
         title.textContent = data.title;
-        body.innerHTML    = data.long.replace(/\n/g, '<br>');
+        // `key` es opcional: market.js abre esta misma ventana para el resumen
+        // diario, que no es un tooltip y no tiene lección.
+        body.innerHTML    = data.long.replace(/\n/g, '<br>') + (key ? enlaceAcademy(key) : '');
         overlay.classList.add('visible');
         document.body.style.overflow = 'hidden';
     },
