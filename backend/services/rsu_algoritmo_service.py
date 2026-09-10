@@ -1,6 +1,7 @@
 import pandas as pd
 import numpy as np
 import yfinance as yf
+from services.cache import cache as _cache  # noqa: E402  (decorador single_flight)
 import sys, os
 from datetime import datetime, time as dt_time
 from zoneinfo import ZoneInfo
@@ -1036,6 +1037,31 @@ def _fetch_breadth_real():
     from services.scanner_service import get_breadth_history
     return get_breadth_history()
 
+
+# UN SOLO CÁLCULO A LA VEZ, y los fallos también se recuerdan un rato
+# (Páginas Contenido #7, 10/09/2026). La caché de 10 min ya evitaba recalcular
+# en cada carga, pero no la ESTAMPIDA: cuando caducaba, todos los que cargaban
+# el Dashboard en ese momento la veían vacía y lanzaban el cálculo entero a la
+# vez. Medido con red real, 10 cargas simultáneas: 10 descargas de 15 años de
+# SPY, 10 del VIX, 10 del VIX3M y 10 peticiones a FRED con la serie de crédito
+# completa desde 1996 — para devolver el mismo resultado diez veces.
+#
+# Los fallos se guardan TTL_FALLO segundos. Sin eso, single_flight solo los
+# pondría en fila: cada uno de los que esperaban turno volvería a intentar el
+# cálculo entero contra un Yahoo que está fallando, uno detrás de otro. Un
+# minuto de «no disponible» es mejor que machacar al proveedor justo cuando
+# peor está.
+ALGORITMO_CACHE_KEY = "algoritmo:live:v1"
+TTL_FALLO = 60
+
+
+def _fallo(cache, mensaje):
+    r = {"ok": False, "error": mensaje}
+    cache.set(ALGORITMO_CACHE_KEY, r, TTL_FALLO)
+    return r
+
+
+@_cache.single_flight(ALGORITMO_CACHE_KEY)
 def get_rsu_algoritmo():
     # Caché de 10 min sobre el resultado completo: antes cada carga del
     # Dashboard/Algoritmo disparaba 6 descargas en paralelo Y ejecutaba
@@ -1047,7 +1073,7 @@ def get_rsu_algoritmo():
     # no se pierde nada de inmediatez real). Mismo patrón que ya usa el
     # backtest de esta misma función más abajo.
     from services.cache import cache
-    cache_key = "algoritmo:live:v1"
+    cache_key = ALGORITMO_CACHE_KEY
     cached = cache.get(cache_key)
     if cached:
         return cached
@@ -1104,7 +1130,7 @@ def get_rsu_algoritmo():
             sector_data = _descargar_sectores()
 
         if len(df_spy) < 50:
-            return {"ok": False, "error": "Datos insuficientes de SPY"}
+            return _fallo(cache, "Datos insuficientes de SPY")
 
         df_spy = df_spy.dropna(subset=['Close'])
         # (Antes había aquí un filtro que borraba filas de los últimos 180 días
@@ -1162,7 +1188,7 @@ def get_rsu_algoritmo():
         return result
 
     except Exception as e:
-        return {"ok": False, "error": str(e)}
+        return _fallo(cache, str(e))
 
 
 # ── Decisión oficial del semáforo: una vez al día, tras el cierre ─────────────
