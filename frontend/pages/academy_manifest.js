@@ -168,7 +168,7 @@ export const LESSON_INDEX = {
     '33-5': { title: 'De la Señal a la Operación', words: 696 },
     '34-1': { title: 'Qué Es un Gap y Por Qué Aparece', words: 495 },
     '34-2': { title: 'Los Tipos de Gap: Dónde Aparecen y Qué Anuncian', words: 400 },
-    '34-3': { title: 'El Relleno del Gap y los Tres Retrocesos', words: 304 },
+    '34-3': { title: 'El Relleno del Gap: Por Qué la Mayoría Vuelven', words: 874 },
     '34-4': { title: 'Tres Estrategias para el Día del Gap', words: 532 },
     '34-5': { title: 'Los Gaps que Engañan y el Riesgo del Gap', words: 480 },
 };

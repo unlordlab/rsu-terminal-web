@@ -8130,23 +8130,61 @@ export const LESSONS = {
     '34-3': {
         moduleId: 34,
         lessonIndex: 2,
-        title: 'El Relleno del Gap y los Tres Retrocesos',
-        duration: '6 min',
-        intro: 'Muchos gaps se «rellenan»: el precio vuelve atrás hasta el nivel donde empezó el hueco. Saber cuándo es probable, y qué hacer cuando ocurre, es la mitad del trading de gaps.',
+        title: 'El Relleno del Gap: Por Qué la Mayoría Vuelven',
+        duration: '9 min',
+        intro: 'Muchos gaps se «rellenan»: el precio vuelve atrás hasta el nivel donde empezó el hueco. Hay una idea muy extendida entre traders —que tarde o temprano casi todos lo hacen— y aquí se explica por qué, se comprueba con datos reales y se ve qué significa para la estructura del precio.',
         sections: [
             {
                 heading: 'Qué es rellenar un gap',
                 blocks: [
-                    { type: 'text', content: 'Un gap se rellena cuando el precio vuelve y <b>cierra en el nivel donde empezó el hueco</b>: el máximo del día anterior en un gap alcista completo, o su cierre en uno dentro del rango.' },
+                    { type: 'text', content: 'Un gap se rellena cuando el precio <b>vuelve hasta el nivel donde empezó el hueco</b>: el máximo del día anterior en un gap alcista completo, o su cierre en uno dentro del rango. Algunos traders lo llaman <b>mitigar</b> el gap: el precio vuelve a pasar por la zona que dejó sin negociar.' },
                     { type: 'table',
-                        headers: ['Suele rellenarse', 'Suele NO rellenarse'],
+                        headers: ['Suele rellenarse pronto', 'Suele tardar, o no rellenarse'],
                         rows: [
                             ['Gaps sin volumen', 'Gaps de ruptura con mucho volumen'],
                             ['Gaps de agotamiento', 'Gaps de continuación en una tendencia fuerte'],
-                            ['Gaps pequeños dentro del rango', 'Gaps que salen de una zona de demanda'],
+                            ['Gaps pequeños', 'Gaps grandes, de un 5% o más'],
                         ]
                     },
-                    { type: 'concept', title: 'Después del relleno', content: 'Rellenar un gap no significa que haya fallado. A menudo el precio vuelve a la zona del hueco, se apoya en ella como en un soporte y retoma la dirección del gap. Lo que lo decide es cómo llega: con poco volumen es una pausa; con mucho volumen y cerrando por debajo, un fallo.' },
+                ]
+            },
+            {
+                heading: 'La teoría: casi todos acaban volviendo',
+                blocks: [
+                    { type: 'text', content: 'Se dice a menudo que tarde o temprano casi todos los gaps se rellenan. Lo hemos medido en las acciones del S&P 500 durante tres años (2023-2026), con más de 7.000 gaps de al menos un 1%, contando como relleno que el precio vuelva a tocar el borde del hueco:' },
+                    { type: 'chart', id: 'gap_relleno_estadistica' },
+                    { type: 'table',
+                        headers: ['Plazo', 'Todos los gaps', 'Gaps grandes (5% o más)', 'Con mucho volumen (3 veces lo normal)'],
+                        rows: [
+                            ['1 día', '10%', '1%', '3%'],
+                            ['1 semana', '34%', '8%', '13%'],
+                            ['1 mes', '56%', '24%', '33%'],
+                            ['3 meses', '70%', '45%', '54%'],
+                            ['<b>1 año</b>', '<b>84%</b>', '75%', '81%'],
+                        ]
+                    },
+                    { type: 'text', content: 'La idea se cumple: <b>más de ocho de cada diez gaps se rellenaron en menos de un año</b>, y los que lo hicieron tardaron nueve sesiones de mediana. Pero no todos, ni al mismo ritmo: uno de cada ocho seguía sin rellenar un año después, y los grandes o con mucho volumen tardan bastante más.' },
+                ]
+            },
+            {
+                heading: 'Por qué vuelven',
+                blocks: [
+                    { type: 'steps', items: [
+                        '<b>Nadie pudo operar en esa zona.</b> Quienes querían comprar o vender a esos precios se quedaron fuera, y muchas de esas órdenes siguen ahí. Cuando el precio vuelve, las encuentra.',
+                        '<b>La apertura suele exagerar.</b> Una noticia provoca una reacción de golpe, con todo el mundo entrando a la vez. En los días siguientes, el precio se ajusta a un valor más razonable.',
+                        '<b>Los que ya estaban dentro recogen beneficios.</b> Quien compró antes de un gap alcista gana de golpe, y parte de ellos vende en los días siguientes. Esa venta empuja el precio de vuelta hacia el hueco.',
+                    ]},
+                ]
+            },
+            {
+                heading: 'Un gap es un punto débil de la estructura',
+                blocks: [
+                    { type: 'text', content: 'Visto así, un gap no es solo un salto: es una zona en la que el precio avanzó <b>sin construir nada debajo</b>. En una subida normal, cada nivel se negocia: hay compradores que entraron ahí y que lo defenderán si el precio vuelve. En el hueco de un gap no compró nadie, así que nadie lo defiende.' },
+                    { type: 'chart', id: 'gap_vacio' },
+                    { type: 'concept', title: 'Debilidad estructural', content: 'Por eso un gap alcista se puede considerar una debilidad en la estructura de la subida. Si el precio vuelve a esa zona, suele atravesarla deprisa, porque no encuentra soporte hasta el <b>borde del hueco</b> (el máximo del día anterior al gap), donde sí hubo negociación. Al revés, un gap bajista deja por encima una resistencia hueca que el precio puede atravesar rápido hacia arriba.' },
+                    { type: 'tip', label: 'CÓMO USARLO', content: 'Si compras después de un gap, cuenta con que el precio puede volver a rellenarlo: pon el stop por debajo del borde del hueco, no dentro de él, y ajusta el tamaño para aguantar ese retroceso. Y si ves un gap sin rellenar por debajo del precio, sabes que ahí hay un tramo sin soporte.' },
+                    { type: 'concept', title: 'Después del relleno', content: 'Rellenar un gap no significa que haya fallado. A menudo el precio vuelve a la zona, se apoya en el borde y retoma la dirección del gap. Lo que lo decide es cómo llega: con poco volumen es una pausa; con mucho volumen y cerrando por debajo del borde, un fallo.' },
+                    { type: 'warning', content: '«Tarde o temprano» no es una estrategia. Un gap que se rellena al cabo de un año no sirve para operar a corto plazo, y apostar siempre contra el gap sale caro con los de ruptura: los grandes, con mucho volumen, son los que menos se rellenan pronto. Además, en esos tres años el mercado subió, y eso ayudó a rellenar los gaps bajistas (el 93% en un año) más que los alcistas (el 77%).' },
                 ]
             },
             {

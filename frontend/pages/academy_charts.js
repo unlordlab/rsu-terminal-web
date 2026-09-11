@@ -12535,6 +12535,64 @@ function gap_riesgo_stop() {
     </svg>`;
 }
 
+// Cuántos gaps se rellenan y en cuánto tiempo. Datos medidos el 11/09/2026 en
+// las acciones del S&P 500 (2023-2026): 7.015 gaps visibles de al menos un 1%.
+// Si se vuelve a medir, se cambian aquí y en la tabla de la lección 34-3.
+function gap_relleno_estadistica() {
+    const W = 680, H = 250;
+    const plazos = ['1 día', '1 semana', '1 mes', '3 meses', '1 año'];
+    const series = [
+        { nombre: 'Todos', color: C.accent, v: [10, 34, 56, 70, 84] },
+        { nombre: 'Grandes (5% o más)', color: C.orange, v: [1, 8, 24, 45, 75] },
+        { nombre: 'Mucho volumen (3 veces lo normal)', color: C.cyan, v: [3, 13, 33, 54, 81] },
+    ];
+    const x0 = 50, y0 = 30, w = 600, h = 150, grupo = w / plazos.length, ancho = 26;
+    const y = (p) => y0 + h - p / 100 * h;
+    let barras = '';
+    plazos.forEach((pl, i) => {
+        const cx = x0 + (i + 0.5) * grupo;
+        series.forEach((s, k) => {
+            const bx = cx + (k - 1) * (ancho + 4) - ancho / 2;
+            barras += `<rect x="${bx.toFixed(1)}" y="${y(s.v[i]).toFixed(1)}" width="${ancho}" height="${(y0 + h - y(s.v[i])).toFixed(1)}" fill="${s.color}" opacity="0.8" rx="1"/>`
+                + `<text x="${(bx + ancho / 2).toFixed(1)}" y="${(y(s.v[i]) - 4).toFixed(1)}" fill="${s.color}" font-size="8.5" font-family="monospace" text-anchor="middle">${s.v[i]}%</text>`;
+        });
+        barras += `<text x="${cx.toFixed(1)}" y="${y0 + h + 15}" fill="${C.text}" font-size="9.5" font-family="monospace" text-anchor="middle">${pl}</text>`;
+    });
+    const guias = [25, 50, 75, 100].map(p => `<line x1="${x0}" y1="${y(p).toFixed(1)}" x2="${x0 + w}" y2="${y(p).toFixed(1)}" stroke="${C.grid}" stroke-width="1"/>`
+        + `<text x="${x0 - 6}" y="${(y(p) + 3).toFixed(1)}" fill="${C.textDim}" font-size="8" font-family="monospace" text-anchor="end">${p}%</text>`).join('');
+    const leyenda = series.map((s, k) => `<rect x="${60 + k * 200}" y="${H - 28}" width="9" height="9" fill="${s.color}" rx="1"/>`
+        + `<text x="${73 + k * 200}" y="${H - 20}" fill="${C.text}" font-size="8.5" font-family="monospace">${s.nombre}</text>`).join('');
+    return `<svg viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg">
+        <rect width="${W}" height="${H}" fill="${C.bg}" rx="6"/>
+        <text x="${W / 2}" y="16" fill="${C.textDim}" font-size="9.5" font-family="monospace" text-anchor="middle">Qué parte de los gaps se ha rellenado en cada plazo · S&amp;P 500, 2023-2026, 7.015 gaps</text>
+        ${guias}${barras}${leyenda}
+    </svg>`;
+}
+
+// El hueco de un gap no tiene soporte: si el precio vuelve, lo cruza deprisa
+function gap_vacio() {
+    const W = 680, H = 250;
+    const velas = [
+        { o: 100, h: 101.5, l: 99.5, c: 101, v: 1 }, { o: 101, h: 102.5, l: 100.6, c: 102.2, v: 1.1 },
+        { o: 102.2, h: 103, l: 101.8, c: 102.8, v: 1 }, { o: 107, h: 108.5, l: 106.6, c: 108, v: 2.4 },
+        { o: 108, h: 109.5, l: 107.6, c: 109, v: 1.5 }, { o: 109, h: 109.6, l: 107.8, c: 108.2, v: 1.1 },
+        { o: 108.2, h: 108.5, l: 106.8, c: 107.1, v: 1.2 }, { o: 107, h: 107.2, l: 102.9, c: 103.4, v: 2.6 },
+        { o: 103.4, h: 104.8, l: 103, c: 104.5, v: 1.3 }, { o: 104.5, h: 106, l: 104.2, c: 105.8, v: 1.1 },
+    ];
+    const r = vsaVelas(velas, { x0: 40, y0: 30, w: 540, h: 150, volY0: 195, volH: 36, mn: 98, mx: 111, ancho: 22, media: 1, destacar: { 3: C.cyan, 7: C.red } });
+    return `<svg viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg">
+        <rect width="${W}" height="${H}" fill="${C.bg}" rx="6"/>
+        ${gapZona(r, 2, 9, 103, 106.6, C.cyan, '')}
+        <text x="${(r.px(2) - r.paso / 2 + 4).toFixed(1)}" y="${(r.py(106.6) + 12).toFixed(1)}" fill="${C.cyan}" font-size="8.5" font-family="monospace">el hueco: aquí no compró nadie</text>
+        ${gapLinea(r, 0, 9, 103, C.accent, 'borde')}
+        ${r.svg}
+        <text x="${r.px(7).toFixed(1)}" y="${(r.py(102.9) + 16).toFixed(1)}" fill="${C.red}" font-size="8.5" font-family="monospace" text-anchor="middle">cruza el hueco</text>
+        <text x="${r.px(7).toFixed(1)}" y="${(r.py(102.9) + 27).toFixed(1)}" fill="${C.red}" font-size="8.5" font-family="monospace" text-anchor="middle">en una sola vela</text>
+        <text x="${W / 2}" y="16" fill="${C.textDim}" font-size="9.5" font-family="monospace" text-anchor="middle">Cuando el precio vuelve al gap, no hay nadie dentro del hueco que lo defienda</text>
+        <text x="${W / 2}" y="${H - 6}" fill="${C.text}" font-size="10" font-family="monospace" text-anchor="middle">Solo se frena en el borde, el máximo de la víspera, donde sí hubo compradores</text>
+    </svg>`;
+}
+
 export const CHARTS = {
     // Módulo 0
     rsu_philosophy, rsu_community, rsu_for_who,
@@ -12670,5 +12728,5 @@ export const CHARTS = {
     vsa_fases_suelo, vsa_climax_venta, vsa_prueba_dos_caminos, vsa_volumen_frenado, vsa_entrada,
     // Módulo 34 (gaps)
     gap_anatomia, gap_tipos_tendencia, gap_tres_retrocesos, gap_and_go, gap_relleno_compra,
-    gap_giro_en_oferta, gap_dentro_trampa, gap_riesgo_stop,
+    gap_giro_en_oferta, gap_dentro_trampa, gap_riesgo_stop, gap_relleno_estadistica, gap_vacio,
 };

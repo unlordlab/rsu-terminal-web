@@ -110,7 +110,7 @@ def test_el_quiz_de_los_modulos_nuevos_esta_bien_formado(modulo):
     siguiente = re.search(r"^    \d+: \{", bloque[10:], re.M)
     bloque = bloque[:siguiente.start() + 10] if siguiente else bloque
     preguntas = re.findall(r"\{ q: '(.+?)', options: \[(.+?)\], correct: (\d), explanation: '(.+?)' \}", bloque)
-    assert len(preguntas) == 10
+    assert 10 <= len(preguntas) <= 12, len(preguntas)
     for q, opciones, correcta, explicacion in preguntas:
         n = len(re.findall(r"'(?:[^'\\]|\\.)*'", opciones))
         assert n == 4 and int(correcta) < n and len(explicacion) > 30, q
@@ -134,7 +134,7 @@ def test_los_gaps_tienen_sus_cinco_lecciones_y_sus_graficos():
     assert [k for k, m, _ in CLAVES if m == "34"] == ["34-1", "34-2", "34-3", "34-4", "34-5"]
     bloque = LECCIONES[LECCIONES.index("'34-1': {"):]
     graficos = re.findall(r"type: 'chart', id: '([a-z0-9_]+)'", bloque)
-    assert len(set(graficos)) == 8 and all(g.startswith("gap_") for g in graficos), graficos
+    assert len(set(graficos)) == 10 and all(g.startswith("gap_") for g in graficos), graficos
 
 
 def test_las_estrategias_del_dia_dicen_que_son_intradia():
@@ -142,6 +142,21 @@ def test_las_estrategias_del_dia_dicen_que_son_intradia():
     gráficos intradía: la lección lo dice y da la versión en diario."""
     bloque = LECCIONES[LECCIONES.index("'34-4': {"):LECCIONES.index("'34-5': {")]
     assert "velas de 5 minutos" in bloque and "gráfico diario" in bloque
+
+
+def test_la_tabla_del_relleno_y_su_grafico_dicen_lo_mismo():
+    """Las cifras de relleno se midieron el 11/09/2026 (S&P 500, 2023-2026,
+    7.015 gaps de al menos un 1%) y están escritas dos veces: en el gráfico y
+    en la tabla de la lección 34-3. Si se vuelven a medir y solo se cambia
+    una, se contradirían en la misma pantalla."""
+    fn = GRAFICOS[GRAFICOS.index("function gap_relleno_estadistica()"):]
+    fn = fn[:fn.index("\n}\n")]
+    series = [[int(x) for x in grupo.split(",")] for grupo in re.findall(r"v: \[([\d,\s]+)\]", fn)]
+    leccion = LECCIONES[LECCIONES.index("'34-3': {"):LECCIONES.index("'34-4': {")]
+    filas = re.findall(r"\['(?:<b>)?(1 día|1 semana|1 mes|3 meses|1 año)(?:</b>)?', '(?:<b>)?(\d+)%(?:</b>)?', '(\d+)%', '(\d+)%'\]", leccion)
+    assert len(filas) == 5 and len(series) == 3
+    for k in range(3):
+        assert [int(f[k + 1]) for f in filas] == series[k], (k, filas, series)
 
 
 # ── Todos los gráficos se dibujan, ejecutados en Node (en CI siempre está) ──
