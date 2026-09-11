@@ -50,7 +50,7 @@ import yfinance as yf
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "shared"))
 from cobertura_amplitud import cobertura_insuficiente  # noqa: E402
 from sp500_universe import SP500_SECTOR_MAP  # noqa: E402
-from weinstein_phases import classify_phase_debounced, classify_phase_weekly  # noqa: E402
+from weinstein_phases import REGLA_FASES, classify_phase_debounced, classify_phase_weekly  # noqa: E402
 from l3_banker import calcular_l3  # noqa: E402
 from rsrw_engine import (  # noqa: E402
     rs_smooth as _rs_smooth, rs_percentile, PERIODS, WEIGHTS, EMA_SMOOTH,
@@ -724,6 +724,7 @@ def run_scan() -> dict:
                 "phase":             phase_info["phase"],
                 "phase_label":       phase_info["phase_label"],
                 "phase_confirmed":   phase_info.get("phase_confirmed"),
+                "phase_regla":       REGLA_FASES,
                 "trend":             phase_info["trend"],
                 "phase_weekly":       phase_weekly_info["phase"],
                 "phase_weekly_label": phase_weekly_info["phase_label"],
@@ -791,6 +792,7 @@ def run_scan() -> dict:
             "phase":         None if pd.isna(r["phase"]) else int(r["phase"]),
             "phase_label":   r["phase_label"],
             "phase_confirmed": None if pd.isna(r.get("phase_confirmed")) else bool(r.get("phase_confirmed")),
+            "phase_regla":     r.get("phase_regla"),
             "phase_weekly":       None if pd.isna(r.get("phase_weekly")) else int(r.get("phase_weekly")),
             "phase_weekly_label": None if pd.isna(r.get("phase_weekly_label")) else r.get("phase_weekly_label"),
             "trend":         r["trend"],

@@ -113,6 +113,12 @@ def init_db():
         conn.execute("ALTER TABLE snapshot_ticker ADD COLUMN rs_score REAL")
     except sqlite3.OperationalError:
         pass
+    # Qué regla calculó la fase (weinstein_phases.REGLA_FASES), desde el
+    # 11/09/2026. Las filas anteriores quedan a NULL: la regla vieja.
+    try:
+        conn.execute("ALTER TABLE snapshot_ticker ADD COLUMN regla_fase TEXT")
+    except sqlite3.OperationalError:
+        pass
     # breadth pasa a ser la métrica que ordena el módulo (15/08/2026), así que
     # es la que hay que seguir en el tiempo. Por ALTER, mismo motivo.
     try:
@@ -302,14 +308,15 @@ def _maybe_write_ticker(conn, fecha):
         (fecha, ticker, s.get("sector"), s.get("precio"), s.get("rvol"), s.get("rs_pct"),
          s.get("rs_score"),
          s.get("phase"), _b(s.get("phase_confirmed")), s.get("phase_weekly"),
-         _b(s.get("above_sma50")), _b(s.get("new_high")), _b(s.get("new_low")), s.get("dias_absorcion"))
+         _b(s.get("above_sma50")), _b(s.get("new_high")), _b(s.get("new_low")), s.get("dias_absorcion"),
+         s.get("phase_regla"))
         for ticker, s in stocks.items()
     ]
     conn.executemany(
         "INSERT OR IGNORE INTO snapshot_ticker "
         "(fecha, ticker, sector, precio, rvol, rs_pct, rs_score, phase, phase_confirmed, "
-        "phase_weekly, above_sma50, new_high, new_low, dias_absorcion) "
-        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        "phase_weekly, above_sma50, new_high, new_low, dias_absorcion, regla_fase) "
+        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
         rows
     )
     conn.commit()
@@ -548,10 +555,23 @@ def transiciones_de_fase(sesiones: int = 5) -> dict:
     """
     conn = _conn()
     try:
-        fechas = [r["fecha"] for r in conn.execute(
-            "SELECT DISTINCT fecha FROM snapshot_ticker ORDER BY fecha DESC "
-            "LIMIT ?", (sesiones + 1,)).fetchall()]
+        filas = conn.execute(
+            "SELECT fecha, MAX(regla_fase) AS regla FROM snapshot_ticker "
+            "GROUP BY fecha ORDER BY fecha DESC LIMIT ?", (sesiones + 1,)).fetchall()
+        # Solo sesiones calculadas con la MISMA regla de fases que la de hoy:
+        # comparar a través de un cambio de regla anunciaría como «entradas»
+        # valores que no se han movido, solo ha cambiado la fórmula.
+        regla_hoy = filas[0]["regla"] if filas else None
+        fechas = []
+        for r in filas:
+            if r["regla"] != regla_hoy:
+                break
+            fechas.append(r["fecha"])
         if len(fechas) < 2:
+            if len(filas) >= 2:
+                return {"ok": False, "sesiones": len(fechas),
+                        "error": "La forma de calcular las fases cambió hace poco: hacen falta "
+                                 "al menos dos sesiones con la nueva para comparar."}
             return {"ok": False, "error": "Hacen falta al menos dos sesiones guardadas.",
                     "sesiones": len(fechas)}
         hoy, antes = fechas[0], fechas[-1]

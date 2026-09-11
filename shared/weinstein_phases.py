@@ -27,10 +27,49 @@ los últimos ~6 meses) en vez de por la posición actual frente a una EMA200
 sin memoria del pasado; y sin histórico suficiente para la SMA150/30-semanas
 se devuelve phase=None en vez de asumir condiciones favorables por defecto.
 
+Rediseño 11/09/2026, tras auditar OSS en Research: la regla de 22/07 tenía dos
+fallos que se sumaban.
+
+  1. Solo había Fase 4 cuando la SMA150 ya BAJABA, y esa media llega tarde:
+     tras una subida fuerte sigue plana (o subiendo) semanas después de que
+     el precio se haya desplomado. OSS, un 57% por debajo de su máximo y un
+     27% por debajo de la SMA150, salía «RANGO».
+  2. En RANGO, Fase 1 o 3 se decidía por el retorno punto a punto de hace 6
+     meses, que no mira el camino: OSS era Fase 3 hasta el 03/09 y pasó a
+     «Fase 1 · Acumulación» el 10/09 solo porque cayó por debajo del precio de
+     marzo. Cuanto más caía, más «acumulación» parecía. Medido ese día en el
+     S&P 500: de 87 valores en Fase 1, 36 estaban cayendo igual que OSS.
+
+Ahora, con la media plana (o el precio al otro lado de su pendiente):
+  · el precio CLARAMENTE por debajo (más de BANDA_RUPTURA) con la media de 50
+    sesiones bajando es la ruptura de Weinstein: Fase 4 (y al revés, Fase 2);
+  · pegado a la media, la procedencia es dónde está la propia SMA150 dentro
+    de su recorrido del último año (arriba: venía de subir → Fase 3; abajo:
+    de bajar → Fase 1). No cuánto se movió en los últimos meses: una media
+    que lleva meses plana en lo alto dice «0%», y un techo largo salía Fase 1.
+    El retorno de 6 meses queda solo como desempate si la media no se movió.
+
+LO QUE LA FASE NO ES: medido en el S&P 500 (2023-2026, 41.205 muestras),
+ni esta regla ni la anterior predicen la rentabilidad a 20 o 60 sesiones;
+los valores que la regla nueva pasa a Fase 4 incluso rebotaron más que la
+media. La fase DESCRIBE dónde está el valor en su ciclo; no es una señal.
+
 Pendiente: falta usar volumen como confirmación de las transiciones a Fase 2
 (mejora C, no implementada aún -- ver memoria del proyecto).
 """
 import pandas as pd
+
+# Cuánto tiene que separarse el precio de una media de 30 semanas plana para
+# contar como ruptura (y no como oscilación dentro de una base o un techo).
+BANDA_RUPTURA = 0.05
+# Cuánto tiene que haber recorrido la media de 30 semanas en el último año para
+# decir de dónde viene el lateral. Por debajo, se desempata con el retorno.
+UMBRAL_PROCEDENCIA = 0.02
+# Qué regla calculó una fase. Viaja con cada fila del escaneo y se guarda en
+# los snapshots, para no comparar fases de reglas distintas: la noche en que
+# cambia la regla, el Scanner anunciaría «entradas en Fase 2» que no son
+# movimientos del mercado sino de la fórmula. Se cambia al cambiar la regla.
+REGLA_FASES = "2026-09-11"
 
 
 def _ema_slope(series: pd.Series, lookback: int, threshold: float):
@@ -48,59 +87,91 @@ def _ema_slope(series: pd.Series, lookback: int, threshold: float):
     return "plana", pct
 
 
+def _retorno(serie: pd.Series, atras: int) -> float:
+    if len(serie) <= atras:
+        return 0.0
+    ref = float(serie.iloc[-atras - 1])
+    return (float(serie.iloc[-1]) - ref) / ref if ref else 0.0
+
+
+def _clasificar(close, media_s, pendiente_media, medio_s, pendiente_medio,
+                ema10_s, ema20_s, pendientes_cortas, atras_procedencia, atras_retorno) -> dict:
+    """El núcleo común de la versión diaria y la semanal; solo cambian las
+    series y los plazos. `media_s` es la de 30 semanas (SMA150 diaria o SMA30
+    semanal) y `medio_s` la de medio plazo que confirma una ruptura (EMA50
+    diaria o EMA10 semanal, ~10 semanas)."""
+    price  = float(close.iloc[-1])
+    media  = float(media_s.iloc[-1])
+    medio  = float(medio_s.iloc[-1])
+    ema20  = float(ema20_s.iloc[-1])
+    dir_media, _ = _ema_slope(media_s, *pendiente_media)
+    dir_medio, _ = _ema_slope(medio_s, *pendiente_medio)
+    dir10, _ = _ema_slope(ema10_s, *pendientes_cortas[0])
+    dir20, _ = _ema_slope(ema20_s, *pendientes_cortas[1])
+    distancia = (price - media) / media if media else 0.0
+
+    # Por encima de una media de 30 semanas que sube sigue siendo Fase 2 aunque
+    # el precio corrija fuerte (Weinstein: la fase no cambia hasta romper la
+    # media), pero la etiqueta lo dice: OSS el 16/07, un 40% por debajo de su
+    # máximo, salía «Avance» a secas. Solo cambia el texto, no el número.
+    if dir_media == "alcista" and price > media:
+        corrige = dir_medio == "bajista" and price < medio
+        phase, label = 2, "Fase 2 · Avance" + (" (en corrección)" if corrige else " (Markup)")
+    elif dir_media == "bajista" and price < media:
+        rebota = dir_medio == "alcista" and price > medio
+        phase, label = 4, "Fase 4 · Declive" + (" (en rebote)" if rebota else " / Corrección")
+    elif distancia < -BANDA_RUPTURA and dir_medio == "bajista" and price < medio:
+        # La media de 30 semanas aún no ha girado, pero el precio ya ha roto
+        # por debajo con la de medio plazo bajando: en Weinstein, eso ES la
+        # entrada en Fase 4. Esperar a que la media baje llega semanas tarde.
+        phase, label = 4, "Fase 4 · Declive (ruptura reciente)"
+    elif distancia > BANDA_RUPTURA and dir_medio == "alcista" and price > medio:
+        phase, label = 2, "Fase 2 · Avance (ruptura reciente)"
+    else:
+        # Lateral, pegado a la media: ¿base o techo? Lo dice en qué parte de
+        # su recorrido del último año está la propia media: arriba es que
+        # venía de subir (techo), abajo que venía de bajar (base). Cuánto se
+        # movió en los últimos meses NO sirve: una media que lleva meses
+        # plana en lo alto dice «0%», y un techo largo salía «Acumulación».
+        recorrido = media_s.dropna().iloc[-atras_procedencia:]
+        alto, bajo = float(recorrido.max()), float(recorrido.min())
+        if bajo > 0 and (alto - bajo) / bajo > UMBRAL_PROCEDENCIA:
+            procedencia = (media - bajo) / (alto - bajo) - 0.5
+        else:
+            # La media no se ha movido en un año: desempata el retorno.
+            procedencia = _retorno(close, atras_retorno)
+        if procedencia <= 0:
+            giro = dir10 == "alcista" and dir20 == "alcista" and price > ema20
+            phase, label = 1, "Fase 1 · Acumulación" + (" (posible giro)" if giro else "")
+        else:
+            giro = dir10 == "bajista" and dir20 == "bajista" and price < ema20
+            phase, label = 3, "Fase 3 · Distribución" + (" (posible giro bajista)" if giro else "")
+
+    trend = {2: "ALCISTA", 4: "BAJISTA"}.get(phase, "RANGO")
+    return {"phase": phase, "phase_label": label, "trend": trend}
+
+
 def classify_phase(close: pd.Series) -> dict:
     """Fase Weinstein (1-4) diaria, a partir de una serie de cierres.
 
     La SMA150 (≈30 semanas, la media móvil original del método) es el
     discriminador principal: Fase 2 si sube y el precio está por encima,
-    Fase 4 si baja y el precio está por debajo. Sin tendencia clara (RANGO),
-    la Fase 1 vs Fase 3 se decide por la procedencia -- el retorno de los
-    últimos ~6 meses -- en vez de por la posición actual frente a una media
-    sin memoria del pasado. Las EMA10/20 solo aportan un matiz táctico
-    ("posible giro") dentro de Fase 1/3, no cambian el número de fase."""
+    Fase 4 si baja y el precio está por debajo. Con la media plana, una
+    ruptura clara confirmada por la EMA50 también es Fase 2 o 4; si el precio
+    sigue pegado a la media, Fase 1 o 3 según de dónde venga la media (ver la
+    cabecera). Las EMA10/20 solo aportan un matiz táctico ("posible giro")
+    dentro de Fase 1/3, no cambian el número de fase."""
     if len(close) < 150:
         return {"phase": None, "phase_label": "Sin datos suficientes (hace falta SMA150)", "trend": None}
-
-    price    = float(close.iloc[-1])
-    sma150_s = close.rolling(150, min_periods=150).mean()
-    ema10_s  = close.ewm(span=10, adjust=False).mean()
-    ema20_s  = close.ewm(span=20, adjust=False).mean()
-
-    sma150 = float(sma150_s.iloc[-1])
-    ema20  = float(ema20_s.iloc[-1])
-
-    slope150_dir, _ = _ema_slope(sma150_s, 15, 0.4)
-    slope10_dir,  _ = _ema_slope(ema10_s,  3,  0.4)
-    slope20_dir,  _ = _ema_slope(ema20_s,  5,  0.4)
-
-    if slope150_dir == "alcista" and price > sma150:
-        trend = "ALCISTA"
-    elif slope150_dir == "bajista" and price < sma150:
-        trend = "BAJISTA"
-    else:
-        trend = "RANGO"
-
-    if trend == "ALCISTA":
-        phase, label = 2, "Fase 2 · Avance (Markup)"
-    elif trend == "BAJISTA":
-        phase, label = 4, "Fase 4 · Declive / Corrección"
-    else:
-        lookback = 126  # ~6 meses de sesiones
-        if len(close) > lookback:
-            ref = float(close.iloc[-lookback - 1])
-            retorno_6m = (price - ref) / ref if ref else 0.0
-        else:
-            retorno_6m = 0.0
-
-        early_reversal  = (slope10_dir == "alcista" and slope20_dir == "alcista" and price > ema20)
-        early_breakdown = (slope10_dir == "bajista" and slope20_dir == "bajista" and price < ema20)
-
-        if retorno_6m <= 0:
-            phase, label = 1, "Fase 1 · Acumulación" + (" (posible giro)" if early_reversal else "")
-        else:
-            phase, label = 3, "Fase 3 · Distribución" + (" (posible giro bajista)" if early_breakdown else "")
-
-    return {"phase": phase, "phase_label": label, "trend": trend}
+    return _clasificar(
+        close,
+        media_s=close.rolling(150, min_periods=150).mean(), pendiente_media=(15, 0.4),
+        medio_s=close.ewm(span=50, adjust=False).mean(), pendiente_medio=(10, 0.6),
+        ema10_s=close.ewm(span=10, adjust=False).mean(),
+        ema20_s=close.ewm(span=20, adjust=False).mean(),
+        pendientes_cortas=((3, 0.4), (5, 0.4)),
+        atras_procedencia=250, atras_retorno=126,
+    )
 
 
 def classify_phase_debounced(close: pd.Series, confirm_sessions: int = 3) -> dict:
@@ -168,44 +239,15 @@ def classify_phase_weekly(close_daily: pd.Series) -> dict:
     weekly = resample_weekly_close(close_daily)
     if weekly is None or len(weekly) < 30:
         return {"phase": None, "phase_label": "Sin histórico semanal suficiente (hace falta SMA30)", "trend": None}
-
-    price   = float(weekly.iloc[-1])
-    sma30_s = weekly.rolling(30, min_periods=30).mean()
+    # La EMA10 semanal hace dos papeles: la corta del «posible giro» (como
+    # antes) y la de medio plazo que confirma una ruptura (≈ la EMA50 diaria).
     ema10_s = weekly.ewm(span=10, adjust=False, min_periods=5).mean()
-    ema20_s = weekly.ewm(span=20, adjust=False, min_periods=10).mean()
-
-    sma30 = float(sma30_s.iloc[-1])
-    ema20 = float(ema20_s.iloc[-1])
-
-    slope30_dir, _ = _ema_slope(sma30_s, 3, 0.5)
-    slope10_dir, _ = _ema_slope(ema10_s, 1, 0.4)
-    slope20_dir, _ = _ema_slope(ema20_s, 2, 0.4)
-
-    if slope30_dir == "alcista" and price > sma30:
-        trend = "ALCISTA"
-    elif slope30_dir == "bajista" and price < sma30:
-        trend = "BAJISTA"
-    else:
-        trend = "RANGO"
-
-    if trend == "ALCISTA":
-        phase, label = 2, "Fase 2 · Avance (Markup)"
-    elif trend == "BAJISTA":
-        phase, label = 4, "Fase 4 · Declive / Corrección"
-    else:
-        lookback = 26  # ~6 meses en semanas
-        if len(weekly) > lookback:
-            ref = float(weekly.iloc[-lookback - 1])
-            retorno_6m = (price - ref) / ref if ref else 0.0
-        else:
-            retorno_6m = 0.0
-
-        early_reversal  = (slope10_dir == "alcista" and slope20_dir == "alcista" and price > ema20)
-        early_breakdown = (slope10_dir == "bajista" and slope20_dir == "bajista" and price < ema20)
-
-        if retorno_6m <= 0:
-            phase, label = 1, "Fase 1 · Acumulación" + (" (posible giro)" if early_reversal else "")
-        else:
-            phase, label = 3, "Fase 3 · Distribución" + (" (posible giro bajista)" if early_breakdown else "")
-
-    return {"phase": phase, "phase_label": label, "trend": trend}
+    return _clasificar(
+        weekly,
+        media_s=weekly.rolling(30, min_periods=30).mean(), pendiente_media=(3, 0.5),
+        medio_s=ema10_s, pendiente_medio=(2, 0.6),
+        ema10_s=ema10_s,
+        ema20_s=weekly.ewm(span=20, adjust=False, min_periods=10).mean(),
+        pendientes_cortas=((1, 0.4), (2, 0.4)),
+        atras_procedencia=52, atras_retorno=26,
+    )
