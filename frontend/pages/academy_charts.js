@@ -12593,6 +12593,222 @@ function gap_vacio() {
     </svg>`;
 }
 
+// ─── MÓDULO 35 · CÓMO OPERAN LAS INSTITUCIONES ───────────────────────────────
+
+// Comprar mucho de golpe «se come» el libro de órdenes
+function inst_libro_ordenes() {
+    const W = 680, H = 260;
+    const niveles = [[100.00, 800], [100.05, 1200], [100.10, 1500], [100.15, 1000], [100.20, 2000], [100.25, 1800], [100.30, 1500], [100.35, 2500]];
+    let quedan = 10000, gastado = 0, ultimo = 100;
+    const consumo = niveles.map(([p, q]) => { const t = Math.min(q, quedan); quedan -= t; gastado += t * p; if (t) ultimo = p; return t; });
+    const medio = gastado / 10000;
+    const fmt = (v) => v.toFixed(2).replace('.', ',');
+    const x0 = 150, w = 300, alto = 22, yBase = 215, max = 2500;
+    const filas = niveles.map(([p, q], i) => {
+        const y = yBase - (i + 1) * alto, lw = q / max * w, cw = consumo[i] / max * w;
+        return `<text x="${x0 - 10}" y="${(y + 15).toFixed(1)}" fill="${C.text}" font-size="10" font-family="monospace" text-anchor="end">${fmt(p)} $</text>`
+            + `<rect x="${x0}" y="${y + 3}" width="${lw.toFixed(1)}" height="${alto - 6}" fill="${C.muted}" opacity="0.5" rx="1"/>`
+            + (cw ? `<rect x="${x0}" y="${y + 3}" width="${cw.toFixed(1)}" height="${alto - 6}" fill="${C.orange}" opacity="0.85" rx="1"/>` : '')
+            + `<text x="${(x0 + lw + 6).toFixed(1)}" y="${(y + 15).toFixed(1)}" fill="${C.textDim}" font-size="9" font-family="monospace">${q.toLocaleString('es-ES')}</text>`;
+    }).join('');
+    return `<svg viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg">
+        <rect width="${W}" height="${H}" fill="${C.bg}" rx="6"/>
+        <text x="${x0}" y="20" fill="${C.textDim}" font-size="9.5" font-family="monospace">acciones a la venta en cada precio</text>
+        ${filas}
+        <text x="${x0 - 10}" y="${yBase + 16}" fill="${C.textDim}" font-size="9" font-family="monospace" text-anchor="end">precio</text>
+        <text x="505" y="80" fill="${C.orange}" font-size="11" font-family="monospace">Comprar 10.000 acciones</text>
+        <text x="505" y="100" fill="${C.text}" font-size="9.5" font-family="monospace">veías: ${fmt(100)} $</text>
+        <text x="505" y="118" fill="${C.text}" font-size="9.5" font-family="monospace">pagas de media: ${fmt(medio)} $</text>
+        <text x="505" y="136" fill="${C.red}" font-size="9.5" font-family="monospace">el precio acaba en ${fmt(ultimo)} $</text>
+        <text x="${W / 2}" y="${H - 10}" fill="${C.text}" font-size="10" font-family="monospace" text-anchor="middle">Cada compra agota un precio y obliga a pagar el siguiente: el propio comprador sube el precio</text>
+    </svg>`;
+}
+
+// El coste de mover el precio crece con el tamaño de la orden
+function inst_impacto_tamano() {
+    const W = 680, H = 240;
+    const x0 = 70, y0 = 30, w = 560, h = 160;
+    const px = (f) => x0 + f / 0.5 * w, py = (c) => y0 + h - c * h;
+    // Forma de raíz cuadrada: la regla empírica más citada del impacto de mercado
+    let d = '';
+    for (let f = 0; f <= 0.5001; f += 0.01) d += `${f ? 'L' : 'M'} ${px(f).toFixed(1)} ${py(Math.sqrt(f / 0.5)).toFixed(1)} `;
+    const marca = (f, t1, t2, col) => `<circle cx="${px(f).toFixed(1)}" cy="${py(Math.sqrt(f / 0.5)).toFixed(1)}" r="5" fill="${col}"/>`
+        + `<text x="${(px(f) + 9).toFixed(1)}" y="${(py(Math.sqrt(f / 0.5)) + 14).toFixed(1)}" fill="${col}" font-size="9" font-family="monospace">${t1}</text>`
+        + `<text x="${(px(f) + 9).toFixed(1)}" y="${(py(Math.sqrt(f / 0.5)) + 25).toFixed(1)}" fill="${C.textDim}" font-size="8.5" font-family="monospace">${t2}</text>`;
+    return `<svg viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg">
+        <rect width="${W}" height="${H}" fill="${C.bg}" rx="6"/>
+        <line x1="${x0}" y1="${y0 + h}" x2="${x0 + w}" y2="${y0 + h}" stroke="${C.border}"/>
+        <line x1="${x0}" y1="${y0}" x2="${x0}" y2="${y0 + h}" stroke="${C.border}"/>
+        <path d="${d}" fill="none" stroke="${C.orange}" stroke-width="2.5"/>
+        ${marca(0.0005, 'tú', 'no mueves nada', C.accent)}
+        ${marca(0.05, 'un fondo mediano', '5% del volumen del día', C.yellow)}
+        ${marca(0.3, 'un fondo grande', '30% del volumen del día', C.red)}
+        <text x="${x0 - 8}" y="${y0 + 8}" fill="${C.textDim}" font-size="9" font-family="monospace" text-anchor="end">más</text>
+        <text x="${x0 - 8}" y="${y0 + 20}" fill="${C.textDim}" font-size="9" font-family="monospace" text-anchor="end">caro</text>
+        <text x="${x0 + w}" y="${y0 + h + 16}" fill="${C.textDim}" font-size="9" font-family="monospace" text-anchor="end">tamaño de la orden →</text>
+        <text x="${W / 2}" y="16" fill="${C.textDim}" font-size="9.5" font-family="monospace" text-anchor="middle">Cuánto se mueve el precio en tu contra según lo que quieras comprar</text>
+        <text x="${W / 2}" y="${H - 8}" fill="${C.text}" font-size="10" font-family="monospace" text-anchor="middle">El coste crece con el tamaño: para un fondo grande, comprar ya es carísimo</text>
+    </svg>`;
+}
+
+// La orden madre se trocea en cientos de órdenes hijas
+function inst_orden_madre() {
+    const W = 680, H = 230;
+    const hijas = [5, 8, 4, 6, 3, 7, 2, 5, 4, 3, 6, 2, 4, 3, 5, 2, 3, 4, 6, 3, 5, 7, 4, 8, 9, 6];
+    const x0 = 250, w = 400, base = 170, esc = 13;
+    const barras = hijas.map((v, i) => {
+        const x = x0 + i * (w / hijas.length) + 2, hh = v * esc;
+        return `<rect x="${x.toFixed(1)}" y="${(base - hh).toFixed(1)}" width="${(w / hijas.length - 5).toFixed(1)}" height="${hh}" fill="${C.accent}" opacity="${0.45 + v / 20}" rx="1"/>`;
+    }).join('');
+    return `<svg viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg">
+        <rect width="${W}" height="${H}" fill="${C.bg}" rx="6"/>
+        <rect x="30" y="60" width="160" height="110" fill="${C.orange}" opacity="0.8" rx="4"/>
+        <text x="110" y="100" fill="#000" font-size="12" font-family="monospace" text-anchor="middle" font-weight="bold">ORDEN MADRE</text>
+        <text x="110" y="122" fill="#000" font-size="10" font-family="monospace" text-anchor="middle">comprar</text>
+        <text x="110" y="138" fill="#000" font-size="10" font-family="monospace" text-anchor="middle">300.000 acciones</text>
+        <line x1="198" y1="115" x2="238" y2="115" stroke="${C.text}" stroke-width="2"/>
+        <path d="M 238 108 L 248 115 L 238 122 z" fill="${C.text}"/>
+        ${barras}
+        <line x1="${x0}" y1="${base}" x2="${x0 + w}" y2="${base}" stroke="${C.border}"/>
+        <text x="${x0}" y="${base + 15}" fill="${C.textDim}" font-size="9" font-family="monospace">9:30</text>
+        <text x="${x0 + w}" y="${base + 15}" fill="${C.textDim}" font-size="9" font-family="monospace" text-anchor="end">16:00</text>
+        <text x="${x0 + w / 2}" y="40" fill="${C.accent}" font-size="10" font-family="monospace" text-anchor="middle">órdenes hijas, pequeñas, durante todo el día</text>
+        <text x="${W / 2}" y="${H - 10}" fill="${C.text}" font-size="10" font-family="monospace" text-anchor="middle">Nadie ve la orden grande: solo cientos de compras normales, repartidas en horas o en días</text>
+    </svg>`;
+}
+
+// La forma del volumen en un día y cómo lo reparten VWAP y TWAP. El volumen
+// por media hora sale de la curva MEDIDA de shared/time_utils.py
+// (_CURVA_VOLUMEN: 216 sesiones de 36 valores líquidos, 10/09/2026).
+function inst_curva_u() {
+    const W = 680, H = 250;
+    const vol = [16.3, 9.5, 8.1, 6.7, 5.5, 5.3, 5.0, 4.9, 4.7, 5.0, 5.3, 6.7, 17.1];
+    const horas = ['9:30', '', '10:30', '', '11:30', '', '12:30', '', '13:30', '', '14:30', '', '15:30'];
+    const x0 = 50, y0 = 30, w = 600, h = 160, paso = w / vol.length, max = 18;
+    const y = (v) => y0 + h - v / max * h;
+    const barras = vol.map((v, i) => `<rect x="${(x0 + i * paso + 6).toFixed(1)}" y="${y(v).toFixed(1)}" width="${(paso - 12).toFixed(1)}" height="${(y0 + h - y(v)).toFixed(1)}" fill="${C.muted}" opacity="0.6" rx="1"/>`
+        + `<text x="${(x0 + (i + 0.5) * paso).toFixed(1)}" y="${(y(v) - 4).toFixed(1)}" fill="${C.textDim}" font-size="8" font-family="monospace" text-anchor="middle">${v.toString().replace('.', ',')}%</text>`
+        + `<text x="${(x0 + (i + 0.5) * paso).toFixed(1)}" y="${y0 + h + 14}" fill="${C.textDim}" font-size="8.5" font-family="monospace" text-anchor="middle">${horas[i]}</text>`).join('');
+    const vwap = vol.map((v, i) => `${i ? 'L' : 'M'} ${(x0 + (i + 0.5) * paso).toFixed(1)} ${y(v * 0.6).toFixed(1)}`).join(' ');
+    const twapY = y(100 / vol.length * 0.6);
+    return `<svg viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg">
+        <rect width="${W}" height="${H}" fill="${C.bg}" rx="6"/>
+        ${barras}
+        <path d="${vwap}" fill="none" stroke="${C.accent}" stroke-width="2.2"/>
+        <line x1="${x0 + paso / 2}" y1="${twapY.toFixed(1)}" x2="${x0 + w - paso / 2}" y2="${twapY.toFixed(1)}" stroke="${C.cyan}" stroke-width="2.2" stroke-dasharray="6 4"/>
+        <rect x="70" y="${H - 30}" width="9" height="9" fill="${C.muted}" rx="1"/><text x="83" y="${H - 22}" fill="${C.text}" font-size="8.5" font-family="monospace">volumen del mercado cada media hora</text>
+        <line x1="330" y1="${H - 26}" x2="350" y2="${H - 26}" stroke="${C.accent}" stroke-width="2.2"/><text x="355" y="${H - 22}" fill="${C.text}" font-size="8.5" font-family="monospace">VWAP: sigue esa forma</text>
+        <line x1="505" y1="${H - 26}" x2="525" y2="${H - 26}" stroke="${C.cyan}" stroke-width="2.2" stroke-dasharray="6 4"/><text x="530" y="${H - 22}" fill="${C.text}" font-size="8.5" font-family="monospace">TWAP: todo igual</text>
+        <text x="${W / 2}" y="16" fill="${C.textDim}" font-size="9.5" font-family="monospace" text-anchor="middle">Qué parte del volumen del día se negocia en cada media hora (acciones líquidas de EE. UU.)</text>
+    </svg>`;
+}
+
+// POV: el algoritmo compra una parte fija de lo que negocia el mercado
+function inst_pov() {
+    const W = 680, H = 240;
+    const mercado = [6, 5, 5, 4, 5, 14, 11, 6, 5, 5, 4, 6];
+    const x0 = 50, y0 = 30, w = 600, h = 150, paso = w / mercado.length, max = 21;
+    const y = (v) => y0 + h - v / max * h;
+    const barras = mercado.map((v, i) => {
+        const x = x0 + i * paso + 8, bw = paso - 16, algo = v * 0.2;
+        return `<rect x="${x.toFixed(1)}" y="${y(v).toFixed(1)}" width="${bw.toFixed(1)}" height="${(y0 + h - y(v)).toFixed(1)}" fill="${C.muted}" opacity="0.55" rx="1"/>`
+            + `<rect x="${x.toFixed(1)}" y="${y(algo).toFixed(1)}" width="${bw.toFixed(1)}" height="${(y0 + h - y(algo)).toFixed(1)}" fill="${v > 10 ? C.orange : C.accent}" opacity="0.9" rx="1"/>`;
+    }).join('');
+    return `<svg viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg">
+        <rect width="${W}" height="${H}" fill="${C.bg}" rx="6"/>
+        ${barras}
+        <text x="${(x0 + 5.5 * paso + paso / 2).toFixed(1)}" y="${(y(14) - 8).toFixed(1)}" fill="${C.orange}" font-size="9" font-family="monospace" text-anchor="middle">llega una noticia: el mercado negocia el triple…</text>
+        <text x="${(x0 + 5.5 * paso + paso / 2).toFixed(1)}" y="${(y(14) + 4).toFixed(1)}" fill="${C.orange}" font-size="9" font-family="monospace" text-anchor="middle">…y el algoritmo compra el triple</text>
+        <rect x="120" y="${H - 30}" width="9" height="9" fill="${C.muted}" rx="1"/><text x="133" y="${H - 22}" fill="${C.text}" font-size="8.5" font-family="monospace">lo que negocia el mercado</text>
+        <rect x="380" y="${H - 30}" width="9" height="9" fill="${C.accent}" rx="1"/><text x="393" y="${H - 22}" fill="${C.text}" font-size="8.5" font-family="monospace">lo que compra el algoritmo (20%)</text>
+        <text x="${W / 2}" y="16" fill="${C.textDim}" font-size="9.5" font-family="monospace" text-anchor="middle">Participación en el volumen (POV): siempre la misma parte de lo que se negocia</text>
+    </svg>`;
+}
+
+// A qué ritmo compra cada algoritmo a lo largo del día
+function inst_ritmo() {
+    const W = 680, H = 250;
+    const x0 = 70, y0 = 30, w = 540, h = 160;
+    const px = (t) => x0 + t * w, py = (p) => y0 + h - p * h;
+    // VWAP sigue el volumen acumulado real del día (la misma curva medida)
+    const acum = [0, 0.163, 0.258, 0.339, 0.406, 0.461, 0.514, 0.563, 0.612, 0.659, 0.709, 0.761, 0.829, 1];
+    const linea = (f, n = 40) => { let d = ''; for (let i = 0; i <= n; i++) { const t = i / n; d += `${i ? 'L' : 'M'} ${px(t).toFixed(1)} ${py(f(t)).toFixed(1)} `; } return d; };
+    const vwap = (t) => { const k = t * 13, i = Math.min(Math.floor(k), 12); return acum[i] + (acum[i + 1] - acum[i]) * (k - i); };
+    const urgente = (t) => 1 - Math.pow(1 - t, 2.4);
+    const guias = [0.25, 0.5, 0.75, 1].map(p => `<line x1="${x0}" y1="${py(p).toFixed(1)}" x2="${x0 + w}" y2="${py(p).toFixed(1)}" stroke="${C.grid}"/>`
+        + `<text x="${x0 - 6}" y="${(py(p) + 3).toFixed(1)}" fill="${C.textDim}" font-size="8" font-family="monospace" text-anchor="end">${p * 100}%</text>`).join('');
+    return `<svg viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg">
+        <rect width="${W}" height="${H}" fill="${C.bg}" rx="6"/>
+        ${guias}
+        <path d="${linea(t => t)}" fill="none" stroke="${C.cyan}" stroke-width="2" stroke-dasharray="6 4"/>
+        <path d="${linea(vwap)}" fill="none" stroke="${C.accent}" stroke-width="2.2"/>
+        <path d="${linea(urgente)}" fill="none" stroke="${C.orange}" stroke-width="2.2"/>
+        <text x="${x0}" y="${y0 + h + 15}" fill="${C.textDim}" font-size="9" font-family="monospace">9:30</text>
+        <text x="${x0 + w}" y="${y0 + h + 15}" fill="${C.textDim}" font-size="9" font-family="monospace" text-anchor="end">16:00</text>
+        <line x1="80" y1="${H - 26}" x2="100" y2="${H - 26}" stroke="${C.orange}" stroke-width="2.2"/><text x="105" y="${H - 22}" fill="${C.text}" font-size="8.5" font-family="monospace">con prisa: más al principio</text>
+        <line x1="300" y1="${H - 26}" x2="320" y2="${H - 26}" stroke="${C.accent}" stroke-width="2.2"/><text x="325" y="${H - 22}" fill="${C.text}" font-size="8.5" font-family="monospace">VWAP: al ritmo del mercado</text>
+        <line x1="500" y1="${H - 26}" x2="520" y2="${H - 26}" stroke="${C.cyan}" stroke-width="2" stroke-dasharray="6 4"/><text x="525" y="${H - 22}" fill="${C.text}" font-size="8.5" font-family="monospace">TWAP: igual cada rato</text>
+        <text x="${W / 2}" y="16" fill="${C.textDim}" font-size="9.5" font-family="monospace" text-anchor="middle">Qué parte de la orden lleva comprada cada algoritmo a cada hora</text>
+    </svg>`;
+}
+
+// La huella en el gráfico diario: comprar, pausar, comprar
+function inst_huella_escalones() {
+    const W = 680, H = 255;
+    const velas = [
+        { o: 50, h: 51, l: 49.4, c: 50.4, v: 1.6 }, { o: 50.4, h: 51.2, l: 49.6, c: 50.1, v: 1.7 },
+        { o: 50.1, h: 50.9, l: 49.5, c: 50.6, v: 1.8 }, { o: 50.6, h: 51.1, l: 49.8, c: 50.2, v: 1.6 },
+        { o: 50.2, h: 51, l: 49.7, c: 50.8, v: 1.9 }, { o: 50.8, h: 53, l: 50.6, c: 52.7, v: 2.2 },
+        { o: 52.7, h: 54.4, l: 52.4, c: 54.1, v: 2.0 }, { o: 54.1, h: 54.6, l: 53.3, c: 53.8, v: 0.9 },
+        { o: 53.8, h: 54.3, l: 53.2, c: 53.6, v: 0.8 }, { o: 53.6, h: 54.2, l: 53.1, c: 54, v: 0.8 },
+        { o: 54, h: 54.4, l: 53.4, c: 53.9, v: 0.7 }, { o: 53.9, h: 56, l: 53.8, c: 55.7, v: 2.1 },
+        { o: 55.7, h: 57.3, l: 55.5, c: 57, v: 1.9 }, { o: 57, h: 57.4, l: 56.3, c: 56.8, v: 0.9 },
+        { o: 56.8, h: 57.2, l: 56.1, c: 56.6, v: 0.8 }, { o: 56.6, h: 57.3, l: 56.2, c: 57.1, v: 0.9 },
+    ];
+    const r = vsaVelas(velas, { x0: 40, y0: 32, w: 600, h: 140, volY0: 190, volH: 40, mn: 48.5, mx: 58.5, ancho: 16, media: 1 });
+    const banda = (a, b, col, t) => { const xa = r.px(a) - r.paso / 2, xb = r.px(b) + r.paso / 2;
+        return `<rect x="${xa.toFixed(1)}" y="26" width="${(xb - xa).toFixed(1)}" height="208" fill="${col}" opacity="0.06"/>`
+            + `<text x="${((xa + xb) / 2).toFixed(1)}" y="20" fill="${col}" font-size="9" font-family="monospace" text-anchor="middle">${t}</text>`; };
+    return `<svg viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg">
+        <rect width="${W}" height="${H}" fill="${C.bg}" rx="6"/>
+        ${banda(0, 4, C.cyan, 'compran sin mover el precio')}
+        ${banda(5, 6, C.accent, 'suben')}
+        ${banda(7, 10, C.yellow, 'pausa')}
+        ${banda(11, 12, C.accent, 'suben')}
+        ${banda(13, 15, C.yellow, 'pausa')}
+        ${r.svg}
+        <text x="${W / 2}" y="${H - 6}" fill="${C.text}" font-size="10" font-family="monospace" text-anchor="middle">Volumen alto con el precio quieto, subidas con volumen y pausas sin él: la escalera de quien compra por partes</text>
+    </svg>`;
+}
+
+// El VWAP del día como referencia: los retrocesos a él se compran
+function inst_vwap_referencia() {
+    const W = 680, H = 250;
+    const velas = [
+        { o: 30, h: 30.4, l: 29.8, c: 30.3, v: 3 }, { o: 30.3, h: 30.7, l: 30.2, c: 30.6, v: 2 },
+        { o: 30.6, h: 30.8, l: 30.3, c: 30.4, v: 1.5 }, { o: 30.4, h: 30.5, l: 30.15, c: 30.25, v: 1.2 },
+        { o: 30.25, h: 30.6, l: 30.2, c: 30.55, v: 1.4 }, { o: 30.55, h: 30.95, l: 30.5, c: 30.9, v: 1.5 },
+        { o: 30.9, h: 31, l: 30.6, c: 30.65, v: 1.1 }, { o: 30.65, h: 30.7, l: 30.42, c: 30.5, v: 1.0 },
+        { o: 30.5, h: 30.9, l: 30.45, c: 30.85, v: 1.3 }, { o: 30.85, h: 31.2, l: 30.8, c: 31.15, v: 1.4 },
+        { o: 31.15, h: 31.3, l: 30.9, c: 30.95, v: 1.0 }, { o: 30.95, h: 31, l: 30.7, c: 30.78, v: 1.0 },
+        { o: 30.78, h: 31.2, l: 30.75, c: 31.15, v: 1.3 }, { o: 31.15, h: 31.5, l: 31.1, c: 31.45, v: 1.6 },
+    ];
+    const r = vsaVelas(velas, { x0: 40, y0: 30, w: 560, h: 150, volY0: 195, volH: 36, mn: 29.6, mx: 31.7, ancho: 18 });
+    let pv = 0, vol = 0;
+    const vwap = velas.map(b => { pv += (b.h + b.l + b.c) / 3 * b.v; vol += b.v; return pv / vol; });
+    const camino = vwap.map((v, i) => `${i ? 'L' : 'M'} ${r.px(i).toFixed(1)} ${r.py(v).toFixed(1)}`).join(' ');
+    const toques = [3, 7, 11].map(i => `<circle cx="${r.px(i).toFixed(1)}" cy="${r.py(velas[i].l).toFixed(1)}" r="9" fill="none" stroke="${C.yellow}" stroke-width="1.5"/>`).join('');
+    return `<svg viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg">
+        <rect width="${W}" height="${H}" fill="${C.bg}" rx="6"/>
+        <path d="${camino}" fill="none" stroke="${C.cyan}" stroke-width="2" opacity="0.9"/>
+        <text x="${(r.px(13) + 14).toFixed(1)}" y="${(r.py(vwap[13]) + 3).toFixed(1)}" fill="${C.cyan}" font-size="9" font-family="monospace">VWAP</text>
+        ${r.svg}
+        ${toques}
+        <text x="${W / 2}" y="16" fill="${C.textDim}" font-size="9.5" font-family="monospace" text-anchor="middle">Un día en que alguien grande compra: cada vuelta al VWAP encuentra compradores</text>
+        <text x="${W / 2}" y="${H - 6}" fill="${C.text}" font-size="10" font-family="monospace" text-anchor="middle">Quien compra contra el VWAP no quiere pagar mucho más que él: por eso lo defiende</text>
+    </svg>`;
+}
+
 export const CHARTS = {
     // Módulo 0
     rsu_philosophy, rsu_community, rsu_for_who,
@@ -12729,4 +12945,7 @@ export const CHARTS = {
     // Módulo 34 (gaps)
     gap_anatomia, gap_tipos_tendencia, gap_tres_retrocesos, gap_and_go, gap_relleno_compra,
     gap_giro_en_oferta, gap_dentro_trampa, gap_riesgo_stop, gap_relleno_estadistica, gap_vacio,
+    // Módulo 35 (instituciones)
+    inst_libro_ordenes, inst_impacto_tamano, inst_orden_madre, inst_curva_u, inst_pov,
+    inst_ritmo, inst_huella_escalones, inst_vwap_referencia,
 };

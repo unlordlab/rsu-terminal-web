@@ -46,12 +46,13 @@ export const MODULES = [
     { id:32, title:'Research — La Ficha de un Valor', icon:'🔎', description:'Manual de la ficha completa de un valor: cuándo se usa (con un nombre ya en la mano, no para explorar), de qué cinco categorías está hecho el RSU Score y por qué el desglose importa más que el número, cómo leer lo que hacen directivos, fondos y analistas —y por qué comprar informa más que vender—, un recorrido de cuatro paradas para descartar pronto, y dónde falla: bancos, aseguradoras, compañías extranjeras y salidas a bolsa recientes.' },
     { id:33, title:'Volume Spread Analysis (VSA)', icon:'👣', description:'Cuánto recorre cada vela, dónde cierra y con cuánto volumen: las huellas del dinero grande. Cómo se forma un suelo y cuándo se entra.' },
     { id:34, title:'Trading de Gaps', icon:'🕳️', description:'Qué dice cada hueco entre dos velas según dónde aparece, cuándo se rellena y cómo se opera el día que sale. Con el riesgo que un gap supone para quien ya está dentro.' },
+    { id:35, title:'Cómo Operan las Instituciones', icon:'🏦', description:'Por qué comprar o vender mucho es difícil y caro, cómo lo resuelven los fondos con algoritmos como VWAP, TWAP o POV, y las huellas que eso deja en el gráfico.' },
 ];
 
 export const PHASES = [
     { label:'🖥️ INTRO // RSU TERMINAL',              modules:[0] },
     { label:'📍 FASE 1 // ANÁLISIS TÉCNICO FUNDAMENTAL', modules:[1,2,3,4] },
-    { label:'🔬 FASE 2 // LECTURA DE MERCADO AVANZADA',  modules:[5,6,7,8,33,17,24] },
+    { label:'🔬 FASE 2 // LECTURA DE MERCADO AVANZADA',  modules:[35,5,6,7,8,33,17,24] },
     { label:'🎯 FASE 3 // ESTRATEGIA Y PLANIFICACIÓN',   modules:[9,10,11,18,19,34,23,25] },
     { label:'🚀 FASE 4 // EJECUCIÓN Y MENTALIDAD',       modules:[12,13,14,15] },
     { label:'🔄 FASE 5 // CICLO DE VIDA DEL PRECIO',     modules:[16] },

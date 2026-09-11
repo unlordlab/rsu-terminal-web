@@ -8315,4 +8315,235 @@ export const LESSONS = {
             },
         ]
     },
+
+    // ── MÓDULO 35 · CÓMO OPERAN LAS INSTITUCIONES ───────────────────────────
+    // Abre la Fase 2 porque es el «porqué» de lo que viene detrás: las zonas
+    // de oferta y demanda (módulo 5), el volumen (8) y el dinero profesional
+    // del VSA (33). La curva de volumen del día es la MEDIDA en
+    // shared/time_utils.py (_CURVA_VOLUMEN), la misma que usa la terminal para
+    // las alertas de RVOL. Gráficos: inst_* en academy_charts.js.
+
+    '35-1': {
+        moduleId: 35,
+        lessonIndex: 0,
+        title: 'El Problema del Tamaño: Por Qué Comprar Mucho Es Difícil',
+        duration: '6 min',
+        intro: 'Un fondo de inversión no compra acciones como tú. Cuando alguien quiere comprar o vender millones de euros de una empresa, su propio tamaño se convierte en su mayor problema. Entender esto explica buena parte de lo que ves en un gráfico.',
+        sections: [
+            {
+                heading: 'Quiénes son «las instituciones»',
+                blocks: [
+                    { type: 'text', content: 'Cuando en bolsa se habla de instituciones, o de dinero grande, se habla de fondos de inversión, planes de pensiones, aseguradoras, fondos de cobertura y bancos. Gestionan el dinero de millones de personas, y juntos mueven la mayor parte del volumen del mercado.' },
+                    { type: 'text', content: 'Su diferencia con un inversor particular no es que sepan más, sino que <b>mueven muchísimo más dinero</b>. Y eso tiene una consecuencia que no se ve a simple vista: no pueden comprar ni vender cuando quieren, al precio que ven.' },
+                ]
+            },
+            {
+                heading: 'El libro de órdenes se acaba',
+                blocks: [
+                    { type: 'text', content: 'En cada momento, a cada precio solo hay unas pocas acciones a la venta. Si compras poco, te las quedas al precio que ves. Si compras mucho de golpe, agotas las de ese precio y tienes que pagar el siguiente, y el siguiente.' },
+                    { type: 'chart', id: 'inst_libro_ordenes' },
+                    { type: 'text', content: 'En el ejemplo, comprar 10.000 acciones cuando se ven a 100,00 $ sale a 100,17 $ de media, y deja el precio en 100,35 $. Ahora imagina que no son 10.000, sino un millón: el comprador empuja el precio contra sí mismo. Es lo que se llama <b>impacto de mercado</b>.' },
+                ]
+            },
+            {
+                heading: 'Tres cosas juegan en su contra',
+                blocks: [
+                    { type: 'chart', id: 'inst_impacto_tamano' },
+                    { type: 'table',
+                        headers: ['Problema', 'Qué pasa'],
+                        rows: [
+                            ['<b>Impacto</b>', 'Su propia compra sube el precio (o su venta lo hunde) mientras todavía está comprando'],
+                            ['<b>Deslizamiento</b>', 'Acaba pagando más de lo que costaba cuando tomó la decisión'],
+                            ['<b>Fuga de información</b>', 'Si otros notan que hay un comprador grande, se adelantan: compran antes para venderle más caro'],
+                        ]
+                    },
+                    { type: 'concept', title: 'El tamaño juega en contra', content: 'El coste crece con el tamaño de la orden: cuanto más grande es respecto al volumen que se negocia cada día, más caro sale ejecutarla de golpe. Un fondo que quiere comprar el equivalente a varios días de volumen no puede hacerlo en una mañana sin disparar el precio.' },
+                    { type: 'tip', label: 'TU VENTAJA', content: 'Aquí el pequeño inversor gana: tu orden no mueve el precio, puedes entrar y salir en segundos y no tienes que esconderte de nadie. Esa agilidad es una ventaja real frente a quien necesita semanas para montar una posición.' },
+                ]
+            },
+        ]
+    },
+
+    '35-2': {
+        moduleId: 35,
+        lessonIndex: 1,
+        title: 'Cómo lo Resuelven: Trocear y Esconder',
+        duration: '6 min',
+        intro: 'Si comprar de golpe es carísimo, la solución es no hacerlo de golpe. Las instituciones parten sus órdenes en trozos pequeños, los reparten en el tiempo y buscan sitios donde no se vean.',
+        sections: [
+            {
+                heading: 'La orden madre y las órdenes hijas',
+                blocks: [
+                    { type: 'text', content: 'La decisión del gestor —«comprar 300.000 acciones»— es la <b>orden madre</b>. Nunca llega así al mercado. Se divide en cientos o miles de <b>órdenes hijas</b> pequeñas que se envían poco a poco, durante horas o durante días.' },
+                    { type: 'chart', id: 'inst_orden_madre' },
+                    { type: 'text', content: 'Vista desde fuera, cada orden hija parece la compra de un particular. Nadie ve la orden grande: solo un goteo de compras normales. De eso se encargan las mesas de negociación de los bancos y, sobre todo, los algoritmos de ejecución de la lección siguiente.' },
+                ]
+            },
+            {
+                heading: 'Dónde se esconden',
+                blocks: [
+                    { type: 'table',
+                        headers: ['Dónde', 'Cómo funciona'],
+                        rows: [
+                            ['<b>Órdenes iceberg</b>', 'En el libro solo se ve una parte pequeña de la orden. Cuando alguien la compra, aparece otra parte igual en el mismo precio, y así hasta completarla'],
+                            ['<b>Mercados oscuros</b> (dark pools)', 'Mercados privados donde las órdenes no se ven antes de ejecutarse. Sirven para cruzar grandes bloques entre instituciones sin mover el precio; la operación se publica después'],
+                            ['<b>Subasta de cierre</b>', 'Al final de la sesión se cruza de una vez una parte muy grande del volumen del día. Para quien necesita el precio de cierre (un fondo indexado, por ejemplo) es el sitio donde más liquidez hay'],
+                        ]
+                    },
+                    { type: 'concept', title: 'Por qué la paciencia es una ventaja para ellos', content: 'Cuanto más despacio compra un fondo, menos mueve el precio. Pero cuanto más tarda, más riesgo corre de que el precio se le escape por otros motivos. Toda la ejecución institucional es un equilibrio entre esas dos cosas: prisa contra impacto.' },
+                    { type: 'warning', content: 'Trocear no hace invisible al comprador. Quien compra durante semanas deja huellas: volumen alto de forma continuada, precios que se sostienen, bases que se forman. La lección 4 explica cómo se leen.' },
+                ]
+            },
+        ]
+    },
+
+    '35-3': {
+        moduleId: 35,
+        lessonIndex: 2,
+        title: 'Los Algoritmos de Ejecución: VWAP, TWAP, POV y Otros',
+        duration: '8 min',
+        intro: 'Los algoritmos de ejecución son programas que reciben la orden madre y deciden cuándo, cuánto y dónde enviar cada orden hija. Hay unos pocos tipos básicos, y cada uno deja una forma distinta en el volumen.',
+        sections: [
+            {
+                heading: 'Primero: cómo se reparte el volumen en un día',
+                blocks: [
+                    { type: 'text', content: 'El volumen no se reparte igual durante la sesión. Tiene forma de U: mucho al abrir, poco a mediodía y mucho al cerrar. Medido en acciones líquidas de EE. UU., la primera media hora se lleva cerca del 16% del volumen del día, la última cerca del 17% (con la subasta de cierre), y a mediodía cada media hora ronda el 5%.' },
+                    { type: 'chart', id: 'inst_curva_u' },
+                    { type: 'tip', label: 'EN LA TERMINAL', content: 'Esa forma de U es la misma que usa la terminal para las alertas de RVOL de la Watchlist: para saber si hoy va a haber un volumen fuera de lo normal, no basta con mirar cuánto se lleva negociado; hay que compararlo con lo que suele haberse negociado a esa hora.' },
+                ]
+            },
+            {
+                heading: 'VWAP: al ritmo del mercado',
+                blocks: [
+                    { type: 'text', content: 'El algoritmo <b>VWAP</b> reparte la orden siguiendo esa U: compra mucho cuando el mercado negocia mucho y poco cuando negocia poco. Su objetivo es conseguir un precio medio parecido al VWAP del día, el precio medio que ha pagado todo el mercado.' },
+                    { type: 'concept', title: 'Por qué el VWAP importa tanto', content: 'Muchas instituciones se juzgan contra el VWAP: si su gestor compró por debajo del VWAP del día, lo hizo bien; si compró por encima, pagó de más. Por eso el VWAP no es solo un indicador: es la vara con la que se mide a quienes mueven el mercado.' },
+                ]
+            },
+            {
+                heading: 'TWAP: lo mismo cada rato',
+                blocks: [
+                    { type: 'text', content: 'El algoritmo <b>TWAP</b> ignora el volumen: divide la orden en partes iguales y envía una cada cierto tiempo, por ejemplo cada cinco minutos. Es sencillo y útil en valores con poco volumen, pero tiene un problema: es <b>predecible</b>. Otros programas pueden detectar un patrón tan regular y adelantarse.' },
+                ]
+            },
+            {
+                heading: 'POV: una parte fija de lo que se negocia',
+                blocks: [
+                    { type: 'text', content: 'El algoritmo de <b>participación en el volumen</b> (POV, por sus siglas en inglés) compra siempre la misma parte de lo que negocia el mercado, por ejemplo un 10% o un 20%. Si el mercado se anima, compra más; si se para, compra menos.' },
+                    { type: 'chart', id: 'inst_pov' },
+                    { type: 'text', content: 'Su ventaja es que nunca pesa demasiado en el mercado. Su inconveniente, que no sabe cuándo terminará: si el valor negocia poco durante días, la orden tarda días en completarse.' },
+                ]
+            },
+            {
+                heading: 'Con prisa: el precio de llegada',
+                blocks: [
+                    { type: 'text', content: 'Los algoritmos de <b>precio de llegada</b> (también llamados de implementation shortfall) intentan acercarse al precio que había cuando se tomó la decisión. Como temen que el precio se escape, <b>compran más al principio</b> y van frenando. Aceptan más impacto a cambio de menos riesgo de llegar tarde.' },
+                    { type: 'chart', id: 'inst_ritmo' },
+                    { type: 'table',
+                        headers: ['Algoritmo', 'Cómo compra', 'Cuándo se usa', 'Qué huella deja'],
+                        rows: [
+                            ['<b>VWAP</b>', 'Siguiendo la U del volumen', 'Cuando se le juzga contra el VWAP del día', 'Nada que destaque: se mezcla con el mercado'],
+                            ['<b>TWAP</b>', 'Partes iguales cada cierto tiempo', 'Valores con poco volumen, órdenes sencillas', 'Un goteo regular, fácil de detectar'],
+                            ['<b>POV</b>', 'Una parte fija del volumen', 'Cuando no quiere pesar más que el mercado', 'Crece con el volumen: nunca dispara el precio solo'],
+                            ['<b>Precio de llegada</b>', 'Más al principio', 'Cuando teme que el precio se escape', 'Presión compradora fuerte al inicio del día o de la operación'],
+                        ]
+                    },
+                    { type: 'text', content: 'Hay más —algoritmos que buscan liquidez escondida en los mercados oscuros, o que envían todo a la subasta de cierre—, pero todos son variaciones del mismo equilibrio: prisa contra impacto.' },
+                ]
+            },
+        ]
+    },
+
+    '35-4': {
+        moduleId: 35,
+        lessonIndex: 3,
+        title: 'Las Huellas que Dejan',
+        duration: '6 min',
+        intro: 'Por mucho que troceen y escondan sus órdenes, quien compra durante semanas deja rastro. No se ve una orden concreta, pero sí el efecto de miles de ellas en el precio y el volumen.',
+        sections: [
+            {
+                heading: 'La escalera: comprar, pausar, comprar',
+                blocks: [
+                    { type: 'chart', id: 'inst_huella_escalones' },
+                    { type: 'steps', items: [
+                        '<b>Volumen alto con el precio casi quieto.</b> Alguien absorbe todo lo que se vende sin dejar que el precio suba demasiado: está acumulando. Es el «mucho esfuerzo, poco resultado» del VSA (módulo 33).',
+                        '<b>Subidas con volumen.</b> Cuando ya no quedan vendedores baratos, el precio sube.',
+                        '<b>Pausas sin volumen.</b> El comprador deja de empujar para no pagar de más; como nadie vende con fuerza, el precio se sostiene.',
+                    ]},
+                    { type: 'text', content: 'Por eso las tendencias de los valores que compran las instituciones suelen durar semanas o meses: una posición grande no se monta en un día. Es la Fase 2 de Weinstein (módulo 16) vista desde dentro.' },
+                ]
+            },
+            {
+                heading: 'Los niveles que defienden',
+                blocks: [
+                    { type: 'text', content: 'Un fondo que todavía no ha terminado de comprar tiene órdenes esperando en ciertos precios. Cuando el precio vuelve a esa zona, las encuentra y rebota. Así nacen muchas <b>zonas de demanda</b> (módulo 5): no son una línea mágica, son el sitio donde alguien grande sigue comprando.' },
+                    { type: 'chart', id: 'inst_vwap_referencia' },
+                    { type: 'text', content: 'Dentro del día pasa lo mismo con el <b>VWAP</b>. Quien compra con un algoritmo VWAP, o a quien se juzga contra el VWAP, no quiere pagar mucho más que él. Cuando el precio vuelve al VWAP, esas compras aparecen, y en los días de acumulación el VWAP hace de soporte.' },
+                ]
+            },
+            {
+                heading: 'Los momentos del calendario',
+                blocks: [
+                    { type: 'table',
+                        headers: ['Momento', 'Qué pasa'],
+                        rows: [
+                            ['Cierre de cada día', 'La subasta de cierre concentra una parte grande del volumen: fondos que necesitan el precio de cierre'],
+                            ['Final de mes y de trimestre', 'Muchos fondos reajustan sus carteras y sus pesos'],
+                            ['Cambios en los índices', 'Cuando un valor entra o sale de un índice, los fondos que lo replican tienen que comprarlo o venderlo el mismo día'],
+                        ]
+                    },
+                    { type: 'warning', content: 'No todo volumen alto es una institución, ni todo soporte es un fondo defendiendo su posición. Estas huellas son pistas que se leen juntas y en contexto, nunca una prueba. Nadie fuera del fondo sabe con certeza qué está haciendo.' },
+                ]
+            },
+        ]
+    },
+
+    '35-5': {
+        moduleId: 35,
+        lessonIndex: 4,
+        title: 'Qué Significa Todo Esto para Ti',
+        duration: '6 min',
+        intro: 'Saber cómo compran y venden los grandes no sirve para adivinar su próxima orden, pero sí para operar a favor de su fuerza, evitar sus problemas y aprovechar tu ventaja de ser pequeño.',
+        sections: [
+            {
+                heading: 'Tus ventajas y tus desventajas',
+                blocks: [
+                    { type: 'table',
+                        headers: ['Tú tienes', 'Ellos tienen'],
+                        rows: [
+                            ['Agilidad: entras y sales sin mover el precio', 'Tamaño: pueden sostener una tendencia durante meses'],
+                            ['Libertad: puedes no hacer nada y esperar', 'Obligaciones: tienen que invertir el dinero que reciben'],
+                            ['Ninguna prisa por cerrar el mes', 'Más información y mejores herramientas'],
+                        ]
+                    },
+                    { type: 'concept', title: 'Nadar a favor de la corriente', content: 'Como una posición grande tarda semanas en montarse, cuando un valor empieza a subir con volumen de forma continuada suele haber detrás alguien que todavía no ha terminado. Ir a favor de esa corriente es más fácil que ir en contra.' },
+                ]
+            },
+            {
+                heading: 'Consejos prácticos',
+                blocks: [
+                    { type: 'steps', items: [
+                        '<b>Opera valores con volumen suficiente.</b> En una acción que negocia poco, tú también mueves el precio al comprar, y pagas la diferencia entre el precio de compra y el de venta.',
+                        '<b>Usa órdenes limitadas.</b> Una orden a mercado en un valor poco líquido, o en la apertura, puede ejecutarse bastante lejos del precio que veías.',
+                        '<b>Cuidado con la apertura y el cierre.</b> Es cuando más volumen hay, pero también cuando el precio más salta.',
+                        '<b>Fíjate en el VWAP en los días de entrada.</b> Si el precio se sostiene por encima con volumen, hay compradores de verdad detrás.',
+                    ]},
+                ]
+            },
+            {
+                heading: 'Tres mitos',
+                blocks: [
+                    { type: 'table',
+                        headers: ['Mito', 'Lo que pasa de verdad'],
+                        rows: [
+                            ['«Las manos fuertes lo manipulan todo»', 'Tienen enormes problemas para mover su propio dinero sin perjudicarse. Más que manipular, intentan no hacerse daño'],
+                            ['«Siempre aciertan»', 'Se equivocan como cualquiera; la diferencia es que no pueden salir rápido cuando se equivocan'],
+                            ['«Si sigo al dinero grande, gano»', 'Sus huellas se ven tarde y no dicen cuándo han terminado de comprar. Son contexto, no una señal'],
+                        ]
+                    },
+                    { type: 'tip', label: 'EN LA TERMINAL', content: 'Varias herramientas miran al dinero grande desde distintos ángulos: en Research, qué están haciendo los directivos y los fondos con cada valor (lección 32-3); en Options Flow, las apuestas grandes en opciones (lección 22-2); y en el Escáner, el RVOL, que dice cuándo un valor negocia mucho más de lo normal.' },
+                    { type: 'concept', title: 'Todo el módulo en una frase', content: 'El dinero grande no puede comprar de golpe, así que compra poco a poco, y eso deja huellas: volumen continuado, bases, soportes defendidos y tendencias que duran. Tu ventaja es ser pequeño y paciente.' },
+                ]
+            },
+        ]
+    },
 };

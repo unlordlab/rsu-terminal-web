@@ -104,7 +104,7 @@ def test_el_VSA_tiene_sus_cinco_lecciones_y_sus_graficos():
     assert len(vsa) == 9 and all(c.startswith("vsa_") for c in vsa)
 
 
-@pytest.mark.parametrize("modulo", [33, 34])
+@pytest.mark.parametrize("modulo", [33, 34, 35])
 def test_el_quiz_de_los_modulos_nuevos_esta_bien_formado(modulo):
     bloque = QUIZZES[QUIZZES.index(f"    {modulo}: {{"):]
     siguiente = re.search(r"^    \d+: \{", bloque[10:], re.M)
@@ -132,7 +132,7 @@ def test_los_gaps_van_detras_del_modulo_de_confirmacion():
 
 def test_los_gaps_tienen_sus_cinco_lecciones_y_sus_graficos():
     assert [k for k, m, _ in CLAVES if m == "34"] == ["34-1", "34-2", "34-3", "34-4", "34-5"]
-    bloque = LECCIONES[LECCIONES.index("'34-1': {"):]
+    bloque = LECCIONES[LECCIONES.index("'34-1': {"):LECCIONES.index("'35-1': {")]
     graficos = re.findall(r"type: 'chart', id: '([a-z0-9_]+)'", bloque)
     assert len(set(graficos)) == 10 and all(g.startswith("gap_") for g in graficos), graficos
 
@@ -157,6 +157,52 @@ def test_la_tabla_del_relleno_y_su_grafico_dicen_lo_mismo():
     assert len(filas) == 5 and len(series) == 3
     for k in range(3):
         assert [int(f[k + 1]) for f in filas] == series[k], (k, filas, series)
+
+
+# ── El módulo 35: Cómo operan las instituciones ──────────────────────────────
+
+def test_las_instituciones_abren_la_fase_2():
+    """Es el porqué de lo que viene detrás: zonas de oferta y demanda (5),
+    volumen (8) y el dinero profesional del VSA (33)."""
+    fase2 = re.search(r"FASE 2[^\n]*modules:\[([\d,\s]+)\]", MODULOS).group(1)
+    orden = [int(x) for x in fase2.split(",")]
+    assert orden[0] == 35 and orden.index(35) < orden.index(5) < orden.index(33), orden
+
+
+def test_las_instituciones_tienen_sus_cinco_lecciones_y_sus_graficos():
+    assert [k for k, m, _ in CLAVES if m == "35"] == ["35-1", "35-2", "35-3", "35-4", "35-5"]
+    bloque = LECCIONES[LECCIONES.index("'35-1': {"):]
+    graficos = re.findall(r"type: 'chart', id: '([a-z0-9_]+)'", bloque)
+    assert len(set(graficos)) == 8 and all(g.startswith("inst_") for g in graficos), graficos
+    for algoritmo in ("VWAP", "TWAP", "POV", "precio de llegada"):
+        assert algoritmo in bloque, algoritmo
+
+
+def test_la_curva_del_dia_es_la_que_mide_la_terminal():
+    """El gráfico del volumen por media hora y el texto de la lección 35-3
+    salen de la curva MEDIDA en shared/time_utils.py (_CURVA_VOLUMEN), la que
+    usan las alertas de RVOL. Si alguien la vuelve a medir, esto avisa de que
+    el gráfico y la lección se han quedado atrás."""
+    import sys
+    sys.path.insert(0, os.path.join(RAIZ, "shared"))
+    from time_utils import _CURVA_VOLUMEN
+    puntos = sorted(_CURVA_VOLUMEN)
+
+    def acumulado(minuto):
+        for a, b in zip(puntos, puntos[1:]):
+            if minuto <= b:
+                return _CURVA_VOLUMEN[a] + (_CURVA_VOLUMEN[b] - _CURVA_VOLUMEN[a]) * (minuto - a) / (b - a)
+        return 1.0
+
+    medidos = [round((acumulado(m) - acumulado(m - 30) if m > 30 else acumulado(30)) * 100, 1)
+               for m in range(30, 391, 30)]
+    fn = GRAFICOS[GRAFICOS.index("function inst_curva_u()"):]
+    fn = fn[:fn.index("\n}\n")]
+    grafico = [float(x) for x in re.search(r"const vol = \[([\d.,\s]+)\];", fn).group(1).split(",")]
+    assert len(grafico) == 13
+    assert all(abs(a - b) <= 0.2 for a, b in zip(grafico, medidos)), (grafico, medidos)
+    leccion = LECCIONES[LECCIONES.index("'35-3': {"):LECCIONES.index("'35-4': {")]
+    assert f"cerca del {round(grafico[0])}%" in leccion and f"cerca del {round(grafico[-1])}%" in leccion
 
 
 # ── Todos los gráficos se dibujan, ejecutados en Node (en CI siempre está) ──

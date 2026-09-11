@@ -171,4 +171,9 @@ export const LESSON_INDEX = {
     '34-3': { title: 'El Relleno del Gap: Por Qué la Mayoría Vuelven', words: 874 },
     '34-4': { title: 'Tres Estrategias para el Día del Gap', words: 532 },
     '34-5': { title: 'Los Gaps que Engañan y el Riesgo del Gap', words: 480 },
+    '35-1': { title: 'El Problema del Tamaño: Por Qué Comprar Mucho Es Difícil', words: 410 },
+    '35-2': { title: 'Cómo lo Resuelven: Trocear y Esconder', words: 331 },
+    '35-3': { title: 'Los Algoritmos de Ejecución: VWAP, TWAP, POV y Otros', words: 612 },
+    '35-4': { title: 'Las Huellas que Dejan', words: 373 },
+    '35-5': { title: 'Qué Significa Todo Esto para Ti', words: 413 },
 };
