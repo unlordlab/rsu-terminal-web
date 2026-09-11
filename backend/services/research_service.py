@@ -1589,13 +1589,27 @@ def _get_short_interest(ticker: str) -> dict:
         else:
             squeeze_label = "BAJO"
 
+        # La fecha del dato (se publica dos veces al mes, con retraso) y cómo
+        # ha cambiado respecto al anterior. Antes `date` iba siempre vacío y
+        # la pantalla dejaba un «del float ·» con el punto colgando.
+        fecha = None
+        if info.get('dateShortInterest'):
+            try:
+                from datetime import datetime, timezone
+                fecha = datetime.fromtimestamp(int(info['dateShortInterest']), timezone.utc).strftime('%Y-%m-%d')
+            except (TypeError, ValueError, OSError):
+                fecha = None
+        previo = _safe(info.get('sharesShortPriorMonth'))
+        cambio = round((short_int / previo - 1) * 100, 1) if short_int and previo else None
+
         return {
             "short_pct":      short_pct_fmt,
             "short_int":      short_int,
             "short_ratio":    round(short_ratio, 1) if short_ratio else None,  # days to cover
             "squeeze_score":  squeeze_score,
             "squeeze_label":  squeeze_label,
-            "date":           "",
+            "date":           fecha,
+            "cambio_previo_pct": cambio,
         }
     except Exception:
         return {}
@@ -1610,6 +1624,26 @@ def _get_flow_badge(ticker: str):
         return get_flow_badge(ticker)
     except Exception:
         return None
+
+
+def _earnings_estimada(ticker: str, fecha_finnhub: str) -> bool:
+    """¿Es una fecha anunciada por la empresa o una estimación? Finnhub no lo
+    dice; Yahoo sí (`isEarningsDateEstimate`). Si Yahoo la marca como
+    estimada, o las dos fuentes no coinciden en el día, es estimada: OSS el
+    11/09 salía «03/11» en Finnhub y «04/11, estimada» en Yahoo."""
+    try:
+        info = _info_de(ticker)
+        if info.get('isEarningsDateEstimate'):
+            return True
+        inicio = info.get('earningsTimestampStart') or info.get('earningsTimestamp')
+        if inicio and fecha_finnhub:
+            from datetime import datetime, timezone
+            yahoo = datetime.fromtimestamp(int(inicio), timezone.utc).strftime('%Y-%m-%d')
+            if yahoo >= datetime.now(timezone.utc).strftime('%Y-%m-%d') and yahoo != fecha_finnhub:
+                return True
+        return False
+    except Exception:
+        return False
 
 
 def _get_next_earnings(ticker: str) -> dict:
@@ -1642,10 +1676,12 @@ def _get_next_earnings(ticker: str) -> dict:
         )
         if not futuros: return {}
         next_e = futuros[0]
+        fecha = next_e.get('date', '')
         return {
-            "date":     next_e.get('date', ''),
+            "date":     fecha,
             "eps_est":  _safe(next_e.get('epsEstimate')),
             "hour":     next_e.get('hour', ''),
+            "estimada": _earnings_estimada(ticker, fecha),
         }
     except Exception:
         return {}
@@ -1707,6 +1743,31 @@ def _get_seasonality(ticker: str) -> list:
         return results
     except Exception:
         return []
+
+def _lista_humana(numeros):
+    """[20, 50, 200] -> «20, 50 y 200»."""
+    n = [str(x) for x in numeros]
+    return n[0] if len(n) == 1 else ", ".join(n[:-1]) + " y " + n[-1]
+
+
+def tendencia_medio_plazo(price, ema20, ema50, ema200, dir50) -> dict:
+    """Hacia dónde va el precio en las próximas semanas, en una palabra y con
+    su motivo. La decide la media de 50 sesiones (su pendiente y de qué lado
+    está el precio); las de 20 y 200 solo completan la frase."""
+    if price > ema50 and dir50 == "alcista":
+        direccion = "ALCISTA"
+    elif price < ema50 and dir50 == "bajista":
+        direccion = "BAJISTA"
+    else:
+        direccion = "LATERAL"
+    lado = "Por encima" if price > ema50 else "Por debajo"
+    verbo = {"alcista": "sube", "bajista": "baja"}.get(dir50, "está plana")
+    motivo = f"{lado} de su media de 50 sesiones, que {verbo}"
+    otras = [n for n, v in ((20, ema20), (200, ema200)) if v is not None and (price > v) == (price > ema50)]
+    if otras:
+        motivo += f", y también de la de {_lista_humana(otras)}" if len(otras) == 1 else f", y también de las de {_lista_humana(otras)}"
+    return {"direccion": direccion, "motivo": motivo}
+
 
 def _get_technical_levels(ticker: str) -> dict:
     try:
@@ -1781,6 +1842,12 @@ def _get_technical_levels(ticker: str) -> dict:
         # ("emas" en el return de abajo), no la decisión de fase en sí.
         phase_info        = classify_phase_debounced(close)
         phase_weekly_info = classify_phase_weekly(close)
+
+        # La media de 30 semanas (SMA150) es la que decide la fase, y el panel
+        # no la enseñaba: se veían la de 20, 50 y 200, pero no la que manda.
+        sma150_s = close.rolling(150, min_periods=150).mean()
+        sma150 = round(float(sma150_s.iloc[-1]), 2) if len(close) >= 150 else None
+        slope150_dir, slope150_pct = _ema_slope(sma150_s, 15, 0.4) if sma150 else (None, None)
 
         trend        = phase_info["trend"]
         phase        = phase_info["phase"]
@@ -1869,6 +1936,15 @@ def _get_technical_levels(ticker: str) -> dict:
                 "ema200": {"value": ema200, "slope": slope200_dir, "slope_pct": slope200_pct,
                            "vs_price": round((price - ema200) / ema200 * 100, 1) if ema200 else None},
             },
+            "sma150":        {"value": sma150, "slope": slope150_dir, "slope_pct": slope150_pct,
+                              "vs_price": round((price - sma150) / sma150 * 100, 1) if sma150 else None},
+            "precio":        round(price, 2),
+            "high52":        high52,
+            "low52":         low52,
+            # Tendencia de MEDIO plazo (la media de 50 sesiones), distinta de
+            # la fase, que mira 30 semanas. Antes la tarjeta «Tendencia»
+            # repetía la fase con otras palabras.
+            "tendencia":     tendencia_medio_plazo(price, ema20, ema50, ema200, slope50_dir),
             "trend":               trend,
             "market_phase":        phase,
             "phase_label":         phase_label,

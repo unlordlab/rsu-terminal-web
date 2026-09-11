@@ -2165,82 +2165,76 @@ LIMITACIÓN:
     },
 
     "ema-slope": {
-        title: "EMAs y su Pendiente",
-        short: "Medias móviles exponenciales (10/20/50/200) con su pendiente reciente: alcista ↗, bajista ↘, o plana →.",
-        long: `Las EMAs (medias móviles exponenciales) dan más peso a los precios recientes que las SMA clásicas, por lo que reaccionan más rápido a cambios de tendencia — útil sobre todo en la EMA10/20 para timing de corto plazo.
+        title: "Medias Móviles",
+        short: "El precio medio de las últimas 20, 50 y 200 sesiones y de las últimas 30 semanas, si cada media sube o baja, y a qué distancia está el precio.",
+        long: `Una media móvil es el precio medio de las últimas sesiones. Sirve para ver la dirección del precio sin el ruido del día a día.
 
-LAS 4 EMAs Y SU USO TÍPICO:
-▸ EMA 10: la más reactiva, sigue el pulso de muy corto plazo (días/1-2 semanas)
-▸ EMA 20: referencia de swing trading de corto plazo (2-4 semanas)
-▸ EMA 50: tendencia de medio plazo (1-3 meses), la más vigilada por gestores
-▸ EMA 200: tendencia de largo plazo (6-12 meses), la línea divisoria clásica entre mercado alcista y bajista de fondo
+QUÉ DICE CADA FILA:
+▸ El valor de la media, en dólares.
+▸ La flecha: si la media sube (↗), baja (↘) o está plana (→).
+▸ Debajo, a qué distancia está el precio: «precio 17% por debajo» quiere decir que el precio está un 17% por debajo de esa media.
 
-CÓMO SE CALCULA LA PENDIENTE:
-Se compara el valor actual de cada EMA contra su propio valor unas sesiones atrás (más sesiones cuanto más lenta la EMA, para evitar ruido). Si la variación supera un umbral mínimo se marca como ↗ alcista o ↘ bajista; si está dentro del umbral, se marca → plana (la EMA se está aplanando, señal de posible cambio de fase).
+QUÉ MIRA CADA UNA:
+▸ 20 sesiones (un mes): el corto plazo. Reacciona rápido y se equivoca a menudo.
+▸ 50 sesiones (dos meses y medio): el medio plazo. Es la que decide la tendencia de arriba.
+▸ 30 semanas: la del método de Weinstein, la que decide la fase.
+▸ 200 sesiones (un año): el largo plazo.
 
-DOS NÚMEROS DISTINTOS QUE NO HAY QUE CONFUNDIR:
-Cada fila de EMA muestra dos porcentajes con significados diferentes:
-▸ "% vs precio" (arriba, número grande) → cuánto se aleja el precio ACTUAL de esa media. Ej. si el precio está en $13.14 y la EMA200 en $14.34, la distancia es -8.4% — esto responde "¿qué tan lejos está el precio de esta media?".
-▸ "EMA pendiente" (abajo, número pequeño con flecha) → cuánto ha cambiado el VALOR de la propia EMA en las últimas sesiones, no su relación con el precio. Responde "¿está esta media subiendo o bajando?", independientemente de dónde esté el precio respecto a ella.
-Un precio puede estar muy lejos de una EMA (distancia grande) mientras esa EMA tiene una pendiente pequeña porque se mueve despacio — son lecturas independientes, no la misma cosa medida de dos formas.
+CÓMO LEERLAS JUNTAS:
+Un precio por encima de todas sus medias, y con todas subiendo, está en una tendencia sana. Por debajo de todas y con todas bajando, lo contrario. Lo más habitual es algo intermedio, y ahí es donde la tendencia y la fase de arriba ayudan a ordenar la lectura.
 
-POR QUÉ LA PENDIENTE IMPORTA MÁS QUE EL VALOR ABSOLUTO:
-Dos activos pueden cotizar ambos por encima de su EMA50, pero si en uno la EMA50 sigue subiendo con fuerza y en el otro se está aplanando, el segundo está mostrando primeras señales de agotamiento de tendencia mucho antes de que el precio lo confirme.`
+Las de 20, 50 y 200 sesiones son exponenciales: dan más peso a los días recientes, así que reaccionan antes que una media simple.`
     },
 
     "asset-trend": {
-        title: "Tendencia del Activo",
-        short: "Clasificación ALCISTA / BAJISTA / RANGO según la alineación y pendiente de las EMAs.",
-        long: `Esta clasificación resume en una sola etiqueta si el activo está en tendencia alcista, bajista, o sin dirección clara (rango/lateral), combinando 5 condiciones de alineación de EMAs:
+        title: "Tendencia",
+        short: "Hacia dónde va el precio en las próximas semanas: ALCISTA, BAJISTA o LATERAL, según su media de 50 sesiones.",
+        long: `La tendencia responde a una pregunta sencilla: ¿hacia dónde se está moviendo el precio estas semanas?
 
-1. Precio por encima de la EMA20
-2. EMA20 por encima de la EMA50
-3. EMA50 por encima de la EMA200
-4. EMA50 con pendiente alcista
-5. EMA200 con pendiente alcista o plana (no bajista)
+CÓMO SE DECIDE:
+Se mira la media de las últimas 50 sesiones (unos dos meses y medio):
+▸ ALCISTA: el precio está por encima de esa media y la media sube.
+▸ BAJISTA: el precio está por debajo y la media baja.
+▸ LATERAL: cualquier otra combinación. Por ejemplo, el precio acaba de cruzar la media, o la media está plana.
 
-CÓMO SE DECIDE LA ETIQUETA:
-▸ 4-5 condiciones cumplidas → ALCISTA: alineación limpia, EMAs ordenadas de corto a largo plazo y subiendo
-▸ 0-1 condiciones cumplidas → BAJISTA: alineación invertida, EMAs ordenadas a la baja
-▸ 2-3 condiciones → RANGO: alineación mixta, sin un sesgo dominante claro — el activo está lateral, en transición entre fases, o las EMAs están entrelazadas
+Debajo verás el motivo en una frase, y si el precio también está del mismo lado de las medias de 20 y 200 sesiones.
 
-POR QUÉ "RANGO" NO ES UN FALLO DEL SISTEMA:
-Los activos no están siempre en tendencia clara — pasan buena parte del tiempo en fases de transición o consolidación. Detectar correctamente el "RANGO" es tan útil como detectar la tendencia: evita forzar una lectura direccional donde el activo simplemente no la tiene todavía.`
+EN QUÉ SE DIFERENCIA DE LA FASE:
+La tendencia mira las próximas semanas; la fase mira meses. Pueden no coincidir, y eso también informa: un valor en Fase 2 (avance) con la tendencia bajista está corrigiendo dentro de una subida más larga.
+
+LO QUE NO ES:
+No es una previsión. Describe lo que está haciendo el precio ahora; puede cambiar la semana que viene.`
     },
 
     "market-phase": {
-        title: "Fase de Mercado (1-4)",
-        short: "Clasificación de las 4 fases clásicas de Stan Weinstein: Acumulación, Avance, Distribución, Declive. Fase diaria (rápida) + fase semanal (lenta, confirmación estructural).",
-        long: `Este sistema de 4 fases, popularizado por Stan Weinstein en "Secrets for Profiting in Bull and Bear Markets", describe el ciclo natural por el que pasa cualquier activo a lo largo del tiempo.
+        title: "Fase (método Weinstein)",
+        short: "En qué punto de su ciclo está el valor: 1 Acumulación, 2 Avance, 3 Distribución o 4 Declive. La decide la media de 30 semanas.",
+        long: `Stan Weinstein describió cuatro fases por las que pasa cualquier acción, y las reconocía con una sola herramienta: la media de las últimas 30 semanas.
 
-DOS TEMPORALIDADES, NO UNA:
-▸ FASE DIARIA: calculada sobre cierres diarios (EMA10/20/50/200 diarias) — rápida y táctica, pero más sensible al ruido de corto plazo. Es la que verás primero en pantalla.
-▸ FASE SEMANAL: calculada sobre velas semanales (mismos indicadores, resampleados) — la temporalidad ORIGINAL del método de Weinstein, mucho más lenta pero mucho más limpia. Se muestra al lado como confirmación estructural, no como sustituta de la diaria.
-Cuando ambas coinciden, la lectura es más fiable. Cuando discrepan (p.ej. diaria ya en Fase 3 pero semanal todavía en Fase 2), el desacuerdo en sí es información: suele significar que un movimiento reciente todavía no tiene entidad suficiente para cambiar el cuadro de fondo.
+LAS CUATRO FASES:
+▸ FASE 1 · ACUMULACIÓN: después de caer, el precio se mueve de lado alrededor de una media que ha dejado de bajar. Es una base.
+▸ FASE 2 · AVANCE: el precio está por encima de una media que sube. Es la subida.
+▸ FASE 3 · DISTRIBUCIÓN: después de subir, el precio se mueve de lado alrededor de una media que ha dejado de subir. Es un techo.
+▸ FASE 4 · DECLIVE: el precio está por debajo de una media que baja. Es la caída.
 
-DEBOUNCE — "SIN CONFIRMAR AÚN":
-La fase diaria exige que la clasificación se mantenga 3 sesiones seguidas antes de darse por buena. Si ves el aviso "cambio reciente, sin confirmar aún", significa que la fase acaba de cambiar y todavía no lleva las 3 sesiones seguidas necesarias — puede estabilizarse en la nueva fase o volver a la anterior. Esto reduce el "parpadeo" entre fases por ruido de un solo día, sin cambiar la fórmula de clasificación en sí.
+LAS RUPTURAS:
+La media de 30 semanas reacciona tarde: después de una subida fuerte puede seguir plana semanas aunque el precio se haya hundido. Por eso, si el precio cae claramente por debajo de ella (más de un 5%) y la media de 50 sesiones ya baja, se considera Fase 4 aunque la de 30 semanas todavía no haya girado; la etiqueta dice «ruptura reciente». Lo mismo al revés para la Fase 2.
 
-LAS 4 FASES:
-▸ FASE 1 — ACUMULACIÓN: el activo lleva tiempo lateral tras una caída previa, las EMAs están entrelazadas sin pendiente clara, normalmente cerca o por debajo de la EMA200. Los inversores informados empiezan a acumular en silencio antes de que el precio confirme nada.
-▸ FASE 2 — AVANCE (Markup): tendencia alcista confirmada y limpia — EMAs ordenadas (10>20>50>200) y con pendiente ascendente. Es la única fase que O'Neil, Minervini y Weinstein coinciden en señalar como la fase para comprar.
-▸ FASE 3 — DISTRIBUCIÓN: el activo cotiza todavía por encima de la EMA200 (herencia de una Fase 2 previa) pero la alineación de EMAs se ha roto — empieza a moverse lateral en zona alta. Los que compraron en Fase 1-2 comienzan a vender posición a quien compra tarde.
-▸ FASE 4 — DECLIVE / CORRECCIÓN: tendencia bajista confirmada y limpia, EMAs ordenadas a la baja. Fase de salida o de espera, nunca de compra según esta metodología.
+¿BASE O TECHO?
+Cuando el precio va de lado pegado a la media, la diferencia entre Fase 1 y Fase 3 es de dónde viene: si la media está en la parte baja de su recorrido del último año, venía de caer (base); si está en la parte alta, venía de subir (techo).
 
-CÓMO SE DISTINGUEN 1 Y 3 EN ESTE SISTEMA (ambas son técnicamente "rango"):
-La diferencia clave es la posición respecto a la EMA200: si el precio está por debajo o pegado a ella tras un periodo lateral, se interpreta como acumulación temprana (Fase 1); si está por encima tras un periodo lateral, se interpreta como distribución tras una subida previa (Fase 3).
+OTROS MATICES DE LA ETIQUETA:
+▸ «en corrección»: sigue en Fase 2 porque no ha perdido la media de 30 semanas, pero está bajando.
+▸ «en rebote»: sigue en Fase 4, pero está subiendo.
+▸ «posible giro»: en una base o un techo, las medias cortas ya empiezan a girar.
 
-SUBESTADOS ESPECIALES — GIROS TEMPRANOS (alcista y bajista):
-Existen dos casos intermedios que el sistema trata de forma diferenciada, uno espejo del otro:
-▸ "FASE 1 · POSIBLE GIRO TEMPRANO": las EMAs cortas (10 y 20) ya giran al alza y el precio cotiza por encima de la EMA20, pero las EMAs largas (50 y 200) siguen con pendiente bajista — un rebote real desde mínimos siempre empieza así.
-▸ "FASE 3 · POSIBLE GIRO BAJISTA TEMPRANO": el caso simétrico — las EMAs cortas ya giran a la baja con fuerza y el precio cotiza por debajo de la EMA20, pero las EMAs largas todavía no han terminado de confirmarlo. Sin este matiz, un activo cayendo con fuerza desde un techo reciente podía quedar clasificado como "Fase 1 · Acumulación" tranquila — justo lo contrario de lo que está pasando.
-En ambos casos sigue siendo una fase de cautela, no de confirmación.
+LO QUE VES EN PANTALLA:
+La fase grande es la semanal, la temporalidad del método. Debajo se dice si la diaria coincide. La diaria es más rápida y exige tres sesiones seguidas antes de dar un cambio por bueno: si acaba de cambiar, lo verás indicado.
 
-LIMITACIÓN A TENER EN CUENTA:
-Esta clasificación se basa puramente en el comportamiento de precio y EMAs (sin datos de volumen institucional real ni acumulación/distribución verificada), por lo que es una aproximación técnica razonable, no una confirmación de manual de Weinstein al 100%. Combínala con el resto de herramientas de la terminal antes de actuar.
+LO QUE LA FASE NO ES:
+Describe dónde está el valor en su ciclo; no dice lo que va a hacer. Medido en las acciones del S&P 500 durante tres años, ninguna fase adelantaba la rentabilidad de los meses siguientes. Úsala para entender el gráfico, no como señal de compra o de venta.
 
-USO EN EL SCANNER:
-El módulo Scanner reutiliza exactamente esta misma lógica (misma fórmula diaria, mismo debounce, misma fase semanal) para clasificar las ~500 acciones del S&P 500 en el scan nocturno, sin llamadas de red adicionales por ticker — así el criterio "Fase" del Scanner y la Fase que ves aquí en Research son siempre coherentes entre sí.`
+El Escáner usa exactamente esta misma fase.`
     },
 
     "short-interest-pct": {

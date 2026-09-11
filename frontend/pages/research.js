@@ -996,145 +996,172 @@ function newsSection(data) {
         + '</div>';
 }
 
+// ── NIVELES TÉCNICOS · POSICIONES CORTAS · PRÓXIMOS RESULTADOS ───────────────
+// Rehecho el 11/09/2026 tras auditar OSS con el usuario. Antes eran cinco
+// tarjetas y cuatro columnas que repetían lo mismo: la «tendencia» decía la
+// fase con otras palabras, las SMA y las EMA daban casi los mismos números, y
+// «✗ Bajo SMA50» repetía la tabla. La media que decide la fase (30 semanas) no
+// salía. Ahora: tres tarjetas (tendencia de medio plazo, fase, fuerza
+// relativa) y tres bloques (medias, rango del año, cortos y resultados).
+
+const RT_COLOR_FASE  = { 1: '#00d9ff', 2: '#00ffad', 3: '#ffb800', 4: '#f23645' };
+const RT_TENDENCIA   = {
+    ALCISTA: { color: '#00ffad', icono: '▲' },
+    BAJISTA: { color: '#f23645', icono: '▼' },
+    LATERAL: { color: '#ffb800', icono: '↔' },
+    RANGO:   { color: '#ffb800', icono: '↔' },
+};
+
 function technicalSection(data) {
     const t = data.technical_levels;
-    const s = data.short_interest;
-    const ne = data.next_earnings;
     if (!t || Object.keys(t).length === 0) return '';
-
-    function vsColor(val) {
-        if (val == null) return 'var(--color-muted)';
-        return val >= 0 ? 'var(--color-accent)' : '#f23645';
-    }
-    function vsStr(val) {
-        if (val == null) return 'N/A';
-        return (val >= 0 ? '+' : '') + val + '%';
-    }
-
     return '<div style="background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius);padding:1.25rem;margin-bottom:1rem;">'
-        + '<div style="color:var(--color-accent);font-size:12px;letter-spacing:0.08em;margin-bottom:1rem;">NIVELES TÉCNICOS · CORTO INTERÉS · PRÓXIMO EARNINGS</div>'
-
-        // Banner de Tendencia + Fase de mercado + Fuerza Relativa
-        + (t.trend ? trendPhaseBanner(t, data.relative_strength) : '')
-
-        + '<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:1rem;">'
-
-        // Medias móviles simples
-        + '<div>'
-        + '<div style="color:var(--color-muted);font-size:10px;margin-bottom:8px;letter-spacing:0.05em;">SMA (CLÁSICAS)</div>'
-        + techRow('SMA 20',  t.sma20,  t.vs_sma20)
-        + techRow('SMA 50',  t.sma50,  t.vs_sma50)
-        + techRow('SMA 200', t.sma200, t.vs_sma200)
+        + '<div style="color:var(--color-accent);font-size:12px;letter-spacing:0.08em;margin-bottom:1rem;">NIVELES TÉCNICOS · POSICIONES CORTAS · PRÓXIMOS RESULTADOS</div>'
+        + '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:0.75rem;margin-bottom:1.25rem;">'
+        + tarjetaTendencia(t) + tarjetaFase(t) + tarjetaFuerza(data.relative_strength)
         + '</div>'
-
-        // EMAs con pendiente
-        + '<div>'
-        + '<div style="color:var(--color-muted);font-size:10px;margin-bottom:8px;letter-spacing:0.05em;">EMAs · PENDIENTE' + tt('ema-slope') + '</div>'
-        + (t.emas ? emaRow('EMA 10',  t.emas.ema10)
-                  + emaRow('EMA 20',  t.emas.ema20)
-                  + emaRow('EMA 50',  t.emas.ema50)
-                  + emaRow('EMA 200', t.emas.ema200)
-           : '<div style="color:var(--color-muted);font-size:11px;">Sin datos</div>')
-        + '</div>'
-
-        // 52 semanas
-        + '<div>'
-        + '<div style="color:var(--color-muted);font-size:10px;margin-bottom:8px;letter-spacing:0.05em;">RANGO 52 SEMANAS</div>'
-        + techRow('Máx 52w', null, t.vs_52h)
-        + techRow('Mín 52w', null, t.vs_52l)
-        + (t.above_sma50 != null ? '<div style="font-size:11px;margin-top:8px;color:' + (t.above_sma50 ? 'var(--color-accent)' : '#f23645') + ';">' + (t.above_sma50 ? '✓ Sobre SMA50' : '✗ Bajo SMA50') + '</div>' : '')
-        + (t.above_sma200 != null ? '<div style="font-size:11px;color:' + (t.above_sma200 ? 'var(--color-accent)' : '#f23645') + ';">' + (t.above_sma200 ? '✓ Sobre SMA200' : '✗ Bajo SMA200') + '</div>' : '')
-        + '</div>'
-
-        // Short interest + next earnings
-        + '<div>'
-        + '<div style="color:var(--color-muted);font-size:10px;margin-bottom:8px;letter-spacing:0.05em;">SHORT INTEREST' + tt('short-interest-pct') + '</div>'
-        + (s && s.short_pct != null
-            ? '<div style="font-size:20px;color:' + (s.short_pct > 20 ? '#f23645' : s.short_pct > 10 ? '#ffb800' : 'var(--color-text)') + ';font-weight:500;">' + s.short_pct + '%</div>'
-              + '<div style="color:var(--color-muted);font-size:10px;">del float · ' + (s.date || '') + '</div>'
-            : '<div style="color:var(--color-muted);font-size:11px;">Sin datos</div>')
-        + (s && s.short_ratio != null
-            ? '<div style="display:flex;justify-content:space-between;align-items:center;margin-top:8px;font-size:11px;">'
-              + '<span style="color:var(--color-muted);">Days to Cover' + tt('days-to-cover') + '</span>'
-              + '<span style="color:' + (s.short_ratio > 10 ? '#f23645' : s.short_ratio > 5 ? '#ffb800' : 'var(--color-text)') + ';">' + s.short_ratio + 'd</span>'
-              + '</div>'
-            : '')
-        + (s && s.squeeze_score != null ? squeezeGauge(s) : '')
-        + (ne && ne.date
-            ? '<div style="margin-top:12px;"><div style="color:var(--color-muted);font-size:10px;margin-bottom:4px;letter-spacing:0.05em;">PRÓXIMO EARNINGS</div>'
-              + '<div style="color:#ffb800;font-size:14px;font-weight:500;">📅 ' + esc(fmtFecha(ne.date)) + '</div>'
-              + (ne.eps_est != null ? '<div style="color:var(--color-muted);font-size:11px;">EPS Est: $' + ne.eps_est.toFixed(2) + '</div>' : '')
-              + (ne.hour ? '<div style="color:var(--color-muted);font-size:10px;">' + (ne.hour.toLowerCase().includes('bmo') ? 'BMO 🌅' : 'AMC 🌙') + '</div>' : '')
-              + '</div>'
-            : '')
-        + '</div>'
+        + '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:1.25rem;">'
+        + tablaMedias(t) + rangoDelAno(t) + cortosYResultados(data.short_interest, data.next_earnings)
         + '</div>'
         + '</div>';
 }
 
-function trendPhaseBanner(t, rs) {
-    const trendColors = { ALCISTA: '#00ffad', BAJISTA: '#f23645', RANGO: '#ffb800' };
-    const trendIcons  = { ALCISTA: '▲', BAJISTA: '▼', RANGO: '↔' };
-    const tColor = trendColors[t.trend] || 'var(--color-muted)';
-    const tIcon  = trendIcons[t.trend] || '';
-    const phaseColors = { 1: '#00d9ff', 2: '#00ffad', 3: '#ffb800', 4: '#f23645' };
-    const pColor = phaseColors[t.market_phase] || 'var(--color-muted)';
-
-    return '<div style="display:flex;gap:1rem;margin-bottom:1rem;flex-wrap:wrap;">'
-        + '<div style="background:' + tColor + '11;border:1px solid ' + tColor + '44;border-radius:var(--radius);padding:8px 14px;flex:1;min-width:140px;">'
-        + '<div style="color:var(--color-muted);font-size:9px;letter-spacing:0.08em;margin-bottom:2px;">TENDENCIA' + tt('asset-trend') + '</div>'
-        + '<div style="color:' + tColor + ';font-size:14px;font-weight:600;letter-spacing:0.05em;">' + tIcon + ' ' + t.trend + '</div>'
-        + '</div>'
-        + '<div style="background:' + pColor + '11;border:1px solid ' + pColor + '44;border-radius:var(--radius);padding:8px 14px;flex:1;min-width:180px;">'
-        + '<div style="color:var(--color-muted);font-size:9px;letter-spacing:0.08em;margin-bottom:2px;">FASE DE MERCADO (DIARIA)' + tt('market-phase') + '</div>'
-        + '<div style="color:' + pColor + ';font-size:14px;font-weight:600;letter-spacing:0.05em;">' + (t.phase_label || ('Fase ' + t.market_phase)) + '</div>'
-        + (t.phase_confirmed === false ? '<div style="color:var(--color-muted);font-size:9px;margin-top:2px;">⚠ cambio reciente, sin confirmar aún</div>' : '')
-        + '</div>'
-        + (t.phase_weekly_label
-            ? '<div style="background:' + (phaseColors[t.phase_weekly] || 'var(--color-muted)') + '11;border:1px solid ' + (phaseColors[t.phase_weekly] || 'var(--color-muted)') + '44;border-radius:var(--radius);padding:8px 14px;flex:1;min-width:180px;">'
-              + '<div style="color:var(--color-muted);font-size:9px;letter-spacing:0.08em;margin-bottom:2px;">FASE SEMANAL (CONFIRMACIÓN)' + tt('market-phase') + '</div>'
-              + '<div style="color:' + (phaseColors[t.phase_weekly] || 'var(--color-muted)') + ';font-size:14px;font-weight:600;letter-spacing:0.05em;">' + t.phase_weekly_label + '</div>'
-              + '</div>'
-            : '')
-        + (rs && rs.rs_vs_spy != null
-            ? '<div style="background:' + rs.rs_vs_spy_color + '11;border:1px solid ' + rs.rs_vs_spy_color + '44;border-radius:var(--radius);padding:8px 14px;flex:1;min-width:160px;">'
-              + '<div style="color:var(--color-muted);font-size:9px;letter-spacing:0.08em;margin-bottom:2px;">FUERZA VS SPY (S&P500)' + tt('relative-strength') + '</div>'
-              + '<div style="color:' + rs.rs_vs_spy_color + ';font-size:14px;font-weight:600;letter-spacing:0.05em;">' + rs.rs_vs_spy_label + ' (' + (rs.rs_vs_spy >= 0 ? '+' : '') + rs.rs_vs_spy + 'pp)</div>'
-              + '</div>'
-            : '')
-        + (rs && rs.rs_vs_sector != null
-            ? '<div style="background:' + rs.rs_vs_sector_color + '11;border:1px solid ' + rs.rs_vs_sector_color + '44;border-radius:var(--radius);padding:8px 14px;flex:1;min-width:160px;">'
-              + '<div style="color:var(--color-muted);font-size:9px;letter-spacing:0.08em;margin-bottom:2px;">FUERZA VS ' + (rs.is_industry_level ? 'INDUSTRIA' : 'SECTOR') + ' (' + (rs.sector_etf || '—') + ')</div>'
-              + '<div style="color:' + rs.rs_vs_sector_color + ';font-size:14px;font-weight:600;letter-spacing:0.05em;">' + rs.rs_vs_sector_label + ' (' + (rs.rs_vs_sector >= 0 ? '+' : '') + rs.rs_vs_sector + 'pp)</div>'
-              + (rs.benchmark_label ? '<div style="color:var(--color-muted);font-size:9px;margin-top:2px;">' + rs.benchmark_label + '</div>' : '')
-              + '</div>'
-            : '')
+function rtTarjeta(color, etiqueta, valor, detalle) {
+    return '<div style="background:' + color + '11;border:1px solid ' + color + '44;border-radius:var(--radius);padding:10px 14px;">'
+        + '<div style="color:var(--color-muted);font-size:9px;letter-spacing:0.08em;margin-bottom:4px;">' + etiqueta + '</div>'
+        + '<div style="color:' + color + ';font-size:14px;font-weight:600;letter-spacing:0.03em;">' + valor + '</div>'
+        + (detalle ? '<div style="color:var(--color-muted);font-size:11px;line-height:1.45;margin-top:4px;">' + detalle + '</div>' : '')
         + '</div>';
 }
 
-function emaRow(label, ema) {
-    if (!ema || ema.value == null) {
-        return '<div style="display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px solid var(--color-border);font-size:11px;">'
-            + '<span style="color:var(--color-muted);">' + label + '</span>'
-            + '<span style="color:var(--color-muted);">N/A</span>'
+function tarjetaTendencia(t) {
+    // `tendencia` es la de medio plazo; `trend` (la de la fase) queda como
+    // respaldo para una respuesta cacheada de antes del cambio.
+    const td  = t.tendencia || (t.trend ? { direccion: t.trend, motivo: '' } : null);
+    if (!td) return '';
+    const est = RT_TENDENCIA[td.direccion] || { color: 'var(--color-muted)', icono: '' };
+    return rtTarjeta(est.color, 'TENDENCIA · PRÓXIMAS SEMANAS' + tt('asset-trend'),
+        est.icono + ' ' + esc(td.direccion), esc(td.motivo));
+}
+
+function tarjetaFase(t) {
+    // La semanal manda: es la temporalidad del método y cambia mucho menos.
+    // La diaria solo aparece si dice otra cosa.
+    const semanal = t.phase_weekly != null;
+    const fase    = semanal ? t.phase_weekly : t.market_phase;
+    const texto   = semanal ? t.phase_weekly_label : t.phase_label;
+    if (fase == null && !texto) return '';
+    let detalle;
+    if (!semanal) {
+        detalle = 'Calculada en diario: no hay histórico semanal suficiente';
+    } else if (t.market_phase != null && t.market_phase !== t.phase_weekly) {
+        detalle = 'En diario: ' + esc(t.phase_label || ('Fase ' + t.market_phase));
+    } else if (t.phase_confirmed === false) {
+        detalle = 'En diario acaba de cambiar y falta confirmarlo';
+    } else {
+        detalle = 'La diaria dice lo mismo';
+    }
+    return rtTarjeta(RT_COLOR_FASE[fase] || 'var(--color-muted)', 'FASE · 30 SEMANAS' + tt('market-phase'),
+        esc(texto || ('Fase ' + fase)), detalle);
+}
+
+function tarjetaFuerza(rs) {
+    if (!rs || rs.rs_vs_spy == null) return '';
+    const puntos = (v) => (v >= 0 ? '+' : '−') + Math.abs(v).toFixed(0) + ' puntos';
+    const linea = (quien, etiqueta, valor, color) =>
+        '<div style="display:flex;justify-content:space-between;gap:8px;">'
+        + '<span>' + quien + '</span>'
+        + '<span style="color:' + color + ';white-space:nowrap;">' + esc(etiqueta) + ' · ' + puntos(valor) + '</span></div>';
+    const referencia = rs.rs_vs_sector != null
+        ? linea('vs ' + esc(rs.benchmark_label || 'su sector') + ' (' + esc(rs.sector_etf || '—') + ')',
+                rs.rs_vs_sector_label, rs.rs_vs_sector, rs.rs_vs_sector_color)
+        : '';
+    return rtTarjeta(rs.rs_vs_spy_color, 'FUERZA RELATIVA' + tt('relative-strength'),
+        esc(rs.rs_vs_spy_label) + ' frente al mercado',
+        linea('vs S&amp;P 500', rs.rs_vs_spy_label, rs.rs_vs_spy, rs.rs_vs_spy_color) + referencia
+        + '<div style="font-size:10px;margin-top:3px;">Diferencia de rentabilidad, media de 1, 3 y 6 meses</div>');
+}
+
+function tablaMedias(t) {
+    const e = t.emas || {};
+    const filas = [
+        ['20 sesiones',  e.ema20,  ''],
+        ['50 sesiones',  e.ema50,  ''],
+        ['30 semanas',   t.sma150, 'la que decide la fase'],
+        ['200 sesiones', e.ema200, ''],
+    ].filter(([, m]) => m && m.value != null);
+    if (!filas.length) return '';
+    const flecha = { alcista: ['↗', '#00ffad', 'sube'], bajista: ['↘', '#f23645', 'baja'], plana: ['→', 'var(--color-muted)', 'plana'] };
+    return '<div>'
+        + '<div style="color:var(--color-muted);font-size:10px;letter-spacing:0.05em;margin-bottom:8px;">MEDIAS MÓVILES' + tt('ema-slope') + '</div>'
+        + filas.map(([nombre, m, nota]) => {
+            const [ico, col, dice] = flecha[m.slope] || ['', 'var(--color-muted)', ''];
+            const vp = m.vs_price;
+            const posicion = vp == null ? '—'
+                : (Math.abs(vp) < 0.5 ? 'precio pegado a ella' : 'precio ' + Math.abs(vp).toFixed(0) + '% ' + (vp > 0 ? 'por encima' : 'por debajo'));
+            return '<div style="display:flex;justify-content:space-between;align-items:baseline;gap:8px;padding:6px 0;border-bottom:1px solid var(--color-border);font-size:11px;">'
+                + '<span style="color:var(--color-muted);">' + nombre + (nota ? '<span style="display:block;font-size:9px;opacity:0.8;">' + nota + '</span>' : '') + '</span>'
+                + '<span style="text-align:right;">'
+                + '<span style="color:var(--color-text);">$' + m.value.toFixed(2) + '</span> '
+                + '<span style="color:' + col + ';" title="La media ' + dice + '">' + ico + '</span>'
+                + '<span style="display:block;font-size:10px;color:' + (vp == null ? 'var(--color-muted)' : vp >= 0 ? 'var(--color-accent)' : '#f23645') + ';">' + posicion + '</span>'
+                + '</span></div>';
+        }).join('')
+        + '</div>';
+}
+
+function rangoDelAno(t) {
+    if (t.high52 == null || t.low52 == null || t.precio == null || t.high52 <= t.low52) return '';
+    const pos = Math.max(0, Math.min(100, (t.precio - t.low52) / (t.high52 - t.low52) * 100));
+    const bajoMax  = Math.round((1 - t.precio / t.high52) * 100);
+    const sobreMin = Math.round((t.precio / t.low52 - 1) * 100);
+    return '<div>'
+        + '<div style="color:var(--color-muted);font-size:10px;letter-spacing:0.05em;margin-bottom:12px;">RANGO DE 52 SEMANAS</div>'
+        + '<div style="position:relative;height:6px;background:var(--color-border);border-radius:3px;margin:0 6px;">'
+        + '<div style="position:absolute;left:0;top:0;height:100%;width:' + pos.toFixed(1) + '%;background:var(--color-accent);opacity:0.35;border-radius:3px;"></div>'
+        + '<div title="Precio actual" style="position:absolute;top:-4px;left:calc(' + pos.toFixed(1) + '% - 7px);width:14px;height:14px;border-radius:50%;background:var(--color-accent);border:2px solid var(--color-surface);"></div>'
+        + '</div>'
+        + '<div style="display:flex;justify-content:space-between;font-size:10px;color:var(--color-muted);margin-top:8px;">'
+        + '<span>mín $' + t.low52.toFixed(2) + '</span><span>máx $' + t.high52.toFixed(2) + '</span></div>'
+        + '<div style="font-size:11px;margin-top:10px;line-height:1.6;">'
+        + '<div style="color:' + (bajoMax > 0 ? '#f23645' : 'var(--color-accent)') + ';">' + (bajoMax > 0 ? bajoMax + '% por debajo del máximo' : 'En máximos del año') + '</div>'
+        + '<div style="color:var(--color-muted);">' + sobreMin + '% por encima del mínimo</div>'
+        + '</div>'
+        + '</div>';
+}
+
+function cortosYResultados(s, ne) {
+    let html = '<div>'
+        + '<div style="color:var(--color-muted);font-size:10px;letter-spacing:0.05em;margin-bottom:8px;">POSICIONES CORTAS' + tt('short-interest-pct') + '</div>';
+    if (s && s.short_pct != null) {
+        const color = s.short_pct > 20 ? '#f23645' : s.short_pct > 10 ? '#ffb800' : 'var(--color-text)';
+        html += '<div style="font-size:20px;color:' + color + ';font-weight:500;">' + s.short_pct + '%</div>'
+            + '<div style="color:var(--color-muted);font-size:10px;">de las acciones en circulación' + (s.date ? ' · dato del ' + esc(fmtFecha(s.date)) : '') + '</div>'
+            + (s.cambio_previo_pct != null && Math.abs(s.cambio_previo_pct) >= 1
+                ? '<div style="font-size:10px;margin-top:2px;color:' + (s.cambio_previo_pct > 0 ? '#ffb800' : 'var(--color-muted)') + ';">'
+                  + (s.cambio_previo_pct > 0 ? '↑ ' : '↓ ') + Math.abs(s.cambio_previo_pct).toFixed(0) + '% ' + (s.cambio_previo_pct > 0 ? 'más' : 'menos') + ' que el dato anterior</div>'
+                : '');
+        if (s.short_ratio != null) {
+            html += '<div style="display:flex;justify-content:space-between;align-items:center;margin-top:8px;font-size:11px;">'
+                + '<span style="color:var(--color-muted);">Días para cubrir' + tt('days-to-cover') + '</span>'
+                + '<span style="color:' + (s.short_ratio > 10 ? '#f23645' : s.short_ratio > 5 ? '#ffb800' : 'var(--color-text)') + ';">' + s.short_ratio + '</span>'
+                + '</div>';
+        }
+        if (s.squeeze_score != null) html += squeezeGauge(s);
+    } else {
+        html += '<div style="color:var(--color-muted);font-size:11px;">Sin datos</div>';
+    }
+    if (ne && ne.date) {
+        html += '<div style="margin-top:14px;">'
+            + '<div style="color:var(--color-muted);font-size:10px;letter-spacing:0.05em;margin-bottom:4px;">PRÓXIMOS RESULTADOS</div>'
+            + '<div style="color:#ffb800;font-size:14px;font-weight:500;">📅 ' + esc(fmtFecha(ne.date))
+            + (ne.hour ? ' <span style="font-size:11px;">' + (ne.hour.toLowerCase().includes('bmo') ? '· antes de la apertura' : '· tras el cierre') + '</span>' : '')
+            + '</div>'
+            + (ne.estimada ? '<div style="color:var(--color-muted);font-size:10px;">Fecha estimada: la empresa aún no la ha confirmado</div>' : '')
+            + (ne.eps_est != null ? '<div style="color:var(--color-muted);font-size:11px;margin-top:2px;">Beneficio por acción esperado: $' + ne.eps_est.toFixed(2) + '</div>' : '')
             + '</div>';
     }
-    const slopeIcons  = { alcista: '↗', bajista: '↘', plana: '→' };
-    const slopeColors = { alcista: '#00ffad', bajista: '#f23645', plana: 'var(--color-muted)' };
-    const sIcon  = slopeIcons[ema.slope] || '';
-    const sColor = slopeColors[ema.slope] || 'var(--color-muted)';
-    const vp     = ema.vs_price;
-    const vpColor = vp == null ? 'var(--color-muted)' : vp >= 0 ? 'var(--color-accent)' : '#f23645';
-    const vpStr   = vp == null ? 'N/A' : (vp >= 0 ? '+' : '') + vp + '%';
-    return '<div style="padding:5px 0;border-bottom:1px solid var(--color-border);font-size:11px;">'
-        + '<div style="display:flex;justify-content:space-between;">'
-        + '<span style="color:var(--color-muted);">' + label + ' $' + ema.value + '</span>'
-        + '<span style="color:' + vpColor + ';">' + vpStr + ' vs precio</span>'
-        + '</div>'
-        + '<div style="text-align:right;font-size:9px;color:' + sColor + ';margin-top:1px;">'
-        + sIcon + ' EMA ' + (ema.slope_pct != null ? (ema.slope_pct >= 0 ? '+' : '') + ema.slope_pct + '%' : 'N/A') + ' pendiente'
-        + '</div>'
-        + '</div>';
+    return html + '</div>';
 }
 
 function squeezeGauge(s) {
@@ -1144,22 +1171,13 @@ function squeezeGauge(s) {
     const pct   = Math.min(score, 100);
     return '<div style="margin-top:10px;">'
         + '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">'
-        + '<span style="color:var(--color-muted);font-size:10px;letter-spacing:0.05em;">SQUEEZE GAUGE' + tt('squeeze-gauge') + '</span>'
-        + '<span style="color:' + color + ';font-size:10px;font-weight:600;letter-spacing:0.05em;">' + label + '</span>'
+        + '<span style="color:var(--color-muted);font-size:10px;letter-spacing:0.05em;">POTENCIAL DE SQUEEZE' + tt('squeeze-gauge') + '</span>'
+        + '<span style="color:' + color + ';font-size:10px;font-weight:600;letter-spacing:0.05em;">' + esc(label) + '</span>'
         + '</div>'
         + '<div style="position:relative;height:6px;background:var(--color-border);border-radius:3px;overflow:hidden;">'
         + '<div style="position:absolute;left:0;top:0;height:100%;width:' + pct + '%;background:' + color + ';border-radius:3px;transition:width 0.4s;"></div>'
         + '</div>'
         + '<div style="text-align:right;color:' + color + ';font-size:10px;margin-top:2px;">' + score + '/100</div>'
-        + '</div>';
-}
-
-function techRow(label, price, vs) {
-    const color = vs == null ? 'var(--color-muted)' : vs >= 0 ? 'var(--color-accent)' : '#f23645';
-    const vsStr = vs == null ? 'N/A' : (vs >= 0 ? '+' : '') + vs + '%';
-    return '<div style="display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px solid var(--color-border);font-size:11px;">'
-        + '<span style="color:var(--color-muted);">' + label + (price ? ' $' + price : '') + '</span>'
-        + '<span style="color:' + color + ';">' + vsStr + '</span>'
         + '</div>';
 }
 
