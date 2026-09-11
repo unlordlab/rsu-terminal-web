@@ -166,4 +166,9 @@ export const LESSON_INDEX = {
     '33-3': { title: 'Cómo Se Forma un Suelo: el Clímax de Venta y la Prueba', words: 618 },
     '33-4': { title: 'El Volumen que Frena la Caída', words: 437 },
     '33-5': { title: 'De la Señal a la Operación', words: 696 },
+    '34-1': { title: 'Qué Es un Gap y Por Qué Aparece', words: 495 },
+    '34-2': { title: 'Los Tipos de Gap: Dónde Aparecen y Qué Anuncian', words: 400 },
+    '34-3': { title: 'El Relleno del Gap y los Tres Retrocesos', words: 304 },
+    '34-4': { title: 'Tres Estrategias para el Día del Gap', words: 532 },
+    '34-5': { title: 'Los Gaps que Engañan y el Riesgo del Gap', words: 480 },
 };

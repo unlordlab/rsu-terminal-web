@@ -12300,6 +12300,241 @@ function vsa_entrada() {
     </svg>`;
 }
 
+// ─── MÓDULO 34 · TRADING DE GAPS ─────────────────────────────────────────────
+// Reutiliza vsaVelas() (velas con máximo, mínimo y cierre explícitos): en un
+// gap lo que importa es exactamente dónde abre una vela respecto al máximo y
+// al cierre de la anterior, y eso no se puede derivar de una serie de cierres.
+
+function gapZona(r, i0, i1, desde, hasta, color, texto, dy = 0) {
+    const x0 = r.px(i0) - r.paso * 0.1, x1 = r.px(i1) + r.paso * 0.1;
+    const y0 = r.py(Math.max(desde, hasta)), y1 = r.py(Math.min(desde, hasta));
+    return `<rect x="${x0.toFixed(1)}" y="${y0.toFixed(1)}" width="${(x1 - x0).toFixed(1)}" height="${Math.max(y1 - y0, 2).toFixed(1)}" fill="${color}" opacity="0.18" stroke="${color}" stroke-width="0.8" stroke-dasharray="3 2"/>`
+        + (texto ? `<text x="${((x0 + x1) / 2).toFixed(1)}" y="${(y0 - 5 + dy).toFixed(1)}" fill="${color}" font-size="8.5" font-family="monospace" text-anchor="middle">${texto}</text>` : '');
+}
+
+function gapLinea(r, i0, i1, nivel, color, texto, lado = 'end') {
+    const x0 = r.px(i0) - r.paso / 2, x1 = r.px(i1) + r.paso / 2;
+    return `<line x1="${x0.toFixed(1)}" y1="${r.py(nivel).toFixed(1)}" x2="${x1.toFixed(1)}" y2="${r.py(nivel).toFixed(1)}" stroke="${color}" stroke-width="1.2" stroke-dasharray="5 3"/>`
+        + (texto ? `<text x="${(lado === 'end' ? x1 + 4 : x0 - 4).toFixed(1)}" y="${(r.py(nivel) + 3).toFixed(1)}" fill="${color}" font-size="9" font-family="monospace" text-anchor="${lado === 'end' ? 'start' : 'end'}">${texto}</text>` : '');
+}
+
+// Gap completo frente a gap dentro del rango
+function gap_anatomia() {
+    const W = 680, H = 240;
+    const cfg = (x0) => ({ x0, y0: 34, w: 270, h: 150, volY0: 0, volH: 0, mn: 97, mx: 112, ancho: 22 });
+    const a = vsaVelas([
+        { o: 100, h: 103, l: 99, c: 102, v: 1 }, { o: 102, h: 104, l: 101, c: 103.5, v: 1 },
+        { o: 103.5, h: 105, l: 102.5, c: 104.5, v: 1 }, { o: 108, h: 110, l: 107.5, c: 109.5, v: 1 },
+        { o: 109.5, h: 111, l: 108.5, c: 110.5, v: 1 },
+    ], cfg(30));
+    const b = vsaVelas([
+        { o: 100, h: 103, l: 99, c: 102, v: 1 }, { o: 102, h: 106, l: 101, c: 102.5, v: 1 },
+        { o: 104, h: 105.5, l: 103.5, c: 105, v: 1 }, { o: 105, h: 106.8, l: 104.3, c: 106.2, v: 1 },
+    ], cfg(380));
+    return `<svg viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg">
+        <rect width="${W}" height="${H}" fill="${C.bg}" rx="6"/>
+        <line x1="340" y1="10" x2="340" y2="230" stroke="${C.border}" stroke-width="1"/>
+        <text x="165" y="18" fill="${C.accent}" font-size="10.5" font-family="monospace" text-anchor="middle">GAP COMPLETO</text>
+        <text x="515" y="18" fill="${C.yellow}" font-size="10.5" font-family="monospace" text-anchor="middle">GAP DENTRO DEL RANGO</text>
+        ${gapZona(a, 2, 3, 105, 107.5, C.accent, '', 0)}
+        ${gapZona(b, 1, 2, 102.5, 104, C.yellow, '', 0)}
+        ${gapLinea(b, 1, 3, 106, C.textDim, '')}
+        <text x="${(b.px(1) - b.paso / 2).toFixed(1)}" y="${(b.py(106) - 5).toFixed(1)}" fill="${C.textDim}" font-size="9" font-family="monospace">máximo de ayer</text>
+        ${a.svg}${b.svg}
+        <text x="165" y="206" fill="${C.text}" font-size="9.5" font-family="monospace" text-anchor="middle">Abre por encima del MÁXIMO de ayer:</text>
+        <text x="165" y="220" fill="${C.text}" font-size="9.5" font-family="monospace" text-anchor="middle">queda un hueco en el que nadie negoció</text>
+        <text x="515" y="206" fill="${C.text}" font-size="9.5" font-family="monospace" text-anchor="middle">Abre por encima del CIERRE de ayer,</text>
+        <text x="515" y="220" fill="${C.text}" font-size="9.5" font-family="monospace" text-anchor="middle">pero sin salir de su rango: más débil</text>
+    </svg>`;
+}
+
+// Los tres tipos clásicos a lo largo de una misma tendencia
+function gap_tipos_tendencia() {
+    const W = 680, H = 265;
+    const velas = [
+        { o: 100, h: 101.5, l: 99, c: 100.5, v: 0.9 }, { o: 100.5, h: 101.5, l: 99.2, c: 99.8, v: 0.8 },
+        { o: 99.8, h: 101, l: 99, c: 100.6, v: 0.8 }, { o: 100.6, h: 101.8, l: 100, c: 101.2, v: 0.9 },
+        { o: 101.2, h: 101.6, l: 99.6, c: 100.2, v: 0.8 }, { o: 100.2, h: 101.9, l: 100, c: 101.5, v: 0.9 },
+        { o: 104.5, h: 107, l: 104.2, c: 106.5, v: 2.6 }, { o: 106.5, h: 108, l: 105.8, c: 107.5, v: 1.6 },
+        { o: 107.5, h: 109, l: 106.8, c: 108.6, v: 1.4 }, { o: 108.6, h: 109.2, l: 107.4, c: 108, v: 1.0 },
+        { o: 108, h: 110, l: 107.8, c: 109.6, v: 1.2 }, { o: 109.6, h: 111, l: 109, c: 110.5, v: 1.2 },
+        { o: 113, h: 115, l: 112.6, c: 114.5, v: 1.9 }, { o: 114.5, h: 116, l: 114, c: 115.5, v: 1.4 },
+        { o: 115.5, h: 117, l: 115, c: 116.4, v: 1.3 }, { o: 116.4, h: 118, l: 116, c: 117.5, v: 1.3 },
+        { o: 117.5, h: 118.5, l: 116.8, c: 118, v: 1.2 }, { o: 121.5, h: 123, l: 120.5, c: 121, v: 3.4 },
+        { o: 121, h: 121.5, l: 117.2, c: 117.8, v: 2.0 }, { o: 117.8, h: 118.5, l: 115.5, c: 116, v: 1.6 },
+        { o: 116, h: 117, l: 114, c: 114.6, v: 1.4 },
+    ];
+    const r = vsaVelas(velas, { x0: 40, y0: 38, w: 600, h: 150, volY0: 200, volH: 40, mn: 96, mx: 126, ancho: 14, media: 1,
+        destacar: { 6: C.cyan, 12: C.accent, 17: C.orange } });
+    const et = (i, y, t1, t2, col) => `<text x="${r.px(i).toFixed(1)}" y="${y.toFixed(1)}" fill="${col}" font-size="9" font-family="monospace" text-anchor="middle">${t1}</text>`
+        + `<text x="${r.px(i).toFixed(1)}" y="${(y + 11).toFixed(1)}" fill="${C.textDim}" font-size="8" font-family="monospace" text-anchor="middle">${t2}</text>`;
+    return `<svg viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg">
+        <rect width="${W}" height="${H}" fill="${C.bg}" rx="6"/>
+        ${gapZona(r, 5, 6, 101.9, 104.2, C.cyan, '')}
+        ${gapZona(r, 11, 12, 111, 112.6, C.accent, '')}
+        ${gapZona(r, 16, 17, 118.5, 120.5, C.orange, '')}
+        ${r.svg}
+        ${et(6, r.py(107) - 16, '1 · RUPTURA', 'sale del lateral', C.cyan)}
+        ${et(12, r.py(115) - 16, '2 · CONTINUACIÓN', 'a mitad del camino', C.accent)}
+        ${et(17, r.py(123) - 14, '3 · AGOTAMIENTO', 'volumen enorme', C.orange)}
+        <text x="${r.px(19).toFixed(1)}" y="${r.py(111.5).toFixed(1)}" fill="${C.red}" font-size="8.5" font-family="monospace" text-anchor="middle">cierra bajo el gap:</text>
+        <text x="${r.px(19).toFixed(1)}" y="${(r.py(111.5) + 11).toFixed(1)}" fill="${C.red}" font-size="8.5" font-family="monospace" text-anchor="middle">agotamiento confirmado</text>
+        <text x="${W / 2}" y="${H - 8}" fill="${C.text}" font-size="10" font-family="monospace" text-anchor="middle">El mismo hueco dice cosas distintas según dónde aparece y con cuánto volumen</text>
+    </svg>`;
+}
+
+// Tres formas de retroceder el día del gap
+function gap_tres_retrocesos() {
+    const W = 680, H = 240;
+    const cfg = (x0) => ({ x0, y0: 34, w: 190, h: 145, volY0: 0, volH: 0, mn: 97, mx: 110, ancho: 20 });
+    const previo = { o: 100, h: 102, l: 99, c: 101.5, v: 1 };
+    const paneles = [
+        [C.accent, 'SE QUEDA ARRIBA', 'compradores fuertes', [previo, { o: 104, h: 106, l: 103.8, c: 105.5, v: 1 }, { o: 105.5, h: 107, l: 105, c: 106.5, v: 1 }, { o: 106.5, h: 108.5, l: 106, c: 108, v: 1 }]],
+        [C.yellow, 'RETROCESO DÉBIL', 'aún hay compradores', [previo, { o: 104, h: 105.5, l: 102.3, c: 103.3, v: 1 }, { o: 103.3, h: 104, l: 102.4, c: 103.8, v: 1 }, { o: 103.8, h: 106, l: 103.5, c: 105.6, v: 1 }]],
+        [C.red, 'RETROCESO FUERTE', 'el gap ha fallado', [previo, { o: 104, h: 104.5, l: 101, c: 101.4, v: 1 }, { o: 101.4, h: 102, l: 99.5, c: 100, v: 1 }, { o: 100, h: 100.8, l: 98.5, c: 99, v: 1 }]],
+    ];
+    let cuerpo = '';
+    paneles.forEach(([col, titulo, lectura, velas], k) => {
+        const x0 = 30 + k * 220, r = vsaVelas(velas, cfg(x0));
+        cuerpo += `${k ? `<line x1="${x0 - 15}" y1="10" x2="${x0 - 15}" y2="230" stroke="${C.border}" stroke-width="1"/>` : ''}
+            ${gapLinea(r, 0, 3, 102, C.textDim, k === 0 ? '' : '')}
+            ${r.svg}
+            <text x="${x0 + 95}" y="18" fill="${col}" font-size="10" font-family="monospace" text-anchor="middle">${titulo}</text>
+            <text x="${x0 + 95}" y="205" fill="${C.text}" font-size="9.5" font-family="monospace" text-anchor="middle">${lectura}</text>`;
+    });
+    return `<svg viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg">
+        <rect width="${W}" height="${H}" fill="${C.bg}" rx="6"/>
+        ${cuerpo}
+        <text x="${W / 2}" y="${H - 10}" fill="${C.textDim}" font-size="9.5" font-family="monospace" text-anchor="middle">La línea discontinua es el máximo del día anterior: mientras no cierre por debajo, el gap sigue vivo</text>
+    </svg>`;
+}
+
+// Gap and go en velas de 5 minutos
+function gap_and_go() {
+    const W = 680, H = 255;
+    const velas = [
+        { o: 51.2, h: 51.8, l: 50.9, c: 51.6, v: 3.0 }, { o: 51.6, h: 51.75, l: 51.1, c: 51.3, v: 2.0 },
+        { o: 51.3, h: 51.7, l: 51.0, c: 51.5, v: 1.6 }, { o: 51.5, h: 51.7, l: 51.25, c: 51.6, v: 1.2 },
+        { o: 51.6, h: 52.2, l: 51.55, c: 52.1, v: 2.2 }, { o: 52.1, h: 52.4, l: 51.9, c: 52.3, v: 1.6 },
+        { o: 52.3, h: 52.5, l: 52.0, c: 52.2, v: 1.1 }, { o: 52.2, h: 52.7, l: 52.1, c: 52.6, v: 1.3 },
+        { o: 52.6, h: 52.9, l: 52.4, c: 52.8, v: 1.2 }, { o: 52.8, h: 53.0, l: 52.5, c: 52.6, v: 1.0 },
+        { o: 52.6, h: 53.1, l: 52.55, c: 53.0, v: 1.2 }, { o: 53.0, h: 53.4, l: 52.9, c: 53.3, v: 1.3 },
+        { o: 53.3, h: 53.6, l: 53.1, c: 53.5, v: 1.1 },
+    ];
+    const r = vsaVelas(velas, { x0: 40, y0: 30, w: 520, h: 150, volY0: 195, volH: 35, mn: 49.8, mx: 54, ancho: 18, destacar: { 4: C.cyan } });
+    // VWAP: precio medio del día ponderado por volumen, acumulado vela a vela
+    let pv = 0, vol = 0;
+    const vwap = velas.map(b => { pv += (b.h + b.l + b.c) / 3 * b.v; vol += b.v; return pv / vol; });
+    const camino = vwap.map((v, i) => `${i ? 'L' : 'M'} ${r.px(i).toFixed(1)} ${r.py(v).toFixed(1)}`).join(' ');
+    const xr0 = r.px(0) - r.paso / 2, xr1 = r.px(2) + r.paso / 2;
+    return `<svg viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg">
+        <rect width="${W}" height="${H}" fill="${C.bg}" rx="6"/>
+        <rect x="${xr0.toFixed(1)}" y="${r.py(51.8).toFixed(1)}" width="${(xr1 - xr0).toFixed(1)}" height="${(r.py(50.9) - r.py(51.8)).toFixed(1)}" fill="${C.yellow}" opacity="0.1" stroke="${C.yellow}" stroke-width="1" stroke-dasharray="3 2"/>
+        <text x="${((xr0 + xr1) / 2).toFixed(1)}" y="${(r.py(51.8) - 6).toFixed(1)}" fill="${C.yellow}" font-size="8.5" font-family="monospace" text-anchor="middle">rango de apertura</text>
+        ${gapLinea(r, 0, 12, 50.4, C.textDim, 'máx. de ayer')}
+        ${gapLinea(r, 3, 12, 51.8, C.accent, 'COMPRA')}
+        ${gapLinea(r, 3, 12, 50.9, C.red, 'STOP')}
+        <path d="${camino}" fill="none" stroke="${C.cyan}" stroke-width="1.5" opacity="0.8"/>
+        <text x="${(r.px(12) + 14).toFixed(1)}" y="${(r.py(vwap[12]) + 3).toFixed(1)}" fill="${C.cyan}" font-size="9" font-family="monospace">VWAP</text>
+        ${r.svg}
+        <text x="${W / 2}" y="16" fill="${C.textDim}" font-size="9.5" font-family="monospace" text-anchor="middle">Velas de 5 minutos · abre por encima del máximo de ayer con mucho volumen</text>
+        <text x="${W / 2}" y="${H - 6}" fill="${C.text}" font-size="10" font-family="monospace" text-anchor="middle">Se compra al romper el rango de apertura, con el precio por encima del VWAP</text>
+    </svg>`;
+}
+
+// Comprar cuando el gap se rellena
+function gap_relleno_compra() {
+    const W = 680, H = 255;
+    const velas = [
+        { o: 100, h: 101.5, l: 99.5, c: 101, v: 1.0 }, { o: 101, h: 102.5, l: 100.6, c: 102.2, v: 1.1 },
+        { o: 102.2, h: 103.2, l: 101.8, c: 102.9, v: 1.0 }, { o: 102.9, h: 103.6, l: 102.3, c: 103.3, v: 1.0 },
+        { o: 106, h: 108, l: 105.8, c: 107.6, v: 2.4 }, { o: 107.6, h: 108.4, l: 106.6, c: 107, v: 1.4 },
+        { o: 107, h: 107.3, l: 105.6, c: 105.9, v: 1.0 }, { o: 105.9, h: 106.2, l: 104.3, c: 104.7, v: 0.8 },
+        { o: 104.7, h: 105, l: 103.7, c: 104.2, v: 0.6 }, { o: 104.2, h: 105.8, l: 103.8, c: 105.6, v: 1.2 },
+        { o: 105.6, h: 107.4, l: 105.4, c: 107.1, v: 1.5 }, { o: 107.1, h: 109, l: 106.9, c: 108.7, v: 1.6 },
+    ];
+    const r = vsaVelas(velas, { x0: 40, y0: 30, w: 540, h: 150, volY0: 195, volH: 38, mn: 98, mx: 110.5, ancho: 18, media: 1,
+        destacar: { 4: C.cyan, 8: C.orange, 9: C.accent } });
+    return `<svg viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg">
+        <rect width="${W}" height="${H}" fill="${C.bg}" rx="6"/>
+        ${gapZona(r, 3, 11, 103.6, 105.8, C.cyan, 'zona del gap', 0)}
+        ${gapLinea(r, 9, 11, 105.8, C.accent, 'COMPRA')}
+        ${gapLinea(r, 8, 11, 103.6, C.red, 'STOP')}
+        ${r.svg}
+        <text x="${r.px(8).toFixed(1)}" y="${(r.py(103.7) + 16).toFixed(1)}" fill="${C.orange}" font-size="8.5" font-family="monospace" text-anchor="middle">rellena con</text>
+        <text x="${r.px(8).toFixed(1)}" y="${(r.py(103.7) + 27).toFixed(1)}" fill="${C.orange}" font-size="8.5" font-family="monospace" text-anchor="middle">poco volumen</text>
+        <text x="${W / 2}" y="16" fill="${C.textDim}" font-size="9.5" font-family="monospace" text-anchor="middle">Gap con volumen · vuelve a la zona del hueco con cada vez menos · vela de giro</text>
+        <text x="${W / 2}" y="${H - 6}" fill="${C.text}" font-size="10" font-family="monospace" text-anchor="middle">El hueco hace de soporte: se compra el giro, con el stop bajo el mínimo del retroceso</text>
+    </svg>`;
+}
+
+// Un gap alcista que choca contra una zona de oferta y falla
+function gap_giro_en_oferta() {
+    const W = 680, H = 250;
+    const velas = [
+        { o: 104, h: 106, l: 103.5, c: 105.5, v: 1 }, { o: 105.5, h: 108, l: 105, c: 107.5, v: 1.1 },
+        { o: 107.5, h: 110, l: 107, c: 109.5, v: 1.2 }, { o: 109.5, h: 112, l: 109, c: 111.5, v: 1.2 },
+        { o: 111.5, h: 114, l: 111, c: 113.6, v: 1.3 }, { o: 113.6, h: 116.8, l: 113.2, c: 116.5, v: 1.4 },
+        { o: 119.5, h: 120.5, l: 115.2, c: 115.8, v: 2.8 }, { o: 115.8, h: 116.2, l: 112.8, c: 113.2, v: 2.0 },
+        { o: 113.2, h: 113.8, l: 110.5, c: 111, v: 1.6 },
+    ];
+    const r = vsaVelas(velas, { x0: 40, y0: 30, w: 520, h: 150, volY0: 195, volH: 38, mn: 100, mx: 124, ancho: 22, media: 1, destacar: { 6: C.red } });
+    const xa = r.px(0) - r.paso / 2, xb = r.px(8) + r.paso / 2;
+    return `<svg viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg">
+        <rect width="${W}" height="${H}" fill="${C.bg}" rx="6"/>
+        <rect x="${xa.toFixed(1)}" y="${r.py(122).toFixed(1)}" width="${(xb - xa).toFixed(1)}" height="${(r.py(118) - r.py(122)).toFixed(1)}" fill="${C.red}" opacity="0.1"/>
+        <text x="${(xa + 6).toFixed(1)}" y="${(r.py(122) + 12).toFixed(1)}" fill="${C.red}" font-size="9" font-family="monospace">zona de oferta: aquí vendieron la última vez</text>
+        ${gapLinea(r, 5, 8, 116.5, C.textDim, 'cierre de ayer')}
+        ${r.svg}
+        <text x="${r.px(7).toFixed(1)}" y="${r.py(107.5).toFixed(1)}" fill="${C.orange}" font-size="8.5" font-family="monospace" text-anchor="middle">abre dentro de la oferta…</text>
+        <text x="${r.px(7).toFixed(1)}" y="${(r.py(107.5) + 12).toFixed(1)}" fill="${C.red}" font-size="8.5" font-family="monospace" text-anchor="middle">…y cierra por debajo del cierre de ayer</text>
+        <text x="${W / 2}" y="16" fill="${C.textDim}" font-size="9.5" font-family="monospace" text-anchor="middle">Tras una subida larga, el gap choca contra una zona donde antes hubo mucha venta</text>
+        <text x="${W / 2}" y="${H - 6}" fill="${C.text}" font-size="10" font-family="monospace" text-anchor="middle">El gap ha fallado: momento de proteger beneficios, no de comprar</text>
+    </svg>`;
+}
+
+// El gap pequeño dentro del rango en una tendencia bajista
+function gap_dentro_trampa() {
+    const W = 680, H = 250;
+    const velas = [
+        { o: 120, h: 120.5, l: 117.5, c: 118, v: 1.2 }, { o: 118, h: 118.6, l: 115.5, c: 116, v: 1.3 },
+        { o: 116, h: 117, l: 113, c: 113.6, v: 1.5 }, { o: 115, h: 115.6, l: 111.8, c: 112.2, v: 0.8 },
+        { o: 112.2, h: 112.8, l: 109.5, c: 110, v: 1.3 }, { o: 110, h: 110.6, l: 108, c: 108.4, v: 1.2 },
+    ];
+    const r = vsaVelas(velas, { x0: 40, y0: 30, w: 520, h: 150, volY0: 195, volH: 38, mn: 105, mx: 122, ancho: 26, media: 1, destacar: { 3: C.orange } });
+    return `<svg viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg">
+        <rect width="${W}" height="${H}" fill="${C.bg}" rx="6"/>
+        ${gapLinea(r, 2, 5, 117, C.textDim, 'máx. de ayer')}
+        ${gapZona(r, 2, 3, 113.6, 115, C.orange, '')}
+        ${r.svg}
+        <text x="${(r.px(3) + 20).toFixed(1)}" y="${r.py(115.3).toFixed(1)}" fill="${C.orange}" font-size="8.5" font-family="monospace">abre por encima del cierre, dentro del rango,</text>
+        <text x="${(r.px(3) + 20).toFixed(1)}" y="${(r.py(115.3) + 11).toFixed(1)}" fill="${C.orange}" font-size="8.5" font-family="monospace">y con poco volumen</text>
+        <text x="${W / 2}" y="16" fill="${C.textDim}" font-size="9.5" font-family="monospace" text-anchor="middle">En plena caída, un gap alcista pequeño parece un giro</text>
+        <text x="${W / 2}" y="${H - 6}" fill="${C.text}" font-size="10" font-family="monospace" text-anchor="middle">Compran los que creen que gira y los grandes aprovechan para vender: la caída sigue</text>
+    </svg>`;
+}
+
+// El riesgo del gap para quien ya tiene la posición
+function gap_riesgo_stop() {
+    const W = 680, H = 235;
+    const velas = [
+        { o: 100, h: 101, l: 98.8, c: 99.5, v: 1 }, { o: 99.5, h: 100, l: 97.5, c: 98, v: 1.1 },
+        { o: 98, h: 98.6, l: 96.6, c: 97, v: 1.2 }, { o: 90, h: 91.5, l: 89, c: 90.5, v: 3.2 },
+        { o: 90.5, h: 92, l: 89.5, c: 91.2, v: 1.8 },
+    ];
+    const r = vsaVelas(velas, { x0: 60, y0: 30, w: 460, h: 150, volY0: 0, volH: 0, mn: 86, mx: 103, ancho: 30, destacar: { 3: C.red } });
+    return `<svg viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg">
+        <rect width="${W}" height="${H}" fill="${C.bg}" rx="6"/>
+        ${gapLinea(r, 0, 4, 95, C.orange, 'tu stop: 95')}
+        ${gapZona(r, 2, 3, 91.5, 96.6, C.red, '')}
+        ${r.svg}
+        <text x="${r.px(3).toFixed(1)}" y="${(r.py(89) + 16).toFixed(1)}" fill="${C.red}" font-size="9" font-family="monospace" text-anchor="middle">se vende aquí, a 90</text>
+        <text x="${r.px(2.5).toFixed(1)}" y="${(r.py(94) + 3).toFixed(1)}" fill="${C.text}" font-size="8.5" font-family="monospace" text-anchor="middle">el precio nunca pasó por 95</text>
+        <text x="${W / 2}" y="16" fill="${C.textDim}" font-size="9.5" font-family="monospace" text-anchor="middle">Resultados malos por la noche: el valor abre a 90</text>
+        <text x="${W / 2}" y="${H - 10}" fill="${C.text}" font-size="10" font-family="monospace" text-anchor="middle">Un stop no garantiza el precio: se ejecuta al primero que haya después del salto</text>
+    </svg>`;
+}
+
 export const CHARTS = {
     // Módulo 0
     rsu_philosophy, rsu_community, rsu_for_who,
@@ -12433,4 +12668,7 @@ export const CHARTS = {
     // Módulo 33 (VSA)
     vsa_tres_datos, vsa_esfuerzo_resultado, vsa_niveles_volumen, vsa_subida_dos_lecturas,
     vsa_fases_suelo, vsa_climax_venta, vsa_prueba_dos_caminos, vsa_volumen_frenado, vsa_entrada,
+    // Módulo 34 (gaps)
+    gap_anatomia, gap_tipos_tendencia, gap_tres_retrocesos, gap_and_go, gap_relleno_compra,
+    gap_giro_en_oferta, gap_dentro_trampa, gap_riesgo_stop,
 };

@@ -8041,4 +8041,240 @@ export const LESSONS = {
             },
         ]
     },
+
+    // ── MÓDULO 34 · TRADING DE GAPS ─────────────────────────────────────────
+    // Va en la Fase 3, justo después del módulo 19, cuya lección 19-5 ya
+    // presenta los tres tipos clásicos como confirmación de una entrada: aquí
+    // se remite a ella y se explica cómo se leen y cómo se operan. Varias
+    // estrategias son del mismo día (velas de 5 minutos) y se dice.
+    // Gráficos: gap_* en academy_charts.js.
+
+    '34-1': {
+        moduleId: 34,
+        lessonIndex: 0,
+        title: 'Qué Es un Gap y Por Qué Aparece',
+        duration: '6 min',
+        intro: 'Un gap es un hueco en el gráfico: el precio abre lejos de donde cerró el día anterior, y entre las dos velas queda una zona en la que nadie compró ni vendió. La lección 19-5 los presentó como una forma de confirmar una entrada; este módulo explica cómo se leen y cómo se operan.',
+        sections: [
+            {
+                heading: 'El hueco entre dos velas',
+                blocks: [
+                    { type: 'text', content: 'Si una acción cierra a 100 y al día siguiente abre a 105, entre 100 y 105 no ha habido ni una sola operación. En el gráfico se ve como un salto. Es un <b>gap alcista</b> si abre más arriba y un <b>gap bajista</b> si abre más abajo.' },
+                    { type: 'chart', id: 'gap_anatomia' },
+                    { type: 'concept', title: 'Completo o dentro del rango', content: 'Un gap <b>completo</b> abre por encima del máximo del día anterior (o por debajo de su mínimo): queda un hueco de verdad en el gráfico. Uno <b>dentro del rango</b> abre por encima del cierre de ayer pero sin superar su máximo: el salto solo existe respecto al cierre. El segundo es mucho más débil, y la lección 5 lo trata aparte.' },
+                ]
+            },
+            {
+                heading: 'Por qué aparecen',
+                blocks: [
+                    { type: 'text', content: 'Las acciones no cotizan por la noche, pero las órdenes se siguen acumulando. A la hora de abrir, el precio tiene que ajustarse de golpe a todo lo que ha pasado. Hay tres motivos habituales:' },
+                    { type: 'steps', items: [
+                        '<b>Hay muchas más órdenes de un lado que del otro.</b> Si a la apertura hay muchos más compradores que vendedores, el precio tiene que subir hasta encontrar a alguien dispuesto a vender.',
+                        '<b>Ha habido noticias fuera de horario.</b> Resultados, un anuncio de la empresa, datos económicos o lo que ha pasado en otros mercados durante la noche.',
+                        '<b>El dinero grande tiene prisa.</b> Cuando un fondo quiere comprar mucho y rápido, puede saltarse de una vez una zona en la que sabe que hay vendedores esperando.',
+                    ]},
+                    { type: 'tip', label: 'LOS RESULTADOS', content: 'La mayoría de los gaps grandes de una acción aparecen el día después de presentar resultados. Por eso conviene saber siempre cuándo los presenta la empresa: en Research, el panel técnico dice la fecha de los próximos resultados, y si todavía es una estimación.' },
+                ]
+            },
+            {
+                heading: 'El hueco se convierte en soporte o resistencia',
+                blocks: [
+                    { type: 'text', content: 'La zona del hueco es precio que nadie negoció. Cuando el precio vuelve más adelante, esa zona suele frenarlo: hace de <b>soporte</b> en un gap alcista y de <b>resistencia</b> en uno bajista.' },
+                    { type: 'concept', title: 'El borde que manda', content: 'En un gap alcista completo, la línea importante es el <b>máximo del día anterior</b>: el punto donde empezó el hueco. Mientras el precio no cierre por debajo de él, el gap sigue vivo. La lección 3 lo desarrolla.' },
+                    { type: 'warning', content: 'No todos los saltos son un gap que merezca atención. Uno de unos céntimos en una acción que se mueve un 3% cada día no significa nada. Importa cuando el salto es grande comparado con lo que el valor se mueve normalmente, y viene con volumen.' },
+                ]
+            },
+        ]
+    },
+
+    '34-2': {
+        moduleId: 34,
+        lessonIndex: 1,
+        title: 'Los Tipos de Gap: Dónde Aparecen y Qué Anuncian',
+        duration: '7 min',
+        intro: 'El mismo hueco puede ser el principio de una tendencia o su final. Lo que lo decide no es su tamaño, sino dónde aparece y con cuánto volumen.',
+        sections: [
+            {
+                heading: 'Los tres clásicos en una misma tendencia',
+                blocks: [
+                    { type: 'chart', id: 'gap_tipos_tendencia' },
+                    { type: 'table',
+                        headers: ['Tipo', 'Dónde aparece', 'Volumen', '¿Se rellena?', 'Qué suele anunciar'],
+                        rows: [
+                            ['<b>Ruptura</b>', 'Al salir de un lateral o romper un soporte o una resistencia', 'Alto', 'Normalmente no, al menos en días', 'Empieza un movimiento nuevo'],
+                            ['<b>Continuación</b>', 'A mitad de una tendencia en marcha', 'Normal o alto', 'Poco', 'La tendencia sigue con fuerza'],
+                            ['<b>Agotamiento</b>', 'Después de un movimiento largo', 'Muy alto', 'Sí, a menudo en pocos días', 'El movimiento se está acabando'],
+                        ]
+                    },
+                    { type: 'text', content: 'El de <b>continuación</b> suele aparecer hacia la mitad del recorrido; por eso también se llama gap de medición. El de <b>agotamiento</b> es el más traicionero: llega con mucho entusiasmo y volumen enorme, justo cuando ya no quedan compradores nuevos.' },
+                    { type: 'concept', title: 'Cómo se confirma el agotamiento', content: 'Un gap de agotamiento no se reconoce el día que aparece, sino en los siguientes: el precio se desinfla enseguida y <b>cierra por debajo del hueco</b>. En ese momento el gap queda confirmado como final de la subida.' },
+                ]
+            },
+            {
+                heading: 'El gap profesional',
+                blocks: [
+                    { type: 'text', content: 'Hay un cuarto tipo que conviene tener en cuenta: el gap que arranca justo desde una <b>zona de demanda</b>, un nivel en el que antes hubo compras fuertes (o hacia abajo, desde una zona de oferta). Suele ser el dinero grande entrando con decisión, y es de los más fiables, porque combina dos señales: la zona y el salto.' },
+                    { type: 'tip', label: 'RELACIÓN CON OTROS MÓDULOS', content: 'Las zonas de oferta y demanda se explican en el módulo 5, y el volumen en los módulos 8 y 33. Un gap profesional es, en el fondo, esas tres cosas a la vez.' },
+                ]
+            },
+            {
+                heading: 'Solo se sabe con seguridad después',
+                blocks: [
+                    { type: 'warning', content: 'El día que aparece, un gap de continuación y uno de agotamiento pueden ser idénticos. Por eso ningún tipo se da por seguro hasta ver lo que hace el precio en las sesiones siguientes: si se aleja del hueco, o si vuelve a rellenarlo.' },
+                    { type: 'text', content: 'Lo que sí se puede mirar desde el primer día es el contexto: si viene de un lateral largo (probable ruptura), si la tendencia ya lleva mucho recorrido (cuidado con el agotamiento) y cuánto volumen lleva comparado con lo normal.' },
+                ]
+            },
+        ]
+    },
+
+    '34-3': {
+        moduleId: 34,
+        lessonIndex: 2,
+        title: 'El Relleno del Gap y los Tres Retrocesos',
+        duration: '6 min',
+        intro: 'Muchos gaps se «rellenan»: el precio vuelve atrás hasta el nivel donde empezó el hueco. Saber cuándo es probable, y qué hacer cuando ocurre, es la mitad del trading de gaps.',
+        sections: [
+            {
+                heading: 'Qué es rellenar un gap',
+                blocks: [
+                    { type: 'text', content: 'Un gap se rellena cuando el precio vuelve y <b>cierra en el nivel donde empezó el hueco</b>: el máximo del día anterior en un gap alcista completo, o su cierre en uno dentro del rango.' },
+                    { type: 'table',
+                        headers: ['Suele rellenarse', 'Suele NO rellenarse'],
+                        rows: [
+                            ['Gaps sin volumen', 'Gaps de ruptura con mucho volumen'],
+                            ['Gaps de agotamiento', 'Gaps de continuación en una tendencia fuerte'],
+                            ['Gaps pequeños dentro del rango', 'Gaps que salen de una zona de demanda'],
+                        ]
+                    },
+                    { type: 'concept', title: 'Después del relleno', content: 'Rellenar un gap no significa que haya fallado. A menudo el precio vuelve a la zona del hueco, se apoya en ella como en un soporte y retoma la dirección del gap. Lo que lo decide es cómo llega: con poco volumen es una pausa; con mucho volumen y cerrando por debajo, un fallo.' },
+                ]
+            },
+            {
+                heading: 'Los tres retrocesos del día del gap',
+                blocks: [
+                    { type: 'text', content: 'El mismo día del gap, o en los siguientes, el precio suele retroceder algo. Cómo lo hace dice mucho de si el gap va en serio:' },
+                    { type: 'chart', id: 'gap_tres_retrocesos' },
+                    { type: 'table',
+                        headers: ['Retroceso', 'Qué pasa', 'Qué indica'],
+                        rows: [
+                            ['<b>Plano</b>', 'El precio se queda cerca de los máximos, casi sin bajar', 'Compradores fuertes'],
+                            ['<b>Débil</b>', 'Baja, pero no cierra por debajo del máximo de ayer', 'Sigue habiendo compradores'],
+                            ['<b>Fuerte</b>', 'Cierra por debajo del máximo de ayer', 'El gap ha fallado: mandan los vendedores'],
+                        ]
+                    },
+                    { type: 'concept', title: 'La línea que manda', content: 'En un gap alcista completo, todo se juega en el <b>máximo del día anterior</b>. Mientras el precio no cierre por debajo, el gap sigue vivo, por mucho que retroceda durante la sesión.' },
+                ]
+            },
+        ]
+    },
+
+    '34-4': {
+        moduleId: 34,
+        lessonIndex: 3,
+        title: 'Tres Estrategias para el Día del Gap',
+        duration: '8 min',
+        intro: 'Estas estrategias se usan el mismo día del gap, mirando velas de 5 minutos. Si no puedes seguir la apertura en directo, la última sección explica cómo aprovechar las mismas ideas en el gráfico diario.',
+        sections: [
+            {
+                heading: 'Antes de empezar: el rango de apertura y el VWAP',
+                blocks: [
+                    { type: 'text', content: 'El <b>rango de apertura</b> es el máximo y el mínimo de los primeros minutos de la sesión, normalmente entre 5 y 15. Sirve de referencia: romperlo por arriba o por abajo marca hacia dónde se inclina el día.' },
+                    { type: 'text', content: 'El <b>VWAP</b> es el precio medio que han pagado hoy todos los que han comprado, teniendo en cuenta cuánto compró cada uno. Si el precio está por encima del VWAP, los compradores del día van ganando; por debajo, van perdiendo.' },
+                ]
+            },
+            {
+                heading: '1 · Seguir el gap (gap and go)',
+                blocks: [
+                    { type: 'chart', id: 'gap_and_go' },
+                    { type: 'steps', items: [
+                        'El valor abre con un gap <b>completo</b>: por encima del máximo de ayer.',
+                        'La primera vela lleva <b>mucho volumen</b> a favor del gap.',
+                        'Marca el <b>rango de apertura</b>.',
+                        'Compra si el precio <b>rompe el máximo del rango</b> y está <b>por encima del VWAP</b>.',
+                        'Pon el stop por debajo del mínimo del rango de apertura.',
+                    ]},
+                    { type: 'tip', label: 'POR QUÉ FUNCIONA', content: 'Un gap completo con mucho volumen, que además supera su rango de apertura, es difícil de fabricar: hacen falta compradores de verdad. Es la estrategia más sencilla porque va a favor de todo.' },
+                ]
+            },
+            {
+                heading: '2 · Comprar el relleno',
+                blocks: [
+                    { type: 'chart', id: 'gap_relleno_compra' },
+                    { type: 'steps', items: [
+                        'Hay un gap alcista con volumen.',
+                        'El precio retrocede hacia la zona del hueco <b>con cada vez menos volumen</b>.',
+                        'No cierra por debajo del máximo de ayer (la línea que manda).',
+                        'Aparece una <b>vela de giro</b> alcista en esa zona: un martillo, una envolvente.',
+                        'Compra si el precio supera el máximo de esa vela; stop por debajo del mínimo del retroceso.',
+                    ]},
+                ]
+            },
+            {
+                heading: '3 · El gap que choca contra una zona de oferta',
+                blocks: [
+                    { type: 'chart', id: 'gap_giro_en_oferta' },
+                    { type: 'text', content: 'Tras una subida larga, el valor abre con un gap que llega a una <b>zona de oferta</b>, un nivel donde la última vez hubo mucha venta. Durante la sesión se da la vuelta y <b>cierra por debajo del cierre de ayer</b>. El gap ha fallado.' },
+                    { type: 'text', content: 'Para quien tiene la acción, es una señal para proteger beneficios o subir el stop. Quien opera también a la baja puede venderla en corto, con el stop por encima del máximo de ese día.' },
+                    { type: 'warning', content: 'Ir en contra del gap pide más confirmación que ir a su favor. En las estrategias 1 y 2 el gap trabaja para ti; en esta, estás apostando a que fracasa.' },
+                ]
+            },
+            {
+                heading: 'Si no puedes mirar la apertura',
+                blocks: [
+                    { type: 'text', content: 'Las mismas ideas funcionan en el gráfico diario, solo que más despacio. Seguir el gap es comprar al día siguiente si el precio supera el máximo del día del gap. Comprar el relleno es exactamente el gráfico de la estrategia 2, que ya es diario. Y el gap que falla contra una oferta se ve igual de claro al cierre.' },
+                    { type: 'tip', label: 'EL TAMAÑO', content: 'La distancia entre la entrada y el stop decide cuántas acciones comprar, no al revés. El módulo 12 (Gestión del Riesgo) explica cómo calcularlo.' },
+                ]
+            },
+        ]
+    },
+
+    '34-5': {
+        moduleId: 34,
+        lessonIndex: 4,
+        title: 'Los Gaps que Engañan y el Riesgo del Gap',
+        duration: '6 min',
+        intro: 'Para cerrar, dos cosas: los gaps pequeños que abren dentro del rango del día anterior, que suelen engañar, y el riesgo que un gap supone para quien ya tiene la acción.',
+        sections: [
+            {
+                heading: 'El gap pequeño en una tendencia bajista',
+                blocks: [
+                    { type: 'chart', id: 'gap_dentro_trampa' },
+                    { type: 'text', content: 'En plena caída, un día el valor abre con un gap alcista pequeño, <b>dentro del rango de ayer</b> y <b>con poco volumen</b>. Parece un giro. Muchas veces es una trampa: compran los que creen que el valor ha tocado fondo y los grandes aprovechan esa demanda para seguir vendiendo.' },
+                    { type: 'steps', items: [
+                        'Espera al menos los primeros 5 minutos y marca el rango de apertura.',
+                        'Mira el volumen: si es bajo, falta demanda de verdad.',
+                        'Si el precio vuelve por debajo de la apertura, la debilidad se confirma: no es momento de comprar.',
+                    ]},
+                    { type: 'warning', content: 'Si en cambio el gap abre con mucho volumen y, tras el primer retroceso, el precio se mantiene por encima de la apertura, puede ser genuino. Aun así, comprar dentro de una tendencia bajista es la opción de más riesgo del módulo: pide doble confirmación.' },
+                ]
+            },
+            {
+                heading: 'Lo que dice el volumen',
+                blocks: [
+                    { type: 'table',
+                        headers: ['Lo que ves', 'Lo que suele significar'],
+                        rows: [
+                            ['Gap alcista con mucho volumen y, tras retroceder, el precio sigue por encima de la apertura', 'Gap genuino: hay compradores de verdad'],
+                            ['Mucho volumen, pero el precio cae enseguida', 'Posible venta de los grandes aprovechando el entusiasmo'],
+                            ['Poco volumen y cierre por debajo de la apertura', 'Probable trampa'],
+                        ]
+                    },
+                ]
+            },
+            {
+                heading: 'El riesgo del gap para quien ya está dentro',
+                blocks: [
+                    { type: 'chart', id: 'gap_riesgo_stop' },
+                    { type: 'text', content: 'Un stop <b>no garantiza el precio</b>. Si tu stop está en 95 y la acción cierra a 97, pero al día siguiente abre a 90 por unos malos resultados, el stop se ejecuta al primer precio disponible: 90. El precio nunca pasó por 95.' },
+                    { type: 'steps', items: [
+                        'Calcula el tamaño de la posición pensando en el peor gap razonable, no solo en la distancia al stop.',
+                        'Antes de unos resultados, decide si quieres correr ese riesgo: muchos traders reducen la posición o esperan a que pasen.',
+                        'Un gap en tu contra con mucho volumen suele ser información nueva: no lo trates como un simple ruido.',
+                    ]},
+                    { type: 'tip', label: 'EN LA TERMINAL', content: 'La terminal no tiene gráficos de 5 minutos: para operar el día del gap hace falta el gráfico de tu bróker. Lo que sí te da es contexto: el Escáner filtra por la variación de un día y por RVOL, que muestra qué valores se han movido mucho y con volumen fuera de lo normal; y el panel técnico de Research dice cuándo son los próximos resultados.' },
+                    { type: 'concept', title: 'Todo el módulo en una frase', content: 'Un gap con volumen que no se rellena suele marcar el principio de algo; uno sin volumen, o al final de un movimiento largo, suele volver a su punto de partida.' },
+                ]
+            },
+        ]
+    },
 };

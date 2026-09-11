@@ -481,4 +481,20 @@ export const QUIZZES = {
         ]
     },
 
+    34: {
+        title: 'Quiz — Trading de Gaps',
+        questions: [
+            { q: '¿Qué es un gap?', options: ['Una vela con mucho volumen', 'Un hueco en el gráfico: el precio abre lejos de donde cerró y entre las dos velas no hubo operaciones', 'La diferencia entre el máximo y el mínimo de un día', 'Una caída de más del 5%'], correct: 1, explanation: 'Entre el cierre de un día y la apertura del siguiente queda una zona en la que nadie compró ni vendió.' },
+            { q: 'Una acción cierra ayer a 50 con un máximo de 52. Hoy abre a 51. ¿Qué tipo de gap es?', options: ['Un gap completo', 'Un gap bajista', 'No es un gap', 'Un gap dentro del rango: abre por encima del cierre pero sin superar el máximo de ayer'], correct: 3, explanation: 'Solo hay salto respecto al cierre; en el gráfico no queda hueco porque 51 está dentro del rango de ayer. Es el más débil.' },
+            { q: '¿Qué gap suele aparecer al salir de un lateral largo, con volumen alto?', options: ['El de ruptura', 'El de agotamiento', 'El de continuación', 'Uno dentro del rango'], correct: 0, explanation: 'Marca el comienzo de un movimiento nuevo, y con volumen suele no rellenarse en días.' },
+            { q: 'Tras una subida muy larga aparece un gap con volumen enorme y, dos días después, el precio cierra por debajo del hueco. ¿Qué indica?', options: ['Que la tendencia se acelera', 'Nada, el volumen no importa aquí', 'Un gap de agotamiento confirmado: la subida probablemente se está acabando', 'Un gap de ruptura'], correct: 2, explanation: 'El agotamiento se confirma en los días siguientes, cuando el precio se desinfla y cierra por debajo del gap.' },
+            { q: 'En un gap alcista completo, ¿qué línea decide si el gap sigue vivo?', options: ['El cierre de hoy', 'El máximo del día anterior', 'La media de 200 sesiones', 'El mínimo de las últimas 52 semanas'], correct: 1, explanation: 'Es donde empezó el hueco. Mientras el precio no cierre por debajo, el gap sigue vivo aunque retroceda.' },
+            { q: 'El día del gap el precio retrocede y cierra por debajo del máximo de ayer. ¿Cómo se lee?', options: ['Retroceso plano: compradores fuertes', 'Retroceso débil: sigue habiendo compradores', 'No dice nada', 'Retroceso fuerte: el gap ha fallado y mandan los vendedores'], correct: 3, explanation: 'Cerrar por debajo del borde del hueco es la señal de que el gap no aguanta.' },
+            { q: '¿Qué es el VWAP?', options: ['El precio medio que han pagado hoy todos los compradores, teniendo en cuenta cuánto compró cada uno', 'El precio de apertura', 'La media de 20 sesiones', 'El máximo del rango de apertura'], correct: 0, explanation: 'Por encima del VWAP, los compradores del día van ganando; por debajo, van perdiendo.' },
+            { q: 'En la estrategia de seguir el gap (gap and go), ¿cuándo se compra?', options: ['Nada más abrir, sin esperar', 'Cuando el precio rompe el máximo del rango de apertura y está por encima del VWAP', 'Cuando el gap se rellena', 'Al día siguiente, pase lo que pase'], correct: 1, explanation: 'Se espera a que el precio confirme que hay compradores de verdad; el stop va por debajo del mínimo del rango.' },
+            { q: 'En plena tendencia bajista, un valor abre con un gap alcista pequeño, dentro del rango de ayer y con poco volumen. ¿Qué suele ser?', options: ['El inicio de una subida', 'Un gap de ruptura', 'Una trampa: compran los que creen que gira y los grandes aprovechan para vender', 'Un gap de continuación'], correct: 2, explanation: 'Sin volumen no hay demanda real. Si además el precio vuelve por debajo de la apertura, la debilidad se confirma.' },
+            { q: 'Tienes un stop en 95. La acción cierra a 97 y al día siguiente abre a 90. ¿A qué precio se vende?', options: ['A 90, el primer precio disponible tras el salto', 'A 95, el precio del stop', 'A 97, el cierre anterior', 'No se vende hasta que vuelva a 95'], correct: 0, explanation: 'Un stop no garantiza el precio. Por eso el tamaño de la posición se calcula pensando también en un gap en contra.' },
+        ]
+    },
+
 };

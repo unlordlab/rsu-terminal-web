@@ -39,7 +39,8 @@ QUIZZES = _js("academy_quizzes.js")
 MODULOS = _js("academy_modulos.js")
 
 CITADOS = re.findall(r"type: 'chart', id: '([a-z0-9_]+)'", LECCIONES)
-REGISTRO = GRAFICOS[GRAFICOS.index("export const CHARTS = {"):]
+# Sin los comentarios: «// Módulo 34 (gaps)» metía «gaps» como si fuera un gráfico.
+REGISTRO = "\n".join(l.split("//")[0] for l in GRAFICOS[GRAFICOS.index("export const CHARTS = {"):].splitlines())
 REGISTRADOS = set(re.findall(r"\b([a-z][a-z0-9_]*)\b", REGISTRO)) - {"export", "const"}
 DEFINIDOS = set(re.findall(r"^function ([a-z][a-z0-9_]*)\(", GRAFICOS, re.M))
 CLAVES = re.findall(r"^    '(\d+-\d+)': \{\s*moduleId: (\d+),\s*lessonIndex: (\d+),", LECCIONES, re.M)
@@ -98,13 +99,16 @@ def test_el_VSA_va_detras_del_modulo_de_volumen():
 def test_el_VSA_tiene_sus_cinco_lecciones_y_sus_graficos():
     claves = [k for k, m, _ in CLAVES if m == "33"]
     assert claves == ["33-1", "33-2", "33-3", "33-4", "33-5"]
-    bloque = LECCIONES[LECCIONES.index("'33-1': {"):]
+    bloque = LECCIONES[LECCIONES.index("'33-1': {"):LECCIONES.index("'34-1': {")]
     vsa = [c for c in re.findall(r"type: 'chart', id: '([a-z0-9_]+)'", bloque)]
     assert len(vsa) == 9 and all(c.startswith("vsa_") for c in vsa)
 
 
-def test_el_quiz_del_VSA_esta_bien_formado():
-    bloque = QUIZZES[QUIZZES.index("    33: {"):]
+@pytest.mark.parametrize("modulo", [33, 34])
+def test_el_quiz_de_los_modulos_nuevos_esta_bien_formado(modulo):
+    bloque = QUIZZES[QUIZZES.index(f"    {modulo}: {{"):]
+    siguiente = re.search(r"^    \d+: \{", bloque[10:], re.M)
+    bloque = bloque[:siguiente.start() + 10] if siguiente else bloque
     preguntas = re.findall(r"\{ q: '(.+?)', options: \[(.+?)\], correct: (\d), explanation: '(.+?)' \}", bloque)
     assert len(preguntas) == 10
     for q, opciones, correcta, explicacion in preguntas:
@@ -113,6 +117,31 @@ def test_el_quiz_del_VSA_esta_bien_formado():
     # Que la buena no caiga siempre en el mismo sitio: se aprendería la posición.
     posiciones = [int(c) for _, _, c, _ in preguntas]
     assert max(posiciones.count(p) for p in set(posiciones)) <= 4, posiciones
+
+
+# ── El módulo 34: Trading de Gaps ─────────────────────────────────────────────
+
+def test_los_gaps_van_detras_del_modulo_de_confirmacion():
+    """La lección 19-5 ya presenta los tres tipos clásicos como confirmación
+    de una entrada; el módulo 34 remite a ella y va justo detrás."""
+    fase3 = re.search(r"FASE 3[^\n]*modules:\[([\d,\s]+)\]", MODULOS).group(1)
+    orden = [int(x) for x in fase3.split(",")]
+    assert orden.index(34) == orden.index(19) + 1, orden
+    assert "lección 19-5" in LECCIONES[LECCIONES.index("'34-1': {"):]
+
+
+def test_los_gaps_tienen_sus_cinco_lecciones_y_sus_graficos():
+    assert [k for k, m, _ in CLAVES if m == "34"] == ["34-1", "34-2", "34-3", "34-4", "34-5"]
+    bloque = LECCIONES[LECCIONES.index("'34-1': {"):]
+    graficos = re.findall(r"type: 'chart', id: '([a-z0-9_]+)'", bloque)
+    assert len(set(graficos)) == 8 and all(g.startswith("gap_") for g in graficos), graficos
+
+
+def test_las_estrategias_del_dia_dicen_que_son_intradia():
+    """Varias estrategias son de velas de 5 minutos y la terminal no tiene
+    gráficos intradía: la lección lo dice y da la versión en diario."""
+    bloque = LECCIONES[LECCIONES.index("'34-4': {"):LECCIONES.index("'34-5': {")]
+    assert "velas de 5 minutos" in bloque and "gráfico diario" in bloque
 
 
 # ── Todos los gráficos se dibujan, ejecutados en Node (en CI siempre está) ──
