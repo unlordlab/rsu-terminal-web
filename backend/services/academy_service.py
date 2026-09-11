@@ -112,23 +112,29 @@ def marcar_quiz(user_id: int, module_id: int, score: int, total: int) -> dict:
 
 
 def obtener_progreso(user_id: int) -> dict:
-    """{lessons: ["0-1", ...], quizzes: {"12": {score, total}}} — el frontend
-    calcula el porcentaje por módulo contra las lecciones que EXISTEN de
-    verdad (academy_manifest.js), no contra un total declarado a mano."""
+    """{lessons: ["0-1", ...], quizzes: {"12": {score, total}}, ultima} — el
+    frontend calcula el porcentaje por módulo contra las lecciones que EXISTEN
+    de verdad (academy_manifest.js), no contra un total declarado a mano.
+
+    `ultima` es la última lección terminada por primera vez: por dónde retoma
+    la tarjeta «sigue donde lo dejaste» del Dashboard. Releer una lección no
+    la mueve (marcar_leccion no actualiza la fecha), así que es «lo último
+    nuevo que leyó», que es justo desde donde tiene sentido seguir."""
     conn = _conn()
     try:
-        lecciones = [
-            r["lesson_key"] for r in conn.execute(
-                "SELECT lesson_key FROM academy_progress WHERE user_id = ?", (user_id,)
-            ).fetchall()
-        ]
+        filas = conn.execute(
+            "SELECT lesson_key FROM academy_progress WHERE user_id = ? "
+            "ORDER BY completed_at, rowid", (user_id,)
+        ).fetchall()
+        lecciones = [r["lesson_key"] for r in filas]
         quizzes = {
             str(r["module_id"]): {"score": r["score"], "total": r["total"]}
             for r in conn.execute(
                 "SELECT module_id, score, total FROM academy_quiz WHERE user_id = ?", (user_id,)
             ).fetchall()
         }
-        return {"ok": True, "lessons": lecciones, "quizzes": quizzes}
+        return {"ok": True, "lessons": lecciones, "quizzes": quizzes,
+                "ultima": lecciones[-1] if lecciones else None}
     finally:
         conn.close()
 

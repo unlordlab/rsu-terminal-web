@@ -1,6 +1,9 @@
-import { api, authHeader } from '/core/api.js';
+import { api, authHeader, hasTier } from '/core/api.js';
 import { errorMessage, esc } from '/core/ui.js';
+import { NAV_ITEMS } from '/components/sidebar.js';
 import { fraseDelDia } from '/pages/dashboard_frases.js';
+import { MODULES, PHASES, leccionesDe } from '/pages/academy_modulos.js';
+import { siguientePaso } from '/pages/academy_continuar.js';
 
 export async function render(container) {
     container.innerHTML = `
@@ -14,6 +17,7 @@ export async function render(container) {
         <div id="shortcuts-tip"></div>
         <div id="daily-quote" style="margin-bottom:1.5rem;"></div>
         <div id="pulse-strip" style="margin-bottom:1.5rem;"></div>
+        <div id="academy-continuar"></div>
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem;margin-bottom:1.5rem;">
             <div id="briefing-preview"></div>
             <div id="watchlist-summary"></div>
@@ -30,7 +34,7 @@ export async function render(container) {
                     transition:all var(--transition);
                 ">
                     <div style="color:var(--color-accent);font-size:20px;margin-bottom:8px;">${m.icon}</div>
-                    <div style="color:var(--color-text);font-size:13px;margin-bottom:4px;letter-spacing:0.05em;">${m.label}</div>
+                    <div style="color:var(--color-text);font-size:13px;margin-bottom:4px;letter-spacing:0.05em;"${bloqueado(m.path) ? ' title="Requiere plan Tier 1 o superior"' : ''}>${m.label}${bloqueado(m.path) ? ' <span style="font-size:10px;opacity:0.6;">🔒</span>' : ''}</div>
                     <div style="color:var(--color-muted);font-size:11px;">${m.desc}</div>
                 </div>
             `).join('')}
@@ -49,6 +53,7 @@ export async function render(container) {
     renderDailyQuote(container.querySelector('#daily-quote'));
     renderShortcutsTip(container.querySelector('#shortcuts-tip'));
     loadPulseStrip(container.querySelector('#pulse-strip'));
+    loadAcademyContinuar(container.querySelector('#academy-continuar'));
     loadBriefingPreview(container.querySelector('#briefing-preview'));
     loadWatchlistSummary(container.querySelector('#watchlist-summary'));
 
@@ -416,6 +421,10 @@ function drawAlgoChart(chartId, chart, color) {
     });
 }
 
+// Una tarjeta por cada sección del menú lateral (NAV_ITEMS), salvo el propio
+// Dashboard. Faltaban seis —Congress Trading, Track Record, Roadmap,
+// Manifiesto, Equipo y Disclaimer— y un test obliga ahora a que cada sección
+// nueva del menú tenga también su tarjeta aquí.
 const modules = [
     { path: '/market',     icon: '◈', label: 'MARKET',        desc: 'Dashboard de mercado' },
     { path: '/cartera',    icon: '◎', label: 'CARTERA',       desc: 'Portfolio tracker' },
@@ -424,13 +433,101 @@ const modules = [
     { path: '/rsrw',       icon: '◆', label: 'RS/RW',         desc: 'Scanner fuerza relativa' },
     { path: '/research',   icon: '◉', label: 'RESEARCH',      desc: 'Análisis con IA' },
     { path: '/insider',    icon: '🔍', label: 'INSIDER FLOW',  desc: 'Compras/ventas de directivos' },
+    { path: '/congress',   icon: '🏛️', label: 'CONGRESS TRADING', desc: 'Operaciones del Congreso de EE. UU.' },
     { path: '/options',    icon: '◐', label: 'OPTIONS FLOW',  desc: 'Actividad institucional' },
     { path: '/canslim',    icon: '◈', label: 'CANSLIM',       desc: 'Screener CAN SLIM' },
     { path: '/algoritmo',  icon: 'A', label: 'RSU ALGORITMO', desc: 'Detector de fondos' },
+    { path: '/track-record', icon: '📓', label: 'TRACK RECORD', desc: 'Lo que hicieron de verdad las señales' },
     { path: '/tesis',      icon: '📄', label: 'TESIS',         desc: 'Análisis de inversión RSU' },
     { path: '/spxl',       icon: '▲', label: 'SPXL',          desc: 'Estrategia DCA apalancada' },
     { path: '/btc-stratum', icon: '₿', label: 'BTC STRATUM',  desc: 'On-chain Bitcoin' },
     { path: '/newsfeed',   icon: '📰', label: 'NEWS FEED',     desc: 'Noticias de mercado' },
-    { path: '/academy',    icon: '🎓', label: 'ACADEMIA',      desc: '22 módulos de metodología' },
+    { path: '/academy',    icon: '🎓', label: 'ACADEMIA',      desc: MODULES.length + ' módulos de formación' },
+    { path: '/roadmap',    icon: '🗺️', label: 'ROADMAP 2026',  desc: 'Escenario de mercado y su revisión' },
+    { path: '/manifiesto', icon: '📜', label: 'MANIFIESTO',    desc: 'Por qué existe RSU' },
+    { path: '/equipo',     icon: '🤖', label: 'EQUIPO RSU',    desc: 'Los agentes de la terminal' },
     { path: '/community',  icon: '👥', label: 'COMUNIDAD',     desc: 'Discord + soporte' },
+    { path: '/disclaimer', icon: '⚖', label: 'DISCLAIMER',    desc: 'Aviso legal y condiciones' },
 ];
+
+// El mismo candado que pinta el menú lateral para las secciones de pago.
+function bloqueado(path) {
+    const item = NAV_ITEMS.find(i => i.path === path);
+    return !!(item && item.minTier && !hasTier(item.minTier));
+}
+
+// ── ACADEMY: SIGUE DONDE LO DEJASTE ──────────────────────────────────────────
+// Qué está completo lo dice el servidor (la misma regla que el certificado);
+// por dónde seguir, academy_continuar.js. Sin datos no se pinta nada: una
+// tarjeta con un progreso inventado es peor que ninguna.
+
+function catalogoAcademy() {
+    const modulos = {};
+    for (const m of MODULES) modulos[m.id] = { title: m.title, lecciones: leccionesDe(m.id) };
+    return { orden: PHASES.flatMap(p => p.modules), modulos };
+}
+
+async function loadAcademyContinuar(el) {
+    if (!el) return;
+    try {
+        const [pRes, cRes] = await Promise.all([
+            fetch('/api/v1/academy/progress',    { headers: authHeader() }),
+            fetch('/api/v1/academy/certificado', { headers: authHeader() }),
+        ]);
+        const progreso = await pRes.json();
+        const cert     = await cRes.json();
+        if (!progreso || !progreso.ok || !cert || !cert.ok) return;
+        const paso = siguientePaso(progreso, cert, catalogoAcademy());
+        if (!paso) return;
+        el.innerHTML = tarjetaAcademy(paso);
+        const boton = el.querySelector('[data-ir]');
+        if (boton) boton.addEventListener('click', () => window.__navigate(boton.getAttribute('data-ir')));
+    } catch (_) { /* el Dashboard se usa igual sin la tarjeta */ }
+}
+
+function tarjetaAcademy(p) {
+    const modulo = p.modulo ? 'Módulo ' + p.modulo.id + ' · ' + esc(p.modulo.title) : '';
+    const leccion = p.leccion ? '«' + esc(p.leccion.title) + '»' : '';
+    const irLeccion = p.leccion ? '/academy?leccion=' + encodeURIComponent(p.leccion.key) : '/academy';
+    const completos = p.completos + ' de ' + p.modulosTotal + ' módulos completos';
+    const barra = (hechas, total) => '<div style="height:4px;background:var(--color-border);border-radius:2px;margin-top:8px;overflow:hidden;max-width:420px;">'
+        + '<div style="height:100%;width:' + (total ? Math.round(hechas / total * 100) : 0) + '%;background:var(--color-accent);"></div></div>';
+
+    let etiqueta, linea, detalle, boton, destino;
+    if (p.tipo === 'empezar') {
+        etiqueta = 'ACADEMY';
+        linea    = 'Formación en ' + p.modulosTotal + ' módulos, incluida en tu cuenta.';
+        detalle  = 'Empieza por ' + leccion + '.';
+        boton    = 'Empezar →';          destino = irLeccion;
+    } else if (p.tipo === 'seguir') {
+        etiqueta = 'ACADEMY · SIGUE DONDE LO DEJASTE';
+        linea    = modulo + ' — ' + p.leidas + ' de ' + p.total + ' lecciones leídas' + barra(p.leidas, p.total);
+        detalle  = 'Siguiente: ' + leccion + ' · ' + completos;
+        boton    = 'Seguir →';           destino = irLeccion;
+    } else if (p.tipo === 'quiz') {
+        etiqueta = 'ACADEMY · TE FALTA EL QUIZ';
+        linea    = 'Has leído todo el ' + modulo.replace('Módulo', 'módulo') + '.';
+        detalle  = (p.quiz === 'sin hacer' ? 'Solo te queda su quiz para darlo por completo.' : 'Su quiz: ' + esc(p.quiz) + '.') + ' · ' + completos;
+        boton    = 'Ir al quiz →';       destino = '/academy?modulo=' + p.modulo.id;
+    } else if (p.tipo === 'nuevo') {
+        etiqueta = 'ACADEMY · MÓDULO NUEVO';
+        linea    = modulo + ' — ' + p.total + ' ' + (p.total === 1 ? 'lección' : 'lecciones');
+        detalle  = 'Se ha añadido después de tu certificado. Empieza por ' + leccion + '.';
+        boton    = 'Leer →';             destino = irLeccion;
+    } else {
+        etiqueta = 'ACADEMY · COMPLETADA';
+        linea    = 'Has completado los ' + p.modulosTotal + ' módulos de Academy.';
+        detalle  = 'Ya puedes pedir tu certificado.';
+        boton    = 'Pedir certificado →'; destino = '/academy';
+    }
+
+    return '<div style="background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius);padding:12px 16px;margin-bottom:1.5rem;display:flex;align-items:center;gap:14px;flex-wrap:wrap;">'
+        + '<div style="font-size:22px;" aria-hidden="true">🎓</div>'
+        + '<div style="flex:1;min-width:220px;">'
+        + '<div style="color:var(--color-accent);font-size:11px;letter-spacing:0.08em;">' + etiqueta + '</div>'
+        + '<div style="color:var(--color-text);font-size:13px;margin-top:3px;">' + linea + '</div>'
+        + '<div style="color:var(--color-muted);font-size:11px;margin-top:6px;">' + detalle + '</div>'
+        + '</div>'
+        + '<button type="button" data-ir="' + esc(destino) + '" style="background:var(--color-accent);color:#000;border:none;border-radius:var(--radius);padding:8px 16px;font-family:var(--font-mono);font-size:12px;font-weight:600;cursor:pointer;flex-shrink:0;">' + boton + '</button>'
+        + '</div>';
+}
