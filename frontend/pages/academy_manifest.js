@@ -161,4 +161,9 @@ export const LESSON_INDEX = {
     '32-3': { title: 'Quién Está Comprando: Directivos, Fondos y Analistas', words: 262 },
     '32-4': { title: 'Cómo Recorrer la Ficha Sin Perderse', words: 335 },
     '32-5': { title: 'De Dónde Salen los Datos y Qué Falla', words: 279 },
+    '33-1': { title: 'Qué Es el VSA: Tres Datos en Cada Vela', words: 634 },
+    '33-2': { title: 'Medir el Volumen y las Dos Reglas del VSA', words: 615 },
+    '33-3': { title: 'Cómo Se Forma un Suelo: el Clímax de Venta y la Prueba', words: 618 },
+    '33-4': { title: 'El Volumen que Frena la Caída', words: 437 },
+    '33-5': { title: 'De la Señal a la Operación', words: 696 },
 };

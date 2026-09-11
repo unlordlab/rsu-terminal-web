@@ -44,12 +44,13 @@ export const MODULES = [
     { id:30, title:'SPXL — La Estrategia de Caídas', icon:'📉', description:'La única herramienta de la terminal que trabaja cuando el mercado corrige, no cuando sube. Qué cambia el triple apalancamiento, la premisa que la sostiene —el índice sube a largo plazo— y qué pasa si esa premisa falla, cómo compra por peldaños sin intentar acertar el suelo, las tres salidas según lo honda que fuera la caída, y por qué su 98% de aciertos no significa lo que parece. Con los números reales de 17,7 años, incluido lo que pierde frente a comprar y mantener.' },
     { id:31, title:'El Indicador RSU',              icon:'📶', description:'Manual del panel de barras que aparece bajo el gráfico en Research. Qué mide en realidad —dónde está el precio dentro de su propio rango reciente, no si la acción está cara o barata—, qué dice cada uno de los seis colores y las dos franjas del fondo, y una estrategia concreta de cuatro pasos para usarlo: filtrar en Scanner, descartar lo que va en contra de la tendencia, esperar el cruce y decidir con el resto de la terminal. Incluye dónde falla, por qué en tendencias fuertes deja de aportar, y en qué se diferencia del «Flujo con volumen» que aparece a su lado.' },
     { id:32, title:'Research — La Ficha de un Valor', icon:'🔎', description:'Manual de la ficha completa de un valor: cuándo se usa (con un nombre ya en la mano, no para explorar), de qué cinco categorías está hecho el RSU Score y por qué el desglose importa más que el número, cómo leer lo que hacen directivos, fondos y analistas —y por qué comprar informa más que vender—, un recorrido de cuatro paradas para descartar pronto, y dónde falla: bancos, aseguradoras, compañías extranjeras y salidas a bolsa recientes.' },
+    { id:33, title:'Volume Spread Analysis (VSA)', icon:'👣', description:'Cuánto recorre cada vela, dónde cierra y con cuánto volumen: las huellas del dinero grande. Cómo se forma un suelo y cuándo se entra.' },
 ];
 
 export const PHASES = [
     { label:'🖥️ INTRO // RSU TERMINAL',              modules:[0] },
     { label:'📍 FASE 1 // ANÁLISIS TÉCNICO FUNDAMENTAL', modules:[1,2,3,4] },
-    { label:'🔬 FASE 2 // LECTURA DE MERCADO AVANZADA',  modules:[5,6,7,8,17,24] },
+    { label:'🔬 FASE 2 // LECTURA DE MERCADO AVANZADA',  modules:[5,6,7,8,33,17,24] },
     { label:'🎯 FASE 3 // ESTRATEGIA Y PLANIFICACIÓN',   modules:[9,10,11,18,19,23,25] },
     { label:'🚀 FASE 4 // EJECUCIÓN Y MENTALIDAD',       modules:[12,13,14,15] },
     { label:'🔄 FASE 5 // CICLO DE VIDA DEL PRECIO',     modules:[16] },

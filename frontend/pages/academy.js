@@ -998,10 +998,16 @@ function renderBlock(block) {
                 </table>
             </div>`;
 
-        case 'chart':
+        case 'chart': {
             const chartFn = _CHARTS && _CHARTS[block.id];
-            if (!chartFn) return `<div style="color:var(--color-muted);font-size:11px;padding:8px;border:1px dashed var(--color-border);border-radius:4px;margin:12px 0;">Gráfico: ${block.id}</div>`;
-            return `<div class="ac-chart">${chartFn()}</div>`;
+            const hueco = `<div style="color:var(--color-muted);font-size:11px;padding:8px;border:1px dashed var(--color-border);border-radius:4px;margin:12px 0;">Gráfico no disponible</div>`;
+            if (!chartFn) return hueco;
+            // Un gráfico que falla deja un hueco, no la lección entera sin
+            // abrir: eso pasó con la 8-4 durante dos meses, y como el
+            // certificado exige leerlas todas, nadie podía conseguirlo.
+            try { return `<div class="ac-chart">${chartFn()}</div>`; }
+            catch (e) { console.error('Gráfico de Academy roto:', block.id, e); return hueco; }
+        }
 
         case 'divider':
             return `<hr style="border:none;border-top:1px solid var(--color-border);margin:20px 0;">`;

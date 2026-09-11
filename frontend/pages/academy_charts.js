@@ -5626,6 +5626,11 @@ function climax_stacking() {
 
 function weak_participation() {
     const W=680, H=240;
+    // Estas tres líneas se perdieron el 05/07 y la lección 8-4 dejó de abrirse
+    // (el gráfico lanzaba «prices is not defined»). Recuperadas de b8d439f.
+    const x0=40, y0=15, w=W-80, h=150;
+    const volY0=y0+h+15, volH=55;
+    const prices=[100,104,108,112,116,120,124,128,132,136,140,144,148,152,156,160];
     const vols=  [2.0,1.8,1.6,1.5,1.4,1.2,1.1,1.0,0.9,0.8,0.7,0.6,0.5,0.4,0.4,0.3];
     const mn=92, mx=168, range=mx-mn;
     const px=(i)=>x0+(i/(prices.length-1))*w;
@@ -11978,6 +11983,323 @@ function spxl_precio_de_dormir() {
     </svg>`;
 }
 
+// ─── MÓDULO 33 · VOLUME SPREAD ANALYSIS (VSA) ────────────────────────────────
+// En VSA lo que se lee es el RANGO de cada vela (máximo − mínimo), DÓNDE
+// cierra dentro de ese rango y su VOLUMEN frente a lo normal. Por eso estas
+// velas llevan máximo, mínimo y cierre explícitos, en vez de derivarse de una
+// serie de cierres como en el resto de gráficos. El volumen va en múltiplos
+// de la media de 20 sesiones: 1 = un día normal.
+
+function vsaVelas(velas, cfg) {
+    const { x0, y0, w, h, volY0, volH, mn, mx, destacar = {}, ancho = 12, media = null } = cfg;
+    const n = velas.length;
+    const px = (i) => x0 + (i + 0.5) * (w / n);
+    const py = (v) => y0 + h - ((v - mn) / (mx - mn)) * h;
+    const vmax = Math.max(...velas.map(b => b.v), media || 0) * 1.1;
+    const vy = (v) => volY0 + volH - (v / vmax) * volH;
+    let svg = '';
+    velas.forEach((b, i) => {
+        const cx = px(i), sube = b.c >= b.o;
+        const color = destacar[i] || (sube ? C.accent : C.red);
+        const top = py(Math.max(b.o, b.c)), bot = py(Math.min(b.o, b.c));
+        svg += `<line x1="${cx.toFixed(1)}" y1="${py(b.h).toFixed(1)}" x2="${cx.toFixed(1)}" y2="${py(b.l).toFixed(1)}" stroke="${color}" stroke-width="1.5"/>`;
+        svg += `<rect x="${(cx - ancho / 2).toFixed(1)}" y="${top.toFixed(1)}" width="${ancho}" height="${Math.max(bot - top, 2).toFixed(1)}" fill="${sube ? color : 'none'}" stroke="${color}" stroke-width="1.5" rx="1"/>`;
+        if (volH) {
+            svg += `<rect x="${(cx - ancho / 2).toFixed(1)}" y="${vy(b.v).toFixed(1)}" width="${ancho}" height="${(volY0 + volH - vy(b.v)).toFixed(1)}" fill="${color}" opacity="${destacar[i] ? 0.9 : 0.4}" rx="1"/>`;
+        }
+    });
+    if (volH) svg += `<line x1="${x0}" y1="${(volY0 - 4).toFixed(1)}" x2="${x0 + w}" y2="${(volY0 - 4).toFixed(1)}" stroke="${C.border}" stroke-width="1"/>`;
+    if (media != null && volH) {
+        svg += `<line x1="${x0}" y1="${vy(media).toFixed(1)}" x2="${x0 + w}" y2="${vy(media).toFixed(1)}" stroke="${C.yellow}" stroke-width="1" stroke-dasharray="4 3" opacity="0.7"/>`;
+    }
+    return { svg, px, py, vy, paso: w / n };
+}
+
+// Los tres datos que se leen de cada vela
+function vsa_tres_datos() {
+    const W = 680, H = 250;
+    const cx = 190, alto = 40, bajo = 200, apertura = 165, cierre = 62;
+    const t1 = alto + (bajo - alto) / 3, t2 = alto + 2 * (bajo - alto) / 3;
+    const vols = [0.9, 1.1, 0.8, 1.0, 1.2, 0.9, 1.0, 2.4];
+    const vx0 = 430, vw = 210, vBase = 200, vH = 130, vmax = 2.8;
+    const barras = vols.map((v, i) => {
+        const x = vx0 + i * (vw / vols.length) + 4, hh = v / vmax * vH;
+        const ultima = i === vols.length - 1;
+        return `<rect x="${x.toFixed(1)}" y="${(vBase - hh).toFixed(1)}" width="${(vw / vols.length - 8).toFixed(1)}" height="${hh.toFixed(1)}" fill="${ultima ? C.cyan : C.muted}" opacity="${ultima ? 0.9 : 0.6}" rx="1"/>`;
+    }).join('');
+    const yMedia = vBase - 1 / vmax * vH;
+    return `<svg viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg">
+        <rect width="${W}" height="${H}" fill="${C.bg}" rx="6"/>
+        <line x1="${cx}" y1="${alto}" x2="${cx}" y2="${bajo}" stroke="${C.accent}" stroke-width="2"/>
+        <rect x="${cx - 18}" y="${cierre}" width="36" height="${apertura - cierre}" fill="${C.accent}" rx="2"/>
+        <line x1="120" y1="${alto}" x2="120" y2="${bajo}" stroke="${C.yellow}" stroke-width="1.5"/>
+        <line x1="114" y1="${alto}" x2="${cx - 4}" y2="${alto}" stroke="${C.yellow}" stroke-width="1" stroke-dasharray="3 3"/>
+        <line x1="114" y1="${bajo}" x2="${cx - 4}" y2="${bajo}" stroke="${C.yellow}" stroke-width="1" stroke-dasharray="3 3"/>
+        <text x="108" y="${(alto + bajo) / 2 - 4}" fill="${C.yellow}" font-size="11" font-family="monospace" text-anchor="end">1 · RANGO</text>
+        <text x="108" y="${(alto + bajo) / 2 + 10}" fill="${C.textDim}" font-size="9" font-family="monospace" text-anchor="end">máximo − mínimo</text>
+        <line x1="${cx + 24}" y1="${t1.toFixed(1)}" x2="300" y2="${t1.toFixed(1)}" stroke="${C.border}" stroke-width="1" stroke-dasharray="3 3"/>
+        <line x1="${cx + 24}" y1="${t2.toFixed(1)}" x2="300" y2="${t2.toFixed(1)}" stroke="${C.border}" stroke-width="1" stroke-dasharray="3 3"/>
+        <text x="306" y="${((alto + t1) / 2 + 4).toFixed(1)}" fill="${C.accent}" font-size="9" font-family="monospace">cierre ALTO</text>
+        <text x="306" y="${((t1 + t2) / 2 + 4).toFixed(1)}" fill="${C.textDim}" font-size="9" font-family="monospace">cierre MEDIO</text>
+        <text x="306" y="${((t2 + bajo) / 2 + 4).toFixed(1)}" fill="${C.red}" font-size="9" font-family="monospace">cierre BAJO</text>
+        <circle cx="${cx}" cy="${cierre}" r="5" fill="none" stroke="${C.cyan}" stroke-width="2"/>
+        <text x="${cx}" y="${alto - 12}" fill="${C.cyan}" font-size="11" font-family="monospace" text-anchor="middle">2 · DÓNDE CIERRA</text>
+        ${barras}
+        <line x1="${vx0}" y1="${yMedia.toFixed(1)}" x2="${vx0 + vw}" y2="${yMedia.toFixed(1)}" stroke="${C.yellow}" stroke-width="1" stroke-dasharray="4 3"/>
+        <text x="${vx0 + vw / 2}" y="${vBase + 15}" fill="${C.yellow}" font-size="8.5" font-family="monospace" text-anchor="middle">línea amarilla: media de 20 sesiones</text>
+        <text x="${vx0 + vw / 2}" y="${alto - 12}" fill="${C.cyan}" font-size="11" font-family="monospace" text-anchor="middle">3 · VOLUMEN</text>
+        <text x="${vx0 + vw / 2}" y="${alto + 4}" fill="${C.textDim}" font-size="9" font-family="monospace" text-anchor="middle">¿cuánto frente a lo normal?</text>
+        <text x="${W / 2}" y="${H - 12}" fill="${C.text}" font-size="10.5" font-family="monospace" text-anchor="middle">Tres preguntas a cada vela: ¿cuánto recorrió? ¿dónde cerró? ¿con cuánto volumen?</text>
+    </svg>`;
+}
+
+// Esfuerzo (volumen) frente a resultado (rango): las cuatro combinaciones
+function vsa_esfuerzo_resultado() {
+    const W = 680, H = 250;
+    const casos = [
+        { amplio: true,  v: 2.6, color: C.accent, l1: 'Mucho esfuerzo,', l2: 'mucho resultado', l3: 'movimiento de verdad' },
+        { amplio: false, v: 2.8, color: C.orange, l1: 'Mucho esfuerzo,', l2: 'poco resultado',  l3: 'alguien frena el precio' },
+        { amplio: true,  v: 0.5, color: C.yellow, l1: 'Poco esfuerzo,',  l2: 'mucho resultado', l3: 'sin apoyo: sospechoso' },
+        { amplio: false, v: 0.4, color: C.textDim, l1: 'Poco esfuerzo,', l2: 'poco resultado',  l3: 'nadie tiene interés' },
+    ];
+    const vBase = 185, vH = 50, vmax = 3;
+    const yMedia = vBase - 1 / vmax * vH;
+    const cols = casos.map((k, i) => {
+        const cx = 85 + i * 170;
+        const [hi, lo, op, cl] = k.amplio ? [30, 125, 115, 42] : [68, 96, 91, 74];
+        const hh = k.v / vmax * vH;
+        return `<line x1="${cx}" y1="${hi}" x2="${cx}" y2="${lo}" stroke="${k.color}" stroke-width="1.5"/>
+            <rect x="${cx - 12}" y="${cl}" width="24" height="${op - cl}" fill="${k.color}" opacity="0.85" rx="1"/>
+            <rect x="${cx - 12}" y="${(vBase - hh).toFixed(1)}" width="24" height="${hh.toFixed(1)}" fill="${k.color}" opacity="0.7" rx="1"/>
+            <line x1="${cx - 30}" y1="${yMedia.toFixed(1)}" x2="${cx + 30}" y2="${yMedia.toFixed(1)}" stroke="${C.yellow}" stroke-width="1" stroke-dasharray="3 3" opacity="0.7"/>
+            <text x="${cx}" y="206" fill="${k.color}" font-size="9.5" font-family="monospace" text-anchor="middle">${k.l1}</text>
+            <text x="${cx}" y="218" fill="${k.color}" font-size="9.5" font-family="monospace" text-anchor="middle">${k.l2}</text>
+            <text x="${cx}" y="233" fill="${C.text}" font-size="9" font-family="monospace" text-anchor="middle">${k.l3}</text>
+            ${i ? `<line x1="${cx - 85}" y1="20" x2="${cx - 85}" y2="236" stroke="${C.border}" stroke-width="1"/>` : ''}`;
+    }).join('');
+    return `<svg viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg">
+        <rect width="${W}" height="${H}" fill="${C.bg}" rx="6"/>
+        <text x="8" y="${(vBase - 20).toFixed(1)}" fill="${C.textDim}" font-size="8" font-family="monospace">vol.</text>
+        ${cols}
+        <text x="${W / 2}" y="14" fill="${C.textDim}" font-size="9.5" font-family="monospace" text-anchor="middle">VOLUMEN = ESFUERZO · RANGO = RESULTADO · la línea amarilla es un día normal</text>
+    </svg>`;
+}
+
+// Cómo se clasifica el volumen: medio, por encima, alto y ultra alto
+function vsa_niveles_volumen() {
+    const W = 680, H = 240;
+    const vols = [0.9, 1.0, 0.8, 1.1, 1.3, 1.6, 2.0, 1.7, 1.3, 1.0, 0.9, 0.8, 1.0, 1.1, 1.4, 1.8, 2.0, 3.2, 1.9, 1.4, 1.1, 0.9, 1.0, 0.8];
+    const x0 = 40, w = 550, base = 185, vH = 150, vmax = 3.5;
+    const paso = w / vols.length;
+    const y = (v) => base - v / vmax * vH;
+    const color = (v) => v <= 1.2 ? C.muted : v < 1.95 ? C.cyan : v <= 2.1 ? C.orange : C.red;
+    const barras = vols.map((v, i) => `<rect x="${(x0 + i * paso + 4).toFixed(1)}" y="${y(v).toFixed(1)}" width="${(paso - 8).toFixed(1)}" height="${(base - y(v)).toFixed(1)}" fill="${color(v)}" opacity="0.85" rx="1"/>`).join('');
+    const cxb = (i) => (x0 + (i + 0.5) * paso).toFixed(1);
+    const leyenda = [[C.muted, 'MEDIO · cerca de la media'], [C.cyan, 'POR ENCIMA · sin llegar a los picos'], [C.orange, 'ALTO · a la altura del pico anterior'], [C.red, 'ULTRA ALTO · supera los picos']]
+        .map(([c, t], i) => `<rect x="${40 + i * 160}" y="${H - 30}" width="9" height="9" fill="${c}" rx="1"/><text x="${53 + i * 160}" y="${H - 22}" fill="${C.text}" font-size="8.5" font-family="monospace">${t}</text>`).join('');
+    return `<svg viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg">
+        <rect width="${W}" height="${H}" fill="${C.bg}" rx="6"/>
+        ${barras}
+        <line x1="${x0}" y1="${y(1).toFixed(1)}" x2="${x0 + w}" y2="${y(1).toFixed(1)}" stroke="${C.yellow}" stroke-width="1" stroke-dasharray="4 3"/>
+        <text x="${x0 + w + 6}" y="${(y(1) - 2).toFixed(1)}" fill="${C.yellow}" font-size="8.5" font-family="monospace">media de</text>
+        <text x="${x0 + w + 6}" y="${(y(1) + 9).toFixed(1)}" fill="${C.yellow}" font-size="8.5" font-family="monospace">20 sesiones</text>
+        <line x1="${x0}" y1="${y(2).toFixed(1)}" x2="${x0 + w}" y2="${y(2).toFixed(1)}" stroke="${C.orange}" stroke-width="1" stroke-dasharray="2 4" opacity="0.7"/>
+        <text x="${x0 + w + 6}" y="${(y(2) - 2).toFixed(1)}" fill="${C.orange}" font-size="8.5" font-family="monospace">altura del</text>
+        <text x="${x0 + w + 6}" y="${(y(2) + 9).toFixed(1)}" fill="${C.orange}" font-size="8.5" font-family="monospace">pico anterior</text>
+        <text x="${cxb(6)}" y="${(y(2.0) - 18).toFixed(1)}" fill="${C.textDim}" font-size="9" font-family="monospace" text-anchor="middle">montaña 1</text>
+        <text x="${cxb(17)}" y="${(y(3.2) - 8).toFixed(1)}" fill="${C.textDim}" font-size="9" font-family="monospace" text-anchor="middle">montaña 2</text>
+        <text x="${W / 2}" y="16" fill="${C.text}" font-size="10" font-family="monospace" text-anchor="middle">El volumen sube, hace pico y baja: cada «montaña» es una oleada de interés</text>
+        ${leyenda}
+    </svg>`;
+}
+
+// Una subida se puede leer de dos formas según su volumen
+function vsa_subida_dos_lecturas() {
+    const W = 680, H = 250;
+    const cfg = (x0) => ({ x0, y0: 30, w: 290, h: 120, volY0: 162, volH: 45, mn: 95, mx: 115, ancho: 14, media: 1 });
+    const izq = vsaVelas([
+        { o: 100, h: 103, l: 99, c: 102, v: 1.6 }, { o: 102, h: 105, l: 101, c: 104, v: 1.3 },
+        { o: 104, h: 106, l: 103, c: 105, v: 1.0 }, { o: 105, h: 106.5, l: 104, c: 106, v: 0.6 },
+        { o: 106, h: 107, l: 105.5, c: 106.5, v: 0.45 }, { o: 106.5, h: 107, l: 103, c: 103.5, v: 0.9 },
+        { o: 103.5, h: 104, l: 100, c: 100.5, v: 1.1 },
+    ], { ...cfg(30), destacar: { 3: C.orange, 4: C.orange } });
+    const der = vsaVelas([
+        { o: 100, h: 103, l: 99, c: 102, v: 1.2 }, { o: 102, h: 105, l: 101, c: 104, v: 1.4 },
+        { o: 104, h: 108, l: 103, c: 107, v: 1.8 }, { o: 107, h: 112, l: 106.5, c: 108, v: 3.6 },
+        { o: 108, h: 109, l: 104, c: 105, v: 2.2 }, { o: 105, h: 106, l: 101, c: 102, v: 1.8 },
+        { o: 102, h: 103, l: 98, c: 99, v: 1.6 },
+    ], { ...cfg(360), destacar: { 3: C.red } });
+    return `<svg viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg">
+        <rect width="${W}" height="${H}" fill="${C.bg}" rx="6"/>
+        <line x1="340" y1="10" x2="340" y2="240" stroke="${C.border}" stroke-width="1"/>
+        <text x="175" y="18" fill="${C.orange}" font-size="10.5" font-family="monospace" text-anchor="middle">SUBE CON CADA VEZ MENOS VOLUMEN</text>
+        <text x="505" y="18" fill="${C.red}" font-size="10.5" font-family="monospace" text-anchor="middle">SUBE CON VOLUMEN ENORME Y CIERRA FLOJO</text>
+        ${izq.svg}${der.svg}
+        <text x="175" y="224" fill="${C.text}" font-size="9.5" font-family="monospace" text-anchor="middle">A los grandes no les interesa subirla:</text>
+        <text x="175" y="238" fill="${C.text}" font-size="9.5" font-family="monospace" text-anchor="middle">falta de demanda</text>
+        <text x="505" y="224" fill="${C.text}" font-size="9.5" font-family="monospace" text-anchor="middle">Venden a los que compran:</text>
+        <text x="505" y="238" fill="${C.text}" font-size="9.5" font-family="monospace" text-anchor="middle">la trampa de la subida</text>
+    </svg>`;
+}
+
+// El mapa de un suelo: las cuatro fases
+function vsa_fases_suelo() {
+    const W = 680, H = 260;
+    const velas = [
+        { o: 128, h: 129, l: 123, c: 124, v: 1.0 }, { o: 124, h: 125, l: 118, c: 119, v: 1.1 },
+        { o: 119, h: 120, l: 113, c: 114, v: 1.2 }, { o: 114, h: 115, l: 108, c: 109, v: 1.4 },
+        { o: 109, h: 110, l: 101, c: 102, v: 1.7 }, { o: 102, h: 103, l: 88, c: 97, v: 3.6 },
+        { o: 97, h: 104, l: 96, c: 103, v: 2.0 }, { o: 103, h: 106, l: 100, c: 101, v: 1.3 },
+        { o: 101, h: 102, l: 96, c: 98, v: 1.1 }, { o: 98, h: 103, l: 97, c: 102, v: 1.0 },
+        { o: 102, h: 105, l: 100, c: 101, v: 0.9 }, { o: 101, h: 102, l: 97, c: 99, v: 0.8 },
+        { o: 99, h: 104, l: 98, c: 103, v: 0.8 }, { o: 103, h: 105, l: 100, c: 100, v: 0.7 },
+        { o: 100, h: 101, l: 95, c: 96, v: 0.7 }, { o: 96, h: 97, l: 91, c: 93, v: 0.45 },
+        { o: 93, h: 99, l: 92, c: 98, v: 1.2 }, { o: 98, h: 104, l: 97, c: 103, v: 1.4 },
+        { o: 103, h: 109, l: 102, c: 108, v: 2.0 }, { o: 108, h: 112, l: 107, c: 111, v: 1.6 },
+        { o: 111, h: 113, l: 108, c: 109, v: 0.9 }, { o: 109, h: 116, l: 108, c: 115, v: 1.5 },
+        { o: 115, h: 120, l: 114, c: 119, v: 1.6 },
+    ];
+    const r = vsaVelas(velas, { x0: 40, y0: 35, w: 600, h: 135, volY0: 185, volH: 45, mn: 84, mx: 132, ancho: 12, media: 1, destacar: { 5: C.red, 15: C.orange } });
+    const banda = (a, b, color, t1, t2) => {
+        const xa = r.px(a) - r.paso / 2, xb = r.px(b) + r.paso / 2;
+        return `<rect x="${xa.toFixed(1)}" y="30" width="${(xb - xa).toFixed(1)}" height="200" fill="${color}" opacity="0.06"/>
+            <text x="${((xa + xb) / 2).toFixed(1)}" y="16" fill="${color}" font-size="10" font-family="monospace" text-anchor="middle">${t1}</text>
+            <text x="${((xa + xb) / 2).toFixed(1)}" y="28" fill="${C.textDim}" font-size="8.5" font-family="monospace" text-anchor="middle">${t2}</text>`;
+    };
+    return `<svg viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg">
+        <rect width="${W}" height="${H}" fill="${C.bg}" rx="6"/>
+        ${banda(5, 6, C.red, 'A', 'frenazo')}
+        ${banda(7, 13, C.cyan, 'B', 'acumulación')}
+        ${banda(14, 16, C.orange, 'C', 'prueba')}
+        ${banda(17, 22, C.accent, 'D', 'subida')}
+        <line x1="${(r.px(7) - r.paso / 2).toFixed(1)}" y1="${r.py(106).toFixed(1)}" x2="${(r.px(16) + r.paso / 2).toFixed(1)}" y2="${r.py(106).toFixed(1)}" stroke="${C.cyan}" stroke-width="1" stroke-dasharray="4 3" opacity="0.6"/>
+        <line x1="${(r.px(7) - r.paso / 2).toFixed(1)}" y1="${r.py(96).toFixed(1)}" x2="${(r.px(16) + r.paso / 2).toFixed(1)}" y2="${r.py(96).toFixed(1)}" stroke="${C.cyan}" stroke-width="1" stroke-dasharray="4 3" opacity="0.6"/>
+        ${r.svg}
+        <text x="${W / 2}" y="${H - 10}" fill="${C.text}" font-size="10" font-family="monospace" text-anchor="middle">Se frena la caída (A) · los grandes compran sin prisa (B) · se prueba que ya no hay vendedores (C) · sube (D)</text>
+    </svg>`;
+}
+
+// El clímax de venta visto con los tres datos
+function vsa_climax_venta() {
+    const W = 680, H = 250;
+    const velas = [
+        { o: 130, h: 131, l: 125, c: 126, v: 1.0 }, { o: 126, h: 127, l: 120, c: 121, v: 1.1 },
+        { o: 121, h: 122, l: 116, c: 117, v: 1.2 }, { o: 117, h: 118, l: 111, c: 112, v: 1.4 },
+        { o: 112, h: 113, l: 105, c: 106, v: 1.7 }, { o: 106, h: 107, l: 98, c: 99, v: 2.1 },
+        { o: 99, h: 100, l: 84, c: 92, v: 3.8 }, { o: 92, h: 95, l: 83, c: 93.5, v: 3.2 },
+        { o: 93.5, h: 99, l: 92, c: 98, v: 1.6 }, { o: 98, h: 101, l: 96, c: 100, v: 1.2 },
+        { o: 100, h: 101, l: 96, c: 97, v: 0.9 }, { o: 97, h: 98, l: 94, c: 95, v: 0.7 },
+        { o: 95, h: 100, l: 94, c: 99, v: 1.0 },
+    ];
+    const r = vsaVelas(velas, { x0: 40, y0: 25, w: 600, h: 140, volY0: 180, volH: 45, mn: 78, mx: 134, ancho: 16, media: 1, destacar: { 6: C.red, 7: C.red } });
+    const x6 = r.px(6), x7 = r.px(7);
+    return `<svg viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg">
+        <rect width="${W}" height="${H}" fill="${C.bg}" rx="6"/>
+        ${r.svg}
+        <line x1="${(x6 - 22).toFixed(1)}" y1="${r.py(100).toFixed(1)}" x2="${(x6 - 22).toFixed(1)}" y2="${r.py(84).toFixed(1)}" stroke="${C.yellow}" stroke-width="1.5"/>
+        <text x="${(x6 - 28).toFixed(1)}" y="${r.py(93).toFixed(1)}" fill="${C.yellow}" font-size="9" font-family="monospace" text-anchor="end">rango amplio</text>
+        <text x="${(x6 - 28).toFixed(1)}" y="${(r.py(93) + 12).toFixed(1)}" fill="${C.yellow}" font-size="9" font-family="monospace" text-anchor="end">hacia abajo</text>
+        <line x1="${(x7 + 12).toFixed(1)}" y1="${r.py(93.5).toFixed(1)}" x2="${(x7 + 60).toFixed(1)}" y2="${(r.py(93.5) + 26).toFixed(1)}" stroke="${C.cyan}" stroke-width="1"/>
+        <text x="${(x7 + 64).toFixed(1)}" y="${(r.py(93.5) + 30).toFixed(1)}" fill="${C.cyan}" font-size="9" font-family="monospace">pero cierra en la mitad o arriba:</text>
+        <text x="${(x7 + 64).toFixed(1)}" y="${(r.py(93.5) + 42).toFixed(1)}" fill="${C.cyan}" font-size="9" font-family="monospace">alguien compró todo lo que se vendía</text>
+        <text x="${((x6 + x7) / 2).toFixed(1)}" y="${(r.vy(3.8) - 5).toFixed(1)}" fill="${C.red}" font-size="9" font-family="monospace" text-anchor="middle">ULTRA ALTO</text>
+        <text x="${W / 2}" y="14" fill="${C.textDim}" font-size="9.5" font-family="monospace" text-anchor="middle">Tras una caída larga, el pánico: puede ocupar más de una vela</text>
+        <text x="${W / 2}" y="${H - 8}" fill="${C.orange}" font-size="10" font-family="monospace" text-anchor="middle">En el clímax no se compra: se espera a la prueba</text>
+    </svg>`;
+}
+
+// Después del clímax, la prueba: dos caminos
+function vsa_prueba_dos_caminos() {
+    const W = 680, H = 255;
+    const comun = [
+        { o: 112, h: 113, l: 106, c: 107, v: 1.4 }, { o: 107, h: 108, l: 92, c: 99, v: 3.6 },
+        { o: 99, h: 106, l: 98, c: 105, v: 1.8 }, { o: 105, h: 107, l: 102, c: 103, v: 1.1 },
+    ];
+    const cfg = (x0) => ({ x0, y0: 30, w: 290, h: 130, volY0: 172, volH: 42, mn: 70, mx: 116, ancho: 12, media: 1 });
+    const bien = vsaVelas(comun.concat([
+        { o: 103, h: 104, l: 99, c: 100, v: 0.8 }, { o: 100, h: 101, l: 96, c: 97, v: 0.6 },
+        { o: 97, h: 98, l: 94, c: 96, v: 0.4 }, { o: 96, h: 103, l: 95, c: 102, v: 1.3 },
+        { o: 102, h: 108, l: 101, c: 107, v: 1.6 }, { o: 107, h: 112, l: 106, c: 111, v: 1.5 },
+    ]), { ...cfg(30), destacar: { 1: C.red, 6: C.orange } });
+    const mal = vsaVelas(comun.concat([
+        { o: 103, h: 104, l: 98, c: 99, v: 1.3 }, { o: 99, h: 100, l: 93, c: 94, v: 1.8 },
+        { o: 94, h: 95, l: 86, c: 87, v: 2.6 }, { o: 87, h: 88, l: 81, c: 82, v: 2.4 },
+        { o: 82, h: 84, l: 77, c: 78, v: 2.2 }, { o: 78, h: 80, l: 74, c: 75, v: 2.0 },
+    ]), { ...cfg(360), destacar: { 1: C.red, 6: C.red } });
+    const zona = (r, x0) => `<rect x="${x0}" y="${r.py(99).toFixed(1)}" width="290" height="${(r.py(92) - r.py(99)).toFixed(1)}" fill="${C.red}" opacity="0.08"/>
+        <line x1="${x0}" y1="${r.py(92).toFixed(1)}" x2="${x0 + 290}" y2="${r.py(92).toFixed(1)}" stroke="${C.red}" stroke-width="1" stroke-dasharray="4 3" opacity="0.6"/>`;
+    return `<svg viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg">
+        <rect width="${W}" height="${H}" fill="${C.bg}" rx="6"/>
+        <line x1="340" y1="10" x2="340" y2="245" stroke="${C.border}" stroke-width="1"/>
+        ${zona(bien, 30)}${zona(mal, 360)}
+        <text x="175" y="18" fill="${C.accent}" font-size="10.5" font-family="monospace" text-anchor="middle">PRUEBA SUPERADA</text>
+        <text x="505" y="18" fill="${C.red}" font-size="10.5" font-family="monospace" text-anchor="middle">PRUEBA FALLIDA</text>
+        ${bien.svg}${mal.svg}
+        <text x="${bien.px(6).toFixed(1)}" y="${(bien.py(94) + 16).toFixed(1)}" fill="${C.orange}" font-size="8.5" font-family="monospace" text-anchor="middle">vela estrecha,</text>
+        <text x="${bien.px(6).toFixed(1)}" y="${(bien.py(94) + 27).toFixed(1)}" fill="${C.orange}" font-size="8.5" font-family="monospace" text-anchor="middle">volumen bajo</text>
+        <text x="175" y="228" fill="${C.text}" font-size="9.5" font-family="monospace" text-anchor="middle">Vuelve a la zona del clímax sin volumen</text>
+        <text x="175" y="242" fill="${C.text}" font-size="9.5" font-family="monospace" text-anchor="middle">y aguanta: ya no quedan vendedores</text>
+        <text x="505" y="228" fill="${C.text}" font-size="9.5" font-family="monospace" text-anchor="middle">Rompe el mínimo con volumen creciente:</text>
+        <text x="505" y="242" fill="${C.text}" font-size="9.5" font-family="monospace" text-anchor="middle">el clímax solo fue una pausa</text>
+    </svg>`;
+}
+
+// El volumen que frena la caída
+function vsa_volumen_frenado() {
+    const W = 680, H = 250;
+    const velas = [
+        { o: 130, h: 131, l: 125, c: 126, v: 1.0 }, { o: 126, h: 127, l: 120, c: 121, v: 1.1 },
+        { o: 121, h: 122, l: 115, c: 116, v: 1.2 }, { o: 116, h: 117, l: 110, c: 111, v: 1.3 },
+        { o: 111, h: 112, l: 104, c: 105, v: 1.5 }, { o: 105, h: 106, l: 99, c: 100, v: 2.6 },
+        { o: 100, h: 101.5, l: 93, c: 101, v: 2.8 }, { o: 101, h: 102, l: 98, c: 100, v: 2.0 },
+        { o: 100, h: 103, l: 99, c: 102, v: 1.1 }, { o: 102, h: 104, l: 100, c: 101, v: 0.8 },
+        { o: 101, h: 105, l: 100, c: 104, v: 1.0 }, { o: 104, h: 106, l: 102, c: 105, v: 0.9 },
+    ];
+    const r = vsaVelas(velas, { x0: 40, y0: 30, w: 600, h: 135, volY0: 180, volH: 45, mn: 90, mx: 134, ancho: 16, media: 1, destacar: { 5: C.orange, 6: C.orange, 7: C.orange } });
+    const xa = r.px(5) - r.paso / 2, xb = r.px(7) + r.paso / 2;
+    return `<svg viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg">
+        <rect width="${W}" height="${H}" fill="${C.bg}" rx="6"/>
+        <rect x="${xa.toFixed(1)}" y="25" width="${(xb - xa).toFixed(1)}" height="205" fill="${C.orange}" opacity="0.06"/>
+        ${r.svg}
+        <text x="${((xa + xb) / 2).toFixed(1)}" y="18" fill="${C.orange}" font-size="10" font-family="monospace" text-anchor="middle">2-3 SESIONES DE FRENADA</text>
+        <line x1="${(r.px(6) + 12).toFixed(1)}" y1="${r.py(96).toFixed(1)}" x2="${(r.px(6) + 70).toFixed(1)}" y2="${(r.py(96) + 8).toFixed(1)}" stroke="${C.cyan}" stroke-width="1"/>
+        <text x="${(r.px(6) + 74).toFixed(1)}" y="${(r.py(96) + 6).toFixed(1)}" fill="${C.cyan}" font-size="9" font-family="monospace">cuerpo estrecho, sombra abajo,</text>
+        <text x="${(r.px(6) + 74).toFixed(1)}" y="${(r.py(96) + 18).toFixed(1)}" fill="${C.cyan}" font-size="9" font-family="monospace">cierra en la mitad o arriba</text>
+        <text x="${r.px(5).toFixed(1)}" y="${(r.py(99) + 16).toFixed(1)}" fill="${C.textDim}" font-size="8.5" font-family="monospace" text-anchor="middle">la 1ª aún</text>
+        <text x="${r.px(5).toFixed(1)}" y="${(r.py(99) + 27).toFixed(1)}" fill="${C.textDim}" font-size="8.5" font-family="monospace" text-anchor="middle">cierra abajo</text>
+        <text x="${W / 2}" y="${H - 8}" fill="${C.text}" font-size="10" font-family="monospace" text-anchor="middle">Mucho volumen y poco recorrido: alguien compra todo lo que se vende</text>
+    </svg>`;
+}
+
+// De la señal a la operación: dónde se compra y dónde va el stop
+function vsa_entrada() {
+    const W = 680, H = 250;
+    const velas = [
+        { o: 115, h: 116, l: 109, c: 110, v: 1.5 }, { o: 110, h: 111, l: 94, c: 101, v: 3.6 },
+        { o: 101, h: 107, l: 100, c: 106, v: 1.7 }, { o: 106, h: 107, l: 102, c: 103, v: 1.0 },
+        { o: 103, h: 104, l: 99, c: 100, v: 0.7 }, { o: 100, h: 101, l: 96.5, c: 97.5, v: 0.45 },
+        { o: 97, h: 103, l: 96, c: 102.5, v: 1.4 }, { o: 102.5, h: 105, l: 102, c: 104.5, v: 1.3 },
+        { o: 104.5, h: 109, l: 104, c: 108, v: 1.5 }, { o: 108, h: 112, l: 107, c: 111, v: 1.4 },
+    ];
+    const r = vsaVelas(velas, { x0: 40, y0: 30, w: 560, h: 140, volY0: 185, volH: 40, mn: 90, mx: 118, ancho: 18, media: 1, destacar: { 1: C.red, 5: C.orange, 6: C.cyan } });
+    const xe = r.px(6) - 12, xf = 40 + 560;
+    const etiqueta = (i, t, color, dy) => `<text x="${r.px(i).toFixed(1)}" y="${dy.toFixed(1)}" fill="${color}" font-size="9" font-family="monospace" text-anchor="middle">${t}</text>`;
+    return `<svg viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg">
+        <rect width="${W}" height="${H}" fill="${C.bg}" rx="6"/>
+        ${r.svg}
+        <line x1="${xe.toFixed(1)}" y1="${r.py(103).toFixed(1)}" x2="${xf}" y2="${r.py(103).toFixed(1)}" stroke="${C.accent}" stroke-width="1.5" stroke-dasharray="5 3"/>
+        <text x="${xf + 4}" y="${(r.py(103) + 3).toFixed(1)}" fill="${C.accent}" font-size="9.5" font-family="monospace">COMPRA</text>
+        <line x1="${xe.toFixed(1)}" y1="${r.py(96).toFixed(1)}" x2="${xf}" y2="${r.py(96).toFixed(1)}" stroke="${C.red}" stroke-width="1.5" stroke-dasharray="5 3"/>
+        <text x="${xf + 4}" y="${(r.py(96) + 3).toFixed(1)}" fill="${C.red}" font-size="9.5" font-family="monospace">STOP</text>
+        ${etiqueta(1, '1 · clímax', C.red, r.py(111) - 6)}
+        ${etiqueta(5, '2 · prueba', C.orange, r.py(96.5) + 16)}
+        ${etiqueta(5, 'sin volumen', C.orange, r.py(96.5) + 27)}
+        ${etiqueta(6, '3 · vela de giro', C.cyan, r.py(103) - 12)}
+        <text x="${W / 2}" y="16" fill="${C.textDim}" font-size="9.5" font-family="monospace" text-anchor="middle">Se compra si el precio supera el máximo de la vela de giro · el stop, por debajo del mínimo de la prueba</text>
+        <text x="${W / 2}" y="${H - 8}" fill="${C.text}" font-size="10" font-family="monospace" text-anchor="middle">La distancia entre las dos líneas es lo que arriesgas: con ella se calcula el tamaño</text>
+    </svg>`;
+}
+
 export const CHARTS = {
     // Módulo 0
     rsu_philosophy, rsu_community, rsu_for_who,
@@ -12108,4 +12430,7 @@ export const CHARTS = {
     rsrw_rotacion_suma_cero, rsrw_amplitud_ancho_estrecho,
     // Módulo 30
     spxl_premisa, spxl_escalera, spxl_precio_de_dormir,
+    // Módulo 33 (VSA)
+    vsa_tres_datos, vsa_esfuerzo_resultado, vsa_niveles_volumen, vsa_subida_dos_lecturas,
+    vsa_fases_suelo, vsa_climax_venta, vsa_prueba_dos_caminos, vsa_volumen_frenado, vsa_entrada,
 };

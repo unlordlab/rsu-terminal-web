@@ -7752,4 +7752,293 @@ export const LESSONS = {
             },
         ]
     },
+
+    // ── MÓDULO 33 · VOLUME SPREAD ANALYSIS (VSA) ────────────────────────────
+    // Va en la Fase 2, justo después del módulo 8 (Análisis de Volumen), que
+    // explica el volumen básico y el clímax: aquí se remite a él en vez de
+    // repetirlo. Gráficos: vsa_* en academy_charts.js.
+
+    '33-1': {
+        moduleId: 33,
+        lessonIndex: 0,
+        title: 'Qué Es el VSA: Tres Datos en Cada Vela',
+        duration: '6 min',
+        intro: 'El VSA —del inglés Volume Spread Analysis, análisis de volumen y rango— es una forma de leer el gráfico preguntándole a cada vela qué ha hecho el dinero grande. No usa fórmulas ni indicadores: solo tres datos que ya están en cualquier gráfico.',
+        sections: [
+            {
+                heading: 'La idea de fondo',
+                blocks: [
+                    { type: 'text', content: 'Un fondo que quiere comprar millones de acciones no puede hacerlo sin que se note: su tamaño deja huellas. Esas huellas no aparecen en el precio por sí solo, sino en la relación entre <b>cuánto se mueve el precio</b> y <b>cuánto volumen hace falta para moverlo</b>. El VSA consiste en leer esa relación vela a vela.' },
+                    { type: 'concept', title: 'El dinero profesional', content: 'En VSA se habla de «dinero profesional» o «dinero inteligente» para referirse a fondos, bancos y operadores grandes. No es que acierten siempre: es que, por su tamaño, sus compras y ventas mueven el volumen de forma visible, y el resto del mercado suele ir detrás.' },
+                    { type: 'text', content: 'El método lo ordenó en los años noventa el operador Tom Williams, a partir de las ideas de Richard Wyckoff, que ya a principios del siglo XX estudiaba cómo se mueve el dinero grande. Si has hecho el módulo 16 (las 4 etapas), verás que muchas ideas encajan.' },
+                ]
+            },
+            {
+                heading: 'Los tres datos',
+                blocks: [
+                    { type: 'chart', id: 'vsa_tres_datos' },
+                    { type: 'table',
+                        headers: ['Dato', 'Qué es', 'Qué pregunta responde'],
+                        rows: [
+                            ['<b>Rango</b>', 'La distancia entre el máximo y el mínimo de la vela', '¿Cuánto se movió el precio?'],
+                            ['<b>Cierre</b>', 'Dónde termina la vela dentro de su rango: arriba, en medio o abajo', '¿Quién ganó al final, compradores o vendedores?'],
+                            ['<b>Volumen</b>', 'Cuántas acciones cambiaron de manos, comparado con lo normal', '¿Cuánta gente empujó ese movimiento?'],
+                        ]
+                    },
+                    { type: 'tip', label: 'EL CIERRE DICE MUCHO', content: 'Una vela que cae mucho pero cierra cerca de su máximo cuenta una historia muy distinta de la que cierra en su mínimo: en la primera, alguien compró con fuerza antes del cierre. Divide mentalmente cada vela en tres tercios y fíjate en cuál termina.' },
+                    { type: 'warning', content: 'Algunos textos miden el rango solo entre la apertura y el cierre (el cuerpo de la vela). Aquí se usa el rango completo, de máximo a mínimo, que es lo habitual en VSA: las sombras también cuentan, porque son precio que se negoció.' },
+                ]
+            },
+            {
+                heading: 'Esfuerzo y resultado',
+                blocks: [
+                    { type: 'text', content: 'La forma más sencilla de leer los tres datos juntos es pensar en el volumen como el <b>esfuerzo</b> y en el rango como el <b>resultado</b>. Normalmente van de la mano: mucho volumen mueve mucho el precio y poco volumen lo mueve poco. Lo interesante es cuando no cuadran.' },
+                    { type: 'chart', id: 'vsa_esfuerzo_resultado' },
+                    { type: 'table',
+                        headers: ['Volumen', 'Rango', 'Qué suele significar'],
+                        rows: [
+                            ['Alto', 'Amplio, cerrando a favor', 'Movimiento de verdad: hay convicción detrás'],
+                            ['Alto', 'Estrecho', 'Alguien está frenando el precio: absorbe lo que otros compran o venden'],
+                            ['Bajo', 'Amplio', 'El precio se mueve sin apoyo: sospechoso, puede no durar'],
+                            ['Bajo', 'Estrecho', 'Nadie tiene interés: el mercado espera'],
+                        ]
+                    },
+                    { type: 'concept', title: 'La pregunta clave', content: 'Cuando veas mucho volumen y poco movimiento, pregúntate: si todo ese volumen fuera de vendedores, ¿por qué no ha caído más el precio? La respuesta suele ser que había alguien grande comprando al otro lado.' },
+                ]
+            },
+            {
+                heading: 'Nunca una vela sola',
+                blocks: [
+                    { type: 'text', content: 'Una vela aislada no dice casi nada. La misma vela significa cosas distintas según venga de una caída larga, de una subida o de un rango lateral, y según esté en un soporte o en mitad de la nada. En VSA siempre se mira primero de dónde viene el precio y después la vela.' },
+                    { type: 'tip', label: 'CÓMO EMPEZAR', content: 'Antes de buscar señales, practica solo esto: en un gráfico diario con volumen, recorre las últimas veinte velas y, en cada una, di cuánto recorrió, dónde cerró y si el volumen fue normal, alto o bajo. Cuando eso te salga solo, el resto del módulo se lee con facilidad.' },
+                ]
+            },
+        ]
+    },
+
+    '33-2': {
+        moduleId: 33,
+        lessonIndex: 1,
+        title: 'Medir el Volumen y las Dos Reglas del VSA',
+        duration: '7 min',
+        intro: 'Decir que el volumen es «alto» no sirve de nada si no sabes alto comparado con qué. Esta lección da una vara de medir sencilla y las dos reglas que explican dónde aparece la fuerza y dónde la debilidad.',
+        sections: [
+            {
+                heading: 'Comparar con la media de 20 sesiones',
+                blocks: [
+                    { type: 'text', content: 'La referencia más usada es la media del volumen de las últimas 20 sesiones, más o menos un mes de bolsa. Un día con un volumen parecido a esa media es un día normal. A partir de ahí se distinguen cuatro niveles.' },
+                    { type: 'table',
+                        headers: ['Nivel', 'Cómo se reconoce'],
+                        rows: [
+                            ['<b>Medio</b>', 'Cerca de la media de 20 sesiones'],
+                            ['<b>Por encima de la media</b>', 'Claramente más que la media, pero sin llegar a los picos recientes'],
+                            ['<b>Alto</b>', 'A la altura de los picos de volumen anteriores'],
+                            ['<b>Ultra alto</b>', 'Supera todos los picos recientes: está pasando algo excepcional'],
+                        ]
+                    },
+                    { type: 'chart', id: 'vsa_niveles_volumen' },
+                    { type: 'concept', title: 'Las montañas de volumen', content: 'El volumen no suele dispararse de un día para otro: crece durante varias sesiones, hace un pico y baja, como una montaña. Cada montaña es una oleada de interés. Comparar la altura de una montaña con la anterior te dice si el interés crece o se apaga.' },
+                    { type: 'tip', label: 'EN LA TERMINAL', content: 'El RVOL del Escáner es exactamente esta vara de medir: el volumen de hoy dividido entre la media de las 20 sesiones anteriores. Un RVOL de 1 es un día normal; de 2, el doble de lo habitual. Puedes filtrar por RVOL para encontrar los valores que hoy mueven un volumen fuera de lo normal.' },
+                ]
+            },
+            {
+                heading: 'Las dos reglas',
+                blocks: [
+                    { type: 'text', content: 'Todo el VSA descansa en dos ideas que al principio parecen al revés.' },
+                    { type: 'concept', title: 'Regla 1 · La debilidad aparece en las velas que suben', content: 'Quien tiene muchas acciones y quiere venderlas necesita compradores enfrente, y los compradores aparecen cuando el precio sube y el público se entusiasma. Por eso las señales de que los grandes están saliendo se ven en los días alcistas, no en los bajistas.' },
+                    { type: 'concept', title: 'Regla 2 · La fuerza aparece en las velas que bajan', content: 'Al revés: quien quiere comprar mucho necesita vendedores, y los encuentra cuando el precio cae y la gente vende con miedo. Las señales de que los grandes están entrando se ven en los días bajistas.' },
+                    { type: 'text', content: 'Por eso en VSA una caída no asusta por sí sola ni una subida alegra por sí sola: lo que importa es qué hace el volumen y dónde cierra la vela mientras sube o baja.' },
+                ]
+            },
+            {
+                heading: 'Una subida se puede leer de dos formas',
+                blocks: [
+                    { type: 'chart', id: 'vsa_subida_dos_lecturas' },
+                    { type: 'text', content: '<b>Sube con volumen cada vez más bajo.</b> El precio avanza, pero cada día participa menos gente. Los grandes no están empujando: no les interesa subirlo. Es lo que en VSA se llama <b>falta de demanda</b>, y una subida así suele quedarse sin gasolina.' },
+                    { type: 'text', content: '<b>Sube con volumen enorme pero cierra flojo.</b> Mucho volumen y el precio apenas avanza, o deja una sombra larga arriba y cierra en la parte baja de su rango. El público está comprando y alguien grande le está vendiendo todo lo que pide. Parece fuerza y es lo contrario.' },
+                    { type: 'warning', content: 'La segunda es la más peligrosa, porque suele llegar con buenas noticias y mucho ruido. Si ves un día alcista con volumen ultra alto que cierra lejos de su máximo, no es momento de comprar: es momento de revisar con lupa lo que ya tienes.' },
+                    { type: 'tip', label: 'RELACIÓN CON EL MÓDULO 8', content: 'La primera lectura es la participación débil de la lección 8-4, y la segunda se parece al clímax alcista de la lección 8-3. El VSA añade a las dos el dato del cierre.' },
+                ]
+            },
+        ]
+    },
+
+    '33-3': {
+        moduleId: 33,
+        lessonIndex: 2,
+        title: 'Cómo Se Forma un Suelo: el Clímax de Venta y la Prueba',
+        duration: '8 min',
+        intro: 'Los suelos importantes rara vez son un solo día. Siguen un guion bastante repetido: la caída se frena, los grandes compran sin prisa, se comprueba que ya no quedan vendedores y, solo entonces, el precio sube. Esta lección da el mapa y explica sus dos piezas más visibles: el clímax de venta y la prueba.',
+        sections: [
+            {
+                heading: 'El mapa: cuatro fases',
+                blocks: [
+                    { type: 'chart', id: 'vsa_fases_suelo' },
+                    { type: 'table',
+                        headers: ['Fase', 'Qué pasa', 'Qué se ve'],
+                        rows: [
+                            ['<b>A · Frenazo</b>', 'La caída se detiene', 'Un clímax de venta o un volumen de frenado'],
+                            ['<b>B · Acumulación</b>', 'Los grandes compran sin prisa', 'Un rango lateral con el volumen apagándose'],
+                            ['<b>C · Prueba</b>', 'Se comprueba que ya no hay vendedores', 'Una bajada a la zona del mínimo con muy poco volumen'],
+                            ['<b>D · Subida</b>', 'El precio sale del rango', 'Rupturas con volumen y retrocesos sin él'],
+                        ]
+                    },
+                    { type: 'tip', label: 'LO MISMO, MÁS DE CERCA', content: 'Es el paso de la etapa 1 a la etapa 2 del módulo 16 (Weinstein), visto con lupa. Weinstein te dice en qué etapa estás; el VSA te ayuda a ver, dentro de la etapa 1, si la acumulación es real.' },
+                    { type: 'text', content: 'No todas las fases se ven siempre con claridad, y a veces el guion se rompe y la caída continúa. El mapa sirve para saber qué buscar a continuación, no para dar por hecho que va a pasar.' },
+                ]
+            },
+            {
+                heading: 'El clímax de venta, con los tres datos',
+                blocks: [
+                    { type: 'text', content: 'El módulo 8 explica el clímax de volumen en general. Aquí se añade cómo se reconoce con los tres datos del VSA. Tienen que darse todas estas condiciones:' },
+                    { type: 'steps', items: [
+                        'Viene de una <b>caída larga</b>: sin caída previa no hay clímax, solo un mal día.',
+                        'Una o varias velas bajistas de <b>rango muy amplio</b>: el pánico.',
+                        'Pero esas velas <b>cierran en la mitad o en la parte alta</b> de su rango, con una sombra larga abajo.',
+                        'El volumen es <b>ultra alto</b>: supera los picos recientes.',
+                        'Puede ocupar <b>más de una vela</b>: a veces el pánico dura dos o tres sesiones.',
+                    ]},
+                    { type: 'chart', id: 'vsa_climax_venta' },
+                    { type: 'concept', title: 'Por qué el cierre lo cambia todo', content: 'Una vela que cae muchísimo con volumen enorme y cierra en su mínimo es venta sin freno. La misma vela cerrando en la mitad dice que, en pleno pánico, apareció alguien que compró todo lo que se vendía y empujó el precio hacia arriba antes del cierre. Esa es la huella del dinero profesional.' },
+                    { type: 'warning', content: 'Un clímax no es una señal de compra: es un aviso de que la caída puede estar terminando. Comprar en la vela del clímax es ponerse en medio del pánico, con el precio moviéndose muchísimo y sin saber todavía si los compradores van a aguantar.' },
+                ]
+            },
+            {
+                heading: 'La prueba: la confirmación que hay que esperar',
+                blocks: [
+                    { type: 'text', content: 'Después del clímax el precio suele rebotar con fuerza y luego volver a bajar hacia la zona donde ocurrió. Esa vuelta es la <b>prueba</b>, y es lo que decide si el suelo es de verdad. Hay dos caminos.' },
+                    { type: 'chart', id: 'vsa_prueba_dos_caminos' },
+                    { type: 'table',
+                        headers: ['', 'Prueba superada', 'Prueba fallida'],
+                        rows: [
+                            ['Volumen al volver', 'Bajo, mucho menor que en el clímax', 'Alto y creciente'],
+                            ['Velas', 'Estrechas', 'Amplias, hacia abajo'],
+                            ['Mínimo del clímax', 'Aguanta, o se toca apenas', 'Se rompe'],
+                            ['Qué significa', 'Los vendedores se han agotado', 'Los compradores del clímax solo frenaron la caída un momento'],
+                            ['Qué hacer', 'Buscar la entrada (lección 5)', 'Olvidar el suelo: la caída sigue'],
+                        ]
+                    },
+                    { type: 'concept', title: 'Por qué el volumen bajo es la clave', content: 'Si todavía quedaran muchos vendedores, al volver el precio a la zona del mínimo se notaría: habría volumen. Que el precio llegue ahí y casi nadie venda significa que quien tenía que vender ya lo hizo durante el pánico.' },
+                ]
+            },
+        ]
+    },
+
+    '33-4': {
+        moduleId: 33,
+        lessonIndex: 3,
+        title: 'El Volumen que Frena la Caída',
+        duration: '6 min',
+        intro: 'No todas las caídas terminan con un pánico espectacular. Muchas se frenan poco a poco, en dos o tres sesiones, como un coche que frena en vez de chocar. El VSA lo llama volumen de frenado (stopping volume), y es más discreto y más frecuente que el clímax.',
+        sections: [
+            {
+                heading: 'Cómo se reconoce',
+                blocks: [
+                    { type: 'chart', id: 'vsa_volumen_frenado' },
+                    { type: 'steps', items: [
+                        'Aparece tras una <b>caída prolongada</b>.',
+                        'El volumen <b>crece mucho</b> de repente.',
+                        'Las velas tienen el <b>cuerpo estrecho</b> y una <b>sombra abajo</b>: el precio bajó durante la sesión, pero lo volvieron a comprar.',
+                        'Cierran en la <b>mitad o en la parte alta</b> de su rango.',
+                        'Suele ocupar <b>más de una vela</b>: la primera a veces todavía cierra abajo, y es la segunda la que cierra en la mitad o arriba.',
+                    ]},
+                    { type: 'concept', title: 'La contradicción que lo delata', content: 'Si todo ese volumen fuera de gente vendiendo, el precio tendría que haber caído mucho. Si no ha caído, es que alguien estaba comprando al mismo ritmo. Mucho esfuerzo y poco resultado: la huella de la lección 1.' },
+                    { type: 'text', content: 'Hay dos explicaciones habituales, y las dos son buenas noticias para quien busca un suelo: o los profesionales están comprando todo lo que el público vende asustado, o están acumulando en una zona de soporte que les parece barata.' },
+                ]
+            },
+            {
+                heading: 'Clímax o frenado: en qué se diferencian',
+                blocks: [
+                    { type: 'table',
+                        headers: ['', 'Clímax de venta', 'Volumen de frenado'],
+                        rows: [
+                            ['Cómo se para la caída', 'De golpe, con pánico', 'Poco a poco, en 2-3 sesiones'],
+                            ['Rango de las velas', 'Muy amplio', 'Estrecho'],
+                            ['Volumen', 'Ultra alto', 'Alto, sostenido varias sesiones'],
+                            ['Cierre', 'En la mitad o arriba, tras una gran caída dentro de la sesión', 'En la mitad o arriba, con sombra abajo'],
+                            ['Qué hay que esperar', 'La prueba', 'La confirmación y el retroceso'],
+                        ]
+                    },
+                    { type: 'text', content: 'Los dos cuentan lo mismo —alguien grande está comprando en la caída— con distinta intensidad. Y los dos piden lo mismo: no comprar en la señal, sino esperar a que el mercado lo confirme.' },
+                ]
+            },
+            {
+                heading: 'Si la vela cierra abajo',
+                blocks: [
+                    { type: 'text', content: 'A veces la vela con el volumen de frenado cierra todavía en su mínimo y no está claro si hubo compradores. En ese caso la regla es sencilla: <b>mira la sesión siguiente</b>. Si el precio aguanta en el mismo nivel o sube, la compra fue real. Si sigue cayendo con volumen, no era frenado: era más venta.' },
+                    { type: 'warning', content: 'El volumen alto en una caída no siempre es compra profesional. Si las velas son amplias y cierran abajo una tras otra, es simplemente gente vendiendo mucho. La diferencia está en el rango y en el cierre, no solo en el volumen.' },
+                ]
+            },
+        ]
+    },
+
+    '33-5': {
+        moduleId: 33,
+        lessonIndex: 4,
+        title: 'De la Señal a la Operación',
+        duration: '8 min',
+        intro: 'Reconocer un clímax o un volumen de frenado no es operar. Esta lección convierte las señales en un plan con entrada y stop, y termina con lo que el VSA no puede hacer.',
+        sections: [
+            {
+                heading: 'Después de un clímax de venta',
+                blocks: [
+                    { type: 'chart', id: 'vsa_entrada' },
+                    { type: 'steps', items: [
+                        'Identifica el <b>clímax de venta</b> (lección 3).',
+                        'Espera la <b>prueba</b>: el precio vuelve a la zona con volumen bajo y velas estrechas, y el mínimo aguanta.',
+                        'Busca una <b>vela de giro</b> alcista en esa zona: una envolvente (una vela que se come entera a la anterior), una vela exterior (supera a la anterior por arriba y por abajo) o un martillo con una sombra larga abajo.',
+                        'Compra solo si el precio <b>supera el máximo</b> de esa vela de giro.',
+                        'Pon el <b>stop por debajo del mínimo</b> de la prueba (o del clímax, si quieres más margen).',
+                    ]},
+                    { type: 'tip', label: 'POR QUÉ ESPERAR AL MÁXIMO', content: 'Comprar cuando el precio supera el máximo de la vela de giro significa que el mercado ya ha empezado a moverse a tu favor. Si no lo supera, no entras, y te ahorras buena parte de las pruebas que fallan.' },
+                ]
+            },
+            {
+                heading: 'Después de un volumen de frenado',
+                blocks: [
+                    { type: 'steps', items: [
+                        'Si la vela de frenado cerró en su mínimo, espera a la <b>sesión siguiente</b>: tiene que aguantar el nivel o subir.',
+                        'Espera un <b>retroceso</b> a la zona del frenado, con menos volumen y velas más estrechas.',
+                        'Busca la <b>vela de giro</b> alcista en esa zona.',
+                        'Compra si el precio supera su <b>máximo</b>; stop por debajo del <b>mínimo</b> de la zona.',
+                    ]},
+                    { type: 'text', content: 'Es el mismo esquema que tras un clímax: señal, vuelta sin volumen, vela de giro, entrada por encima y stop por debajo. Solo cambia la señal de partida.' },
+                ]
+            },
+            {
+                heading: 'El tamaño va antes que la entrada',
+                blocks: [
+                    { type: 'text', content: 'La distancia entre el precio de entrada y el stop es lo que arriesgas por acción. Con ella se decide cuántas acciones comprar, no al revés: si el stop queda lejos, compras menos. El módulo 12 (Gestión del Riesgo) explica cómo calcularlo.' },
+                    { type: 'warning', content: 'En los suelos el precio se mueve mucho y los stops cercanos saltan con facilidad. Arriesga en cada operación una parte pequeña de tu capital: aunque la lectura sea buena, una parte de estas operaciones va a fallar.' },
+                ]
+            },
+            {
+                heading: '¿Suelo o solo una pausa?',
+                blocks: [
+                    { type: 'table',
+                        headers: ['Qué mirar', 'Apunta a un giro', 'Apunta a que la caída sigue'],
+                        rows: [
+                            ['La vuelta a la zona del mínimo', 'Con volumen bajo y velas estrechas', 'Con volumen alto y velas amplias'],
+                            ['El mínimo', 'Aguanta', 'Se rompe'],
+                            ['Las subidas siguientes', 'Con volumen', 'Sin volumen (falta de demanda)'],
+                        ]
+                    },
+                ]
+            },
+            {
+                heading: 'Lo que el VSA no puede hacer',
+                blocks: [
+                    { type: 'text', content: 'El VSA es una forma de leer el gráfico, no un sistema automático. Conviene tener claros sus límites:' },
+                    { type: 'steps', items: [
+                        '<b>El volumen no dice quién compra y quién vende.</b> Cada acción que alguien compra, otro la vende. El VSA deduce quién domina por el rango y el cierre: es una interpretación, no un dato.',
+                        '<b>Necesita volumen real.</b> En acciones y futuros el volumen es real. En divisas y en muchos CFD las plataformas muestran solo cuántas veces cambió el precio (volumen de ticks), que es una aproximación.',
+                        '<b>Es subjetivo.</b> Dos personas pueden leer lo mismo de forma distinta, sobre todo al empezar. Por eso cada señal pide una confirmación antes de actuar.',
+                        '<b>Funciona mejor en valores líquidos.</b> En una acción que negocia poco, una sola orden grande puede fabricar una vela de volumen «ultra alto» que no significa nada.',
+                    ]},
+                    { type: 'tip', label: 'EN LA TERMINAL', content: 'Para practicar VSA necesitas un gráfico de velas con el volumen debajo, como el de tu bróker o el de TradingView: el gráfico de Research todavía no pinta el volumen vela a vela. Lo que sí te da la terminal es dónde mirar: el filtro de RVOL del Escáner encuentra los valores con un volumen fuera de lo normal, y una alerta de RVOL en la Watchlist te avisa el día que uno de los tuyos lo tiene.' },
+                    { type: 'concept', title: 'Todo el módulo en una frase', content: 'La fuerza se ve en los días que bajan y la debilidad en los días que suben; y nunca se actúa en la señal: siempre se espera la prueba.' },
+                ]
+            },
+        ]
+    },
 };
