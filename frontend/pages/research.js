@@ -491,7 +491,13 @@ function piotroskiSection(data) {
         + '<span style="color:' + p.color + ';font-size:20px;font-weight:500;">' + p.score + '/' + p.max + '</span>'
         + '<span style="color:' + p.color + ';font-size:12px;padding:2px 10px;border:1px solid ' + p.color + '33;border-radius:4px;">' + p.label + '</span>'
         + '</div></div>'
-        + '<div style="color:var(--color-muted);font-size:9px;margin-bottom:10px;">Este score es uno de los 5 componentes que forman el RSU Score (20% del total).</div>'
+        + '<div style="color:var(--color-muted);font-size:9px;margin-bottom:10px;">'
+        // Son cuentas ANUALES: en septiembre, el ejercicio que se juzga puede
+        // haber cerrado hace nueve meses. Antes no se decía.
+        + (p.ejercicio && p.ejercicio_anterior
+            ? 'Cuentas anuales: ejercicio cerrado en ' + esc(fmtFecha(p.ejercicio)) + ' frente al anterior. '
+            : '')
+        + 'Es uno de los 5 componentes del RSU Score (20% del total).</div>'
         // Un 5/9 medido sobre 9 criterios y un 5/9 medido sobre 7 no son
         // comparables, y hasta ahora se veían idénticos. Pasa en todo el
         // sector financiero: bancos y aseguradoras presentan el balance sin

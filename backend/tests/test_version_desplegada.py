@@ -30,6 +30,9 @@ import pytest
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 
 import main  # noqa: E402
+# La lectura vive desde el 11/09/2026 en despliegue.py, porque también la usa
+# la caché de Research; main la importa de ahí para /health.
+import despliegue  # noqa: E402
 
 RUTA_VERSION = os.path.join(os.path.dirname(main.__file__), "VERSION")
 
@@ -57,7 +60,7 @@ def _escribir(contenido):
 def test_lee_el_commit_y_la_fecha_que_sella_el_despliegue():
     """Formato exacto que escribe deploy.sh: commit corto y fecha UTC."""
     _escribir("a1b2c3d\n2026-08-14T14:05:00Z\n")
-    v = main._version_desplegada()
+    v = despliegue.version_desplegada()
     assert v["commit"] == "a1b2c3d"
     assert v["desplegado"] == "2026-08-14T14:05:00Z"
 
@@ -65,7 +68,7 @@ def test_lee_el_commit_y_la_fecha_que_sella_el_despliegue():
 def test_sin_fichero_dice_desconocida_y_no_se_inventa_nada():
     """Pasa al ejecutar en local, fuera de un despliegue. Decir «desconocida»
     es correcto; devolver un commit falso sería peor que no tener versión."""
-    v = main._version_desplegada()
+    v = despliegue.version_desplegada()
     assert v["commit"] == "desconocida"
     assert v["desplegado"] is None
 
@@ -74,9 +77,9 @@ def test_un_fichero_vacio_o_corrupto_no_tumba_el_endpoint():
     """/health lo usan los chequeos de Docker: si revienta, el contenedor se
     marca como caído por no poder leer un fichero informativo."""
     _escribir("")
-    assert main._version_desplegada()["commit"] == "desconocida"
+    assert despliegue.version_desplegada()["commit"] == "desconocida"
     _escribir("basura sin formato")
-    assert main._version_desplegada()["commit"] == "basura sin formato"
+    assert despliegue.version_desplegada()["commit"] == "basura sin formato"
 
 
 def test_health_devuelve_la_version_ademas_del_estado():

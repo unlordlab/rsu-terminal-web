@@ -157,7 +157,7 @@ def test_un_ticker_invalido_no_repite_el_pipeline_entero_en_cada_peticion():
     petición -- y es de los casos que más se repiten: alguien tecleando mal,
     o un enlace viejo a algo que ya no cotiza."""
     from services.cache import cache
-    cache.set("research:NOEXISTE", None, 1)
+    cache.set(rs._clave_research("NOEXISTE"), None, 1)
 
     llamadas = {"n": 0}
 
@@ -175,4 +175,4 @@ def test_un_ticker_invalido_no_repite_el_pipeline_entero_en_cada_peticion():
         f"El fallo debe servirse de caché en la segunda petición, se "
         f"reconstruyó {llamadas['n']} veces."
     )
-    cache.set("research:NOEXISTE", None, 1)
+    cache.set(rs._clave_research("NOEXISTE"), None, 1)

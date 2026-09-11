@@ -1266,11 +1266,39 @@ def _get_piotroski_score(ticker: str) -> dict:
             return {}
 
         ta0, ta1 = _safe(total_assets.iloc[0]), _safe(total_assets.iloc[1])
-        ni0, ni1 = _safe(net_income.iloc[0]), _safe(net_income.iloc[1])
+        # El activo de hace dos ejercicios: el INICIO del año anterior.
+        ta2 = _safe(total_assets.iloc[2]) if len(total_assets) > 2 else None
         cfo0     = _safe(op_cf.iloc[0])
 
-        roa0 = (ni0 / ta0) if (ta0 and ni0 is not None) else None
-        roa1 = (ni1 / ta1) if (ta1 and ni1 is not None) else None
+        # Beneficio ANTES de partidas extraordinarias, como en Piotroski
+        # (2000): el de las operaciones que continúan. El neto total mete la
+        # venta o el cierre de un negocio, que es un ingreso de una vez. OSS en
+        # 2025: +5,09M de beneficio neto, de los que 8,19M venían de
+        # operaciones discontinuadas; su negocio perdió 3,1M, y la terminal
+        # le daba «ROA positivo». Si Yahoo no trae la línea, el neto total.
+        _CONTINUAS = ('Net Income From Continuing Operation Net Minority Interest',
+                      'Net Income Continuous Operations', 'Net Income')
+        ni0 = valor_linea(fin, 0, *_CONTINUAS)
+        ni1 = valor_linea(fin, 1, *_CONTINUAS)
+        ni_total0 = _safe(net_income.iloc[0])
+
+        # Rentabilidad y rotación sobre el activo al INICIO de cada año, y
+        # apalancamiento sobre el activo MEDIO: la definición de Piotroski.
+        # Con el del cierre, un año de ampliación de capital o de venta de un
+        # negocio infla el denominador: OSS subió su activo un 43% en 2025, y
+        # la rotación salía «empeoró» (0,66 → 0,61) cuando con el activo
+        # inicial mejora (0,51 → 0,87). Sin el balance de hace dos años (poco
+        # histórico) se cae al del cierre en los dos años, que al menos
+        # compara lo mismo con lo mismo.
+        if ta2:
+            base0, base1 = ta1, ta2
+            medio0, medio1 = (ta0 + ta1) / 2 if ta0 else None, (ta1 + ta2) / 2
+        else:
+            base0, base1 = ta0, ta1
+            medio0, medio1 = ta0, ta1
+
+        roa0 = (ni0 / base0) if (base0 and ni0 is not None) else None
+        roa1 = (ni1 / base1) if (base1 and ni1 is not None) else None
 
         criteria = []
         score = 0
@@ -1296,7 +1324,11 @@ def _get_piotroski_score(ticker: str) -> dict:
 
         # 1. ROA positivo
         c1 = (roa0 > 0) if roa0 is not None else None
-        add_criterion(c1, "ROA positivo", "ROA negativo (pérdidas)", "ROA no disponible")
+        vendio_negocio = (ni0 is not None and ni_total0 is not None and ni0 <= 0 < ni_total0)
+        add_criterion(c1, "ROA positivo",
+                      "ROA negativo: el beneficio del año viene de vender o cerrar un negocio" if vendio_negocio
+                      else "ROA negativo (pérdidas)",
+                      "ROA no disponible")
 
         # 2. CFO positivo
         c2 = (cfo0 > 0) if cfo0 is not None else None
@@ -1336,8 +1368,8 @@ def _get_piotroski_score(ticker: str) -> dict:
 
         c5 = None
         ld0, ld1 = deuda_largo_plazo(0), deuda_largo_plazo(1)
-        if ld0 is not None and ld1 is not None and ta0 and ta1:
-            c5 = (ld0 / ta0) <= (ld1 / ta1)
+        if ld0 is not None and ld1 is not None and medio0 and medio1:
+            c5 = (ld0 / medio0) <= (ld1 / medio1)
         etiqueta_ok = ("Sin deuda a largo plazo" if (c5 and not ld0 and not ld1)
                        else "Apalancamiento estable o ha bajado")
         add_criterion(c5, etiqueta_ok, "El apalancamiento ha aumentado", "Apalancamiento no disponible")
@@ -1370,10 +1402,10 @@ def _get_piotroski_score(ticker: str) -> dict:
 
         # 9. Rotación de activos en mejora
         c9 = None
-        if revenue is not None and ta0 and ta1:
+        if revenue is not None and base0 and base1:
             rv0, rv1 = _safe(revenue.iloc[0]), _safe(revenue.iloc[1])
             if rv0 and rv1:
-                c9 = (rv0 / ta0) > (rv1 / ta1)
+                c9 = (rv0 / base0) > (rv1 / base1)
         add_criterion(c9, "Rotación de activos mejoró", "Rotación de activos empeoró", "Rotación de activos no disponible")
 
         if score >= 8:    label, color = "EXCELENTE", "#00ffad"
@@ -1394,8 +1426,17 @@ def _get_piotroski_score(ticker: str) -> dict:
         # un 5/9 con 9 evaluables y un 5/9 con 7 no son el mismo dato.
         evaluables = sum(1 for c in criteria if c["pass"] is not None)
 
+        # Qué ejercicios se comparan: son cuentas ANUALES, y la pantalla no lo
+        # decía. OSS, en septiembre de 2026, se juzga por el año 2025.
+        def _ejercicio(col):
+            try:
+                return col.strftime('%Y-%m-%d')
+            except AttributeError:
+                return str(col)[:10]
+
         return {"score": score, "max": 9, "evaluables": evaluables, "label": label,
-                "color": color, "criteria": criteria, "missing_lines": missing_lines}
+                "color": color, "criteria": criteria, "missing_lines": missing_lines,
+                "ejercicio": _ejercicio(bs.columns[0]), "ejercicio_anterior": _ejercicio(bs.columns[1])}
     except Exception as e:
         print(f"[Piotroski:{ticker}] Error inesperado al calcular: {e}")
         return {}
@@ -2241,7 +2282,7 @@ def _get_research_crypto(ticker: str) -> dict:
         # propósito: si el ticker aparece o Yahoo se recupera, se reintenta
         # en un par de minutos, no dentro de 15.
         fallo = {"ok": False, "error": yf_data.get('error', 'Sin datos')}
-        cache.set(f"research:{ticker}", fallo, 120)
+        cache.set(_clave_research(ticker), fallo, 120)
         return fallo
 
     symbol  = ticker.replace("-USD", "").upper()
@@ -2268,14 +2309,24 @@ def _get_research_crypto(ticker: str) -> dict:
     }
     from services.cartera_service import get_cartera_tickers
     result["en_cartera"] = ticker in get_cartera_tickers()
-    cache.set(f"research:{ticker}", result, TTL["research"])
+    cache.set(_clave_research(ticker), result, TTL["research"])
     return result
+
+
+def _clave_research(ticker: str) -> str:
+    """La clave de caché de la ficha lleva el commit desplegado. La caché
+    vive en disco y sobrevive a los despliegues: el 11/09/2026, tras
+    desplegar el panel técnico nuevo, OSS siguió saliendo con la respuesta
+    de la versión anterior (Fase 1, sin la media de 30 semanas) hasta que
+    caducó. Con el commit en la clave, cada despliegue empieza de cero."""
+    from despliegue import COMMIT
+    return f"research:{COMMIT}:{ticker}"
 
 
 def get_research(ticker: str) -> dict:
     ticker = ticker.upper().strip()
     from services.cache import cache, TTL
-    cached = cache.get(f"research:{ticker}")
+    cached = cache.get(_clave_research(ticker))
     if cached: return cached
 
     # Cripto (convención de yfinance: sufijo -USD, p.ej. BTC-USD, ETH-USD) usa
@@ -2326,7 +2377,7 @@ def get_research(ticker: str) -> dict:
         # propósito: si el ticker aparece o Yahoo se recupera, se reintenta
         # en un par de minutos, no dentro de 15.
         fallo = {"ok": False, "error": yf_data.get('error', 'Sin datos')}
-        cache.set(f"research:{ticker}", fallo, 120)
+        cache.set(_clave_research(ticker), fallo, 120)
         return fallo
 
     sector_comparison = _get_sector_comparison(yf_data['sector'], yf_data['metrics'], yf_data['profitability'])
@@ -2400,7 +2451,7 @@ def get_research(ticker: str) -> dict:
     }
     from services.cartera_service import get_cartera_tickers
     result["en_cartera"] = ticker in get_cartera_tickers()
-    cache.set(f"research:{ticker}", result, TTL["research"])
+    cache.set(_clave_research(ticker), result, TTL["research"])
     return result
 # ── COMPARATIVA SECTORIAL (valoración, rentabilidad, crecimiento vs sector) ────
 

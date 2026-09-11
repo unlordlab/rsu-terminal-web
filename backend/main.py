@@ -194,19 +194,10 @@ app.mount("/pages",      CodigoDeLaApp(directory="../frontend/pages"),  name="pa
 # una versión anterior, y cada vez costó una sesión entera de depuración
 # descubrirlo. El `git pull` del despliegue avisa cuando no trae nada nuevo,
 # pero eso no dice nada sobre lo que hay DENTRO del contenedor.
-def _version_desplegada() -> dict:
-    try:
-        with open(os.path.join(os.path.dirname(__file__), "VERSION"), encoding="utf-8") as f:
-            lineas = [l.strip() for l in f if l.strip()]
-        return {"commit": lineas[0], "desplegado": lineas[1] if len(lineas) > 1 else None}
-    except Exception:
-        # Sin fichero: se está ejecutando fuera de un despliegue (desarrollo
-        # local) o la imagen se construyó sin pasar por deploy.sh. Se dice, en
-        # vez de inventar un número de versión.
-        return {"commit": "desconocida", "desplegado": None}
+from despliegue import version_desplegada  # noqa: E402
 
 
-_VERSION = _version_desplegada()
+_VERSION = version_desplegada()
 
 
 @app.get("/health")
