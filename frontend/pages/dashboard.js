@@ -41,9 +41,14 @@ export async function render(container) {
         </div>
     `;
 
-    const style = document.createElement('style');
-    style.textContent = `.module-card:hover{border-color:var(--color-accent)!important;background:var(--color-surface2,#1a1a1a)!important;}`;
-    document.head.appendChild(style);
+    // Una sola vez: antes se añadía un <style> idéntico al <head> cada vez que
+    // se volvía al Dashboard (mismo patrón que manifest.js y academy.js).
+    if (!document.getElementById('dashboard-styles')) {
+        const style = document.createElement('style');
+        style.id = 'dashboard-styles';
+        style.textContent = `.module-card:hover{border-color:var(--color-accent)!important;background:var(--color-surface2,#1a1a1a)!important;}`;
+        document.head.appendChild(style);
+    }
 
     container.querySelectorAll('.module-card').forEach(card => {
         card.addEventListener('click', () => window.__navigate(card.getAttribute('data-path')));
