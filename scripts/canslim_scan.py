@@ -63,7 +63,7 @@ def run_scan() -> dict:
     close_d, vol_d, hl_d = download_batch(
         tickers, period="2y", batch_size=BATCH_SIZE, batch_sleep=BATCH_SLEEP,
         max_retries=3, coverage_threshold=0.85, min_history=100,
-        include_hl=True, log_prefix="[CANSLIM scan] ",
+        include_hl=True, reparar_ultima=True, log_prefix="[CANSLIM scan] ",
     )
     print(f"✅ Con histórico suficiente: {len(close_d)}/{len(tickers)} tickers")
 

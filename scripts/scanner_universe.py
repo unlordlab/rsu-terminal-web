@@ -302,7 +302,7 @@ def _fetch_batch(all_syms: list) -> tuple:
     # OHLC completo (su precio típico usa la apertura).
     return download_batch(all_syms, period="2y", batch_size=BATCH_SIZE, batch_sleep=BATCH_SLEEP,
                            max_retries=3, coverage_threshold=0.85, include_hl=True,
-                           log_prefix="[Scanner] ")
+                           reparar_ultima=True, log_prefix="[Scanner] ")
 
 
 # Techo de la curva de volumen. Calibrado sobre las 6.012 observaciones reales
@@ -389,6 +389,12 @@ def diagnosticar_ultima_sesion(close_d: dict, umbral: float = 0.9, muestra: int 
     Solo pide datos cuando la sesión viene incompleta: las noches normales no
     cuesta ninguna llamada. Nunca levanta: un diagnóstico no puede tumbar el
     escaneo que diagnostica.
+
+    DESDE EL 12/09 SE EJECUTA DESPUÉS DE LA REPARACIÓN (ver
+    `shared/yf_batch.py::reparar_ultima_sesion`), así que cambia de significado:
+    ya no es «la descarga vino mal», es «vino mal Y la segunda pasada tampoco la
+    recuperó». Si esto vuelve a saltar, el arreglo no basta y la prueba de por
+    qué está en el registro, justo encima.
     """
     ultimas = {}
     for t, s in close_d.items():

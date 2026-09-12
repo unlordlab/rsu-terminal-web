@@ -129,3 +129,17 @@ def sesion_anterior(d: date) -> date:
     while not sesion_habil(d):
         d -= timedelta(days=1)
     return d
+
+
+def ultima_sesion_cerrada(ahora_et) -> date:
+    """La última sesión que YA ha cerrado a esa hora de Nueva York.
+
+    Hace falta para poder decir «falta la barra de tal día» sin depender de los
+    propios datos descargados: si la descarga viene mal para TODOS los tickers,
+    mirar el máximo de lo descargado da la sesión anterior y el hueco no se ve.
+    El calendario no se equivoca por mucho que falle Yahoo.
+    """
+    hoy = ahora_et.date()
+    if sesion_habil(hoy) and ahora_et.hour >= 16:
+        return hoy
+    return sesion_anterior(hoy)

@@ -61,7 +61,8 @@ def run_scan(max_tickers: int = 525) -> dict:
 
     close_d, vol_d = download_batch(
         all_syms, period="260d", batch_size=BATCH_SIZE, batch_sleep=BATCH_SLEEP,
-        max_retries=3, coverage_threshold=0.85, log_prefix="[RS/RW scan] ",
+        max_retries=3, coverage_threshold=0.85, reparar_ultima=True,
+        log_prefix="[RS/RW scan] ",
     )
     print(f"[RS/RW scan] Total con histórico suficiente: {len(close_d)}/{len(all_syms)} símbolos solicitados")
 

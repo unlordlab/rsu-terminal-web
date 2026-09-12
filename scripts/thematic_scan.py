@@ -216,7 +216,8 @@ THEMATIC_SECTORS = {
 
 def _fetch_batch(all_syms: list) -> dict:
     close_d, _ = download_batch(all_syms, period="200d", batch_size=BATCH_SIZE,
-                                 batch_sleep=BATCH_SLEEP, include_volume=False)
+                                 batch_sleep=BATCH_SLEEP, include_volume=False,
+                                 reparar_ultima=True, log_prefix="[Temáticos] ")
     return close_d
 
 
