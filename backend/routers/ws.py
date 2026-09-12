@@ -459,7 +459,15 @@ async def market_cache_warm_loop():
         # reinició el contenedor, no de una fecha real).
         try:
             from services.snapshots_service import maybe_write_daily_snapshot
-            await loop.run_in_executor(None, maybe_write_daily_snapshot)
+            sesion_nueva = await loop.run_in_executor(None, maybe_write_daily_snapshot)
+            # Las alertas de señal (fase, liderazgo RS, SMA50, máximos) salen de
+            # esa foto, así que se miran AQUÍ, una vez por sesión, y no en el
+            # bucle de 90 s: entre dos pasadas de 90 s no pueden haber cambiado.
+            if sesion_nueva:
+                from services.watchlist_service import check_signal_alerts, notify_triggered_alerts
+                disparadas = await loop.run_in_executor(None, check_signal_alerts, sesion_nueva)
+                if disparadas:
+                    await loop.run_in_executor(None, notify_triggered_alerts, disparadas)
         except Exception as e:
             print(f"[Snapshots] Error: {e}")
 

@@ -132,11 +132,18 @@ def init_db():
 def maybe_write_daily_snapshot():
     """Punto de entrada único, llamado desde market_cache_warm_loop().
     Append-only: cada sub-función comprueba primero si YA hay fila para
-    la fecha de sesión más reciente conocida, y si la hay no hace nada."""
+    la fecha de sesión más reciente conocida, y si la hay no hace nada.
+
+    Devuelve la fecha de sesión SI se ha escrito la foto de los tickers en esta
+    pasada, y None si no había nada nuevo. Quien llama lo usa para lanzar lo
+    que solo tiene sentido una vez por sesión — hoy, las alertas de señal
+    (Watchlist #18): así no hace falta un bucle de 24 h, que derivaría de
+    cuándo se reinició el contenedor en vez de seguir a las sesiones reales.
+    """
     from services.scanner_service import get_breadth_history
     breadth_hist = get_breadth_history()
     if not breadth_hist:
-        return  # scan nocturno todavía sin datos (Gist vacío/no configurado) -- no hay nada que guardar
+        return None  # scan nocturno todavía sin datos (Gist vacío/no configurado)
     ultimo = breadth_hist[-1]
     fecha  = ultimo["date"]
 
@@ -152,9 +159,10 @@ def maybe_write_daily_snapshot():
         incompleto, _, _ = cobertura_insuficiente(
             _cobertura(ultimo), [_cobertura(h) for h in breadth_hist[:-1]])
         _maybe_write_mercado(conn, fecha, ultimo, incompleto)
-        _maybe_write_ticker(conn, fecha)
+        escrita = _maybe_write_ticker(conn, fecha)
         _maybe_write_cartera(conn, fecha)
         _maybe_write_tematico(conn, fecha)
+        return fecha if escrita else None
     finally:
         conn.close()
 
@@ -294,12 +302,15 @@ def _maybe_write_mercado(conn, fecha, breadth_row, incompleto=False):
 
 
 def _maybe_write_ticker(conn, fecha):
+    """True si ha escrito la foto de esta sesión; False si ya estaba o no había
+    datos. Lo mira `maybe_write_daily_snapshot()` para saber si hay sesión nueva
+    de la que sacar señales."""
     if conn.execute("SELECT 1 FROM snapshot_ticker WHERE fecha = ? LIMIT 1", (fecha,)).fetchone():
-        return
+        return False
     from services.scanner_service import get_universe_stocks
     stocks = get_universe_stocks()
     if not stocks:
-        return
+        return False
 
     def _b(v):
         return None if v is None else int(bool(v))
@@ -321,6 +332,7 @@ def _maybe_write_ticker(conn, fecha):
     )
     conn.commit()
     print(f"[Snapshots] snapshot_ticker guardado para {fecha} ({len(rows)} tickers)")
+    return True
 
 
 def _maybe_write_cartera(conn, fecha):

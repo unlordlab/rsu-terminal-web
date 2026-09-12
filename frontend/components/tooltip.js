@@ -135,14 +135,18 @@ LÍMITE: hasta 50 tickers por usuario, contando todas las listas. Es una lista p
 
     "price-alerts": {
         title: "Alertas",
-        short: "Avisa cuando un ticker cruza un umbral de precio o de RVOL, o toca una de sus EMAs (10/20/50/200). Se comprueban cada ~90 segundos.",
+        short: "Avisa cuando un ticker cruza un umbral de precio o de RVOL, toca una de sus EMAs (10/20/50/200), o da una de las señales que calcula la terminal (cambio de fase, liderazgo RS, SMA50, máximos). Las tres primeras se comprueban cada ~90 segundos; las señales, una vez al día.",
         long: `Cada alerta compara un valor en vivo del ticker contra el objetivo que fijaste. Tres métricas disponibles:
 
 ▸ PRECIO: compara el precio actual contra un precio objetivo en $, con la condición "por encima de" o "por debajo de".
 ▸ RVOL: compara el volumen relativo actual (volumen de hoy / media de 20 sesiones) contra un múltiplo objetivo — p.ej. "RVOL por encima de 2.5" avisa cuando el ticker negocia 2,5 veces su volumen medio, señal típica de entrada de dinero grande.
 ▸ TOQUE DE EMA: avisa cuando el precio se acerca a menos de un 0,5% de la EMA que elijas (10, 20, 50 o 200 sesiones) — útil para vigilar posibles retrocesos a una media móvil clave sin tener que mirar el gráfico constantemente. A diferencia de precio/RVOL, no tiene "por encima" o "por debajo": es un aviso de proximidad, en cualquier dirección.
+▸ SEÑAL DE LA TERMINAL: lo que calcula la propia terminal cada noche sobre ese valor — que entre en Fase 2 o en Fase 4, que entre o salga del grupo de líderes por fuerza relativa, que recupere o pierda su media de 50 sesiones, que haga máximo o mínimo de 52 semanas. Es lo que las otras tres no pueden vigilar: un bróker te avisa de un precio, no de que un valor acaba de entrar en tendencia alcista. Estas sí se repiten: avisan cada vez que la señal vuelve a darse.
 
-CÓMO SE COMPRUEBAN:
+CUÁNDO LLEGAN LAS DE SEÑAL:
+Salen del escaneo nocturno, así que se comprueban UNA VEZ AL DÍA, con la sesión ya cerrada — no en el momento en que ocurren. Es el mismo dato que ves en Scanner, en RS/RW y en la ficha de Research, no un cálculo aparte. Y el cambio de fase solo avisa cuando está confirmado (tres sesiones), para que un valor que baila entre dos fases no te mande un mensaje cada dos días.
+
+CÓMO SE COMPRUEBAN LAS DEMÁS:
 Un proceso en segundo plano revisa todas las alertas activas de todos los usuarios cada ~90 segundos (agrupando por ticker, así que no importa cuánta gente tenga una alerta en el mismo nombre — el dato se pide una sola vez por ticker y métrica). Para las alertas de EMA, el valor de la media de las sesiones ya cerradas se calcula una vez al día (no tiene sentido recalcularlo cada 90 segundos si los cierres de ayer no cambian) y se combina con el precio en vivo de hoy en cada ciclo. En cuanto se cumple la condición, la alerta pasa a "DISPARADA" y aparece un aviso (número rojo) junto a Watchlist en el menú lateral.
 
 NOTIFICACIONES:

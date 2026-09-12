@@ -52,10 +52,11 @@ class ListaRename(BaseModel):
 
 class AlertCreate(BaseModel):
     ticker: str = Field(..., min_length=1, max_length=15)
-    condition: str = "above"       # 'above' | 'below' — ignorado si metric='ema_touch'
-    target_price: float = 0        # ignorado si metric='ema_touch'
-    metric: str = "price"          # 'price' | 'rvol' | 'ema_touch'
+    condition: str = "above"       # 'above' | 'below' — ignorado si metric='ema_touch'/'senal'
+    target_price: float = 0        # ignorado si metric='ema_touch'/'senal'
+    metric: str = "price"          # 'price' | 'rvol' | 'ema_touch' | 'senal'
     ema_period: Optional[int] = None   # 10 | 20 | 50 | 200 — obligatorio si metric='ema_touch'
+    senal: Optional[str] = Field(None, max_length=32)   # obligatorio si metric='senal'
 
     @field_validator("ticker")
     @classmethod
@@ -113,7 +114,9 @@ async def list_alerts(user=Depends(verify_token)):
 
 @router.post("/alerts")
 async def add_alert(body: AlertCreate, user=Depends(verify_token)):
-    return watchlist_service.create_alert(_user_id(user), body.ticker, body.condition, body.target_price, body.metric, body.ema_period)
+    return watchlist_service.create_alert(_user_id(user), body.ticker, body.condition,
+                                          body.target_price, body.metric, body.ema_period,
+                                          body.senal)
 
 
 @router.delete("/alerts/triggered")

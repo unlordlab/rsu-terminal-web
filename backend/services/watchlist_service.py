@@ -22,7 +22,12 @@ MAX_WATCHLIST_ITEMS = 50
 MAX_ACTIVE_ALERTS   = 30
 
 VALID_CONDITIONS = ("above", "below")
-VALID_METRICS    = ("price", "rvol", "ema_touch")
+# `senal` son las señales que calcula la propia terminal (cambio de fase,
+# entrada en el grupo de líderes, pérdida de la SMA50, máximo de 52 semanas).
+# A diferencia de las otras tres, NO se miran cada 90 segundos: salen del
+# escaneo nocturno, así que se comprueban una vez al día, cuando entra la foto
+# de la sesión. Ver services/senales_service.py y Watchlist #18.
+VALID_METRICS    = ("price", "rvol", "ema_touch", "senal")
 EMA_PERIODS      = (10, 20, 50, 200)
 # % de distancia a la EMA que cuenta como tocarla. El 0,5% es el que había
 # antes del 25/07 y el que proponía la auditoría: más ancho dispararía con el
@@ -154,6 +159,20 @@ def init_db():
     # con objetivo único. Ver hallazgo #7, auditoría Watchlist 21/07/2026.
     try:
         conn.execute("ALTER TABLE alerts ADD COLUMN recurring INTEGER NOT NULL DEFAULT 0")
+    except sqlite3.OperationalError:
+        pass  # la columna ya existe
+    # senal: cuál de las señales de la terminal vigila esta alerta -- solo
+    # relevante si metric='senal'. Ver services/senales_service.py.
+    try:
+        conn.execute("ALTER TABLE alerts ADD COLUMN senal TEXT")
+    except sqlite3.OperationalError:
+        pass  # la columna ya existe
+    # sesion_disparo: la fecha de sesión con la que se disparó una alerta de
+    # señal. Sin esto, una alerta recurrente volvería a dispararse con la MISMA
+    # foto en cuanto el cooldown la reactivara, porque la señal sigue ahí hasta
+    # que entre la sesión siguiente.
+    try:
+        conn.execute("ALTER TABLE alerts ADD COLUMN sesion_disparo TEXT")
     except sqlite3.OperationalError:
         pass  # la columna ya existe
     conn.commit()
@@ -354,14 +373,26 @@ def get_watchlist(user_id: int) -> dict:
 
 # ── ALERTAS ──────────────────────────────────────────────────────────────────
 
-def create_alert(user_id: int, ticker: str, condition: str, target_price: float, metric: str = "price", ema_period: int = None) -> dict:
+def create_alert(user_id: int, ticker: str, condition: str, target_price: float, metric: str = "price",
+                 ema_period: int = None, senal: str = None) -> dict:
     ticker = (ticker or "").strip().upper()
     if not ticker:
         return {"ok": False, "error": "Ticker vacío"}
     if metric not in VALID_METRICS:
-        return {"ok": False, "error": "Métrica inválida (usa 'price', 'rvol' o 'ema_touch')"}
+        return {"ok": False, "error": "Métrica inválida (usa 'price', 'rvol', 'ema_touch' o 'senal')"}
 
-    if metric == "ema_touch":
+    if metric == "senal":
+        from services.senales_service import SENALES
+        if senal not in SENALES:
+            return {"ok": False, "error": "Señal desconocida"}
+        # Recurrente por naturaleza: «avísame CADA VEZ que entre en Fase 2» es
+        # lo que se quiere, no una sola vez en la vida del valor. Y sin
+        # condición ni objetivo: la señal ocurre o no ocurre.
+        condition = "touch"
+        target_price = 0.0
+        ema_period = None
+        recurring = 1
+    elif metric == "ema_touch":
         try:
             ema_period = int(ema_period)
         except (TypeError, ValueError):
@@ -391,9 +422,11 @@ def create_alert(user_id: int, ticker: str, condition: str, target_price: float,
         if count >= MAX_ACTIVE_ALERTS:
             return {"ok": False, "error": f"Límite de {MAX_ACTIVE_ALERTS} alertas activas alcanzado"}
         cur = conn.execute(
-            "INSERT INTO alerts (user_id, ticker, condition, target_price, status, created_at, seen, metric, ema_period, recurring) "
-            "VALUES (?, ?, ?, ?, 'active', ?, 1, ?, ?, ?)",
-            (user_id, ticker, condition, target_price, datetime.now(timezone.utc).isoformat(), metric, ema_period, recurring)
+            "INSERT INTO alerts (user_id, ticker, condition, target_price, status, created_at, seen, "
+            "metric, ema_period, recurring, senal) "
+            "VALUES (?, ?, ?, ?, 'active', ?, 1, ?, ?, ?, ?)",
+            (user_id, ticker, condition, target_price, datetime.now(timezone.utc).isoformat(),
+             metric, ema_period, recurring, senal if metric == "senal" else None)
         )
         conn.commit()
         return {"ok": True, "id": cur.lastrowid}
@@ -644,6 +677,9 @@ def check_all_active_alerts() -> list:
     price_alerts = [a for a in active if a.get("metric", "price") == "price"]
     rvol_alerts  = [a for a in active if a.get("metric") == "rvol"]
     ema_alerts   = [a for a in active if a.get("metric") == "ema_touch"]
+    # Las de señal NO se miran aquí: salen del escaneo nocturno y no cambian
+    # entre dos pasadas de 90 s. Su sitio es check_signal_alerts(), que corre
+    # una vez cuando entra la foto de la sesión.
 
     from services.cartera_service import fetch_live_prices
     prices = {}
@@ -745,6 +781,60 @@ def check_all_active_alerts() -> list:
 _METRIC_LABEL = {"price": "Precio", "rvol": "RVOL", "ema_touch": "Toque de EMA"}
 
 
+def check_signal_alerts(fecha: str = None) -> list:
+    """Las alertas de señal de la sesión que acaba de entrar.
+
+    Se llama UNA vez por sesión, desde `routers/ws.py` en cuanto el snapshot
+    diario escribe una fecha nueva. Devuelve las disparadas, con la misma forma
+    que `check_all_active_alerts()` para que el aviso por Telegram sea el mismo
+    camino.
+
+    `sesion_disparo` evita el bucle tonto: estas alertas son recurrentes (el
+    caso de uso es «avísame CADA VEZ que entre en Fase 2»), así que al pasar el
+    cooldown vuelven a 'active' — y la señal de esa foto sigue estando ahí hasta
+    que entre la sesión siguiente. Sin recordar con qué sesión se disparó, la
+    misma foto la dispararía otra vez.
+    """
+    from services.senales_service import senales_de_la_sesion
+
+    senales = senales_de_la_sesion(fecha)
+    if not senales:
+        return []
+    fecha_usada = fecha or _ultima_sesion_de_senales()
+
+    conn = _conn()
+    triggered = []
+    try:
+        _reactivate_recurring_alerts(conn)
+        conn.commit()
+        filas = conn.execute(
+            "SELECT * FROM alerts WHERE status = 'active' AND metric = 'senal'"
+        ).fetchall()
+        now_iso = datetime.now(timezone.utc).isoformat()
+        for fila in filas:
+            a = dict(fila)
+            if a.get("sesion_disparo") == fecha_usada:
+                continue                       # ya avisó con esta misma foto
+            if a.get("senal") not in senales.get(a["ticker"], []):
+                continue
+            conn.execute(
+                "UPDATE alerts SET status = 'triggered', triggered_at = ?, seen = 0, "
+                "sesion_disparo = ? WHERE id = ?", (now_iso, fecha_usada, a["id"]))
+            a["triggered_at"] = now_iso
+            a["sesion_disparo"] = fecha_usada
+            triggered.append(a)
+        conn.commit()
+        return triggered
+    finally:
+        conn.close()
+
+
+def _ultima_sesion_de_senales():
+    from services.snapshots_service import fechas_snapshot_ticker
+    fechas = fechas_snapshot_ticker(limite=1)
+    return fechas[0] if fechas else None
+
+
 def notify_triggered_alerts(triggered: list) -> None:
     """Envía un Telegram al dueño de cada alerta recién disparada -- solo a
     quien tenga la cuenta vinculada; quien no la tenga sigue viendo la
@@ -764,6 +854,14 @@ def notify_triggered_alerts(triggered: list) -> None:
         if not chat_id:
             continue
         metric_label = _METRIC_LABEL.get(a.get("metric", "price"), "Precio")
+        if a.get("metric") == "senal":
+            # Sin línea de precio: la señal es de la sesión cerrada, y poner un
+            # precio al lado invitaría a leerla como algo que pasa ahora mismo.
+            from services.senales_service import texto_de
+            enviar_telegram(f"🔔 *{a['ticker']}* — {texto_de(a.get('senal'))}\n"
+                            f"Sesión del {a.get('sesion_disparo') or 'cierre anterior'}",
+                            chat_id=chat_id)
+            continue
         if a.get("metric") == "ema_touch":
             detalle = f"cruzó su EMA{a.get('ema_period')}"
         else:

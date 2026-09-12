@@ -67,6 +67,10 @@ function pageShell() {
         + '<option value="price">Precio</option>'
         + '<option value="rvol">RVOL</option>'
         + '<option value="ema_touch">Toque de EMA</option>'
+        + '<option value="senal">Señal de la terminal</option>'
+        + '</select>'
+        + '<select id="alert-senal" style="display:none;background:var(--color-bg,#0a0a0a);border:1px solid var(--color-border);border-radius:var(--radius);padding:8px 10px;color:var(--color-text);font-family:var(--font-mono);font-size:12px;outline:none;">'
+        + Object.keys(SENAL_CORTA).map(k => '<option value="' + k + '">' + SENAL_CORTA[k] + '</option>').join('')
         + '</select>'
         + '<select id="alert-condition" style="background:var(--color-bg,#0a0a0a);border:1px solid var(--color-border);border-radius:var(--radius);padding:8px 10px;color:var(--color-text);font-family:var(--font-mono);font-size:12px;outline:none;">'
         + '<option value="above">Por encima de</option>'
@@ -325,6 +329,22 @@ function wireAddTicker(container) {
 
 // ── ALERTAS ──────────────────────────────────────────────────────────────────
 
+// Las señales que calcula la propia terminal. El texto largo vive en el
+// backend (services/senales_service.py), que es quien lo manda por Telegram;
+// aquí van las versiones cortas que caben en una celda de tabla y en un
+// desplegable. Si se añade una señal nueva, hay que tocar los dos sitios — y
+// un test lo comprueba, para que no aparezca una señal sin nombre en pantalla.
+const SENAL_CORTA = {
+    fase2:        'Entra en Fase 2',
+    fase4:        'Entra en Fase 4',
+    lider_rs:     'Entra en líderes RS',
+    sale_lider:   'Sale de líderes RS',
+    sma50_arriba: 'Recupera la SMA50',
+    sma50_abajo:  'Pierde la SMA50',
+    maximo_52:    'Máximo de 52 semanas',
+    minimo_52:    'Mínimo de 52 semanas',
+};
+
 const IMPACT_LABEL = { active: 'ACTIVA', triggered: 'DISPARADA', cancelled: 'CANCELADA' };
 const IMPACT_COLOR = { active: '#3b82f6', triggered: '#00ffad', cancelled: 'var(--color-muted)' };
 
@@ -343,18 +363,26 @@ async function loadAlerts(container) {
             const rows = data.data.map(a => {
                 const isRvol = a.metric === 'rvol';
                 const isEma  = a.metric === 'ema_touch';
-                const condLabel = isEma
-                    ? ('Toque de EMA' + esc(a.ema_period))
-                    : (a.condition === 'above' ? 'Por encima de ' : 'Por debajo de ') + (isRvol ? 'RVOL' : 'precio');
-                const targetFmt = isEma ? 'Cruce' : (isRvol ? Number(a.target_price).toFixed(2) + 'x' : '$' + Number(a.target_price).toFixed(2));
+                const isSenal = a.metric === 'senal';
+                const condLabel = isSenal
+                    ? 'Señal de la terminal'
+                    : (isEma
+                        ? ('Toque de EMA' + esc(a.ema_period))
+                        : (a.condition === 'above' ? 'Por encima de ' : 'Por debajo de ') + (isRvol ? 'RVOL' : 'precio'));
+                const targetFmt = isSenal ? esc(SENAL_CORTA[a.senal] || a.senal || '—')
+                                          : (isEma ? 'Cruce' : (isRvol ? Number(a.target_price).toFixed(2) + 'x' : '$' + Number(a.target_price).toFixed(2)));
                 const stColor   = IMPACT_COLOR[a.status] || 'var(--color-muted)';
                 const bg        = a.status === 'triggered' && !a.seen ? 'rgba(0,255,173,0.05)' : 'transparent';
                 const fmtTriggerPrice = (v) => isRvol ? v.toFixed(2) + 'x' : '$' + v.toFixed(2);
-                const detail    = a.status === 'triggered'
-                    ? ('Disparada a ' + (a.triggered_price != null ? fmtTriggerPrice(a.triggered_price) : '?') + ' el ' + esc(fmtFecha(a.triggered_at)))
-                    : ('Creada el ' + esc(fmtFecha(a.created_at)));
+                // Una señal no tiene precio de disparo: es de la sesión cerrada.
+                // Poner uno invitaría a leerla como algo que pasa ahora mismo.
+                const detail    = a.status !== 'triggered'
+                    ? ('Creada el ' + esc(fmtFecha(a.created_at)))
+                    : (isSenal
+                        ? ('En la sesión del ' + esc(a.sesion_disparo || fmtFecha(a.triggered_at)))
+                        : ('Disparada a ' + (a.triggered_price != null ? fmtTriggerPrice(a.triggered_price) : '?') + ' el ' + esc(fmtFecha(a.triggered_at))));
                 return '<div style="display:grid;grid-template-columns:90px 130px 110px 100px 1fr 40px;gap:8px;padding:8px 14px;border-bottom:1px solid var(--color-border);font-size:12px;align-items:center;background:' + bg + ';">'
-                    + '<div class="ticker-link" style="color:var(--color-accent);cursor:pointer;font-weight:500;" onclick="goToResearch(\'' + esc(a.ticker) + '\')">' + esc(a.ticker) + '</div>'
+                    + '<div class="ticker-link wl-ticker" data-ticker="' + esc(a.ticker) + '" style="color:var(--color-accent);cursor:pointer;font-weight:500;">' + esc(a.ticker) + '</div>'
                     + '<div style="color:var(--color-muted);">' + condLabel + '</div>'
                     + '<div style="text-align:right;color:var(--color-text);">' + targetFmt + '</div>'
                     + '<div style="color:' + stColor + ';font-size:10px;font-weight:600;">' + esc(IMPACT_LABEL[a.status] || a.status) + '</div>'
@@ -364,6 +392,11 @@ async function loadAlerts(container) {
             }).join('');
             el.innerHTML = shell('MIS ALERTAS', header + rows);
 
+            el.querySelectorAll('.wl-ticker').forEach(t => {
+                t.addEventListener('click', () => {
+                    window.__navigate('/research?ticker=' + encodeURIComponent(t.getAttribute('data-ticker')));
+                });
+            });
             el.querySelectorAll('.alert-remove-btn').forEach(btn => {
                 btn.addEventListener('click', async () => {
                     const id = btn.getAttribute('data-id');
@@ -403,26 +436,37 @@ function wireCreateAlert(container) {
     const price     = container.querySelector('#alert-price');
     const condition = container.querySelector('#alert-condition');
     const emaPeriod = container.querySelector('#alert-ema-period');
+    const senal     = container.querySelector('#alert-senal');
 
     metric.addEventListener('change', () => {
-        const isEma = metric.value === 'ema_touch';
-        price.style.display     = isEma ? 'none' : '';
-        condition.style.display = isEma ? 'none' : '';
+        const isEma   = metric.value === 'ema_touch';
+        const isSenal = metric.value === 'senal';
+        price.style.display     = (isEma || isSenal) ? 'none' : '';
+        condition.style.display = (isEma || isSenal) ? 'none' : '';
         emaPeriod.style.display = isEma ? '' : 'none';
+        senal.style.display     = isSenal ? '' : 'none';
         price.placeholder = metric.value === 'rvol' ? 'RVOL objetivo (ej. 2.5)' : 'Precio objetivo ($)';
+        // Decirlo aquí y no en una nota al pie: estas señales salen del escaneo
+        // nocturno, así que avisan con la sesión cerrada. Quien espere un aviso
+        // en el momento se llevaría un chasco a los tres días.
+        msg.style.color = 'var(--color-muted)';
+        msg.textContent = isSenal
+            ? 'Las señales se comprueban una vez al día, cuando cierra la sesión.'
+            : '';
     });
 
     btn.addEventListener('click', async () => {
         const ticker      = container.querySelector('#alert-ticker').value.trim().toUpperCase();
         const metricValue = metric.value;
         const isEma       = metricValue === 'ema_touch';
+        const isSenal     = metricValue === 'senal';
 
         if (!ticker) {
             msg.style.color = '#f23645';
             msg.textContent = 'Escribe un ticker';
             return;
         }
-        if (!isEma) {
+        if (!isEma && !isSenal) {
             const target = parseFloat(price.value);
             if (!target || target <= 0) {
                 msg.style.color = '#f23645';
@@ -435,9 +479,11 @@ function wireCreateAlert(container) {
         msg.style.color = 'var(--color-muted)';
         msg.textContent = 'Creando...';
         try {
-            const payload = isEma
-                ? { ticker, metric: metricValue, ema_period: parseInt(emaPeriod.value, 10) }
-                : { ticker, condition: condition.value, target_price: parseFloat(price.value), metric: metricValue };
+            const payload = isSenal
+                ? { ticker, metric: metricValue, senal: senal.value }
+                : (isEma
+                    ? { ticker, metric: metricValue, ema_period: parseInt(emaPeriod.value, 10) }
+                    : { ticker, condition: condition.value, target_price: parseFloat(price.value), metric: metricValue });
             const res  = await fetch('/api/v1/watchlist/alerts', {
                 method: 'POST', headers: authHeader(),
                 body: JSON.stringify(payload),
