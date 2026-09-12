@@ -90,6 +90,29 @@ def init_db():
             UNIQUE(user_id, ticker)
         )
     ''')
+    # `lista` y `nota` (Watchlist #19 y #16). Las listas NO tienen tabla propia
+    # a propósito: una lista es una etiqueta, existe mientras algún ticker la
+    # lleve y desaparece sola cuando se queda vacía. Sin tabla no hay que
+    # mantener sincronizadas dos cosas ni limpiar huérfanas.
+    #
+    # Un ticker vive en UNA lista: el UNIQUE(user_id, ticker) de arriba es de
+    # la tabla original y cambiarlo obligaría a reconstruirla entera en SQLite.
+    # No es solo comodidad — con el ticker único, todo lo que ya lee la
+    # watchlist (Research, Scanner, RS/RW, CANSLIM, Options, Congress, Insider)
+    # sigue viendo exactamente el mismo conjunto, y las alertas, que apuntan al
+    # ticker y no a la fila, no necesitan saber nada de listas.
+    for columna, tipo in (("lista", "TEXT NOT NULL DEFAULT 'Principal'"), ("nota", "TEXT")):
+        try:
+            conn.execute(f"ALTER TABLE watchlist ADD COLUMN {columna} {tipo}")
+        except sqlite3.OperationalError:
+            pass  # la columna ya existe
+    # Y ninguna fila sin lista, pase lo que pase. El ALTER de arriba rellena
+    # las que ya había, pero esto lo deja dicho como INVARIANTE en vez de como
+    # efecto secundario: a partir de aquí, todo lo que lea `lista` puede
+    # confiar en que hay un nombre, y renombrar no tiene que acordarse de los
+    # huecos.
+    conn.execute("UPDATE watchlist SET lista = ? WHERE lista IS NULL OR TRIM(lista) = ''",
+                 ("Principal",))
     conn.execute('''
         CREATE TABLE IF NOT EXISTS alerts (
             id               INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -137,23 +160,146 @@ def init_db():
     conn.close()
 
 
+# ── LISTAS Y NOTAS ───────────────────────────────────────────────────────────
+
+LISTA_POR_DEFECTO = "Principal"
+MAX_LISTAS   = 10
+MAX_NOTA     = 500
+LARGO_LISTA  = 24
+# Letras (con acentos y ñ), números, espacios y los tres signos que se usan de
+# verdad al nombrar una lista. Nada de comillas ni `<`: el nombre se pinta en
+# la pantalla y el escapado es la segunda defensa, no la primera.
+import re as _re
+_LISTA_RE = _re.compile(r"^[\wÁÉÍÓÚÜÑáéíóúüñ .\-]{1,%d}$" % LARGO_LISTA)
+
+
+def _limpiar_lista(nombre) -> str:
+    """El nombre de lista, normalizado. Vacío -> la de por defecto."""
+    nombre = " ".join((nombre or "").split())      # espacios de sobra fuera
+    return nombre or LISTA_POR_DEFECTO
+
+
+def _validar_lista(nombre) -> str:
+    nombre = _limpiar_lista(nombre)
+    if not _LISTA_RE.match(nombre):
+        raise ValueError(f"Nombre de lista inválido (máx. {LARGO_LISTA} caracteres, "
+                         f"letras, números, espacios, punto o guion)")
+    return nombre
+
+
+def _limpiar_nota(nota) -> str:
+    nota = (nota or "").strip()
+    return nota[:MAX_NOTA]
+
+
+def listas_de(user_id: int) -> list:
+    """[{nombre, n}] — las listas que EXISTEN, que son las que tienen tickers.
+
+    La de por defecto va SIEMPRE la primera y siempre sale, aunque esté vacía:
+    es el sitio donde cae lo que se añade sin decir nada, y en la pantalla es
+    la pestaña de casa. El resto, por orden alfabético."""
+    conn = _conn()
+    try:
+        filas = conn.execute(
+            "SELECT COALESCE(lista, ?) AS nombre, COUNT(*) AS n FROM watchlist "
+            "WHERE user_id = ? GROUP BY nombre ORDER BY nombre COLLATE NOCASE",
+            (LISTA_POR_DEFECTO, user_id)
+        ).fetchall()
+        listas = [dict(f) for f in filas]
+        principal = next((l for l in listas if l["nombre"] == LISTA_POR_DEFECTO),
+                         {"nombre": LISTA_POR_DEFECTO, "n": 0})
+        return [principal] + [l for l in listas if l["nombre"] != LISTA_POR_DEFECTO]
+    finally:
+        conn.close()
+
+
+def set_nota(user_id: int, ticker: str, nota: str) -> dict:
+    ticker = (ticker or "").strip().upper()
+    nota = _limpiar_nota(nota)
+    conn = _conn()
+    try:
+        cur = conn.execute("UPDATE watchlist SET nota = ? WHERE user_id = ? AND ticker = ?",
+                           (nota or None, user_id, ticker))
+        conn.commit()
+        if not cur.rowcount:
+            return {"ok": False, "error": "Ese ticker no está en tu watchlist"}
+        return {"ok": True, "ticker": ticker, "nota": nota}
+    finally:
+        conn.close()
+
+
+def mover_a_lista(user_id: int, ticker: str, lista: str) -> dict:
+    ticker = (ticker or "").strip().upper()
+    try:
+        lista = _validar_lista(lista)
+    except ValueError as e:
+        return {"ok": False, "error": str(e)}
+    conn = _conn()
+    try:
+        existentes = {l["nombre"] for l in listas_de(user_id)}
+        if lista not in existentes and len(existentes) >= MAX_LISTAS:
+            return {"ok": False, "error": f"Límite de {MAX_LISTAS} listas alcanzado"}
+        cur = conn.execute("UPDATE watchlist SET lista = ? WHERE user_id = ? AND ticker = ?",
+                           (lista, user_id, ticker))
+        conn.commit()
+        if not cur.rowcount:
+            return {"ok": False, "error": "Ese ticker no está en tu watchlist"}
+        return {"ok": True, "ticker": ticker, "lista": lista}
+    finally:
+        conn.close()
+
+
+def renombrar_lista(user_id: int, nombre: str, nuevo: str) -> dict:
+    """Renombrar es actualizar la etiqueta de sus tickers: no hay nada más que
+    una lista SEA. Si el nombre nuevo ya existe, las dos se funden en una, que
+    es lo que uno espera al renombrar «Semis» a «Semiconductores» cuando ya
+    tenía esa."""
+    nombre = _limpiar_lista(nombre)
+    try:
+        nuevo = _validar_lista(nuevo)
+    except ValueError as e:
+        return {"ok": False, "error": str(e)}
+    conn = _conn()
+    try:
+        # Sin COALESCE: `init_db()` garantiza que ninguna fila se queda sin
+        # lista, así que aquí no hay huecos que cubrir. Ponerlo «por si acaso»
+        # sería código que ningún test puede tumbar — comprobado con un
+        # sabotaje: quitarlo no rompía nada porque el caso no existe.
+        cur = conn.execute(
+            "UPDATE watchlist SET lista = ? WHERE user_id = ? AND lista = ?",
+            (nuevo, user_id, nombre))
+        conn.commit()
+        if not cur.rowcount:
+            return {"ok": False, "error": "Esa lista no existe"}
+        return {"ok": True, "lista": nuevo, "movidos": cur.rowcount}
+    finally:
+        conn.close()
+
+
 # ── WATCHLIST ────────────────────────────────────────────────────────────────
 
-def add_to_watchlist(user_id: int, ticker: str) -> dict:
+def add_to_watchlist(user_id: int, ticker: str, lista: str = None) -> dict:
     ticker = (ticker or "").strip().upper()
     if not ticker:
         return {"ok": False, "error": "Ticker vacío"}
+    try:
+        lista = _validar_lista(lista)
+    except ValueError as e:
+        return {"ok": False, "error": str(e)}
     conn = _conn()
     try:
         count = conn.execute("SELECT COUNT(*) FROM watchlist WHERE user_id = ?", (user_id,)).fetchone()[0]
         if count >= MAX_WATCHLIST_ITEMS:
             return {"ok": False, "error": f"Límite de {MAX_WATCHLIST_ITEMS} tickers en watchlist alcanzado"}
+        existentes = {l["nombre"] for l in listas_de(user_id)}
+        if lista not in existentes and len(existentes) >= MAX_LISTAS:
+            return {"ok": False, "error": f"Límite de {MAX_LISTAS} listas alcanzado"}
         conn.execute(
-            "INSERT OR IGNORE INTO watchlist (user_id, ticker, added_at) VALUES (?, ?, ?)",
-            (user_id, ticker, datetime.now(timezone.utc).isoformat())
+            "INSERT OR IGNORE INTO watchlist (user_id, ticker, added_at, lista) VALUES (?, ?, ?, ?)",
+            (user_id, ticker, datetime.now(timezone.utc).isoformat(), lista)
         )
         conn.commit()
-        return {"ok": True, "ticker": ticker}
+        return {"ok": True, "ticker": ticker, "lista": lista}
     finally:
         conn.close()
 
@@ -173,7 +319,8 @@ def get_watchlist_tickers(user_id: int) -> list:
     conn = _conn()
     try:
         rows = conn.execute(
-            "SELECT ticker, added_at FROM watchlist WHERE user_id = ? ORDER BY added_at DESC", (user_id,)
+            "SELECT ticker, added_at, COALESCE(lista, ?) AS lista, nota FROM watchlist "
+            "WHERE user_id = ? ORDER BY added_at DESC", (LISTA_POR_DEFECTO, user_id)
         ).fetchall()
         return [dict(r) for r in rows]
     finally:
@@ -186,7 +333,7 @@ def get_watchlist(user_id: int) -> dict:
     con ThreadPoolExecutor) en vez de duplicar lógica de precios."""
     items = get_watchlist_tickers(user_id)
     if not items:
-        return {"ok": True, "data": []}
+        return {"ok": True, "data": [], "listas": listas_de(user_id)}
     from services.cartera_service import fetch_live_prices
     tickers = [i["ticker"] for i in items]
     prices  = fetch_live_prices(tickers)
@@ -196,11 +343,13 @@ def get_watchlist(user_id: int) -> dict:
         data.append({
             "ticker":   i["ticker"],
             "added_at": i["added_at"],
+            "lista":    i.get("lista") or LISTA_POR_DEFECTO,
+            "nota":     i.get("nota") or "",
             "price":    p["price"] if p else None,
             "chg":      p["chg"]   if p else None,
             "ok":       p is not None,
         })
-    return {"ok": True, "data": data}
+    return {"ok": True, "data": data, "listas": listas_de(user_id)}
 
 
 # ── ALERTAS ──────────────────────────────────────────────────────────────────

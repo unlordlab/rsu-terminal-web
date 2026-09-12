@@ -124,9 +124,13 @@ QUÉ PUEDES HACER:
 ▸ Añadir cualquier ticker escribiéndolo arriba.
 ▸ Clic en el nombre del ticker para ir directo a su ficha en Research.
 ▸ Botón "＋ alerta" en cada fila para crear una alerta de precio sobre ese ticker sin tener que volver a escribirlo.
+▸ "nota" abre un recuadro para escribir por qué sigues ese valor: el nivel que esperas, la tesis, lo que sea. La nota se ve debajo del ticker sin tener que abrir nada.
+▸ Ahí mismo puedes moverlo a otra lista, o crear una nueva sobre la marcha.
 ▸ Quitar un ticker con la ✕.
 
-LÍMITE: hasta 50 tickers por usuario. Es una lista personal — no se comparte con el resto de la comunidad.`
+LISTAS: puedes repartir tus tickers en hasta 10 listas (por sector, por horizonte, por lo que te sirva) y cambiar de una a otra con las pestañas de arriba. Un ticker vive en una sola lista. Una lista existe mientras tenga tickers: cuando se queda vacía, desaparece sola. Lo que añadas mientras miras una lista cae en esa lista.
+
+LÍMITE: hasta 50 tickers por usuario, contando todas las listas. Es una lista personal — no se comparte con el resto de la comunidad.`
     },
 
     "price-alerts": {

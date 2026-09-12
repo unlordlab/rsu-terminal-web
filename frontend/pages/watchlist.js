@@ -103,6 +103,50 @@ function error(msg) { return errorMessage(msg); }
 
 // ── WATCHLIST ────────────────────────────────────────────────────────────────
 
+// La lista que se está mirando. 'Todas' no es una lista de verdad: es la vista
+// sin filtro, y es la que se enseña al entrar para que quien no use listas no
+// note ningún cambio.
+const TODAS = 'Todas';
+let listaActiva = TODAS;
+
+function barraDeListas(listas, total) {
+    const pestana = (nombre, n, activa) =>
+        '<button class="wl-lista-tab" data-lista="' + esc(nombre) + '" style="'
+        + 'background:' + (activa ? 'var(--color-accent)' : 'transparent') + ';'
+        + 'color:' + (activa ? '#000' : 'var(--color-muted)') + ';'
+        + 'border:1px solid ' + (activa ? 'var(--color-accent)' : 'var(--color-border)') + ';'
+        + 'border-radius:var(--radius);padding:4px 10px;font-family:var(--font-mono);'
+        + 'font-size:11px;cursor:pointer;">' + esc(nombre) + ' <span style="opacity:.7;">'
+        + n + '</span></button>';
+    // Con una sola lista no hay nada que elegir: la barra sobra y se calla.
+    if (listas.length <= 1) return '';
+    return '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px;align-items:center;">'
+        + pestana(TODAS, total, listaActiva === TODAS)
+        + listas.map(l => pestana(l.nombre, l.n, listaActiva === l.nombre)).join('')
+        + '</div>';
+}
+
+function panelDetalle(w, listas) {
+    const opciones = listas.map(l => '<option value="' + esc(l.nombre) + '"'
+        + (l.nombre === w.lista ? ' selected' : '') + '>' + esc(l.nombre) + '</option>').join('');
+    return '<div class="wl-detalle" data-ticker="' + esc(w.ticker) + '" hidden '
+        + 'style="padding:10px 14px;border-bottom:1px solid var(--color-border);background:rgba(255,255,255,.02);">'
+        + '<div style="display:flex;gap:8px;align-items:flex-start;flex-wrap:wrap;">'
+        + '<textarea class="wl-nota" maxlength="500" rows="2" placeholder="Tu nota sobre ' + esc(w.ticker)
+        + ' (por qué lo sigues, el nivel que esperas...)" style="flex:1;min-width:220px;background:var(--color-bg,#0a0a0a);'
+        + 'border:1px solid var(--color-border);border-radius:var(--radius);padding:7px 10px;color:var(--color-text);'
+        + 'font-family:var(--font-mono);font-size:12px;outline:none;resize:vertical;">' + esc(w.nota || '') + '</textarea>'
+        + '<div style="display:flex;flex-direction:column;gap:6px;">'
+        + '<select class="wl-lista-sel" style="background:var(--color-bg,#0a0a0a);border:1px solid var(--color-border);'
+        + 'border-radius:var(--radius);padding:6px 8px;color:var(--color-text);font-family:var(--font-mono);font-size:11px;outline:none;">'
+        + opciones + '<option value="__nueva__">＋ lista nueva…</option></select>'
+        + '<button class="wl-guardar" style="background:var(--color-accent);color:#000;border:none;'
+        + 'border-radius:var(--radius);padding:6px 14px;font-family:var(--font-mono);font-size:11px;cursor:pointer;">GUARDAR</button>'
+        + '</div></div>'
+        + '<div class="wl-detalle-msg" style="font-size:10px;color:var(--color-muted);margin-top:5px;"></div>'
+        + '</div>';
+}
+
 async function loadWatchlist(container) {
     const el = container.querySelector('#wl-table');
     el.innerHTML = shell('TICKERS SEGUIDOS', loading());
@@ -110,13 +154,19 @@ async function loadWatchlist(container) {
         const res  = await fetch('/api/v1/watchlist', { headers: authHeader() });
         const data = await res.json();
         if (!data.ok) throw new Error(data.error || 'Sin datos');
+        const listas = data.listas || [];
+        if (listaActiva !== TODAS && !listas.some(l => l.nombre === listaActiva)) {
+            listaActiva = TODAS;          // la lista se quedó vacía mientras mirabas
+        }
         if (!data.data.length) {
             el.innerHTML = shell('TICKERS SEGUIDOS', '<div style="padding:1.5rem;text-align:center;color:var(--color-muted);font-size:12px;">Todavía no sigues ningún ticker. Añade uno arriba ↑</div>');
             return;
         }
-        const header = '<div style="display:grid;grid-template-columns:1fr 100px 90px 90px 40px;gap:8px;padding:7px 14px;border-bottom:1px solid var(--color-border);font-size:10px;color:var(--color-muted);">'
-            + '<div>TICKER</div><div style="text-align:right;">PRECIO</div><div style="text-align:right;">VAR%</div><div style="text-align:center;">ALERTA</div><div></div></div>';
-        const rows = data.data.map(w => {
+        const visibles = listaActiva === TODAS
+            ? data.data : data.data.filter(w => w.lista === listaActiva);
+        const header = '<div style="display:grid;grid-template-columns:1fr 100px 90px 90px 46px 34px;gap:8px;padding:7px 14px;border-bottom:1px solid var(--color-border);font-size:10px;color:var(--color-muted);">'
+            + '<div>TICKER</div><div style="text-align:right;">PRECIO</div><div style="text-align:right;">VAR%</div><div style="text-align:center;">ALERTA</div><div></div><div></div></div>';
+        const rows = visibles.map(w => {
             // chg puede ser null teniendo precio: la fuente de respaldo da la
             // cotización pero no la variación del día. Antes `Math.abs(null)`
             // daba 0 y se pintaba un "▲ 0.00%" que parecía una sesión plana
@@ -125,15 +175,36 @@ async function loadWatchlist(container) {
             const up     = (w.chg || 0) >= 0;
             const color  = hayChg ? (up ? 'var(--color-accent)' : '#f23645') : 'var(--color-muted)';
             const arrow  = up ? '▲' : '▼';
-            return '<div style="display:grid;grid-template-columns:1fr 100px 90px 90px 40px;gap:8px;padding:8px 14px;border-bottom:1px solid var(--color-border);font-size:12px;align-items:center;">'
-                + '<div class="ticker-link" style="color:var(--color-accent);cursor:pointer;font-weight:500;" onclick="goToResearch(\'' + esc(w.ticker) + '\')">' + esc(w.ticker) + '</div>'
+            // La nota, asomada bajo el ticker: si hay que abrir algo para
+            // verla, es como no haberla escrito. Y la etiqueta de la lista
+            // solo cuando se están viendo todas, que es cuando distingue algo.
+            const nota = w.nota
+                ? '<div style="color:var(--color-muted);font-size:10px;line-height:1.4;margin-top:2px;'
+                  + 'white-space:nowrap;overflow:hidden;text-overflow:ellipsis;" title="' + esc(w.nota) + '">'
+                  + esc(w.nota) + '</div>'
+                : '';
+            const etiqueta = (listaActiva === TODAS && w.lista && w.lista !== 'Principal')
+                ? ' <span style="color:var(--color-muted);font-size:9px;border:1px solid var(--color-border);'
+                  + 'border-radius:3px;padding:1px 5px;">' + esc(w.lista) + '</span>'
+                : '';
+            return '<div style="display:grid;grid-template-columns:1fr 100px 90px 90px 46px 34px;gap:8px;padding:8px 14px;border-bottom:1px solid var(--color-border);font-size:12px;align-items:center;">'
+                + '<div><span class="ticker-link wl-ticker" data-ticker="' + esc(w.ticker) + '" style="color:var(--color-accent);cursor:pointer;font-weight:500;">' + esc(w.ticker) + '</span>' + etiqueta + nota + '</div>'
                 + '<div style="text-align:right;color:var(--color-text);">' + (w.ok ? '$' + w.price.toFixed(2) : '—') + '</div>'
                 + '<div style="text-align:right;color:' + color + ';">' + (hayChg ? arrow + ' ' + Math.abs(w.chg).toFixed(2) + '%' : '—') + '</div>'
                 + '<div style="text-align:center;"><button class="wl-alert-btn" data-ticker="' + esc(w.ticker) + '" style="background:transparent;border:1px solid var(--color-border);color:var(--color-muted);border-radius:3px;padding:3px 8px;font-size:10px;cursor:pointer;">＋ alerta</button></div>'
+                // Una palabra en vez de un icono: «✎» se pinta como emoji en
+                // media máquina y ahí el color deja de decir si hay nota.
+                + '<div style="text-align:center;"><button class="wl-edit-btn" data-ticker="' + esc(w.ticker) + '" style="background:transparent;border:none;color:' + (w.nota ? 'var(--color-accent)' : 'var(--color-muted)') + ';cursor:pointer;font-size:10px;font-family:var(--font-mono);" title="Nota y lista">nota</button></div>'
                 + '<div style="text-align:center;"><button class="wl-remove-btn" data-ticker="' + esc(w.ticker) + '" style="background:transparent;border:none;color:var(--color-muted);cursor:pointer;font-size:14px;" title="Quitar de watchlist">✕</button></div>'
-                + '</div>';
+                + '</div>'
+                + panelDetalle(w, listas);
         }).join('');
-        el.innerHTML = shell('TICKERS SEGUIDOS', header + rows);
+        const vacia = visibles.length ? '' :
+            '<div style="padding:1.2rem;text-align:center;color:var(--color-muted);font-size:12px;">'
+            + 'Esta lista está vacía.</div>';
+        el.innerHTML = shell('TICKERS SEGUIDOS',
+                             barraDeListas(listas, data.data.length) + header + (rows || vacia));
+        wireListas(container, el);
 
         el.querySelectorAll('.wl-remove-btn').forEach(btn => {
             btn.addEventListener('click', async () => {
@@ -157,6 +228,70 @@ async function loadWatchlist(container) {
     }
 }
 
+// Pestañas de lista, panel de nota y guardado. Sin `onclick` con datos dentro:
+// el navegador descodifica el atributo ANTES de ejecutarlo, así que ahí escapar
+// HTML no protege (Watchlist #22) — y aquí el contenido lo escribe el usuario.
+function wireListas(container, el) {
+    el.querySelectorAll('.wl-lista-tab').forEach(tab => {
+        tab.addEventListener('click', () => {
+            listaActiva = tab.getAttribute('data-lista');
+            loadWatchlist(container);
+        });
+    });
+
+    el.querySelectorAll('.wl-ticker').forEach(t => {
+        t.addEventListener('click', () => {
+            window.__navigate('/research?ticker=' + encodeURIComponent(t.getAttribute('data-ticker')));
+        });
+    });
+
+    el.querySelectorAll('.wl-edit-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+            const ticker  = btn.getAttribute('data-ticker');
+            const detalle = el.querySelector('.wl-detalle[data-ticker="' + CSS.escape(ticker) + '"]');
+            if (!detalle) return;
+            detalle.hidden = !detalle.hidden;
+            if (!detalle.hidden) detalle.querySelector('.wl-nota').focus();
+        });
+    });
+
+    el.querySelectorAll('.wl-detalle').forEach(detalle => {
+        const ticker = detalle.getAttribute('data-ticker');
+        const sel    = detalle.querySelector('.wl-lista-sel');
+        const msg    = detalle.querySelector('.wl-detalle-msg');
+        // «＋ lista nueva…» pregunta el nombre y, si se cancela, vuelve a donde
+        // estaba: quedarse con la opción fantasma seleccionada movería el
+        // ticker a una lista llamada "__nueva__".
+        let anterior = sel.value;
+        sel.addEventListener('change', () => {
+            if (sel.value !== '__nueva__') { anterior = sel.value; return; }
+            const nombre = (window.prompt('Nombre de la lista nueva') || '').trim();
+            if (!nombre) { sel.value = anterior; return; }
+            const opcion = document.createElement('option');
+            opcion.value = nombre;
+            opcion.textContent = nombre;
+            sel.insertBefore(opcion, sel.lastElementChild);
+            sel.value = nombre;
+            anterior = nombre;
+        });
+        detalle.querySelector('.wl-guardar').addEventListener('click', async () => {
+            const cuerpo = { nota: detalle.querySelector('.wl-nota').value, lista: sel.value };
+            msg.textContent = 'Guardando…';
+            try {
+                const res  = await fetch('/api/v1/watchlist/' + encodeURIComponent(ticker), {
+                    method: 'PUT',
+                    headers: { ...authHeader(), 'Content-Type': 'application/json' },
+                    body: JSON.stringify(cuerpo) });
+                const data = await res.json();
+                if (!data.ok) { msg.textContent = data.error || 'No se pudo guardar'; return; }
+                loadWatchlist(container);
+            } catch (e) {
+                msg.textContent = 'Error de red: ' + e.message;
+            }
+        });
+    });
+}
+
 function wireAddTicker(container) {
     const input = container.querySelector('#wl-add-input');
     const btn   = container.querySelector('#wl-add-btn');
@@ -165,7 +300,12 @@ function wireAddTicker(container) {
         if (!ticker) return;
         btn.disabled = true;
         try {
-            const res  = await fetch('/api/v1/watchlist', { method: 'POST', headers: authHeader(), body: JSON.stringify({ ticker }) });
+            // Lo que se añade cae en la lista que se está mirando: si estás en
+            // «Semis» y escribes NVDA, ahí es donde lo quieres. Con la vista
+            // «Todas» va a la de por defecto, como siempre.
+            const cuerpo = { ticker };
+            if (listaActiva !== TODAS) cuerpo.lista = listaActiva;
+            const res  = await fetch('/api/v1/watchlist', { method: 'POST', headers: authHeader(), body: JSON.stringify(cuerpo) });
             const data = await res.json();
             if (data.ok) {
                 input.value = '';
