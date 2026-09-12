@@ -380,6 +380,19 @@ function renderMovimientos(d) {
         let mk = '';
         if (m.en_cartera)   mk += '<span title="En Cartera" style="font-size:10px;">💼</span>';
         if (m.in_watchlist) mk += '<span title="En tu Watchlist" style="font-size:10px;">⭐</span>';
+        // El percentil es un puesto, no una nota: se sube de puesto también
+        // cuando los demás caen más. Cuando eso pasa —el puesto va hacia un
+        // lado y la fuerza real hacia el otro— se dice, porque si no un valor
+        // que ha perdido un 8% aparece en «nuevos líderes» igual que uno que
+        // ha ganado un 25%.
+        if (m.contra_corriente) {
+            const sube = m.variacion >= 0;
+            mk += '<span title="' + (sube
+                    ? 'Sube de puesto aunque su fuerza frente al índice ha bajado: ha subido porque el resto ha caído más'
+                    : 'Baja de puesto aunque su fuerza frente al índice ha subido: ha bajado porque el resto ha subido más')
+                + '" style="color:var(--color-muted);font-size:9px;margin-left:4px;">'
+                + (sube ? '↓fuerza' : '↑fuerza') + '</span>';
+        }
         return '<div style="display:grid;grid-template-columns:1fr 62px 16px 62px 60px;gap:6px;padding:5px 12px;border-top:1px solid var(--color-border);font-size:11px;align-items:center;">'
             + '<span class="ticker-link" onclick="window.__navigate(\'/research?ticker=' + esc(m.ticker) + '\')" style="color:var(--color-accent);cursor:pointer;">' + esc(m.ticker) + mk + '</span>'
             + '<span style="color:var(--color-muted);text-align:right;">' + esc(m.rs_previo) + '</span>'
@@ -389,10 +402,18 @@ function renderMovimientos(d) {
             + '</div>';
     };
 
-    const bloque = (titulo, filas, vacio, color) =>
+    // `total` es cuántos cruzaron DE VERDAD. La lista llega cortada en 20, y
+    // rotular el bloque con las filas que caben decía «(20)» los días de mucha
+    // rotación como si esos fueran todos los cruces. Medido sobre 263 ventanas
+    // del último año: mediana 15 por lado, máximo 32, y el 15% de los días pasa
+    // de 20. Cuando se recorta, se dice: «(20 de 27)».
+    const bloque = (titulo, filas, vacio, color, total) =>
         '<div style="background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius);overflow:hidden;">'
         + '<div style="padding:8px 12px;border-bottom:1px solid var(--color-border);color:' + color + ';font-size:11px;letter-spacing:0.06em;">'
-        + esc(titulo) + ' <span style="color:var(--color-muted);">(' + filas.length + ')</span></div>'
+        + esc(titulo) + ' <span style="color:var(--color-muted);" title="'
+        + (total > filas.length ? 'Cruzaron ' + esc(total) + '; se enseñan los ' + filas.length + ' más extremos' : '')
+        + '">(' + filas.length
+        + (total > filas.length ? ' de ' + esc(total) : '') + ')</span></div>'
         + (filas.length ? filas.map(fila).join('')
             : '<div style="padding:10px 12px;color:var(--color-muted);font-size:11px;">' + esc(vacio) + '</div>')
         + '</div>';
@@ -415,11 +436,15 @@ function renderMovimientos(d) {
         + avisoMuestra
         + '<div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem;margin-bottom:1rem;">'
         + bloque('NUEVOS LÍDERES · cruzan el ' + d.umbral_lider + ' al alza', d.nuevos_lideres,
-                 'Ninguno ha entrado en el grupo de líderes en este periodo.', 'var(--color-accent)')
+                 'Ninguno ha entrado en el grupo de líderes en este periodo.', 'var(--color-accent)',
+                 d.total_alza)
         + bloque('PIERDEN EL LIDERAZGO · caen por debajo del ' + d.umbral_lider, d.lideres_perdidos,
-                 'Ninguno ha salido del grupo de líderes en este periodo.', '#f23645')
+                 'Ninguno ha salido del grupo de líderes en este periodo.', '#f23645',
+                 d.total_baja)
         + '</div>'
         + '<div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem;">'
+        // Estos dos son un top por definición ("los que más"), no un recuento:
+        // no hay total que enseñar.
         + bloque('LOS QUE MÁS SUBEN', d.mas_suben, 'Sin datos.', 'var(--color-secondary)')
         + bloque('LOS QUE MÁS BAJAN', d.mas_bajan, 'Sin datos.', 'var(--color-secondary)')
         + '</div></div>';

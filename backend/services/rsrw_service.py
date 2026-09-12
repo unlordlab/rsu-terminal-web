@@ -385,7 +385,7 @@ def get_rs_movimientos(ventana: int = 10) -> dict:
     en el valor subyacente. Sin esa comprobación esto estaría mezclando dos
     varas de medir, que es el error que costó caro en CANSLIM #6.
     """
-    from services.snapshots_service import fechas_snapshot_ticker, rs_pct_en_fecha
+    from services.snapshots_service import fechas_snapshot_ticker, rs_datos_en_fecha
 
     fechas = fechas_snapshot_ticker(limite=max(ventana, 2))
     if len(fechas) < 2:
@@ -397,19 +397,39 @@ def get_rs_movimientos(ventana: int = 10) -> dict:
 
     fecha_hoy   = fechas[0]
     fecha_antes = fechas[-1]          # la más antigua DENTRO de la ventana
-    hoy   = rs_pct_en_fecha(fecha_hoy)
-    antes = rs_pct_en_fecha(fecha_antes)
+    hoy   = rs_datos_en_fecha(fecha_hoy)
+    antes = rs_datos_en_fecha(fecha_antes)
 
     movimientos = []
-    for ticker, rs_hoy in hoy.items():
-        rs_antes = antes.get(ticker)
-        if rs_antes is None:
+    for ticker, d_hoy in hoy.items():
+        d_antes = antes.get(ticker)
+        if d_antes is None:
             continue          # no estaba en el universo entonces: no hay variación
+        rs_hoy, rs_antes = d_hoy["pct"], d_antes["pct"]
+        variacion = round(rs_hoy - rs_antes, 1)
+        # LA FUERZA EN CRUDO, AL LADO DEL PERCENTIL. El percentil es una
+        # posición dentro del universo, así que se cruza el 80 hacia arriba de
+        # dos maneras muy distintas: subiendo, o quedándose quieto mientras el
+        # resto cae. El 12/09/2026, de los diez «nuevos líderes» del panel, DOS
+        # eran del segundo tipo -- ARES (-8,27% en la ventana, con su score
+        # bajando de 8,35 a 8,16) y REGN (-1,79%, de 8,27 a 7,82)-- y se
+        # presentaban igual que SWKS, que había subido un 24,75%. El dato que
+        # los separa ya estaba guardado en `snapshot_ticker.rs_score`; solo no
+        # se leía. Ver RS/RW #24.
+        s_hoy, s_antes = d_hoy.get("score"), d_antes.get("score")
+        fuerza = (round(s_hoy - s_antes, 2)
+                  if s_hoy is not None and s_antes is not None else None)
         movimientos.append({
             "ticker":     ticker,
             "rs_actual":  round(rs_hoy, 1),
             "rs_previo":  round(rs_antes, 1),
-            "variacion":  round(rs_hoy - rs_antes, 1),
+            "variacion":  variacion,
+            "fuerza":     fuerza,
+            # Solo cuando los dos signos se contradicen Y hay dato de las dos
+            # sesiones: sin score guardado no se marca nada, que es distinto de
+            # marcar que todo va a la par.
+            "contra_corriente": bool(fuerza is not None and variacion != 0 and fuerza != 0
+                                     and (variacion > 0) != (fuerza > 0)),
             "cruce_alza": rs_antes <  UMBRAL_LIDER  and rs_hoy >= UMBRAL_LIDER,
             "cruce_baja": rs_antes >= UMBRAL_LIDER  and rs_hoy <  UMBRAL_LIDER,
         })
@@ -429,6 +449,13 @@ def get_rs_movimientos(ventana: int = 10) -> dict:
         "fiable":          len(fechas) >= MIN_SESIONES_FIABLE,
         "umbral_lider":    UMBRAL_LIDER,
         "comparados":      len(movimientos),
+        # CUÁNTOS CRUZARON DE VERDAD. Las listas se cortan en 20 y la pantalla
+        # rotulaba el bloque con las filas que le llegaban, así que los días de
+        # mucha rotación decía «(20)» como si esos fueran todos. Medido sobre
+        # 263 ventanas de 10 sesiones del último año: la mediana son 15 cruces
+        # por lado, el máximo 32, y en el 15% de los días pasan de 20. Ver #23.
+        "total_alza":      len(nuevos),
+        "total_baja":      len(perdidos),
         "nuevos_lideres":  _tag_cartera(nuevos[:20]),
         "lideres_perdidos": _tag_cartera(perdidos[:20]),
         "mas_suben":       _tag_cartera(por_variacion[:15]),

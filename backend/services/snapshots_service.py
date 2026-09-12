@@ -627,16 +627,27 @@ def fechas_snapshot_ticker(limite: int = 60) -> list:
         conn.close()
 
 
-def rs_pct_en_fecha(fecha: str) -> dict:
-    """{ticker: rs_pct} de una sesión concreta. Se excluyen los nulos: un
-    ticker sin percentil ese día no puede compararse, y arrastrarlo como 0
-    lo convertiría en una caída inventada de 80 puntos."""
+def rs_datos_en_fecha(fecha: str) -> dict:
+    """{ticker: {"pct": …, "score": …}} de una sesión concreta.
+
+    Se excluyen los nulos de percentil: un ticker sin percentil ese día no
+    puede compararse, y arrastrarlo como 0 lo convertiría en una caída
+    inventada de 80 puntos.
+
+    El percentil es una POSICIÓN: se cruza el 80 hacia arriba sin haber
+    mejorado, si los demás caen más. El `rs_score` es la fuerza en crudo y es
+    lo único que distingue un caso del otro, así que las dos cifras viajan
+    juntas — antes esta función devolvía solo el percentil y el score se
+    quedaba en la base sin que nadie lo leyera. Puede venir a None en las
+    sesiones anteriores a que existiera la columna: quien lo use tiene que
+    aguantar el hueco sin inventarse nada.
+    """
     conn = _conn()
     try:
         return {
-            r["ticker"]: r["rs_pct"]
+            r["ticker"]: {"pct": r["rs_pct"], "score": r["rs_score"]}
             for r in conn.execute(
-                "SELECT ticker, rs_pct FROM snapshot_ticker "
+                "SELECT ticker, rs_pct, rs_score FROM snapshot_ticker "
                 "WHERE fecha = ? AND rs_pct IS NOT NULL", (fecha,)
             ).fetchall()
         }

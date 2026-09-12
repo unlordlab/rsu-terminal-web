@@ -1713,11 +1713,17 @@ LOS CUATRO BLOQUES:
 POR QUÉ EL UMBRAL ES 80:
 Es exactamente el mismo corte que separa líderes de no líderes en la tabla de arriba. Si aquí se usara otro número, estarías viendo cruces de una frontera que no aparece en ninguna otra parte de la pantalla.
 
+LA MARCA «↓fuerza» (Y «↑fuerza»):
+El percentil es un puesto, no una nota. Se sube de puesto de dos maneras muy distintas: subiendo tú, o quedándote quieto mientras el resto cae. Cuando el puesto va hacia un lado y la fuerza real frente al índice va hacia el otro, la fila lo dice con esa marca. Un valor con «↓fuerza» entre los nuevos líderes ha entrado por la puerta de atrás: está ahí porque los demás lo han hecho peor, no porque él lo esté haciendo bien.
+
+EL RECUENTO DEL TÍTULO:
+Entre paréntesis van los que se enseñan. Los días de mucha rotación cruzan más de los que caben en la lista, y entonces pone «20 de 27»: los 20 más extremos de 27 que cruzaron.
+
 CUIDADO CON LAS VENTANAS CORTAS:
 El percentil es una posición relativa, así que se mueve también cuando suben los demás — un valor puede perder cinco puntos sin haber bajado de precio. Con pocas sesiones guardadas, parte de lo que ves es ruido, y la pantalla lo avisa cuando es el caso. El histórico se va formando con cada scan nocturno y la señal mejora con el tiempo.
 
 DE DÓNDE SALEN LOS DATOS:
-De los registros que la terminal guarda cada noche con el percentil de las ~500 acciones del índice. No se recalcula nada: se leen dos fotos y se restan.`
+De los registros que la terminal guarda cada noche con el percentil y la fuerza en crudo de las ~500 acciones del índice. No se recalcula nada: se leen dos fotos y se restan.`
     },
 
     "rsrw-rotacion": {
