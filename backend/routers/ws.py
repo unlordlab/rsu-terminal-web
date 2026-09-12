@@ -363,7 +363,13 @@ async def broadcast_cartera_loop():
 # Watchlist 21/07/2026.
 async def alerts_check_loop():
     while True:
-        await asyncio.sleep(90)
+        # Cada 90 s en sesión, cada 15 min fuera — ver
+        # watchlist_service.intervalo_comprobacion_alertas(). Con el mercado
+        # cerrado el precio que se compara es el cierre de la última barra y no
+        # se mueve: preguntarlo cada 90 s era pedirle a Yahoo, 960 veces por
+        # fin de semana, un número que ya se sabía. Watchlist #13.
+        from services.watchlist_service import intervalo_comprobacion_alertas
+        await asyncio.sleep(intervalo_comprobacion_alertas())
         try:
             from services.watchlist_service import check_all_active_alerts, notify_triggered_alerts
             loop = asyncio.get_event_loop()

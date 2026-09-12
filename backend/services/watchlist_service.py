@@ -29,6 +29,49 @@ EMA_PERIODS      = (10, 20, 50, 200)
 # precio simplemente cerca, más estrecho perdería toques reales entre pasadas.
 EMA_TOUCH_TOLERANCE_PCT = 0.5
 
+# ── CADA CUÁNTO SE MIRAN LAS ALERTAS ─────────────────────────────────────────
+#
+# EL CASO (Watchlist #13). El bucle de `routers/ws.py` preguntaba cada 90
+# segundos las 24 horas, fines de semana y festivos incluidos. Con el mercado
+# cerrado eso no puede encontrar nada: `cartera_service._fetch_price_single()`
+# solo pide precio en vivo entre las 9:30 y las 16:00 ET; fuera de ahí devuelve
+# el cierre de la última barra diaria, que no se mueve. O sea, 960 pasadas cada
+# fin de semana preguntándole a Yahoo por un número que ya se sabe.
+#
+# No se apaga, se ESPACIA: hay alertas que se reactivan solas (las recurrentes)
+# y tickers que sí cotizan fuera de hora, así que dejar de mirar del todo
+# cambiaría el comportamiento. Y el intervalo largo se recorta para caer justo
+# en la apertura: dormir 15 minutos a las 9:25 dejaría ciega la media hora más
+# movida del día.
+INTERVALO_ALERTAS_EN_SESION = 90
+INTERVALO_ALERTAS_FUERA     = 900      # 15 min
+_APERTURA = (9, 30)
+_CIERRE   = (16, 0)
+
+
+def _en_sesion(now_et) -> bool:
+    from time_utils import _hay_sesion_hoy
+    if not _hay_sesion_hoy(now_et):
+        return False
+    minutos = now_et.hour * 60 + now_et.minute
+    return _APERTURA[0] * 60 + _APERTURA[1] <= minutos < _CIERRE[0] * 60 + _CIERRE[1]
+
+
+def intervalo_comprobacion_alertas(now_et=None) -> int:
+    """Segundos hasta la siguiente pasada del comprobador de alertas."""
+    now_et = now_et or datetime.now(ZoneInfo("America/New_York"))
+    if _en_sesion(now_et):
+        return INTERVALO_ALERTAS_EN_SESION
+    from time_utils import _hay_sesion_hoy
+    minutos = now_et.hour * 60 + now_et.minute
+    if _hay_sesion_hoy(now_et) and minutos < _APERTURA[0] * 60 + _APERTURA[1]:
+        faltan = (_APERTURA[0] * 60 + _APERTURA[1] - minutos) * 60 - now_et.second
+        # Sin suelo de 90: a un minuto de abrir, esperar 90 s llegaría medio
+        # minuto tarde a la apertura. Una pasada de más no le cuesta nada a
+        # nadie; llegar tarde al primer movimiento del día, sí.
+        return max(5, min(INTERVALO_ALERTAS_FUERA, faltan))
+    return INTERVALO_ALERTAS_FUERA
+
 
 def _conn():
     conn = sqlite3.connect(DB_PATH)

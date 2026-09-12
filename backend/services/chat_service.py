@@ -24,7 +24,7 @@ import re
 import json
 import math
 import requests
-from datetime import datetime
+from datetime import datetime, timedelta
 from collections import Counter
 
 DB_PATH = os.path.join(os.path.dirname(__file__), '..', 'chat_historial.db')
@@ -198,6 +198,55 @@ def _llamar_groq(system_prompt, historial_mensajes, mensaje_nuevo):
 
 # ── API PÚBLICA DEL SERVICIO ─────────────────────────────────────────────────
 
+# ── EL TOPE POR USUARIO ──────────────────────────────────────────────────────
+#
+# EL CASO (Watchlist #10). El chat solo tenía el `rate_limit` global del router
+# y el manejo del 429 de Groq: NADA impedía que una sola cuenta se pasara el día
+# preguntando. El coste no es solo de dinero — los límites de Groq son por
+# minuto y por modelo, así que un usuario a fuego agota el chat DE TODOS.
+#
+# Ventana MÓVIL de 24 horas, no «se reinicia a medianoche»: medianoche ¿de
+# dónde? La base guarda UTC y quien pregunta está en Madrid, así que un corte
+# por días naturales significaría «a las 2 de la madrugada» sin que eso le
+# diga nada a nadie. Además, con un contador que se reinicia a una hora fija,
+# el tope real se duplica pegando dos ráfagas a un lado y otro del corte.
+#
+# 40 preguntas en 24 h es holgado para una persona (el chat responde sobre la
+# terminal, no es un asistente de escritura) y corta el abuso en seco.
+LIMITE_PREGUNTAS_24H = 40
+
+
+def _preguntas_ultimas_24h(conn, usuario: str):
+    """(cuántas lleva, cuándo se libera una plaza). El segundo valor es None si
+    todavía no ha llegado al tope."""
+    desde = (datetime.utcnow() - timedelta(hours=24)).isoformat()
+    filas = conn.execute(
+        "SELECT creado_en FROM mensajes WHERE usuario = ? AND rol = 'user' "
+        "AND creado_en >= ? ORDER BY creado_en ASC", (usuario, desde)
+    ).fetchall()
+    if len(filas) < LIMITE_PREGUNTAS_24H:
+        return len(filas), None
+    # La plaza se libera cuando la más antigua de las que cuentan cumple 24 h.
+    mas_antigua = filas[len(filas) - LIMITE_PREGUNTAS_24H]["creado_en"]
+    try:
+        libre = datetime.fromisoformat(mas_antigua) + timedelta(hours=24)
+    except ValueError:
+        libre = None
+    return len(filas), libre
+
+
+def _texto_de_espera(libre) -> str:
+    if libre is None:
+        return "Vuelve a intentarlo más tarde."
+    faltan = (libre - datetime.utcnow()).total_seconds()
+    if faltan <= 60:
+        return "Puedes volver a preguntar en menos de un minuto."
+    if faltan < 3600:
+        return f"Puedes volver a preguntar dentro de {int(faltan // 60)} minutos."
+    horas = int(faltan // 3600)
+    return f"Puedes volver a preguntar dentro de {horas} hora{'s' if horas > 1 else ''}."
+
+
 def enviar_mensaje(usuario: str, mensaje: str) -> dict:
     """Punto de entrada principal — recibe la pregunta de un usuario, recupera
     contexto relevante, llama al modelo con el historial reciente, guarda
@@ -210,6 +259,16 @@ def enviar_mensaje(usuario: str, mensaje: str) -> dict:
 
     conn = _conn()
     ahora = datetime.utcnow().isoformat()
+
+    # El tope se mira ANTES de llamar al modelo: comprobarlo después costaría
+    # exactamente lo que se quiere evitar.
+    llevadas, libre = _preguntas_ultimas_24h(conn, usuario)
+    if llevadas >= LIMITE_PREGUNTAS_24H:
+        conn.close()
+        print(f"[Chat] {usuario} ha llegado al tope de {LIMITE_PREGUNTAS_24H} preguntas en 24 h")
+        return {"ok": False, "limite": True,
+                "error": f"Has hecho {llevadas} preguntas en las últimas 24 horas, que es el "
+                         f"máximo por cuenta. " + _texto_de_espera(libre)}
 
     # Últimos mensajes para dar continuidad a la conversación — recortado a 6
     # (3 intercambios), no 10, por el mismo motivo que el truncado de chunks:
