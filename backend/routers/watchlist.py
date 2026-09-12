@@ -50,6 +50,10 @@ class ListaRename(BaseModel):
     nuevo: str = Field(..., min_length=1, max_length=watchlist_service.LARGO_LISTA)
 
 
+class DigestPref(BaseModel):
+    activo: bool
+
+
 class AlertCreate(BaseModel):
     ticker: str = Field(..., min_length=1, max_length=15)
     condition: str = "above"       # 'above' | 'below' — ignorado si metric='ema_touch'/'senal'
@@ -106,6 +110,23 @@ async def remove_watchlist(ticker: str, user=Depends(verify_token)):
 # Nota de rutas: van antes que /{ticker} arriba a nivel de prefijo distinto
 # (/alerts vs raíz), así que no hay colisión de path entre "eliminar ticker
 # de watchlist" y "listar/crear alertas".
+
+@router.get("/digest")
+async def ver_digest(user=Depends(verify_token)):
+    """El resumen de la última sesión, para verlo en la pantalla aunque no se
+    tenga Telegram. Sin riesgo de colisión con /{ticker}: ahí solo hay PUT y
+    DELETE, y esto es GET y POST."""
+    from services.digest_service import digest_de
+    uid = _user_id(user)
+    d = digest_de(uid)
+    d["activo"] = users_service.quiere_digest(uid)
+    return d
+
+
+@router.post("/digest")
+async def cambiar_digest(body: DigestPref, user=Depends(verify_token)):
+    return users_service.set_digest_diario(_user_id(user), body.activo)
+
 
 @router.get("/alerts")
 async def list_alerts(user=Depends(verify_token)):

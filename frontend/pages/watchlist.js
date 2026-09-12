@@ -27,6 +27,7 @@ export async function render(container) {
     injectStyles();
     container.innerHTML = pageShell();
     wireForm(container);
+    loadDigest(container);
     loadWatchlist(container);
     loadAlerts(container);
     loadTelegramBanner(container);
@@ -54,6 +55,8 @@ function pageShell() {
         + '<input id="wl-add-input" type="text" placeholder="Añadir ticker (NVDA, AAPL...)" style="flex:1;background:var(--color-bg,#0a0a0a);border:1px solid var(--color-border);border-radius:var(--radius);padding:8px 14px;color:var(--color-text);font-family:var(--font-mono);font-size:13px;outline:none;text-transform:uppercase;">'
         + '<button id="wl-add-btn" style="background:var(--color-accent);color:#000;border:none;border-radius:var(--radius);padding:8px 20px;font-family:var(--font-mono);font-size:12px;cursor:pointer;font-weight:500;">＋ AÑADIR</button>'
         + '</div>'
+
+        + '<div id="wl-digest" style="margin-bottom:1rem;"></div>'
 
         + '<div id="wl-table"></div>'
 
@@ -104,6 +107,71 @@ function shell(title, content, subtitle, avisos) {
 
 function loading() { return '<div style="padding:1rem;color:var(--color-muted);font-size:12px;">Cargando...</div>'; }
 function error(msg) { return errorMessage(msg); }
+
+// ── RESUMEN DE LA SESIÓN ─────────────────────────────────────────────────────
+//
+// El mismo dato que sale por Telegram cada noche, aquí para quien no lo tenga
+// vinculado o no quiera un mensaje diario. La línea de «los otros N, sin
+// novedades» no es relleno: sin ella no se distingue «no pasó nada» de «no se
+// ha mirado».
+
+async function loadDigest(container) {
+    const el = container.querySelector('#wl-digest');
+    if (!el) return;
+    try {
+        const res = await fetch('/api/v1/watchlist/digest', { headers: authHeader() });
+        const d   = await res.json();
+        if (!d.ok || !d.seguidos) { el.innerHTML = ''; return; }
+
+        const filas = (d.novedades || []).map(n =>
+            '<div style="display:flex;gap:8px;padding:5px 0;font-size:12px;align-items:baseline;">'
+            + '<span class="ticker-link wl-ticker" data-ticker="' + esc(n.ticker) + '" style="color:var(--color-accent);cursor:pointer;min-width:60px;">' + esc(n.ticker) + '</span>'
+            + '<span style="color:var(--color-text);">' + n.textos.map(t => esc(t)).join(' · ') + '</span>'
+            + '</div>').join('');
+
+        const resto = d.sin_novedades
+            ? '<div style="color:var(--color-muted);font-size:11px;margin-top:6px;">'
+              + (d.novedades.length ? 'Los otros ' + d.sin_novedades + ', sin novedades.'
+                                    : 'Tus ' + d.sin_novedades + ' valores, sin novedades.') + '</div>'
+            : '';
+
+        const aviso = d.activo
+            ? 'Lo recibes por Telegram cada noche, solo los días con novedades.'
+            : 'Puedes recibirlo por Telegram cada noche (hace falta la cuenta vinculada).';
+
+        el.innerHTML = panel({
+            titulo: 'LO QUE HA PASADO EN TUS VALORES',
+            subtitulo: d.fecha_larga ? 'Sesión del ' + d.fecha_larga : '',
+            contenido: '<div style="padding:8px 14px 10px;">' + filas + resto
+                + '<div style="display:flex;gap:8px;align-items:center;margin-top:10px;padding-top:8px;border-top:1px solid var(--color-border);">'
+                + '<button id="wl-digest-toggle" style="background:' + (d.activo ? 'var(--color-accent)' : 'transparent') + ';'
+                + 'color:' + (d.activo ? '#000' : 'var(--color-muted)') + ';border:1px solid ' + (d.activo ? 'var(--color-accent)' : 'var(--color-border)') + ';'
+                + 'border-radius:var(--radius);padding:4px 12px;font-family:var(--font-mono);font-size:10px;cursor:pointer;">'
+                + (d.activo ? 'RESUMEN NOCTURNO: SÍ' : 'RESUMEN NOCTURNO: NO') + '</button>'
+                + '<span style="color:var(--color-muted);font-size:10px;">' + esc(aviso) + '</span>'
+                + '</div></div>',
+            escapar: true,
+        });
+
+        el.querySelectorAll('.wl-ticker').forEach(t => {
+            t.addEventListener('click', () => {
+                window.__navigate('/research?ticker=' + encodeURIComponent(t.getAttribute('data-ticker')));
+            });
+        });
+        const btn = el.querySelector('#wl-digest-toggle');
+        btn.addEventListener('click', async () => {
+            btn.disabled = true;
+            await fetch('/api/v1/watchlist/digest', {
+                method: 'POST',
+                headers: { ...authHeader(), 'Content-Type': 'application/json' },
+                body: JSON.stringify({ activo: !d.activo }),
+            });
+            loadDigest(container);
+        });
+    } catch (e) {
+        el.innerHTML = '';        // el resumen es un extra: si falla, no estorba
+    }
+}
 
 // ── WATCHLIST ────────────────────────────────────────────────────────────────
 

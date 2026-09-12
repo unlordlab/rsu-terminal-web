@@ -468,6 +468,10 @@ async def market_cache_warm_loop():
                 disparadas = await loop.run_in_executor(None, check_signal_alerts, sesion_nueva)
                 if disparadas:
                     await loop.run_in_executor(None, notify_triggered_alerts, disparadas)
+                # Y el resumen de la sesión a quien lo tenga activado: mismo
+                # dato, mismo momento, un solo mensaje en vez de uno por señal.
+                from services.digest_service import enviar_digests
+                await loop.run_in_executor(None, enviar_digests, sesion_nueva)
         except Exception as e:
             print(f"[Snapshots] Error: {e}")
 

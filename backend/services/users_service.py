@@ -114,6 +114,13 @@ def init_db():
         conn.execute("ALTER TABLE users ADD COLUMN telegram_link_code_expires_at TEXT")
     except sqlite3.OperationalError:
         pass  # la columna ya existe
+    # Digest diario de la watchlist (Watchlist #20). OPT-IN: por defecto 0.
+    # Un mensaje al día a quien no lo ha pedido es correo basura, aunque sea
+    # útil — y quien lo activa ya ha dicho que lo quiere.
+    try:
+        conn.execute("ALTER TABLE users ADD COLUMN digest_diario INTEGER NOT NULL DEFAULT 0")
+    except sqlite3.OperationalError:
+        pass  # la columna ya existe
     conn.commit()
     conn.close()
 
@@ -322,6 +329,47 @@ def get_telegram_chat_ids(user_ids: list[int]) -> dict[int, str]:
         rows = conn.execute(
             f"SELECT id, telegram_chat_id FROM users WHERE id IN ({placeholders}) AND telegram_chat_id IS NOT NULL",
             user_ids
+        ).fetchall()
+        return {r["id"]: r["telegram_chat_id"] for r in rows}
+    finally:
+        conn.close()
+
+
+def set_digest_diario(user_id: int, activo: bool) -> dict:
+    """Activa o desactiva el resumen nocturno de la watchlist."""
+    conn = _conn()
+    try:
+        cur = conn.execute("UPDATE users SET digest_diario = ? WHERE id = ?",
+                           (1 if activo else 0, user_id))
+        conn.commit()
+        if not cur.rowcount:
+            return {"ok": False, "error": "Usuario no encontrado"}
+        return {"ok": True, "digest_diario": bool(activo)}
+    finally:
+        conn.close()
+
+
+def quiere_digest(user_id: int) -> bool:
+    conn = _conn()
+    try:
+        fila = conn.execute("SELECT digest_diario FROM users WHERE id = ?", (user_id,)).fetchone()
+        return bool(fila and fila["digest_diario"])
+    finally:
+        conn.close()
+
+
+def destinatarios_del_digest() -> dict:
+    """{user_id: chat_id} de quienes lo han activado Y tienen Telegram.
+
+    Las dos condiciones van juntas a propósito: sin Telegram no hay dónde
+    mandarlo, y activarlo sin vincular la cuenta no puede hacer que el envío
+    falle en silencio cada noche. La pantalla avisa de eso al activarlo.
+    """
+    conn = _conn()
+    try:
+        rows = conn.execute(
+            "SELECT id, telegram_chat_id FROM users "
+            "WHERE digest_diario = 1 AND telegram_chat_id IS NOT NULL"
         ).fetchall()
         return {r["id"]: r["telegram_chat_id"] for r in rows}
     finally:
