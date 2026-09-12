@@ -105,7 +105,7 @@ reponderación 4.5 del RSU Score, la longitud del briefing diario.
 De los críticos y altos verificados como ABIERTOS. Lista regenerada desde las
 propias filas del documento (09/09, segunda regeneración del día), no escrita a
 mano — así no vuelve a citar hallazgos ya cerrados, que es justo lo que le había
-pasado. **26 hallazgos abiertos ❌ en total** (11/09, tras vaciar Watchlist, cerrar Páginas Contenido #7-#14, #17, #19, #20 y #23 —#11 y #12 por decisión del usuario— y confirmar #15 al comprobarlo; 9 son de Watchlist y casi todos propuestas de funcionalidad); los que no aparecen aquí son los
+pasado. **28 hallazgos abiertos ❌ en total** (12/09: 6 🔴 · 4 🟠 · 8 🟡 · 5 🟢 · 5 🔵; 9 son de Watchlist y casi todos propuestas de funcionalidad). Del 12/09 entran los tres que quedan de la auditoría del briefing (Newsfeed #65–#67) y salen Newsfeed #61–#64, RS/RW #23–#24 y Watchlist #23, hechos ese mismo día; los que no aparecen aquí son los
 🟡/🔵 de la cola.
 
 **Bloqueados por una decisión del usuario, no por código:**
@@ -116,7 +116,9 @@ pasado. **26 hallazgos abiertos ❌ en total** (11/09, tras vaciar Watchlist, ce
 
 **Listos para trabajar:**
 
-3. **INFRAESTRUCTURA #25** 🔴 — **Elia no cabe en el techo de Groq.** Pide 3.000 fichas contra 1.000, y una lección son 1.586 de mediana: no se arregla bajando la constante, hay que escribirla por partes — **APARCADO POR AHORA (10/09), decisión del usuario**
+3. **SCANNER #25** 🔴 — **El escaneo nocturno va una sesión por detrás casi todas las noches** (4 de 6): a las 00:15 UTC Yahoo sirve la barra del día para ~1% de los valores. Arrastra a Market, al briefing, a CANSLIM, RS/RW y Temáticos. **Diagnosticado el 12/09**: la fila del día llega VACÍA por `yf.download` en lote y **con dato** por `Ticker.history` en el mismo minuto — es el camino de descarga, no la hora. Instrumentado el 10/09 sin arreglar, a propósito: la próxima noche mala deja en el registro si la fila llega vacía o no llega, y por qué camino de yfinance. Con eso se decide el arreglo
+
+3b. **INFRAESTRUCTURA #25** 🔴 — **Elia no cabe en el techo de Groq.** Pide 3.000 fichas contra 1.000, y una lección son 1.586 de mediana: no se arregla bajando la constante, hay que escribirla por partes — **APARCADO POR AHORA (10/09), decisión del usuario**
 4. **NEWSFEED #28** 🟠 — Las instrucciones fijas son el 44% del prompt, y por eso el briefing lleva semanas en modo «mínimo» sin memoria narrativa
 5. **CARTERA #A4** 🟠 — Cripto con el precio congelado 16 horas al día
 6. **INFRAESTRUCTURA #12** 🟠 — La configuración de Nginx solo existe en el VPS: si se pierde el servidor, hay que reconstruirla de memoria
@@ -131,7 +133,6 @@ pasado. **26 hallazgos abiertos ❌ en total** (11/09, tras vaciar Watchlist, ce
 
 12. **CANSLIM #23** 🔴 — Bases y pivot points. Necesita 3–4 semanas de muestra, que empezó a acumularse el 06/09 al arreglar el registro
 13. **NEWSFEED #39** 🔴 — Los cuatro porcentajes que no son de ninguna sesión. Instrumentado, esperando que se repita. **El 10/09 apareció una pista fuerte** (cada ticker compara barras en su propio calendario) y quedó puesta una guardia: una variación que abarca más de una sesión sale marcada en el prompt
-14. **SCANNER #25** 🔴 — **El escaneo nocturno va una sesión por detrás casi todas las noches** (4 de 6): a las 00:15 UTC Yahoo sirve la barra del día para ~1% de los valores. Arrastra a Market, al briefing, a CANSLIM, RS/RW y Temáticos. **Diagnosticado el 12/09**: la fila del día llega VACÍA por `yf.download` en lote y **con dato** por `Ticker.history` en el mismo minuto — es el camino de descarga, no la hora. Instrumentado el 10/09 sin arreglar, a propósito: la próxima noche mala deja en el registro si la fila llega vacía o no llega, y por qué camino de yfinance. Con eso se decide el arreglo
 
 **La bolsa de verificación: 66 hallazgos ❓** — Páginas Contenido 4, Tesis Admin 13, Módulos 10, Cartera 7, Newsfeed 7, Research 6, SPXL 5, Infraestructura 4, Insider Flow 4, y el resto repartido. Infraestructura bajó de 14 a 4 el 09/09: **dos eran bugs vivos** (#5 el límite por IP, #16 el apagado sin esperar a las tareas) y seis ya estaban hechos o no procedían. **Watchlist Community se vació el 10/09 (19 → 0)**: nueve ya estaban bien, y **tres «ya hechos» tenían un bug vivo** — la alerta de RVOL saltaba en falso el 61% de las mañanas normales, el toque de EMA no avisaba de un rebote, y un hueco de XSS con datos de terceros (Congreso, Insider) que se encontró al verificar el #4.
 ---
