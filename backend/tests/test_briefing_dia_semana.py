@@ -120,8 +120,13 @@ def test_se_separa_lo_que_es_del_CIERRE_de_lo_que_es_de_HOY():
     # hicieron EN la sesión, que es la que cuenta el briefing.
     assert cierre < p.index("- S&P 500:") < hoy
     assert p.index("- VIX:") > hoy and p.index("- Dólar Index (DXY):") > hoy
-    assert "[sesion ▲4.71%]" in p, "falta lo que hizo el VIX el miércoles"
-    assert "[sesion ▼0.07%]" in p, "falta que el dólar BAJÓ el miércoles"
+    # Desde el 12/09 (Newsfeed #63) el cierre va DELANTE y con su nombre, para
+    # que no se pueda citar el precio de ahora como si fuera el cierre.
+    assert "- VIX: CIERRE 16.46 (▲4.71%) · ahora 16.63" in p, \
+        "falta lo que hizo el VIX el miércoles, y por delante"
+    assert "- Dólar Index (DXY): CIERRE 98.77 (▼0.07%) · ahora 98.91" in p, \
+        "falta que el dólar BAJÓ el miércoles, y por delante"
+    assert "CIERRE = el del 2026-09-09 (miercoles)" in p, "la cabecera no dice de qué día"
 
 
 def test_la_linea_de_estado_ya_no_afirma_de_que_dia_es_cada_cosa():

@@ -135,7 +135,9 @@ def test_el_prompt_pone_cada_fila_bajo_su_dia(datos):
     assert cierre < p.index("- S&P 500:") < hoy
     for fila in ("- VIX:", "- Dólar Index (DXY):", "- Oro:", "- Petróleo WTI:"):
         assert p.index(fila) > hoy, f"{fila} sigue bajo el cierre"
-    assert "[sesion ▲4.71%]" in p and "[sesion ▼0.07%]" in p
+    # El formato cambió el 12/09 (Newsfeed #63): el cierre va primero.
+    assert "- VIX: CIERRE 16.46 (▲4.71%) · ahora 16.63" in p
+    assert "- Dólar Index (DXY): CIERRE 98.77 (▼0.07%) · ahora 98.91" in p
 
 
 def test_la_variacion_de_la_sesion_no_se_inventa_si_falta_la_barra():

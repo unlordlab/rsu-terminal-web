@@ -9,6 +9,7 @@ import re
 import sys
 import json
 import time
+import unicodedata
 import requests
 from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
@@ -266,6 +267,32 @@ GROQ_TPM_LIMIT     = 8000
 GROQ_TPM_SAFETY    = 350   # colchón: mi estimación por caracteres nunca coincide exactamente con el tokenizador real
 GROQ_MAX_OUTPUT    = 1800  # ~33% por encima del briefing más largo observado
 GROQ_MIN_OUTPUT    = 800   # ver la nota del OTPM justo debajo
+# ── ITPM: el limite que hacia imposible el reintento del verificador ─────────
+#
+# EL CASO, 11/09/2026. La revision previa a publicar SI vio el fallo (una
+# prevision del IPC contada como hecho) y pidio el reintento, que murio con:
+#
+#   429 ... on input tokens per minute (ITPM): Limit 7000, Used 5850
+#
+# No es el TPM de 8.000 de prompt+respuesta, es un tope solo de ENTRADA y mas
+# bajo. Con un prompt de ~6,2k fichas, la segunda llamada DENTRO DEL MISMO
+# MINUTO se pasa siempre: el verificador lleva desde el 08/09 detectando cosas
+# y no ha llegado a corregir ni una. Recortar el prompt no lo arregla (el
+# original ya se ha gastado); esperar, si. El Action entero dura ~1m30s y su
+# tope son 10 minutos, asi que el minuto cabe de sobra. Ver Newsfeed #62.
+GROQ_ITPM_LIMIT    = 7000
+# Configurable para que los tests no esperen un minuto de verdad.
+ESPERA_REINTENTO_S = int(os.environ.get("BRIEFING_ESPERA_REINTENTO", "62"))
+
+
+def esperar_a_groq(que: str = "el reintento"):
+    """Deja pasar la ventana del minuto antes de volver a llamar a Groq."""
+    if ESPERA_REINTENTO_S <= 0:
+        return
+    print(f"   ⏳ Esperando {ESPERA_REINTENTO_S}s antes de {que}: el limite de ENTRADA de "
+          f"Groq es de {GROQ_ITPM_LIMIT} fichas por minuto y el prompt ya se ha gastado "
+          f"una vez, asi que dos llamadas en el mismo minuto no caben")
+    time.sleep(ESPERA_REINTENTO_S)
 # ── OTPM: un techo SOLO de salida, que aparece y desaparece ──────────────────
 #
 # EL CASO, 07/09/2026. El briefing murió con un 429 -- no un 413-- y el mensaje
@@ -1550,9 +1577,18 @@ def get_macro_indicators() -> list:
             if cambio_prev is not None:
                 delta   = cambio - cambio_prev
                 sentido = ("SUBE" if delta > 0 else "BAJA" if delta < 0 else "IGUAL")
+                # SIN EL TERCER NUMERO. La primera version de esta aclaracion
+                # metia la DIFERENCIA entre los dos meses ("+141k"), y el
+                # 11/09/2026 la segunda lectura publico «las nominas sumaron
+                # +162.000, una mejora respecto al mes anterior (+141.000)»:
+                # el mes anterior fueron +21k, y +141k era la diferencia. Un
+                # numero mas en la fila es un numero mas que se puede citar por
+                # lo que no es, asi que el sentido se dice con palabras y entre
+                # parentesis van solo las dos cifras que si existen. Ver #64.
                 extra = (f"mes anterior {cambio_prev:+,.0f}k".replace(",", ".") +
                          f" · la creacion de empleo {sentido} RESPECTO AL MES ANTERIOR "
-                         f"({delta:+,.0f}k; no hay consenso con el que compararla)".replace(",", "."))
+                         f"({cambio:+,.0f}k frente a {cambio_prev:+,.0f}k; no hay consenso "
+                         f"con el que compararla)".replace(",", "."))
             else:
                 extra = "sin mes anterior"
         elif tipo == "mm_aa":
@@ -1869,12 +1905,27 @@ def build_prompt(market_data: dict, news: list, major_headlines: list, earnings:
         extra = ""
         en_ses = (d.get(k) or {}).get("en_sesion")
         if con_sesion and en_ses:
+            # EL CIERRE VA DELANTE, Y CON SU NOMBRE. La fila daba el precio de
+            # AHORA primero y colgaba la sesion detras entre corchetes ("99.40
+            # (▼3.01%) [sesion ▲6.69%]"), con una cabecera encima que lo
+            # explicaba. No basto: el 11/09/2026, el dia en que el petroleo era
+            # LA noticia, la segunda lectura publico «el WTI CERRO AYER en
+            # 99,40 $ (-3,01%)». El WTI cerro en 102,48, un +6,69% -- el signo
+            # del movimiento del dia, invertido, en el dato que sostenia el
+            # relato. Lo que se va a citar como cierre tiene que ir primero y
+            # llamarse cierre; lo de ahora, detras y dicho contra que se mide.
+            # Ver Newsfeed #63.
+            # La fecha va UNA VEZ en la cabecera del grupo, no en cada fila: el
+            # prompt no cabe en el techo ningun dia y repetirla cinco veces
+            # cuesta ~50 fichas que salen del largo del briefing.
             if k in ("TNX", "TYX"):
                 pb = (en_ses["cierre"] - en_ses["prev"]) * 100
-                extra = f" [sesion {'+' if pb >= 0 else '−'}{abs(pb):.0f} pb]"
+                txt = (f"CIERRE {en_ses['cierre']:.2f}% "
+                       f"({'+' if pb >= 0 else '−'}{abs(pb):.0f} pb) · ahora {txt}")
             else:
                 c = en_ses["chg_pct"]
-                extra = f" [sesion {'▲' if c >= 0 else '▼'}{abs(c):.2f}%]"
+                txt = (f"CIERRE {en_ses['cierre']:,.2f} "
+                       f"({'▲' if c >= 0 else '▼'}{abs(c):.2f}%) · ahora {txt}")
         if k != "BTC" and salta_mas_de_una_sesion(barras_d, k):
             extra += (f" [OJO: variacion desde el {con_dia_semana(barras_d[k][0])}, "
                       f"abarca MAS de una sesion: no la cuentes como la de un dia]")
@@ -1888,8 +1939,8 @@ def build_prompt(market_data: dict, news: list, major_headlines: list, earnings:
             else:
                 cab = "CIERRE DE ESA SESION:" if fecha_g else "MERCADO:"
         elif tipo_g == "hoy":
-            cab = (f"EN CURSO HOY {con_dia_semana(fecha_g)} {ses.get('hora_et', '??:??')} ET, "
-                   f"vs ese cierre; [sesion X] = lo que hizo EN la sesion que cuentas:")
+            cab = (f"EN CURSO HOY {con_dia_semana(fecha_g)} {ses.get('hora_et', '??:??')} ET: "
+                   f"CIERRE = el del {dia_sesion}; ahora = este momento, NO un cierre:")
         else:
             cab = (f"SIN DATO DE ESA SESION, ultimo del {con_dia_semana(fecha_g)}: "
                    f"no lo atribuyas al {dia_sesion}:")
@@ -2609,17 +2660,106 @@ def _esta_en(valor: float, referencia: list, tolerancia: float = 0.001) -> bool:
     return any(abs(valor - r) <= tolerancia * max(1.0, abs(r)) for r in referencia)
 
 
-def revisar_briefing(texto: str, prompt: str, titulares: str = "", eventos: list = None) -> dict:
+# ── LA AMPLITUD, CITADA POR EL DIA QUE ES ────────────────────────────────────
+#
+# EL CASO, 11/09/2026. El escaneo nocturno va una sesion por detras (Scanner
+# #25), asi que el briefing del viernes narraba el JUEVES con la amplitud del
+# MIERCOLES. El prompt lo decia con todas las letras desde el 31/08 -- «AMPLITUD
+# del 2026-09-09 (miercoles): NO de hoy ni de la sesion de los indices, citala
+# por ESE dia»-- y LAS DOS LECTURAS lo ignoraron igual:
+#
+#   «En la sesion del jueves 10 de septiembre... solo el 19,9% de los
+#    componentes del indice avanzaron, con 99 avances frente a 399 descensos»
+#
+# El jueves fueron 165/329, o sea el 33,4%, y el ABI 32,4% en vez del 59,0% de
+# «capitulacion» que se publico. La frase mas dura del briefing describia otro
+# dia. Pedirlo en el prompt ya se probo; esto lo COMPRUEBA sobre el texto.
+MESES = ("enero", "febrero", "marzo", "abril", "mayo", "junio", "julio",
+         "agosto", "septiembre", "octubre", "noviembre", "diciembre")
+
+
+def _sin_acentos(t: str) -> str:
+    return "".join(c for c in unicodedata.normalize("NFD", t or "")
+                   if unicodedata.category(c) != "Mn")
+
+
+def _marcas_de_dia(fecha, sesion=None) -> list:
+    """Las formas validas de nombrar ese dia dentro del texto.
+
+    La fecha entera, el dia de la semana y «9 de septiembre». Y, solo si la
+    amplitud es de la sesion INMEDIATAMENTE anterior a la que se narra, vale
+    tambien decirlo asi ("la sesion anterior"): es exacto y es como escribe una
+    persona. Un dia de diferencia, o el salto del viernes al lunes; con dos
+    sesiones por medio esa formula ya seria falsa y no se acepta."""
+    try:
+        d = datetime.strptime(str(fecha)[:10], "%Y-%m-%d").date()
+    except Exception:
+        return []
+    marcas = [re.escape(str(fecha)[:10]),
+              DIAS_SEMANA[d.weekday()],
+              rf"\b{d.day}\s+de\s+{MESES[d.month - 1]}"]
+    try:
+        dias = (datetime.strptime(str(sesion)[:10], "%Y-%m-%d").date() - d).days
+        if dias == 1 or (dias == 3 and d.weekday() == 4):   # el puente del finde
+            marcas.append(r"(?:sesion|jornada|dia)\s+anterior|vispera")
+    except Exception:
+        pass
+    return marcas
+
+
+def amplitud_de_otro_dia(texto: str, amplitud: dict) -> list:
+    """Cifras de amplitud citadas sin decir de que dia son.
+
+    Solo mira cuando la amplitud NO es de la sesion que se narra -- que es
+    cuando el error es posible-- y solo acusa a una frase por las cifras que no
+    se confunden con cualquier otro numero: las de tres digitos o mas y las que
+    llevan decimales. Un «31» o un «98» sueltos no bastan para acusar.
+    """
+    amp = amplitud or {}
+    fecha, sesion = amp.get("fecha"), amp.get("sesion")
+    if not fecha or not sesion or str(fecha)[:10] == str(sesion)[:10]:
+        return []
+    cifras = []
+    for clave in ("advances", "declines", "sp500_advances", "sp500_declines",
+                  "sp500_pct_al_alza", "pct_above_sma50", "mcclellan", "abi",
+                  "nh_nl", "new_highs", "new_lows"):
+        v = amp.get(clave)
+        if isinstance(v, (int, float)) and not isinstance(v, bool):
+            cifras.append(abs(float(v)))
+    cifras = [c for c in cifras if c >= 100 or c != int(c)]
+    if not cifras:
+        return []
+    marcas = _marcas_de_dia(fecha, sesion)
+    frases = _frases(texto)
+    for i, frase in enumerate(frases):
+        if not any(_esta_en(n, cifras) for n in _numeros(frase)):
+            continue
+        # La frase anterior tambien cuenta: «Miro la amplitud del miercoles.
+        # Solo avanzo el 19,9%» dice el dia, aunque no en la misma frase.
+        contexto = _sin_acentos(" ".join(frases[max(0, i - 1):i + 1]).lower())
+        if any(re.search(m, contexto) for m in marcas):
+            continue
+        return [f"AMPLITUD DE OTRO DIA SIN DECIRLO: esas cifras son del "
+                f"{con_dia_semana(fecha)}, no de la sesion que cuentas "
+                f"({con_dia_semana(sesion)}), y la frase no lo dice: "
+                f"«{' '.join(frase.replace('**', '').split())[:90]}»"]
+    return []
+
+
+def revisar_briefing(texto: str, prompt: str, titulares: str = "", eventos: list = None,
+                     amplitud: dict = None) -> dict:
     """Lo que el briefing ha roto, antes de publicarlo.
 
-    Devuelve {"ordenes": [...], "hechos": [...], "otros": [...]} -- separados
-    porque no cuestan lo mismo. Una orden de operar es la unica que vale perder
-    el briefing principal. Un dato que no ha salido contado como publicado
-    («hechos») no tumba el principal, pero SI descarta la segunda lectura, que
-    es opcional: mejor ausente que equivocada.
+    Devuelve {"ordenes": [...], "hechos": [...], "amplitud": [...],
+    "otros": [...]} -- separados porque no cuestan lo mismo. Una orden de
+    operar es la unica que vale perder el briefing principal. Un dato que no ha
+    salido contado como publicado («hechos») o la amplitud de otro dia contada
+    como la de hoy («amplitud») no tumban el principal, pero SI descartan la
+    segunda lectura, que es opcional: mejor ausente que equivocada.
 
-    `eventos` es el calendario tal como llego al prompt. Sin el, las dos reglas
-    que dependen de el se comportan como antes.
+    `eventos` es el calendario tal como llego al prompt y `amplitud` el bloque
+    de amplitud con la fecha de la sesion que se narra. Sin ellos, las reglas
+    que dependen de ellos se comportan como antes.
     """
     bajo = (texto or "").lower()
     ordenes, otros = [], []
@@ -2676,13 +2816,15 @@ def revisar_briefing(texto: str, prompt: str, titulares: str = "", eventos: list
                 otros.append(f"NIVEL INVENTADO: {n:g} no sale de los datos "
                              f"(el prompt da SMA20/SMA50/SMA200 y el rango de 20 dias)")
 
-    return {"ordenes": ordenes, "hechos": hechos, "otros": otros}
+    return {"ordenes": ordenes, "hechos": hechos,
+            "amplitud": amplitud_de_otro_dia(texto, amplitud), "otros": otros}
 
 
 def fallos_de(revision: dict) -> list:
     """Todo lo encontrado, en orden de gravedad. `.get` porque una revision
-    guardada antes de que existiera «hechos» no la trae."""
-    return [x for clave in ("ordenes", "hechos", "otros") for x in (revision or {}).get(clave, [])]
+    guardada antes de que existieran «hechos» o «amplitud» no las trae."""
+    return [x for clave in ("ordenes", "hechos", "amplitud", "otros")
+            for x in (revision or {}).get(clave, [])]
 
 
 def extract_bias_tag(text: str) -> tuple:
@@ -2851,7 +2993,7 @@ MODELO_SEGUNDA_LECTURA = os.environ.get("BRIEFING_MODELO_2", "groq/compound")
 
 
 def generar_segunda_lectura(prompt: str, modelo: str = None, titulares: str = "",
-                            eventos: list = None) -> dict:
+                            eventos: list = None, amplitud: dict = None) -> dict:
     """El mismo prompt, otro modelo. Devuelve None si no sale — nunca levanta.
 
     Se le pasa el prompt ORIGINAL, con su marca de longitud sin sustituir, para
@@ -2877,16 +3019,17 @@ def generar_segunda_lectura(prompt: str, modelo: str = None, titulares: str = ""
             print(f"⚠️  La segunda lectura salio con {len(cuerpo.split())} palabras: se descarta. "
                   f"El briefing principal se publica igual.")
             return None
-        revision = revisar_briefing(cuerpo, prompt, titulares, eventos)
-        if revision["ordenes"] or revision["hechos"]:
+        revision = revisar_briefing(cuerpo, prompt, titulares, eventos, amplitud)
+        if revision["ordenes"] or revision["hechos"] or revision["amplitud"]:
             fallos = "; ".join(fallos_de(revision))
             print(f"🔎 Segunda lectura rechazada en la revision: {fallos}")
             texto, diag = generate_briefing(
                 prompt + f"\n\nAVISO: tu version anterior incumplia esto y se rechazo — {fallos}. "
                          f"Reescribe el briefing entero SIN eso.", modelo=modelo)
             cuerpo, sesgo = extract_bias_tag(texto)
-            revision = revisar_briefing(cuerpo, prompt, titulares, eventos)
-            if revision["ordenes"] or revision["hechos"] or len(cuerpo.split()) < 50:
+            revision = revisar_briefing(cuerpo, prompt, titulares, eventos, amplitud)
+            if (revision["ordenes"] or revision["hechos"] or revision["amplitud"]
+                    or len(cuerpo.split()) < 50):
                 print(f"⚠️  El reintento de la segunda lectura sigue fallando "
                       f"({'; '.join(fallos_de(revision)) or 'texto demasiado corto'}): no se "
                       f"publica. El briefing principal sale igual.")
@@ -3160,19 +3303,23 @@ def main():
     # saber que un dato no ha salido todavia (#57) ni que un «consenso» si
     # estaba en la tabla (#59).
     eventos = market_data.get("calendar") or []
-    revision = revisar_briefing(briefing, prompt, titulares_txt, eventos)
+    # La amplitud CON la fecha de la sesion que se narra: sin las dos fechas el
+    # verificador no puede saber que las cifras son de otro dia (#61).
+    amplitud = {**(breadth or {}), "sesion": (market_data.get("sesion") or {}).get("fecha")}
+    revision = revisar_briefing(briefing, prompt, titulares_txt, eventos, amplitud)
     if fallos_de(revision):
         print("🔎 La revision previa a publicar ha encontrado:")
         for x in fallos_de(revision):
             print(f"   - {x}")
         fallos = "; ".join(fallos_de(revision))
+        esperar_a_groq("el reintento")
         try:
             reintento, diag_rev = generate_briefing(
                 prompt + f"\n\nAVISO: tu version anterior incumplia esto y se rechazo — {fallos}. "
                          f"Reescribe el briefing entero SIN eso. El nivel de invalidacion tiene que ser "
                          f"uno de los que aparecen arriba, copiado tal cual.")
             b2, s2 = extract_bias_tag(reintento)
-            r2 = revisar_briefing(b2, prompt, titulares_txt, eventos)
+            r2 = revisar_briefing(b2, prompt, titulares_txt, eventos, amplitud)
             if len(fallos_de(r2)) < len(fallos_de(revision)):
                 print(f"   ✅ El reintento corrige "
                       f"{len(fallos_de(revision)) - len(fallos_de(r2))} de {len(fallos_de(revision))}")
@@ -3194,7 +3341,8 @@ def main():
     # distintos no dice nada. `prompt` sigue siendo el original con su marca de
     # longitud sin sustituir, porque generate_briefing la sustituye en una
     # copia local.
-    segunda = generar_segunda_lectura(prompt, titulares=titulares_txt, eventos=eventos)
+    segunda = generar_segunda_lectura(prompt, titulares=titulares_txt, eventos=eventos,
+                                      amplitud=amplitud)
 
     # Si el modelo se queda sin presupuesto de tokens pensando (ver nota en
     # generate_briefing) puede devolver un texto vacío o casi vacío — mejor

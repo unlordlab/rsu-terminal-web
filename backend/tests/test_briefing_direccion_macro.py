@@ -79,7 +79,13 @@ def test_la_fila_DICE_que_la_creacion_de_empleo_sube():
         f"la fila sigue dando dos números sueltos sin decir el sentido: "
         f"«{fila['extra']}» — es lo que produjo «desaceleración» con +162k "
         f"frente a +21k")
-    assert "+141k" in fila["extra"], "no se dice CUÁNTO sube"
+    # Y la sube CON LAS CIFRAS QUE EXISTEN, no con la diferencia. La primera
+    # versión metía «+141k» (162 − 21) y el 11/09/2026 la segunda lectura la
+    # citó como si fuera el mes anterior: «+162.000, una mejora respecto al mes
+    # anterior (+141.000)». El mes anterior fueron +21k. Ver Newsfeed #64.
+    assert "+162k frente a +21k" in fila["extra"], "no se dice CUÁNTO sube"
+    assert "141" not in fila["extra"], (
+        f"la diferencia vuelve a ser un número citable: «{fila['extra']}»")
 
 
 def test_y_dice_BAJA_cuando_de_verdad_baja():

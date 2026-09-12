@@ -116,7 +116,14 @@ def test_la_recta_de_Reddit_tambien_respeta_los_festivos(monkeypatch):
 # ── #3: la alerta de RVOL ────────────────────────────────────────────────────
 
 def _hist(ultimo_dia, vol_hoy, vol_normal=1_000_000):
+    # La ULTIMA barra es la del día que pide la llamada, sea o no laborable.
+    # `bdate_range` sola la dejaba en el viernes cuando el test se ejecutaba un
+    # sábado, y entonces `_fetch_rvol_single` veía que la última barra no era la
+    # de hoy y devolvía None: el test fallaba por el día en que se corriera, no
+    # por el código (visto el 12/09/2026 auditando el briefing, con la suite
+    # entera verde salvo este).
     dias = pd.bdate_range(end=ultimo_dia, periods=25, tz=ET)
+    dias = dias[:-1].append(pd.DatetimeIndex([pd.Timestamp(ultimo_dia, tz=ET)]))
     vols = [vol_normal] * 24 + [vol_hoy]
     return pd.DataFrame({"Close": [1.0] * 25, "Volume": vols}, index=dias)
 
