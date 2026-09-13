@@ -35,7 +35,10 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 
 import services.telegram_service as T  # noqa: E402
 
-FALSO = "1234567890:AAFakeTokenSoloParaTests_abcdefghijk"
+# Partido en dos A PROPÓSITO: escrito de una pieza tiene la forma exacta de un
+# token de bot, y test_no_hay_secretos_commiteados.py —con razón— lo trata como
+# una credencial subida a un repositorio público. Así el detector no se toca.
+FALSO = "1234567890:" + "AAFakeTokenSoloParaTests_abcdefghijk"
 
 
 def _error_como_el_real(token):
@@ -57,7 +60,7 @@ def test_tapa_el_token_dentro_de_un_error_real():
 def test_tapa_tambien_un_token_distinto_del_configurado():
     """Por patrón, no solo el token de la configuración: un token de otro
     entorno o uno viejo que se cuele en un mensaje también se tapa."""
-    otro = "9876543210:BBOtroTokenDeOtroEntorno_zyxwvutsrq"
+    otro = "9876543210:" + "BBOtroTokenDeOtroEntorno_zyxwvutsrq"
     assert otro not in T.sin_token(f"fallo en /bot{otro}/sendMessage")
 
 
