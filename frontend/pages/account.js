@@ -117,11 +117,11 @@ async function loadStatus(container) {
 function renderTelegramSection(container, linked) {
     const section = container.querySelector('#account-telegram-section');
     section.innerHTML =
-        '<div style="color:var(--color-muted);font-size:11px;letter-spacing:0.06em;margin-bottom:10px;">🔔 ALERTAS DE WATCHLIST POR TELEGRAM</div>'
+        '<div style="color:var(--color-muted);font-size:11px;letter-spacing:0.06em;margin-bottom:10px;">🔔 TELEGRAM: ALERTAS Y RESUMEN NOCTURNO</div>'
         + (linked
-            ? '<div style="color:var(--color-accent);font-size:13px;margin-bottom:12px;">✅ Vinculado — tus alertas de Watchlist te llegarán aquí en cuanto se disparen.</div>'
+            ? '<div style="color:var(--color-accent);font-size:13px;margin-bottom:12px;">✅ Vinculado — tus alertas de Watchlist te llegarán aquí en cuanto se disparen, y el resumen nocturno de tus valores si lo activas en Watchlist.</div>'
               + '<button id="tg-unlink-btn" style="background:none;border:1px solid var(--color-border);color:var(--color-muted);padding:6px 16px;border-radius:var(--radius);cursor:pointer;font-family:var(--font-mono);font-size:12px;">DESVINCULAR</button>'
-            : '<div style="color:var(--color-muted);font-size:13px;margin-bottom:12px;">Sin vincular — tus alertas de Watchlist solo se ven en la campanita de la web.</div>'
+            : '<div style="color:var(--color-muted);font-size:13px;margin-bottom:12px;">Sin vincular — tus alertas de Watchlist solo se ven en la campanita de la web, y el resumen nocturno no te puede llegar.</div>'
               + '<button id="tg-link-btn" style="background:var(--color-accent);color:#000;border:none;border-radius:var(--radius);padding:8px 20px;font-family:var(--font-mono);font-size:12px;cursor:pointer;font-weight:500;">VINCULAR TELEGRAM</button>');
 
     const linkBtn = section.querySelector('#tg-link-btn');
@@ -154,7 +154,7 @@ async function startLinking(container) {
 function renderLinkPending(container, deepLink) {
     const section = container.querySelector('#account-telegram-section');
     section.innerHTML =
-        '<div style="color:var(--color-muted);font-size:11px;letter-spacing:0.06em;margin-bottom:10px;">🔔 ALERTAS DE WATCHLIST POR TELEGRAM</div>'
+        '<div style="color:var(--color-muted);font-size:11px;letter-spacing:0.06em;margin-bottom:10px;">🔔 TELEGRAM: ALERTAS Y RESUMEN NOCTURNO</div>'
         + '<div style="color:var(--color-text);font-size:13px;margin-bottom:12px;">1. Abre el enlace y pulsa "Iniciar" en Telegram.<br>2. Vuelve aquí y pulsa "Ya lo vinculé".</div>'
         + '<a href="' + esc(safeUrl(deepLink)) + '" target="_blank" rel="noopener" style="display:inline-block;background:var(--color-accent);color:#000;border-radius:var(--radius);padding:8px 20px;font-family:var(--font-mono);font-size:12px;font-weight:500;text-decoration:none;margin-bottom:12px;">ABRIR EN TELEGRAM</a>'
         + '<div style="color:var(--color-muted);font-size:11px;margin-bottom:12px;">El enlace caduca a los 15 minutos.</div>'
