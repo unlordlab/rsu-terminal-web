@@ -118,7 +118,7 @@ function analyzerPanel() {
     return '<div style="background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius);padding:1.25rem;">'
         + '<div style="color:var(--color-accent);font-size:13px;letter-spacing:0.08em;margin-bottom:1rem;">ANÁLISIS INDIVIDUAL ' + tt('canslim') + '</div>'
         + '<div style="display:flex;gap:8px;">'
-        + '<input id="ticker-input" type="text" placeholder="AAPL, NVDA, KTOS..." style="flex:1;background:var(--color-bg);border:1px solid var(--color-border);border-radius:var(--radius);padding:8px 12px;color:var(--color-text);font-family:var(--font-mono);font-size:13px;outline:none;">'
+        + '<input id="ticker-input" aria-label="Ticker a analizar" type="text" placeholder="AAPL, NVDA, KTOS..." style="flex:1;background:var(--color-bg);border:1px solid var(--color-border);border-radius:var(--radius);padding:8px 12px;color:var(--color-text);font-family:var(--font-mono);font-size:13px;outline:none;">'
         + '<button id="analyze-btn" style="background:var(--color-accent);color:#000;border:none;border-radius:var(--radius);padding:8px 16px;font-family:var(--font-mono);font-size:12px;cursor:pointer;letter-spacing:0.05em;">ANALIZAR</button>'
         + '</div>'
         + '<div style="color:var(--color-muted);font-size:11px;margin-top:8px;">Cualquier ticker del mercado americano</div>'
@@ -146,7 +146,7 @@ function scannerPanel() {
         // que no la exigía. Caso real que lo destapó: DXCM, con RS 36 y un
         // +3,3% a 12 meses, puntuaba 75 clavado. A partir de 76 desaparecen
         // todos los de RS<70; se sube a 80, que es el corte redondo.
-        + '<select id="min-score" style="background:var(--color-bg);border:1px solid var(--color-border);border-radius:var(--radius);padding:8px 12px;color:var(--color-text);font-family:var(--font-mono);font-size:12px;flex:1;">'
+        + '<select id="min-score" aria-label="Puntuación mínima" style="background:var(--color-bg);border:1px solid var(--color-border);border-radius:var(--radius);padding:8px 12px;color:var(--color-text);font-family:var(--font-mono);font-size:12px;flex:1;">'
         + '<option value="60">60 — Amplio</option>'
         + '<option value="80" selected>80 — Estándar</option>'
         + '<option value="85">85 — Estricto</option>'

@@ -14,7 +14,7 @@ function pageShell() {
         + '<div style="color:var(--color-muted);font-size:10px;margin-top:2px;">Fuente: kadoa-org/congress-trading-monitor (agrega Senado eFD + Cámara Clerk + OGE) · No es asesoramiento de inversión</div>'
         + '</div>'
         + '<div style="display:flex;gap:8px;margin-bottom:1.5rem;">'
-        + '<input id="congress-search" type="text" placeholder="Buscar ticker (NVDA, AAPL...)" style="flex:1;background:var(--color-bg,#0a0a0a);border:1px solid var(--color-border);border-radius:var(--radius);padding:8px 14px;color:var(--color-text);font-family:var(--font-mono);font-size:13px;outline:none;">'
+        + '<input id="congress-search" aria-label="Buscar ticker" type="text" placeholder="Buscar ticker (NVDA, AAPL...)" style="flex:1;background:var(--color-bg,#0a0a0a);border:1px solid var(--color-border);border-radius:var(--radius);padding:8px 14px;color:var(--color-text);font-family:var(--font-mono);font-size:13px;outline:none;">'
         + '<button id="congress-search-btn" style="background:var(--color-accent);color:#000;border:none;border-radius:var(--radius);padding:8px 20px;font-family:var(--font-mono);font-size:12px;cursor:pointer;font-weight:500;">BUSCAR</button>'
         + '</div>'
         + '<div id="congress-ticker-result"></div>'

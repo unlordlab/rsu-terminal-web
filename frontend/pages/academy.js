@@ -365,7 +365,7 @@ function header() {
 
 function searchBox() {
     return `<div style="margin-bottom:1.5rem;">
-        <input id="ac-search" type="search" placeholder="Buscar en Academy (p. ej. VIX, Weinstein, stop loss)…" autocomplete="off"
+        <input id="ac-search" aria-label="Buscar en Academy" type="search" placeholder="Buscar en Academy (p. ej. VIX, Weinstein, stop loss)…" autocomplete="off"
             style="width:100%;background:var(--color-surface);border:1px solid var(--color-border);color:var(--color-text);border-radius:var(--radius);padding:10px 14px;font-family:var(--font-mono);font-size:13px;outline:none;">
     </div>`;
 }

@@ -359,10 +359,10 @@ function _criterionBlockHtml(id, label, type, placeholder, step, limites, nota) 
         + 'style="border:1px solid var(--color-border);border-radius:var(--radius);padding:10px;cursor:pointer;transition:border-color .15s,background .15s;">'
         + '<div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">'
         + '<span id="scanner-' + id + '-dot" style="width:9px;height:9px;border-radius:50%;border:1px solid var(--color-muted);flex-shrink:0;"></span>'
-        + '<span style="color:var(--color-text);font-size:12px;letter-spacing:0.03em;">' + label + '</span>'
+        + '<span id="scanner-' + id + '-label" style="color:var(--color-text);font-size:12px;letter-spacing:0.03em;">' + label + '</span>'
         + '<input type="checkbox" id="scanner-' + id + '-toggle" style="display:none;">'
         + '</div>'
-        + '<input type="' + type + '" id="scanner-' + id + '-value" step="' + step + '"' + (limites || '') + ' placeholder="' + placeholder + '" disabled '
+        + '<input type="' + type + '" id="scanner-' + id + '-value" aria-labelledby="scanner-' + id + '-label" step="' + step + '"' + (limites || '') + ' placeholder="' + placeholder + '" disabled '
         + 'style="width:100%;background:var(--color-bg,#0a0a0a);border:1px solid var(--color-border);border-radius:var(--radius);padding:6px 8px;color:var(--color-text);font-family:var(--font-mono);font-size:12px;box-sizing:border-box;cursor:not-allowed;">'
         + (nota || '')
         + '</div>';
@@ -373,10 +373,10 @@ function selectCriterionBlock(id, label, optionsHtml) {
         + 'style="border:1px solid var(--color-border);border-radius:var(--radius);padding:10px;cursor:pointer;transition:border-color .15s,background .15s;">'
         + '<div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">'
         + '<span id="scanner-' + id + '-dot" style="width:9px;height:9px;border-radius:50%;border:1px solid var(--color-muted);flex-shrink:0;"></span>'
-        + '<span style="color:var(--color-text);font-size:12px;letter-spacing:0.03em;">' + label + '</span>'
+        + '<span id="scanner-' + id + '-label" style="color:var(--color-text);font-size:12px;letter-spacing:0.03em;">' + label + '</span>'
         + '<input type="checkbox" id="scanner-' + id + '-toggle" style="display:none;">'
         + '</div>'
-        + '<select id="scanner-' + id + '-value" disabled '
+        + '<select id="scanner-' + id + '-value" aria-labelledby="scanner-' + id + '-label" disabled '
         + 'style="width:100%;background:var(--color-bg,#0a0a0a);border:1px solid var(--color-border);border-radius:var(--radius);padding:6px 8px;color:var(--color-text);font-family:var(--font-mono);font-size:12px;box-sizing:border-box;cursor:not-allowed;">'
         + optionsHtml
         + '</select>'
@@ -390,7 +390,7 @@ function toggleCriterionBlock(id, label, sublabel) {
         + 'style="border:1px solid var(--color-border);border-radius:var(--radius);padding:10px;cursor:pointer;transition:border-color .15s,background .15s;display:flex;flex-direction:column;justify-content:center;">'
         + '<div style="display:flex;align-items:center;gap:8px;">'
         + '<span id="scanner-' + id + '-dot" style="width:9px;height:9px;border-radius:50%;border:1px solid var(--color-muted);flex-shrink:0;"></span>'
-        + '<span style="color:var(--color-text);font-size:12px;letter-spacing:0.03em;">' + label + '</span>'
+        + '<span id="scanner-' + id + '-label" style="color:var(--color-text);font-size:12px;letter-spacing:0.03em;">' + label + '</span>'
         + '<input type="checkbox" id="scanner-' + id + '-toggle" style="display:none;">'
         + '</div>'
         + (sublabel ? '<div style="color:var(--color-muted);font-size:9px;margin-top:4px;margin-left:17px;">' + sublabel + '</div>' : '')

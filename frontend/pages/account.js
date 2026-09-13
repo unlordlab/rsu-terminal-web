@@ -73,7 +73,7 @@ function wireDatos(container) {
         // Se pide la contraseña ANTES de borrar, no un "¿estás seguro?": una
         // sesión abierta en un ordenador ajeno no debe bastar para esto.
         zona.innerHTML = '<div style="font-size:12px;color:var(--color-muted);margin-bottom:6px;">Escribe tu contraseña para confirmar:</div>'
-            + '<input id="borrar-pwd" type="password" placeholder="········" style="padding:6px 10px;background:var(--color-bg);color:var(--color-text);border:1px solid var(--color-border);border-radius:var(--radius);font-family:var(--font-mono);font-size:12px;">'
+            + '<input id="borrar-pwd" aria-label="Tu contraseña, para confirmar el borrado" type="password" placeholder="········" style="padding:6px 10px;background:var(--color-bg);color:var(--color-text);border:1px solid var(--color-border);border-radius:var(--radius);font-family:var(--font-mono);font-size:12px;">'
             + ' <button id="borrar-confirmar" style="padding:6px 12px;background:#f23645;color:#fff;border:none;border-radius:var(--radius);font-family:var(--font-mono);font-size:12px;cursor:pointer;">CONFIRMAR BORRADO</button>'
             + '<div id="borrar-msg" style="font-size:12px;margin-top:8px;"></div>';
 

@@ -491,7 +491,7 @@ async function loadCommodities(el) {
 // cuando mas falta hace poder buscar. Ver auditoria Market, hallazgo #25.
 function _barraBusquedaEarnings() {
     return '<div style="padding:8px 12px;border-bottom:1px solid var(--color-border);display:flex;gap:8px;">'
-        + '<input id="earnings-search" type="text" placeholder="Buscar ticker (AAPL, NVDA...)" style="flex:1;background:var(--color-bg,#0a0a0a);border:1px solid var(--color-border);border-radius:var(--radius);padding:5px 10px;color:var(--color-text);font-family:var(--font-mono);font-size:11px;outline:none;text-transform:uppercase;">'
+        + '<input id="earnings-search" aria-label="Buscar ticker en resultados" type="text" placeholder="Buscar ticker (AAPL, NVDA...)" style="flex:1;background:var(--color-bg,#0a0a0a);border:1px solid var(--color-border);border-radius:var(--radius);padding:5px 10px;color:var(--color-text);font-family:var(--font-mono);font-size:11px;outline:none;text-transform:uppercase;">'
         + '<button id="earnings-search-btn" style="background:var(--color-secondary);color:#000;border:none;border-radius:var(--radius);padding:5px 12px;font-family:var(--font-mono);font-size:11px;cursor:pointer;">VER</button>'
         + '</div>';
 }

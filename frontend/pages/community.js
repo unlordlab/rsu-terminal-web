@@ -72,15 +72,15 @@ function pageShell() {
         + '</p>'
 
         + '<div style="display:flex;gap:8px;margin-bottom:0.75rem;flex-wrap:wrap;">'
-        + '<select id="fb-tipo" style="background:var(--color-bg,#0a0a0a);border:1px solid var(--color-border);border-radius:var(--radius);padding:8px 10px;color:var(--color-text);font-family:var(--font-mono);font-size:12px;outline:none;">'
+        + '<select id="fb-tipo" aria-label="Tipo de mensaje" style="background:var(--color-bg,#0a0a0a);border:1px solid var(--color-border);border-radius:var(--radius);padding:8px 10px;color:var(--color-text);font-family:var(--font-mono);font-size:12px;outline:none;">'
         + '<option value="bug">🐞 Reportar un bug</option>'
         + '<option value="sugerencia">💡 Sugerencia</option>'
         + '<option value="otro">✉️ Otro</option>'
         + '</select>'
-        + '<input id="fb-contacto" type="email" placeholder="Tu email (opcional, para poder responderte)" style="flex:1;min-width:220px;background:var(--color-bg,#0a0a0a);border:1px solid var(--color-border);border-radius:var(--radius);padding:8px 10px;color:var(--color-text);font-family:var(--font-mono);font-size:12px;outline:none;">'
+        + '<input id="fb-contacto" aria-label="Tu email (opcional)" type="email" placeholder="Tu email (opcional, para poder responderte)" style="flex:1;min-width:220px;background:var(--color-bg,#0a0a0a);border:1px solid var(--color-border);border-radius:var(--radius);padding:8px 10px;color:var(--color-text);font-family:var(--font-mono);font-size:12px;outline:none;">'
         + '</div>'
 
-        + '<textarea id="fb-mensaje" rows="4" maxlength="3000" placeholder="Cuéntame qué ha pasado o qué se te ha ocurrido..." style="width:100%;background:var(--color-bg,#0a0a0a);border:1px solid var(--color-border);border-radius:var(--radius);padding:10px;color:var(--color-text);font-family:var(--font-mono);font-size:12px;outline:none;box-sizing:border-box;resize:vertical;margin-bottom:0.75rem;"></textarea>'
+        + '<textarea id="fb-mensaje" aria-label="Tu mensaje" rows="4" maxlength="3000" placeholder="Cuéntame qué ha pasado o qué se te ha ocurrido..." style="width:100%;background:var(--color-bg,#0a0a0a);border:1px solid var(--color-border);border-radius:var(--radius);padding:10px;color:var(--color-text);font-family:var(--font-mono);font-size:12px;outline:none;box-sizing:border-box;resize:vertical;margin-bottom:0.75rem;"></textarea>'
 
         + '<div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;">'
         + '<button id="fb-submit-btn" style="background:var(--color-accent);color:#000;border:none;border-radius:var(--radius);padding:9px 22px;font-family:var(--font-mono);font-size:12px;cursor:pointer;font-weight:500;">ENVIAR</button>'

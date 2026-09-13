@@ -233,7 +233,7 @@ export async function render(container) {
             + '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem;">'
             + '<div style="color:var(--color-accent);font-size:12px;letter-spacing:0.08em;">BACKTEST · ¿TIENE VENTAJA REAL? ' + tt('algoritmo-backtest') + '</div>'
             + '<div style="display:flex;gap:8px;align-items:center;">'
-            + '<select id="backtest-years" style="background:var(--color-bg,#0a0a0a);color:var(--color-text);border:1px solid var(--color-border);border-radius:var(--radius);padding:5px 8px;font-family:var(--font-mono);font-size:11px;">'
+            + '<select id="backtest-years" aria-label="Años de backtest" style="background:var(--color-bg,#0a0a0a);color:var(--color-text);border:1px solid var(--color-border);border-radius:var(--radius);padding:5px 8px;font-family:var(--font-mono);font-size:11px;">'
             + '<option value="10">10 años</option>'
             + '<option value="15">15 años</option>'
             // "máximo" y no "20 años" a secas: la EMA200 semanal necesita 15

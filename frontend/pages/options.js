@@ -48,7 +48,7 @@ function pageHeader() {
     <div style="margin-bottom:1.5rem;">
         <div style="color:var(--color-accent);font-size:18px;letter-spacing:0.1em;margin-bottom:1rem;">OPTIONS FLOW ${tt('options-flow')}</div>
         <div style="display:flex;gap:8px;">
-            <input id="opt-search-input" type="text" placeholder="Buscar ticker (NVDA, TSLA...)" style="flex:1;max-width:320px;background:var(--color-bg,#0a0a0a);border:1px solid var(--color-border);border-radius:var(--radius);padding:8px 12px;color:var(--color-text);font-family:var(--font-mono);font-size:13px;outline:none;text-transform:uppercase;">
+            <input id="opt-search-input" aria-label="Buscar ticker" type="text" placeholder="Buscar ticker (NVDA, TSLA...)" style="flex:1;max-width:320px;background:var(--color-bg,#0a0a0a);border:1px solid var(--color-border);border-radius:var(--radius);padding:8px 12px;color:var(--color-text);font-family:var(--font-mono);font-size:13px;outline:none;text-transform:uppercase;">
             <button id="opt-search-btn" style="background:var(--color-accent);color:var(--color-bg,#0a0a0a);border:none;border-radius:var(--radius);padding:8px 16px;font-family:var(--font-mono);font-size:12px;cursor:pointer;">BUSCAR</button>
             <button id="opt-back-btn" style="display:none;background:transparent;color:var(--color-muted);border:1px solid var(--color-border);border-radius:var(--radius);padding:8px 14px;font-family:var(--font-mono);font-size:12px;cursor:pointer;">← Volver</button>
         </div>

@@ -378,6 +378,21 @@ window.goToResearch = function(ticker) {
 //   data-ir="/ruta?x=y"         → navegar a una ruta interna
 //
 // Un test prohíbe volver a meter datos dentro de un onclick.
+// «Saltar al contenido» (Accesibilidad #2 g). Quien navega con teclado o lector
+// de pantalla pasaba por las ~20 entradas de la barra lateral y la superior en
+// CADA página antes de llegar a lo que venía a ver. El enlace lleva href="#main"
+// para que funcione aunque falle el JavaScript, pero aquí se evita el salto por
+// URL: cambiar el hash dispara popstate y el router volvería a pintar la página.
+// `tabindex=-1` hace enfocable el <main> sin meterlo en el orden del tabulador.
+document.addEventListener('click', (e) => {
+    if (!e.target.closest('.saltar-al-contenido')) return;
+    e.preventDefault();
+    const main = document.getElementById('main');
+    if (!main) return;
+    main.setAttribute('tabindex', '-1');
+    main.focus();
+});
+
 document.addEventListener('click', (e) => {
     const el = e.target.closest('[data-research],[data-add-watchlist],[data-ir]');
     if (!el) return;

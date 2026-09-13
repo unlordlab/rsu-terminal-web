@@ -39,6 +39,13 @@ body {
   font-family: var(--font-mono);
   font-size:   var(--font-size);
   line-height: var(--line-height);
+  /* Accesibilidad #2 (e). Una palabra más ancha que su caja —un ticker con
+   * sufijo, el nombre completo de una empresa, una URL, un email en Admin— se
+   * salía por el borde y tapaba lo de al lado, o forzaba scroll horizontal en
+   * el móvil. `break-word` y NO `anywhere`: solo parte la palabra cuando de
+   * verdad no cabe, y no cambia el ancho mínimo de nada — las columnas de las
+   * tablas y los elementos flex miden lo mismo que antes. */
+  overflow-wrap: break-word;
 }
 
 body::after {
@@ -138,6 +145,53 @@ a:hover {
     outline-offset: 2px;
     box-shadow: 0 0 0 2px var(--color-accent);
 }
+
+/* ── TAMAÑO PARA EL DEDO (Accesibilidad #2 f) ─────────────────────────────────
+ *
+ * Ningún control llegaba a los 44px que piden Apple y la WCAG (2.5.5): los
+ * botones de la terminal miden 24–32px de alto, pensados para ratón. En un
+ * teléfono eso es tocar «VOLVER» y darle al de al lado.
+ *
+ * `pointer: coarse` y no un ancho de pantalla: lo que importa es si se toca
+ * con el dedo, no el tamaño. Un portátil con ratón conserva la densidad de
+ * siempre, y una tablet en horizontal (más de 768px) también recibe el
+ * tamaño táctil. `:where()` deja la especificidad a cero, para que cualquier
+ * regla de un tema o de una página pueda seguir decidiendo lo demás.
+ * Casillas y radios a 24px, el mínimo AA: a 44px deformarían cada formulario. */
+@media (pointer: coarse) {
+    :where(button, select, textarea, [role="button"], .nav-item,
+           input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="color"])) {
+        min-height: 44px;
+    }
+    :where(input[type="checkbox"], input[type="radio"]) {
+        min-width: 24px;
+        min-height: 24px;
+    }
+}
+
+/* «Saltar al contenido» (Accesibilidad #2 g): fuera de la pantalla hasta que
+ * recibe el foco con el primer Tab, y entonces aparece arriba a la izquierda.
+ * No se oculta con display:none ni visibility:hidden, que lo sacarían también
+ * del orden del teclado y del lector de pantalla. */
+.saltar-al-contenido {
+    position: fixed;
+    top: 8px;
+    left: 8px;
+    z-index: 10000;
+    padding: 10px 16px;
+    background: var(--color-surface);
+    color: var(--color-text);
+    border: 1px solid var(--color-accent);
+    border-radius: var(--radius);
+    transform: translateY(-200%);
+}
+.saltar-al-contenido:focus {
+    transform: none;
+}
+/* Al saltar, el <main> recibe el foco y enseña el anillo de `[tabindex]`. Se
+ * deja a propósito: dice adónde ha ido el teclado. Quitárselo con
+ * `outline:none` en `:focus` dejaría sin indicador a los navegadores sin
+ * `:focus-visible` (ver test_frontend_foco_teclado.py). */
 
 /* El foco no puede quedar tapado por la barra superior al llegar a un control
  * navegando con el tabulador (WCAG 2.2, «Focus Not Obscured»). */

@@ -160,7 +160,7 @@ function renderKeyPrompt(content, onSuccess) {
             padding: 2rem;
             max-width: 380px;
         ">
-            <label style="
+            <label for="admin-key-input" style="
                 display: block;
                 color: var(--color-muted);
                 font-size: 11px;
@@ -299,6 +299,7 @@ async function renderUsersPanel(content) {
         const tdTier = document.createElement('td');
         tdTier.style.padding = '8px';
         const select = document.createElement('select');
+        select.setAttribute('aria-label', 'Plan de ' + u.email);
         select.style.cssText = 'background:var(--color-bg);color:var(--color-text);border:1px solid var(--color-border);border-radius:var(--radius);padding:4px 6px;font-family:var(--font-mono);font-size:12px;';
         Object.entries(TIER_LABELS).forEach(([value, label]) => {
             const opt = document.createElement('option');
@@ -415,7 +416,7 @@ async function renderMetricsPanel(content) {
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem;flex-wrap:wrap;gap:8px;">
             <div style="display:flex;gap:6px;align-items:center;">
                 <span style="color:var(--color-muted);font-size:11px;">VENTANA:</span>
-                <select id="metrics-days" style="background:var(--color-bg);color:var(--color-text);border:1px solid var(--color-border);border-radius:var(--radius);padding:4px 8px;font-family:var(--font-mono);font-size:12px;">
+                <select id="metrics-days" aria-label="Ventana de métricas" style="background:var(--color-bg);color:var(--color-text);border:1px solid var(--color-border);border-radius:var(--radius);padding:4px 8px;font-family:var(--font-mono);font-size:12px;">
                     <option value="7"${metricsDays === 7 ? ' selected' : ''}>7 días</option>
                     <option value="30"${metricsDays === 30 ? ' selected' : ''}>30 días</option>
                     <option value="90"${metricsDays === 90 ? ' selected' : ''}>90 días</option>
@@ -519,7 +520,7 @@ async function renderHealthPanel(content) {
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem;flex-wrap:wrap;gap:8px;">
             <div style="display:flex;gap:6px;align-items:center;">
                 <span style="color:var(--color-muted);font-size:11px;">VENTANA:</span>
-                <select id="health-hours" style="background:var(--color-bg);color:var(--color-text);border:1px solid var(--color-border);border-radius:var(--radius);padding:4px 8px;font-family:var(--font-mono);font-size:12px;">
+                <select id="health-hours" aria-label="Ventana de salud" style="background:var(--color-bg);color:var(--color-text);border:1px solid var(--color-border);border-radius:var(--radius);padding:4px 8px;font-family:var(--font-mono);font-size:12px;">
                     <option value="1"${healthHours === 1 ? ' selected' : ''}>Última hora</option>
                     <option value="6"${healthHours === 6 ? ' selected' : ''}>6 horas</option>
                     <option value="24"${healthHours === 24 ? ' selected' : ''}>24 horas</option>
@@ -994,7 +995,7 @@ async function renderMeetingRoomPanel(content) {
 
     content.innerHTML = `
         <div style="position:relative;border-radius:var(--radius-lg);overflow:hidden;margin-bottom:1rem;height:140px;">
-            <img src="/assets/meeting-room.jpg" style="width:100%;height:100%;object-fit:cover;object-position:center 25%;filter:brightness(0.55);" />
+            <img src="/assets/meeting-room.jpg" alt="" style="width:100%;height:100%;object-fit:cover;object-position:center 25%;filter:brightness(0.55);" />
             <div style="position:absolute;bottom:12px;left:16px;">
                 <div style="color:#fff;font-size:18px;letter-spacing:0.08em;text-shadow:0 2px 6px rgba(0,0,0,0.6);">MEETING ROOM</div>
                 <div style="color:#ddd;font-size:11px;text-shadow:0 1px 4px rgba(0,0,0,0.6);">Deja instrucciones para Gael, Elia o Laia — las recogen en su próxima ejecución, no al instante.</div>
@@ -1004,13 +1005,13 @@ async function renderMeetingRoomPanel(content) {
         <div id="meeting-room-chat" style="background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius);padding:1rem;margin-bottom:1rem;max-height:420px;overflow-y:auto;display:flex;flex-direction:column;gap:10px;"></div>
 
         <div style="display:flex;gap:8px;align-items:flex-start;">
-            <select id="mr-destinatario" style="background:var(--color-surface);border:1px solid var(--color-border);color:var(--color-text);border-radius:var(--radius);padding:8px 10px;font-family:var(--font-mono);font-size:12px;flex-shrink:0;">
+            <select id="mr-destinatario" aria-label="Destinatario" style="background:var(--color-surface);border:1px solid var(--color-border);color:var(--color-text);border-radius:var(--radius);padding:8px 10px;font-family:var(--font-mono);font-size:12px;flex-shrink:0;">
                 <option value="gael">🐂 Gael</option>
                 <option value="elia">🎓 Elia</option>
                 <option value="laia">⚖️ Laia</option>
                 <option value="todos">📢 Todos</option>
             </select>
-            <textarea id="mr-mensaje" placeholder="Ej: 'Gael, analiza NVDA' o 'Elia, añade una lección sobre stop-loss'..." style="flex:1;background:var(--color-surface);border:1px solid var(--color-border);color:var(--color-text);border-radius:var(--radius);padding:8px 10px;font-family:var(--font-mono);font-size:12px;resize:vertical;min-height:38px;"></textarea>
+            <textarea id="mr-mensaje" aria-label="Mensaje" placeholder="Ej: 'Gael, analiza NVDA' o 'Elia, añade una lección sobre stop-loss'..." style="flex:1;background:var(--color-surface);border:1px solid var(--color-border);color:var(--color-text);border-radius:var(--radius);padding:8px 10px;font-family:var(--font-mono);font-size:12px;resize:vertical;min-height:38px;"></textarea>
             <button id="mr-enviar" style="background:var(--color-accent);color:#000;border:none;border-radius:var(--radius);padding:8px 16px;font-family:var(--font-mono);font-size:12px;cursor:pointer;flex-shrink:0;">ENVIAR</button>
         </div>
     `;

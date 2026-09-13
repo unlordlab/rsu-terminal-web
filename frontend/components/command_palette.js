@@ -56,7 +56,7 @@ function _buildDOM() {
     overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.6);z-index:9999;display:none;align-items:flex-start;justify-content:center;padding-top:12vh;';
     overlay.innerHTML =
         '<div id="cmdk-box" style="width:520px;max-width:92vw;background:var(--color-surface);border:1px solid var(--color-accent);border-radius:var(--radius);overflow:hidden;box-shadow:0 12px 40px rgba(0,0,0,0.5);">'
-        + '<input id="cmdk-input" type="text" placeholder="Ir a una sección o acción..." autocomplete="off" spellcheck="false" '
+        + '<input id="cmdk-input" aria-label="Ir a una sección o acción" type="text" placeholder="Ir a una sección o acción..." autocomplete="off" spellcheck="false" '
         + 'style="width:100%;box-sizing:border-box;background:var(--color-bg,#0a0a0a);border:none;border-bottom:1px solid var(--color-border);padding:14px 16px;color:var(--color-text);font-family:var(--font-mono);font-size:14px;outline:none;">'
         + '<div id="cmdk-list" style="max-height:360px;overflow-y:auto;"></div>'
         + '<div style="padding:6px 14px;border-top:1px solid var(--color-border);font-size:10px;color:var(--color-muted);display:flex;gap:14px;">'

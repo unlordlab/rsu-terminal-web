@@ -52,7 +52,7 @@ export async function render(container) {
 
         // Buscador
         + '<div style="display:flex;gap:8px;margin-bottom:8px;align-items:center;">'
-        + '<input id="news-buscar" type="search" placeholder="Buscar en titulares, descripciones y tickers..." '
+        + '<input id="news-buscar" aria-label="Buscar en las noticias" type="search" placeholder="Buscar en titulares, descripciones y tickers..." '
         + 'style="flex:1;min-width:0;background:var(--color-surface);border:1px solid var(--color-border);'
         + 'border-radius:var(--radius);padding:6px 10px;color:var(--color-text);font-family:var(--font-mono);font-size:11px;">'
         + '<span id="news-buscar-estado" style="color:var(--color-muted);font-size:10px;white-space:nowrap;"></span>'

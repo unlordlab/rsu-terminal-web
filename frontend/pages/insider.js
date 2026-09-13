@@ -13,7 +13,7 @@ function pageShell() {
         + '<div style="color:var(--color-muted);font-size:12px;">Transacciones de directivos · SEC EDGAR Form 4 · Datos oficiales</div>'
         + '</div>'
         + '<div style="display:flex;gap:8px;margin-bottom:1.5rem;">'
-        + '<input id="insider-search" type="text" placeholder="Buscar ticker (NVDA, AAPL...)" style="flex:1;background:var(--color-bg,#0a0a0a);border:1px solid var(--color-border);border-radius:var(--radius);padding:8px 14px;color:var(--color-text);font-family:var(--font-mono);font-size:13px;outline:none;">'
+        + '<input id="insider-search" aria-label="Buscar ticker" type="text" placeholder="Buscar ticker (NVDA, AAPL...)" style="flex:1;background:var(--color-bg,#0a0a0a);border:1px solid var(--color-border);border-radius:var(--radius);padding:8px 14px;color:var(--color-text);font-family:var(--font-mono);font-size:13px;outline:none;">'
         + '<button id="insider-search-btn" style="background:var(--color-accent);color:#000;border:none;border-radius:var(--radius);padding:8px 20px;font-family:var(--font-mono);font-size:12px;cursor:pointer;font-weight:500;">BUSCAR</button>'
         + '</div>'
         + '<div id="insider-ticker-result"></div>'

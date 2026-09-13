@@ -147,7 +147,7 @@ function pageHeader() {
         + '<div style="color:var(--color-muted);font-size:12px;">Análisis fundamental</div>'
         + '</div>'
         + '<div style="display:flex;gap:8px;margin-bottom:1.5rem;">'
-        + '<input id="research-input" type="text" placeholder="AAPL, NVDA, TSLA..." style="flex:1;background:var(--color-bg,#0a0a0a);border:1px solid var(--color-border);border-radius:var(--radius);padding:10px 14px;color:var(--color-text);font-family:var(--font-mono);font-size:14px;outline:none;">'
+        + '<input id="research-input" aria-label="Ticker a analizar" type="text" placeholder="AAPL, NVDA, TSLA..." style="flex:1;background:var(--color-bg,#0a0a0a);border:1px solid var(--color-border);border-radius:var(--radius);padding:10px 14px;color:var(--color-text);font-family:var(--font-mono);font-size:14px;outline:none;">'
         + '<button id="research-btn" style="background:var(--color-accent);color:#000;border:none;border-radius:var(--radius);padding:10px 20px;font-family:var(--font-mono);font-size:13px;cursor:pointer;letter-spacing:0.05em;font-weight:500;">ANALIZAR</button>'
         + '</div>'
         + '<div id="research-result"></div>';

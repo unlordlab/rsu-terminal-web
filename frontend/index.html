@@ -174,10 +174,10 @@
         border: 1px solid var(--color-border);
         color: var(--color-muted);
         border-radius: var(--radius);
-        /* 40px de lado: por debajo de eso el dedo falla más de lo que
-           acierta. */
-        width: 40px;
-        height: 40px;
+        /* 44px de lado, el mínimo táctil (Accesibilidad #2 f): por debajo
+           el dedo falla más de lo que acierta. */
+        width: 44px;
+        height: 44px;
         font-size: 17px;
         line-height: 1;
         cursor: pointer;
@@ -245,6 +245,7 @@
   <script src="https://cdnjs.cloudflare.com/ajax/libs/marked/12.0.2/marked.min.js"></script>
 </head>
 <body>
+  <a href="#main" class="saltar-al-contenido">Saltar al contenido</a>
   <div id="app">
     <nav id="sidebar"></nav>
     <div id="nav-velo"></div>

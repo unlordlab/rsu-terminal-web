@@ -104,10 +104,10 @@ export async function renderThemeMaker(content) {
 
     function campoColor(id, label, value) {
         return `<div>
-            <label style="display:block;color:var(--color-muted);font-size:10px;letter-spacing:0.06em;margin-bottom:4px;">${label}</label>
+            <label for="${id}" style="display:block;color:var(--color-muted);font-size:10px;letter-spacing:0.06em;margin-bottom:4px;">${label}</label>
             <div style="display:flex;gap:6px;align-items:center;">
                 <input type="color" id="${id}" value="${value}" style="width:36px;height:30px;border:1px solid var(--color-border);border-radius:4px;background:none;cursor:pointer;padding:0;">
-                <input type="text" id="${id}-hex" value="${value}" style="flex:1;background:var(--color-bg);border:1px solid var(--color-border);border-radius:4px;padding:6px 8px;color:var(--color-text);font-family:var(--font-mono);font-size:11px;">
+                <input type="text" id="${id}-hex" aria-label="${label} en hexadecimal" value="${value}" style="flex:1;background:var(--color-bg);border:1px solid var(--color-border);border-radius:4px;padding:6px 8px;color:var(--color-text);font-family:var(--font-mono);font-size:11px;">
             </div>
         </div>`;
     }
@@ -115,7 +115,7 @@ export async function renderThemeMaker(content) {
     function renderControls() {
         controls.innerHTML = `
             <div>
-                <label style="display:block;color:var(--color-muted);font-size:10px;letter-spacing:0.06em;margin-bottom:4px;">NOMBRE DEL TEMA (id interno, sin espacios)</label>
+                <label for="tm-nombre" style="display:block;color:var(--color-muted);font-size:10px;letter-spacing:0.06em;margin-bottom:4px;">NOMBRE DEL TEMA (id interno, sin espacios)</label>
                 <input type="text" id="tm-nombre" value="${draft.nombre}" style="width:100%;background:var(--color-bg);border:1px solid var(--color-border);border-radius:4px;padding:7px 9px;color:var(--color-text);font-family:var(--font-mono);font-size:12px;">
             </div>
 
@@ -124,10 +124,10 @@ export async function renderThemeMaker(content) {
             ${campoColor('tm-surface', 'Superficie / tarjetas (--color-surface)', draft.surface)}
             ${campoColor('tm-surface2', 'Superficie secundaria (--color-surface2)', draft.surface2)}
             <div>
-                <label style="display:block;color:var(--color-muted);font-size:10px;letter-spacing:0.06em;margin-bottom:4px;">Borde — color + opacidad (${draft.borderOpacity}%)</label>
+                <label for="tm-borderColor" style="display:block;color:var(--color-muted);font-size:10px;letter-spacing:0.06em;margin-bottom:4px;">Borde — color + opacidad (${draft.borderOpacity}%)</label>
                 <div style="display:flex;gap:6px;align-items:center;">
                     <input type="color" id="tm-borderColor" value="${draft.borderColor}" style="width:36px;height:30px;border:1px solid var(--color-border);border-radius:4px;background:none;cursor:pointer;padding:0;">
-                    <input type="range" id="tm-borderOpacity" min="0" max="100" value="${draft.borderOpacity}" style="flex:1;">
+                    <input type="range" id="tm-borderOpacity" aria-label="Opacidad del borde" min="0" max="100" value="${draft.borderOpacity}" style="flex:1;">
                 </div>
             </div>
 
@@ -141,12 +141,12 @@ export async function renderThemeMaker(content) {
 
             <div style="color:var(--color-muted);font-size:10px;letter-spacing:0.08em;border-top:1px solid var(--color-border);padding-top:10px;">TIPOGRAFÍA Y EFECTOS</div>
             <div>
-                <label style="display:block;color:var(--color-muted);font-size:10px;letter-spacing:0.06em;margin-bottom:4px;">Fuente (--font-mono)</label>
+                <label for="tm-fuente" style="display:block;color:var(--color-muted);font-size:10px;letter-spacing:0.06em;margin-bottom:4px;">Fuente (--font-mono)</label>
                 <select id="tm-fuente" style="width:100%;background:var(--color-bg);border:1px solid var(--color-border);border-radius:4px;padding:7px 9px;color:var(--color-text);font-family:var(--font-mono);font-size:12px;">
                     ${FUENTES_DISPONIBLES.map(f => `<option value="${f.valor}" ${f.valor === draft.fuente ? 'selected' : ''}>${f.etiqueta}</option>`).join('')}
                 </select>
                 ${draft.fuente === 'custom' ? `
-                <input type="text" id="tm-fuente-custom" placeholder="Nombre exacto en Google Fonts, ej: Sora" value="${draft.fuenteCustom}"
+                <input type="text" id="tm-fuente-custom" aria-label="Nombre de la fuente en Google Fonts" placeholder="Nombre exacto en Google Fonts, ej: Sora" value="${draft.fuenteCustom}"
                     style="width:100%;margin-top:6px;background:var(--color-bg);border:1px solid var(--color-border);border-radius:4px;padding:7px 9px;color:var(--color-text);font-family:var(--font-mono);font-size:11px;">
                 <div style="color:var(--color-muted);font-size:9px;margin-top:4px;">⚠ Si no está ya cargada en index.html, hay que añadirla a mano al &lt;link&gt; de Google Fonts.</div>
                 ` : ''}
@@ -285,7 +285,7 @@ export async function renderThemeMaker(content) {
                 <code>"${draft.nombre}"</code> al array <code>THEMES</code> en <code>frontend/core/theme.js</code> · enlázalo en
                 <code>index.html</code> junto a los demás temas${draft.fuente === 'custom' ? ' · añade la fuente al &lt;link&gt; de Google Fonts si no está ya cargada' : ''}.
             </div>
-            <textarea readonly style="width:100%;height:220px;background:var(--color-bg);border:1px solid var(--color-border);border-radius:6px;padding:10px;color:var(--color-text);font-family:var(--font-mono);font-size:11px;">${css}</textarea>
+            <textarea readonly aria-label="CSS del tema generado" style="width:100%;height:220px;background:var(--color-bg);border:1px solid var(--color-border);border-radius:6px;padding:10px;color:var(--color-text);font-family:var(--font-mono);font-size:11px;">${css}</textarea>
             <div style="margin-top:8px;">
                 <button id="tm-copy-btn" style="background:var(--color-surface);color:var(--color-text);border:1px solid var(--color-border);border-radius:var(--radius);padding:7px 14px;font-family:var(--font-mono);font-size:11px;cursor:pointer;">📋 Copiar</button>
                 <button id="tm-download-btn" style="background:var(--color-surface);color:var(--color-text);border:1px solid var(--color-border);border-radius:var(--radius);padding:7px 14px;font-family:var(--font-mono);font-size:11px;cursor:pointer;margin-left:6px;">⬇ Descargar .css</button>

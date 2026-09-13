@@ -52,7 +52,7 @@ function pageShell() {
 
         // Añadir ticker
         + '<div style="display:flex;gap:8px;margin-bottom:1.5rem;">'
-        + '<input id="wl-add-input" type="text" placeholder="Añadir ticker (NVDA, AAPL...)" style="flex:1;background:var(--color-bg,#0a0a0a);border:1px solid var(--color-border);border-radius:var(--radius);padding:8px 14px;color:var(--color-text);font-family:var(--font-mono);font-size:13px;outline:none;text-transform:uppercase;">'
+        + '<input id="wl-add-input" aria-label="Añadir ticker a la lista" type="text" placeholder="Añadir ticker (NVDA, AAPL...)" style="flex:1;background:var(--color-bg,#0a0a0a);border:1px solid var(--color-border);border-radius:var(--radius);padding:8px 14px;color:var(--color-text);font-family:var(--font-mono);font-size:13px;outline:none;text-transform:uppercase;">'
         + '<button id="wl-add-btn" style="background:var(--color-accent);color:#000;border:none;border-radius:var(--radius);padding:8px 20px;font-family:var(--font-mono);font-size:12px;cursor:pointer;font-weight:500;">＋ AÑADIR</button>'
         + '</div>'
 
@@ -65,22 +65,22 @@ function pageShell() {
         // Crear alerta
         + '<div style="margin-top:1.5rem;margin-bottom:0.75rem;color:var(--color-accent);font-size:14px;letter-spacing:0.08em;">⏰ NUEVA ALERTA ' + tt('price-alerts') + '</div>'
         + '<div style="display:flex;gap:8px;margin-bottom:1.5rem;flex-wrap:wrap;align-items:center;background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius);padding:12px 14px;">'
-        + '<input id="alert-ticker" type="text" placeholder="Ticker" style="width:100px;background:var(--color-bg,#0a0a0a);border:1px solid var(--color-border);border-radius:var(--radius);padding:8px 10px;color:var(--color-text);font-family:var(--font-mono);font-size:13px;outline:none;text-transform:uppercase;">'
-        + '<select id="alert-metric" style="background:var(--color-bg,#0a0a0a);border:1px solid var(--color-border);border-radius:var(--radius);padding:8px 10px;color:var(--color-text);font-family:var(--font-mono);font-size:12px;outline:none;">'
+        + '<input id="alert-ticker" aria-label="Ticker de la alerta" type="text" placeholder="Ticker" style="width:100px;background:var(--color-bg,#0a0a0a);border:1px solid var(--color-border);border-radius:var(--radius);padding:8px 10px;color:var(--color-text);font-family:var(--font-mono);font-size:13px;outline:none;text-transform:uppercase;">'
+        + '<select id="alert-metric" aria-label="Tipo de alerta" style="background:var(--color-bg,#0a0a0a);border:1px solid var(--color-border);border-radius:var(--radius);padding:8px 10px;color:var(--color-text);font-family:var(--font-mono);font-size:12px;outline:none;">'
         + '<option value="price">Precio</option>'
         + '<option value="rvol">RVOL</option>'
         + '<option value="ema_touch">Toque de EMA</option>'
         + '<option value="senal">Señal de la terminal</option>'
         + '</select>'
-        + '<select id="alert-senal" style="display:none;background:var(--color-bg,#0a0a0a);border:1px solid var(--color-border);border-radius:var(--radius);padding:8px 10px;color:var(--color-text);font-family:var(--font-mono);font-size:12px;outline:none;">'
+        + '<select id="alert-senal" aria-label="Señal" style="display:none;background:var(--color-bg,#0a0a0a);border:1px solid var(--color-border);border-radius:var(--radius);padding:8px 10px;color:var(--color-text);font-family:var(--font-mono);font-size:12px;outline:none;">'
         + Object.keys(SENAL_CORTA).map(k => '<option value="' + k + '">' + SENAL_CORTA[k] + '</option>').join('')
         + '</select>'
-        + '<select id="alert-condition" style="background:var(--color-bg,#0a0a0a);border:1px solid var(--color-border);border-radius:var(--radius);padding:8px 10px;color:var(--color-text);font-family:var(--font-mono);font-size:12px;outline:none;">'
+        + '<select id="alert-condition" aria-label="Condición" style="background:var(--color-bg,#0a0a0a);border:1px solid var(--color-border);border-radius:var(--radius);padding:8px 10px;color:var(--color-text);font-family:var(--font-mono);font-size:12px;outline:none;">'
         + '<option value="above">Por encima de</option>'
         + '<option value="below">Por debajo de</option>'
         + '</select>'
-        + '<input id="alert-price" type="number" step="0.01" placeholder="Precio objetivo ($)" style="width:160px;background:var(--color-bg,#0a0a0a);border:1px solid var(--color-border);border-radius:var(--radius);padding:8px 10px;color:var(--color-text);font-family:var(--font-mono);font-size:13px;outline:none;">'
-        + '<select id="alert-ema-period" style="display:none;background:var(--color-bg,#0a0a0a);border:1px solid var(--color-border);border-radius:var(--radius);padding:8px 10px;color:var(--color-text);font-family:var(--font-mono);font-size:12px;outline:none;">'
+        + '<input id="alert-price" aria-label="Precio objetivo" type="number" step="0.01" placeholder="Precio objetivo ($)" style="width:160px;background:var(--color-bg,#0a0a0a);border:1px solid var(--color-border);border-radius:var(--radius);padding:8px 10px;color:var(--color-text);font-family:var(--font-mono);font-size:13px;outline:none;">'
+        + '<select id="alert-ema-period" aria-label="Periodo de la EMA" style="display:none;background:var(--color-bg,#0a0a0a);border:1px solid var(--color-border);border-radius:var(--radius);padding:8px 10px;color:var(--color-text);font-family:var(--font-mono);font-size:12px;outline:none;">'
         + '<option value="10">EMA 10</option>'
         + '<option value="20">EMA 20</option>'
         + '<option value="50" selected>EMA 50</option>'
@@ -204,12 +204,12 @@ function panelDetalle(w, listas) {
     return '<div class="wl-detalle" data-ticker="' + esc(w.ticker) + '" hidden '
         + 'style="padding:10px 14px;border-bottom:1px solid var(--color-border);background:rgba(255,255,255,.02);">'
         + '<div style="display:flex;gap:8px;align-items:flex-start;flex-wrap:wrap;">'
-        + '<textarea class="wl-nota" maxlength="500" rows="2" placeholder="Tu nota sobre ' + esc(w.ticker)
+        + '<textarea class="wl-nota" aria-label="Tu nota sobre ' + esc(w.ticker) + '" maxlength="500" rows="2" placeholder="Tu nota sobre ' + esc(w.ticker)
         + ' (por qué lo sigues, el nivel que esperas...)" style="flex:1;min-width:220px;background:var(--color-bg,#0a0a0a);'
         + 'border:1px solid var(--color-border);border-radius:var(--radius);padding:7px 10px;color:var(--color-text);'
         + 'font-family:var(--font-mono);font-size:12px;outline:none;resize:vertical;">' + esc(w.nota || '') + '</textarea>'
         + '<div style="display:flex;flex-direction:column;gap:6px;">'
-        + '<select class="wl-lista-sel" style="background:var(--color-bg,#0a0a0a);border:1px solid var(--color-border);'
+        + '<select class="wl-lista-sel" aria-label="Mover a la lista" style="background:var(--color-bg,#0a0a0a);border:1px solid var(--color-border);'
         + 'border-radius:var(--radius);padding:6px 8px;color:var(--color-text);font-family:var(--font-mono);font-size:11px;outline:none;">'
         + opciones + '<option value="__nueva__">＋ lista nueva…</option></select>'
         + '<button class="wl-guardar" style="background:var(--color-accent);color:#000;border:none;'

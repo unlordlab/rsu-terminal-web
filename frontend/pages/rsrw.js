@@ -228,7 +228,7 @@ function tickerPanel() {
     return '<div style="background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius);padding:1.25rem;margin-bottom:1.5rem;">'
         + '<div style="color:var(--color-accent);font-size:13px;letter-spacing:0.08em;margin-bottom:1rem;">ANÁLISIS RS/RW INDIVIDUAL ' + tt('rs-rating') + '</div>'
         + '<div style="display:flex;gap:8px;">'
-        + '<input id="rsrw-ticker-input" type="text" placeholder="NVDA, AAPL, TSLA..." style="flex:1;background:var(--color-bg,#0a0a0a);border:1px solid var(--color-border);border-radius:var(--radius);padding:8px 12px;color:var(--color-text);font-family:var(--font-mono);font-size:13px;outline:none;">'
+        + '<input id="rsrw-ticker-input" aria-label="Ticker a analizar" type="text" placeholder="NVDA, AAPL, TSLA..." style="flex:1;background:var(--color-bg,#0a0a0a);border:1px solid var(--color-border);border-radius:var(--radius);padding:8px 12px;color:var(--color-text);font-family:var(--font-mono);font-size:13px;outline:none;">'
         + '<button id="rsrw-ticker-btn" style="background:var(--color-accent);color:#000;border:none;border-radius:var(--radius);padding:8px 16px;font-family:var(--font-mono);font-size:12px;cursor:pointer;letter-spacing:0.05em;">ANALIZAR</button>'
         + '</div>'
         + '</div>';

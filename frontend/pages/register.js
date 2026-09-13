@@ -32,7 +32,7 @@ export async function render(container) {
                 ">Crea tu cuenta · Plan gratuito por defecto</div>
 
                 <div style="margin-bottom: 1rem;">
-                    <label style="
+                    <label for="email-input" style="
                         display: block;
                         color: var(--color-muted);
                         font-size: 11px;
@@ -60,7 +60,7 @@ export async function render(container) {
                 </div>
 
                 <div style="margin-bottom: 1rem;">
-                    <label style="
+                    <label for="password-input" style="
                         display: block;
                         color: var(--color-muted);
                         font-size: 11px;
@@ -88,7 +88,7 @@ export async function render(container) {
                 </div>
 
                 <div style="margin-bottom: 1rem;">
-                    <label style="
+                    <label for="password2-input" style="
                         display: block;
                         color: var(--color-muted);
                         font-size: 11px;

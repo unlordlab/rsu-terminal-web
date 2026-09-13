@@ -824,7 +824,7 @@ function renderClosedSection() {
 
 function tableControls(scope, filterVal, shown, total) {
     return `<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:.5rem;">
-        <input type="text" placeholder="Filtrar por ticker, sector o comentario…" value="${filterVal}"
+        <input type="text" placeholder="Filtrar por ticker, sector o comentario…" aria-label="Filtrar posiciones" value="${filterVal}"
             oninput="window.__carteraFilter('${scope}', this.value)"
             style="background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius);color:var(--color-text);font-family:var(--font-mono);font-size:11px;padding:5px 10px;width:280px;">
         <span style="color:var(--color-muted);font-size:10px;">${shown} / ${total}</span>

@@ -12,7 +12,7 @@ export async function render(container) {
         + '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem;">'
         + '<div style="color:var(--color-secondary);font-size:13px;letter-spacing:0.08em;border-left:3px solid var(--color-accent);padding-left:10px;">BACKTEST · SPXL 2008 → HOY</div>'
         + '<div style="display:flex;gap:8px;align-items:center;">'
-        + '<label style="color:var(--color-muted);font-size:12px;">Capital:</label>'
+        + '<label for="bt-capital" style="color:var(--color-muted);font-size:12px;">Capital:</label>'
         + '<input id="bt-capital" type="number" value="100000" min="1000" step="1000" style="width:120px;background:var(--color-bg,#0a0a0a);border:1px solid var(--color-border);border-radius:var(--radius);padding:6px 10px;color:var(--color-text);font-family:var(--font-mono);font-size:12px;outline:none;">'
         + '<button id="bt-run" style="background:var(--color-accent);color:#000;border:none;border-radius:var(--radius);padding:6px 16px;font-family:var(--font-mono);font-size:12px;cursor:pointer;">EJECUTAR</button>'
         + '</div>'

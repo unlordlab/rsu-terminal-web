@@ -60,9 +60,9 @@ export function initChatWidget() {
         <div id="rsu-chat-messages" style="flex:1;overflow-y:auto;padding:12px 14px;display:flex;flex-direction:column;gap:10px;"></div>
         <div style="padding:10px 12px;border-top:1px solid var(--color-border);flex-shrink:0;">
             <div style="display:flex;gap:8px;">
-                <input id="rsu-chat-input" type="text" placeholder="Pregunta lo que sea sobre RSU Terminal..."
+                <input id="rsu-chat-input" aria-label="Pregunta al asistente" type="text" placeholder="Pregunta lo que sea sobre RSU Terminal..."
                     style="flex:1;background:var(--color-bg,#0a0a0a);border:1px solid var(--color-border);border-radius:var(--radius);padding:8px 10px;color:var(--color-text);font-family:var(--font-mono);font-size:12px;outline:none;">
-                <button id="rsu-chat-send" style="background:var(--color-accent);color:#000;border:none;border-radius:var(--radius);padding:8px 14px;font-family:var(--font-mono);font-size:12px;cursor:pointer;font-weight:600;">➤</button>
+                <button id="rsu-chat-send" aria-label="Enviar pregunta" style="background:var(--color-accent);color:#000;border:none;border-radius:var(--radius);padding:8px 14px;font-family:var(--font-mono);font-size:12px;cursor:pointer;font-weight:600;">➤</button>
             </div>
         </div>
     `;

@@ -112,7 +112,7 @@ function avisoLegal() {
 
 function gallery() {
     return '<div style="display:flex;gap:8px;margin-bottom:1rem;flex-wrap:wrap;">'
-        + '<input id="tesis-search" type="text" placeholder="Buscar ticker o nombre..." style="flex:1;min-width:200px;background:var(--color-bg,#0a0a0a);border:1px solid var(--color-border);border-radius:var(--radius);padding:8px 12px;color:var(--color-text);font-family:var(--font-mono);font-size:13px;outline:none;">'
+        + '<input id="tesis-search" aria-label="Buscar tesis por ticker o nombre" type="text" placeholder="Buscar ticker o nombre..." style="flex:1;min-width:200px;background:var(--color-bg,#0a0a0a);border:1px solid var(--color-border);border-radius:var(--radius);padding:8px 12px;color:var(--color-text);font-family:var(--font-mono);font-size:13px;outline:none;">'
         + '<div id="rating-filters" style="display:flex;gap:6px;flex-wrap:wrap;"></div>'
         + '</div>'
         + '<div id="tesis-stats" style="color:var(--color-muted);font-size:11px;margin-bottom:1rem;"></div>'
@@ -264,7 +264,7 @@ function tesisCard(item) {
     // cabecera de marca a partir de ticker/rating/sector — cero pasos manuales.
     // autoHeaderHtml escapa por su cuenta: aquí se le pasan los datos crudos.
     const imgHtml = safeUrl(item.imagen) !== '#'
-        ? '<img src="' + esc(item.imagen) + '" style="width:100%;height:140px;object-fit:cover;" '
+        ? '<img src="' + esc(item.imagen) + '" alt="' + esc(item.ticker) + '" style="width:100%;height:140px;object-fit:cover;" '
           + 'data-ticker="' + esc(item.ticker) + '" data-color="' + esc(color) + '" data-rating="' + esc(item.rating) + '" data-sector="' + esc(item.sector || '') + '" '
           + 'onerror="window.__tesisImgError(this)">'
         : autoHeaderHtml(item.ticker, color, item.rating, item.sector);
