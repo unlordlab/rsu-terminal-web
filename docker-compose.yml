@@ -1,6 +1,14 @@
 services:
   app:
     build: .
+    # SE LEVANTA SOLO si se para. El 12/09/2026 un despliegue se interrumpió al
+    # recrear el contenedor: el viejo quedó parado, el nuevo creado y sin
+    # arrancar, y la terminal estuvo 12 horas caída hasta que alguien lo vio.
+    # Sin política de reinicio, cualquier parada (un despliegue a medias, un
+    # reinicio del servidor, un fallo del propio proceso) deja la terminal
+    # apagada. `unless-stopped` y no `always`: si alguien la para A MANO con
+    # `docker compose stop`, se respeta.
+    restart: unless-stopped
     ports:
       # 127.0.0.1: el puerto SOLO es accesible desde el propio servidor (Nginx).
       # Antes era "8000:8000" (0.0.0.0) — Docker manipula iptables directamente

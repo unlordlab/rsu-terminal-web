@@ -5,7 +5,29 @@ dentro de algoritmo_tracking_service.py; se extrae aquí para que Cartera lo
 reutilice sin copiar el código.
 """
 import os
+import re
 import requests
+
+# ── EL TOKEN NO SALE NUNCA EN UN LOG ─────────────────────────────────────────
+#
+# EL CASO, 13/09/2026. La API de bots de Telegram lleva el token DENTRO de la
+# URL (https://api.telegram.org/bot<TOKEN>/getUpdates), y cuando `requests`
+# falla, el texto de la excepción incluye la URL entera. Los `print` de error
+# de este fichero volcaban `{e}` tal cual, así que un fallo de red escribía el
+# token del bot en claro — en `docker logs`, y ese día en la salida de
+# `deploy.sh`, que el usuario pegó en una conversación. Con el token, cualquiera
+# puede mandar mensajes como el bot a todos sus suscriptores y leer lo que le
+# escriben.
+#
+# Se tapa por patrón y no solo sustituyendo el token configurado: así también
+# cubre un token distinto (el de otro entorno, uno viejo en una variable) que
+# llegara a colarse en un mensaje.
+_PATRON_TOKEN = re.compile(r"bot\d{5,}:[A-Za-z0-9_-]{20,}")
+
+
+def sin_token(texto) -> str:
+    """El texto con cualquier token de bot de Telegram tapado."""
+    return _PATRON_TOKEN.sub("bot***", str(texto))
 
 
 def enviar_telegram(mensaje: str, chat_id: str = None) -> bool:
@@ -29,11 +51,11 @@ def enviar_telegram(mensaje: str, chat_id: str = None) -> bool:
             timeout=10
         )
         if r.status_code != 200:
-            print(f"[Telegram] La API respondió HTTP {r.status_code}: {r.text[:200]}")
+            print(f"[Telegram] La API respondió HTTP {r.status_code}: {sin_token(r.text[:200])}")
             return False
         return True
     except Exception as e:
-        print(f"[Telegram] Error enviando mensaje: {type(e).__name__}: {e}")
+        print(f"[Telegram] Error enviando mensaje: {type(e).__name__}: {sin_token(e)}")
         return False
 
 
@@ -79,11 +101,11 @@ def enviar_telegram_foto(caption: str, photo_path: str) -> bool:
                 timeout=15
             )
         if r.status_code != 200:
-            print(f"[Telegram] sendPhoto respondió HTTP {r.status_code}: {r.text[:200]}")
+            print(f"[Telegram] sendPhoto respondió HTTP {r.status_code}: {sin_token(r.text[:200])}")
             return False
         return True
     except Exception as e:
-        print(f"[Telegram] Error enviando foto: {type(e).__name__}: {e}")
+        print(f"[Telegram] Error enviando foto: {type(e).__name__}: {sin_token(e)}")
         return False
 
 
@@ -212,7 +234,7 @@ def poll_and_process_updates() -> int:
             return 0
         updates = r.json().get("result", [])
     except Exception as e:
-        print(f"[Telegram] Error en getUpdates: {type(e).__name__}: {e}")
+        print(f"[Telegram] Error en getUpdates: {type(e).__name__}: {sin_token(e)}")
         return 0
 
     for upd in updates:

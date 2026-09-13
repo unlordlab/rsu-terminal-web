@@ -94,7 +94,8 @@ def submit_feedback(user_id: int, user_email: str, tipo: str, mensaje: str, cont
                 texto += f"\n\nContacto: {contacto}"
             enviar_telegram(texto, chat_id=settings.telegram_admin_chat_id)
     except Exception as e:
-        print(f"[CommunityFeedback] No se pudo notificar por Telegram: {type(e).__name__}: {e}")
+        from services.telegram_service import sin_token
+        print(f"[CommunityFeedback] No se pudo notificar por Telegram: {type(e).__name__}: {sin_token(e)}")
 
     return {"ok": True, "id": feedback_id}
 

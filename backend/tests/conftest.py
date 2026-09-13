@@ -88,3 +88,39 @@ def _sin_red(request):
     finally:
         socket.socket.connect = _connect_real
         socket.socket.connect_ex = _connect_ex_real
+
+
+# ── NINGUNA CREDENCIAL DE VERDAD DENTRO DE LA SUITE ─────────────────────────
+#
+# EL CASO, 13/09/2026. `deploy.sh` corre esta suite DENTRO del contenedor de
+# producción, que carga el `.env` real. Un test que arranca la app entera
+# (TestClient) arrancaba con ella el bucle de vinculación de Telegram, que
+# intentaba `getUpdates` con el token REAL del bot. El cierre de red de arriba lo
+# bloqueó —bien—, pero el mensaje de error de `requests` lleva la URL completa, y
+# la URL de la API de bots lleva el token dentro: salió impreso en claro en la
+# salida del despliegue.
+#
+# Tapar el token en los logs (services/telegram_service.py::sin_token) arregla el
+# síntoma. Esto arregla la causa: los tests no tienen por qué ver nunca un token
+# de verdad. En CI esos campos ya están vacíos, así que allí no cambia nada.
+_CREDENCIALES_TELEGRAM = ("telegram_bot_token", "telegram_chat_id",
+                          "telegram_admin_chat_id", "telegram_bot_username")
+
+
+@pytest.fixture(autouse=True, scope="session")
+def _sin_credenciales_reales():
+    try:
+        from config import settings
+    except Exception:
+        yield
+        return
+    guardadas = {c: getattr(settings, c, "") for c in _CREDENCIALES_TELEGRAM}
+    for c in _CREDENCIALES_TELEGRAM:
+        if hasattr(settings, c):
+            setattr(settings, c, "")
+    try:
+        yield
+    finally:
+        for c, v in guardadas.items():
+            if hasattr(settings, c):
+                setattr(settings, c, v)

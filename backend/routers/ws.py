@@ -397,7 +397,8 @@ async def telegram_link_poll_loop():
             loop = asyncio.get_event_loop()
             await loop.run_in_executor(None, poll_and_process_updates)
         except Exception as e:
-            print(f"[TelegramLink] Error: {type(e).__name__}: {e}")
+            from services.telegram_service import sin_token
+            print(f"[TelegramLink] Error: {type(e).__name__}: {sin_token(e)}")
             await asyncio.sleep(30)
 
 
