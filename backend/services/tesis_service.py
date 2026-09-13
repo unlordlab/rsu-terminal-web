@@ -442,6 +442,43 @@ def recent_tickers_with_tesis(days: int = 60) -> set:
     return {r["ticker"] for r in rows}
 
 
+# EL CONTENIDO DE UNA TESIS NO ES DE FIAR COMO HTML (Tesis Admin #23). Lo
+# escribe el agente Bull —un modelo de lenguaje que lee páginas web— y aprobar
+# una tesis es leerla, no revisar su HTML. Comprobado el 13/09/2026 con un
+# servidor de prueba: un `<img>`, un `<link>` o un `@import` metidos en el
+# contenido hacían que el SERVIDOR pidiera esas direcciones al generar el PDF
+# (12 peticiones para 4 recursos), es decir, cualquier dirección de la red
+# interna del VPS; y un enlace `javascript:` llegaba tal cual al PDF.
+#
+# Dos cierres, porque cada uno tapa lo que el otro no ve:
+#   1. El markdown se convierte SIN su paso de HTML crudo: `<img …>` sale como
+#      texto. No quita nada que un informe necesite (tablas, listas, negritas
+#      y código son sintaxis markdown, no HTML).
+#   2. xhtml2pdf no descarga nada: toda dirección se sustituye por una imagen
+#      vacía. Una imagen en sintaxis markdown `![](url)` sigue siendo HTML
+#      legítimo, y es justo la que el paso 1 deja pasar.
+_URL_DE_ENLACE_PERMITIDA = re.compile(r"^(https?:|mailto:|#)", re.IGNORECASE)
+_HREF_RE = re.compile(r'href="([^"]*)"')
+# GIF transparente de 1x1. OJO: devolver "" o None NO bloquea — xhtml2pdf
+# solo cambia la dirección si el callback devuelve algo, y si no, la descarga.
+_IMAGEN_VACIA = "data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7"
+
+
+def _markdown_sin_html(md, texto: str) -> str:
+    conversor = md.Markdown(extensions=["tables", "fenced_code"])
+    conversor.preprocessors.deregister("html_block")
+    conversor.inlinePatterns.deregister("html")
+    html_body = conversor.convert(texto)
+    return _HREF_RE.sub(
+        lambda m: m.group(0) if _URL_DE_ENLACE_PERMITIDA.match(m.group(1)) else 'href="#"',
+        html_body,
+    )
+
+
+def _sin_recursos_externos(uri, rel):
+    return _IMAGEN_VACIA
+
+
 def generar_pdf_tesis(tesis: dict) -> bytes:
     """Convierte el contenido markdown de una tesis en un PDF descargable.
     markdown -> HTML -> PDF, las dos librerías son puro Python (sin
@@ -453,7 +490,7 @@ def generar_pdf_tesis(tesis: dict) -> bytes:
     import io
 
     fecha_str = tesis.get("fecha", "")
-    html_body = md.markdown(tesis.get("contenido", ""), extensions=["tables", "fenced_code"])
+    html_body = _markdown_sin_html(md, tesis.get("contenido", "") or "")
     # ticker/titulo/autor vienen del agente Bull (LLM + extracción web) y el
     # PDF se distribuye a la comunidad -- sin escapar, un </style><script>
     # en cualquiera de los tres rompe la plantilla o inyecta contenido.
@@ -488,6 +525,6 @@ def generar_pdf_tesis(tesis: dict) -> bytes:
 </html>"""
 
     buffer = io.BytesIO()
-    pisa.CreatePDF(html_full, dest=buffer)
+    pisa.CreatePDF(html_full, dest=buffer, link_callback=_sin_recursos_externos)
     buffer.seek(0)
     return buffer.getvalue()

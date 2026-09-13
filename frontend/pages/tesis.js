@@ -1,4 +1,4 @@
-import { errorMessage, fmtFecha } from '/core/ui.js';
+import { errorMessage, fmtFecha, esc, safeUrl } from '/core/ui.js';
 import { authHeader } from '/core/api.js';
 let currentPage  = 1;
 let activeRating = 'Todos';
@@ -33,16 +33,55 @@ function ensureMarkdownStyles() {
     document.head.appendChild(style);
 }
 
+// NADA DE LO QUE LLEGA DE UNA TESIS SE PINTA SIN ESCAPAR (Tesis Admin #23).
+// Lo escribe el agente Bull —un modelo que lee páginas web— y aprobar una
+// tesis es leerla, no revisar su HTML. Comprobado el 13/09/2026 con datos
+// falsos: ticker, nombre, sector, autor, resumen y contenido ejecutaban
+// código al abrir la galería o la tesis, y un enlace `javascript:` del
+// markdown llegaba intacto. Por eso cada campo pasa por esc() y el markdown
+// por un marked PROPIO, no el global:
+//   · el HTML crudo sale como texto (tablas, listas y negritas son sintaxis
+//     markdown, no HTML: un informe no pierde nada);
+//   · enlaces e imágenes solo con http(s).
+// Si esta versión de marked no permite crear una instancia, NO se cae al
+// marked.parse global (que deja pasar el HTML): se enseña el texto plano.
+let _markedSeguro = null;
+
+function markedSeguro() {
+    if (_markedSeguro || !window.marked || typeof window.marked.Marked !== 'function') return _markedSeguro;
+    _markedSeguro = new window.marked.Marked({
+        renderer: {
+            html(html) { return esc(html); },
+            link(href, title, text) {
+                if (safeUrl(href) === '#') return text;
+                return '<a href="' + esc(href) + '"' + (title ? ' title="' + esc(title) + '"' : '')
+                    + ' target="_blank" rel="noopener noreferrer">' + text + '</a>';
+            },
+            image(href, title, text) {
+                if (safeUrl(href) === '#') return esc(text);
+                return '<img src="' + esc(href) + '" alt="' + esc(text) + '"'
+                    + (title ? ' title="' + esc(title) + '"' : '') + ' style="max-width:100%;">';
+            },
+        },
+    });
+    return _markedSeguro;
+}
+
+// El documento embebido solo puede ser de Google Docs o Drive, que es lo único
+// que `_normalize_doc_url` sabe preparar. Cualquier otra dirección https no se
+// esconde: se enseña como enlace normal, fuera de la página.
+const _DOC_EMBEBIBLE = /^https:\/\/(docs|drive)\.google\.com\//i;
+
 function renderMarkdown(text) {
     ensureMarkdownStyles();
     try {
-        if (window.marked) return window.marked.parse(text);
+        const m = markedSeguro();
+        if (m) return m.parse(text);
     } catch (e) {
         console.error('Error renderizando markdown:', e);
     }
     // Fallback si marked.js no cargó por lo que sea: texto plano con saltos de línea
-    const escaped = text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-    return '<pre style="white-space:pre-wrap;font-family:var(--font-mono);">' + escaped + '</pre>';
+    return '<pre style="white-space:pre-wrap;font-family:var(--font-mono);">' + esc(text) + '</pre>';
 }
 let allRatings   = ['Todos'];
 
@@ -116,7 +155,7 @@ async function loadGallery(container) {
         // Stats
         const stats = container.querySelector('#tesis-stats');
         if (stats) {
-            stats.innerHTML = '▸ ' + data.total + ' análisis encontrados · Página ' + data.page + ' de ' + data.total_pages;
+            stats.textContent = '▸ ' + data.total + ' análisis encontrados · Página ' + data.page + ' de ' + data.total_pages;
         }
 
         // Grid
@@ -147,12 +186,12 @@ function renderRatingFilters(container) {
     div.innerHTML = allRatings.map(r => {
         const active = r === activeRating;
         const color  = r === 'BUY' ? '#00ffad' : r === 'SELL' ? '#f23645' : r === 'HOLD' ? '#ff9800' : 'var(--color-muted)';
-        return '<button class="rating-filter-btn" data-rating="' + r + '" style="'
+        return '<button class="rating-filter-btn" data-rating="' + esc(r) + '" style="'
             + 'background:' + (active ? color : 'var(--color-surface)') + ';'
             + 'color:' + (active ? '#000' : color) + ';'
             + 'border:1px solid ' + color + ';border-radius:var(--radius);'
             + 'padding:4px 12px;font-family:var(--font-mono);font-size:11px;cursor:pointer;">'
-            + r + '</button>';
+            + esc(r) + '</button>';
     }).join('');
 
     div.querySelectorAll('.rating-filter-btn').forEach(btn => {
@@ -187,9 +226,20 @@ function renderPagination(container, data) {
     });
 }
 
+// El color va dentro de `style` sin comillas propias: se admite solo un hex o
+// una variable de tema. Hoy lo pone el backend desde RATING_CONFIG, pero
+// autoHeaderHtml también lo recibe de un data-* a través de __tesisImgError.
+const _COLOR_RE = /^(#[0-9a-f]{3,8}|var\(--[a-z0-9-]+\))$/i;
+
+function colorSeguro(color, porDefecto) {
+    return _COLOR_RE.test(color || '') ? color : porDefecto;
+}
+
 function autoHeaderHtml(ticker, color, rating, sector) {
-    color = color || 'var(--color-accent)';
-    const sectorUp = (sector || '').toUpperCase();
+    color = colorSeguro(color, 'var(--color-accent)');
+    ticker = esc(ticker);
+    rating = esc(rating);
+    const sectorUp = esc((sector || '').toUpperCase());
     return '<div style="height:140px;position:relative;overflow:hidden;background:linear-gradient(135deg,#151a23,#0a0c10);display:flex;align-items:center;justify-content:center;">'
         + '<div style="position:absolute;inset:0;background-image:repeating-linear-gradient(115deg, transparent, transparent 18px, ' + color + '14 18px, ' + color + '14 19px);"></div>'
         + '<div style="position:absolute;width:200px;height:200px;border-radius:50%;background:radial-gradient(circle, ' + color + '33 0%, transparent 70%);"></div>'
@@ -208,13 +258,14 @@ window.__tesisImgError = function(img) {
 };
 
 function tesisCard(item) {
-    const color   = item.rating_color || 'var(--color-muted)';
+    const color   = colorSeguro(item.rating_color, 'var(--color-muted)');
     // Si hay una imagen puesta a mano en el Sheet, se respeta (por compatibilidad
     // con las tesis que ya la tienen). Si no hay ninguna, se genera sola una
     // cabecera de marca a partir de ticker/rating/sector — cero pasos manuales.
-    const imgHtml = item.imagen && item.imagen.startsWith('http')
-        ? '<img src="' + item.imagen + '" style="width:100%;height:140px;object-fit:cover;" '
-          + 'data-ticker="' + item.ticker + '" data-color="' + color + '" data-rating="' + item.rating + '" data-sector="' + (item.sector || '') + '" '
+    // autoHeaderHtml escapa por su cuenta: aquí se le pasan los datos crudos.
+    const imgHtml = safeUrl(item.imagen) !== '#'
+        ? '<img src="' + esc(item.imagen) + '" style="width:100%;height:140px;object-fit:cover;" '
+          + 'data-ticker="' + esc(item.ticker) + '" data-color="' + esc(color) + '" data-rating="' + esc(item.rating) + '" data-sector="' + esc(item.sector || '') + '" '
           + 'onerror="window.__tesisImgError(this)">'
         : autoHeaderHtml(item.ticker, color, item.rating, item.sector);
 
@@ -222,17 +273,17 @@ function tesisCard(item) {
         + imgHtml
         + '<div style="padding:1rem;flex:1;display:flex;flex-direction:column;">'
         + '<div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">'
-        + '<span style="background:' + color + '22;color:' + color + ';border:1px solid ' + color + '55;border-radius:3px;padding:2px 8px;font-size:11px;font-weight:500;">' + item.rating + '</span>'
+        + '<span style="background:' + color + '22;color:' + color + ';border:1px solid ' + color + '55;border-radius:3px;padding:2px 8px;font-size:11px;font-weight:500;">' + esc(item.rating) + '</span>'
         + (item.es_nuevo ? '<span style="background:#00ffad22;color:#00ffad;border:1px solid #00ffad55;border-radius:3px;padding:2px 6px;font-size:10px;">NEW</span>' : '')
         + '</div>'
-        + '<div style="color:var(--color-accent);font-size:16px;letter-spacing:0.08em;margin-bottom:2px;">' + item.ticker + '</div>'
-        + '<div style="color:var(--color-muted);font-size:12px;margin-bottom:8px;">' + (item.nombre || '') + '</div>'
+        + '<div style="color:var(--color-accent);font-size:16px;letter-spacing:0.08em;margin-bottom:2px;">' + esc(item.ticker) + '</div>'
+        + '<div style="color:var(--color-muted);font-size:12px;margin-bottom:8px;">' + esc(item.nombre || '') + '</div>'
         + '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:auto;">'
-        + (item.sector ? '<span style="color:var(--color-secondary);font-size:10px;padding:2px 6px;background:rgba(0,217,255,0.08);border-radius:3px;">' + item.sector + '</span>' : '')
-        + (item.autor  ? '<span style="color:var(--color-muted);font-size:10px;">👤 ' + item.autor + '</span>' : '')
+        + (item.sector ? '<span style="color:var(--color-secondary);font-size:10px;padding:2px 6px;background:rgba(0,217,255,0.08);border-radius:3px;">' + esc(item.sector) + '</span>' : '')
+        + (item.autor  ? '<span style="color:var(--color-muted);font-size:10px;">👤 ' + esc(item.autor) + '</span>' : '')
         + '</div>'
-        + '<div style="color:var(--color-muted);font-size:10px;margin-top:8px;margin-bottom:1rem;">📅 ' + fmtFecha(item.fecha) + '</div>'
-        + '<button class="tesis-card-btn" data-ticker="' + item.ticker + '" data-fecha="' + item.fecha + '" style="'
+        + '<div style="color:var(--color-muted);font-size:10px;margin-top:8px;margin-bottom:1rem;">📅 ' + esc(fmtFecha(item.fecha)) + '</div>'
+        + '<button class="tesis-card-btn" data-ticker="' + esc(item.ticker) + '" data-fecha="' + esc(item.fecha) + '" style="'
         + 'width:100%;background:transparent;border:1px solid var(--color-accent);color:var(--color-accent);'
         + 'border-radius:var(--radius);padding:8px;font-family:var(--font-mono);font-size:12px;cursor:pointer;'
         + 'letter-spacing:0.05em;transition:all var(--transition);"'
@@ -245,7 +296,7 @@ function tesisCard(item) {
 }
 
 async function loadDetail(container, ticker, fecha) {
-    let url = '/api/v1/tesis/' + ticker;
+    let url = '/api/v1/tesis/' + encodeURIComponent(ticker);
     if (fecha) url += '?fecha=' + encodeURIComponent(fecha);
 
     container.querySelector('#tesis-grid')?.closest('div')?.previousElementSibling;
@@ -298,8 +349,9 @@ async function loadDetail(container, ticker, fecha) {
 }
 
 function renderDetail(data) {
-    const color  = data.rating_color || 'var(--color-muted)';
+    const color  = colorSeguro(data.rating_color, 'var(--color-muted)');
     const upside = data.upside !== null && data.upside !== undefined;
+    const ticker = esc(data.ticker);
     const upsideColor = upside && data.upside >= 0 ? 'var(--color-accent)' : '#f23645';
 
     const riesgoColor = (data.riesgo || '').includes('BAJO') ? 'var(--color-accent)'
@@ -314,8 +366,8 @@ function renderDetail(data) {
 
     return '<div style="margin-bottom:1.5rem;">'
         + '<button id="btn-volver" style="background:transparent;border:1px solid var(--color-border);color:var(--color-muted);border-radius:var(--radius);padding:6px 14px;font-family:var(--font-mono);font-size:12px;cursor:pointer;margin-bottom:1rem;">← VOLVER</button>'
-        + '<div style="font-family:var(--font-mono);color:var(--color-muted);font-size:11px;letter-spacing:0.1em;margin-bottom:4px;">[LOADING ANALYSIS // TICKER: ' + data.ticker + ']</div>'
-        + '<div style="color:var(--color-accent);font-size:22px;letter-spacing:0.08em;margin-bottom:4px;">' + data.nombre + ' <span style="color:var(--color-muted);font-size:14px;">// ' + data.ticker + '</span></div>'
+        + '<div style="font-family:var(--font-mono);color:var(--color-muted);font-size:11px;letter-spacing:0.1em;margin-bottom:4px;">[LOADING ANALYSIS // TICKER: ' + ticker + ']</div>'
+        + '<div style="color:var(--color-accent);font-size:22px;letter-spacing:0.08em;margin-bottom:4px;">' + esc(data.nombre) + ' <span style="color:var(--color-muted);font-size:14px;">// ' + ticker + '</span></div>'
         + avisoLegal()
         + '</div>'
 
@@ -330,7 +382,7 @@ function renderDetail(data) {
         // Resumen
         + (data.resumen ? '<div style="background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius);padding:1.25rem;margin-bottom:1rem;">'
             + '<div style="color:var(--color-accent);font-size:12px;letter-spacing:0.08em;margin-bottom:0.75rem;">📝 RESUMEN EJECUTIVO</div>'
-            + '<div style="color:var(--color-text);font-size:13px;line-height:1.7;">' + data.resumen + '</div>'
+            + '<div style="color:var(--color-text);font-size:13px;line-height:1.7;">' + esc(data.resumen) + '</div>'
             + '</div>' : '')
 
         // Métricas clave
@@ -344,24 +396,35 @@ function renderDetail(data) {
         + '<div style="background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius);padding:1.25rem;margin-bottom:1rem;">'
         + '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.75rem;flex-wrap:wrap;gap:8px;">'
         + '<div style="color:var(--color-accent);font-size:12px;letter-spacing:0.08em;">📄 DOCUMENTO COMPLETO</div>'
-        + (data.id ? '<button id="btn-descargar-pdf" data-tesis-id="' + data.id + '" style="background:transparent;border:1px solid var(--color-accent);color:var(--color-accent);border-radius:var(--radius);padding:5px 12px;font-family:var(--font-mono);font-size:11px;cursor:pointer;">⬇ DESCARGAR PDF</button>' : '')
+        + (data.id ? '<button id="btn-descargar-pdf" data-tesis-id="' + esc(data.id) + '" style="background:transparent;border:1px solid var(--color-accent);color:var(--color-accent);border-radius:var(--radius);padding:5px 12px;font-family:var(--font-mono);font-size:11px;cursor:pointer;">⬇ DESCARGAR PDF</button>' : '')
         + '</div>'
-        + (data.url_doc
-            ? '<iframe src="' + data.url_doc + '" style="width:100%;height:820px;border:none;border-radius:var(--radius);" allowfullscreen></iframe>'
-            : data.contenido
-                ? '<div class="tesis-markdown" style="color:var(--color-text);font-size:13px;line-height:1.7;max-width:100%;overflow-x:auto;">' + renderMarkdown(data.contenido) + '</div>'
-                : '<div style="color:var(--color-muted);font-size:12px;padding:1rem;text-align:center;">⚠ Sin documento disponible.</div>')
+        + documento(data)
         + '</div>'
 
         // Footer
         + '<div style="text-align:center;padding:1rem;color:var(--color-muted);font-size:10px;letter-spacing:0.1em;">'
-        + '[END OF ANALYSIS // ' + data.ticker + '_v1.0] [FECHA: ' + fmtFecha(data.fecha) + '] [STATUS: ACTIVE]'
+        + '[END OF ANALYSIS // ' + ticker + '_v1.0] [FECHA: ' + esc(fmtFecha(data.fecha)) + '] [STATUS: ACTIVE]'
         + '</div>';
 }
 
+function documento(data) {
+    if (data.url_doc && _DOC_EMBEBIBLE.test(data.url_doc)) {
+        return '<iframe src="' + esc(data.url_doc) + '" style="width:100%;height:820px;border:none;border-radius:var(--radius);" allowfullscreen></iframe>';
+    }
+    const enlace = data.url_doc && safeUrl(data.url_doc) !== '#'
+        ? '<div style="margin-bottom:0.75rem;font-size:12px;"><a href="' + esc(data.url_doc) + '" target="_blank" rel="noopener noreferrer" style="color:var(--color-accent);">Abrir el documento original ↗</a></div>'
+        : '';
+    if (data.contenido) {
+        return enlace + '<div class="tesis-markdown" style="color:var(--color-text);font-size:13px;line-height:1.7;max-width:100%;overflow-x:auto;">' + renderMarkdown(data.contenido) + '</div>';
+    }
+    return enlace || '<div style="color:var(--color-muted);font-size:12px;padding:1rem;text-align:center;">⚠ Sin documento disponible.</div>';
+}
+
+// `value` y `color` se escapan/validan aquí para que ningún llamador pueda
+// olvidarlo: RATING, SECTOR, ANALISTA y RIESGO vienen de la tesis.
 function metricCard(label, value, color) {
     return '<div style="background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius);padding:1rem;text-align:center;">'
-        + '<div style="color:' + color + ';font-size:18px;font-weight:500;margin-bottom:4px;">' + (value || 'N/A') + '</div>'
+        + '<div style="color:' + colorSeguro(color, 'var(--color-text)') + ';font-size:18px;font-weight:500;margin-bottom:4px;">' + esc(value || 'N/A') + '</div>'
         + '<div style="color:var(--color-muted);font-size:10px;letter-spacing:0.1em;">' + label + '</div>'
         + '</div>';
 }
