@@ -307,7 +307,7 @@ function renderCartera(d) {
             : '<span title="No forma parte del S&P 500 — su percentil se calcula contra el índice, no dentro de él" style="color:var(--color-muted);font-size:9px;margin-left:4px;">ext</span>';
         const star = f.in_watchlist ? '<span title="En tu Watchlist" style="font-size:10px;">⭐</span>' : '';
         return '<div style="display:grid;grid-template-columns:1fr 54px 70px 70px 70px 24px;gap:6px;padding:5px 12px;border-top:1px solid var(--color-border);font-size:11px;align-items:center;">'
-            + '<span class="ticker-link" onclick="window.__navigate(\'/research?ticker=' + esc(f.ticker) + '\')" style="color:var(--color-accent);cursor:pointer;">' + esc(f.ticker) + star + fuera + '</span>'
+            + '<span class="ticker-link" data-research="' + esc(f.ticker) + '" style="color:var(--color-accent);cursor:pointer;">' + esc(f.ticker) + star + fuera + '</span>'
             + '<span style="color:' + colorPct(f.rs_pct) + ';text-align:right;font-weight:500;">' + (f.rs_pct == null ? '—' : esc(f.rs_pct)) + '</span>'
             + '<span style="color:var(--color-muted);text-align:right;">' + esc(f.rs_21d) + '</span>'
             + '<span style="color:var(--color-muted);text-align:right;">' + esc(f.rs_63d) + '</span>'
@@ -394,7 +394,7 @@ function renderMovimientos(d) {
                 + (sube ? '↓fuerza' : '↑fuerza') + '</span>';
         }
         return '<div style="display:grid;grid-template-columns:1fr 62px 16px 62px 60px;gap:6px;padding:5px 12px;border-top:1px solid var(--color-border);font-size:11px;align-items:center;">'
-            + '<span class="ticker-link" onclick="window.__navigate(\'/research?ticker=' + esc(m.ticker) + '\')" style="color:var(--color-accent);cursor:pointer;">' + esc(m.ticker) + mk + '</span>'
+            + '<span class="ticker-link" data-research="' + esc(m.ticker) + '" style="color:var(--color-accent);cursor:pointer;">' + esc(m.ticker) + mk + '</span>'
             + '<span style="color:var(--color-muted);text-align:right;">' + esc(m.rs_previo) + '</span>'
             + '<span style="color:var(--color-muted);text-align:center;">→</span>'
             + '<span style="color:var(--color-text);text-align:right;">' + esc(m.rs_actual) + '</span>'
@@ -574,7 +574,7 @@ function renderTable(el, title, rows, isLeaders, freshness, total, tableId) {
         const watchlistTag = r.in_watchlist ? ' <span title="En tu Watchlist">⭐</span>' : '';
 
         return '<div style="display:grid;grid-template-columns:70px 60px 60px 60px 60px 60px 60px 1fr;gap:6px;padding:8px 12px;border-bottom:1px solid var(--color-border);font-size:11px;align-items:center;">'
-            + '<div onclick="goToResearch(\'' + esc(r.ticker || '') + '\')" class="ticker-link" style="color:var(--color-accent);font-weight:500;">' + esc(r.ticker || '') + carteraTag + watchlistTag + '</div>'
+            + '<div data-research="' + esc(r.ticker || '') + '" class="ticker-link" style="color:var(--color-accent);font-weight:500;">' + esc(r.ticker || '') + carteraTag + watchlistTag + '</div>'
             + '<div style="color:' + pctColor + ';font-weight:500;">' + pct.toFixed(0) + '</div>'
             + '<div style="color:var(--color-muted);">' + (r.rs_21d || 0).toFixed(1) + '</div>'
             + '<div style="color:var(--color-muted);">' + (r.rs_63d || 0).toFixed(1) + '</div>'

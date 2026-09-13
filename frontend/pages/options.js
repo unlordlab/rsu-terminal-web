@@ -23,6 +23,17 @@ let currentPeriod = '1w';
 
 export async function render(container) {
     container.innerHTML = pageHeader() + '<div id="options-body"></div>';
+    // Un solo escuchador para todos los tickers pulsables de la página. Antes
+    // cada fila llevaba onclick="window.__optionsSearchTicker('…')" con el
+    // ticker dentro, y en un atributo onclick escapar HTML no protege: el
+    // navegador descodifica el atributo ANTES de ejecutarlo (Watchlist #22).
+    // El valor de un data-* se lee como texto y nunca se ejecuta. Va en
+    // #options-body y no en `container`: el contenedor lo reutiliza el router
+    // entre páginas, y engancharlo ahí sumaría un escuchador por visita.
+    container.querySelector('#options-body').addEventListener('click', (e) => {
+        const el = e.target.closest('[data-options-ticker]');
+        if (el) window.__optionsSearchTicker(el.getAttribute('data-options-ticker'));
+    });
     // setupSearch devuelve true si un ?ticker= de la URL ya ha lanzado la
     // vista de ticker. En ese caso NO se carga el panel: las dos peticiones
     // escriben en el mismo #options-body y la que acabe última gana, así
@@ -232,7 +243,7 @@ function renderDashboard(data) {
         <div style="background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius);padding:14px;flex:1;min-width:220px;">
             <div style="color:var(--color-muted);font-size:11px;letter-spacing:0.06em;margin-bottom:10px;">${title}</div>
             <div style="display:flex;flex-wrap:wrap;gap:8px;">
-                ${items.length ? items.map(t => `<span onclick="window.__optionsSearchTicker('${esc(t.ticker)}')" style="cursor:pointer;color:var(--color-accent);font-size:12px;font-weight:600;padding:3px 8px;background:var(--color-bg,#0a0a0a);border-radius:3px;border:1px solid var(--color-border);">${esc(t.ticker)}${badges(t)}${t.premium_fmt ? ' <span style="color:var(--color-muted);font-weight:400;">' + esc(t.premium_fmt) + '</span>' : ''}</span>`).join('') : '<span style="color:var(--color-muted);font-size:11px;">Sin datos todavía</span>'}
+                ${items.length ? items.map(t => `<span data-options-ticker="${esc(t.ticker)}" style="cursor:pointer;color:var(--color-accent);font-size:12px;font-weight:600;padding:3px 8px;background:var(--color-bg,#0a0a0a);border-radius:3px;border:1px solid var(--color-border);">${esc(t.ticker)}${badges(t)}${t.premium_fmt ? ' <span style="color:var(--color-muted);font-weight:400;">' + esc(t.premium_fmt) + '</span>' : ''}</span>`).join('') : '<span style="color:var(--color-muted);font-size:11px;">Sin datos todavía</span>'}
             </div>
         </div>`;
 
@@ -283,7 +294,7 @@ function flowTable(title, rows, color) {
         <div style="max-height:340px;overflow-y:auto;">
             ${rows.length ? rows.map(r => `
             <div style="display:grid;grid-template-columns:70px 1fr 90px 70px;gap:8px;padding:7px 14px;border-bottom:1px solid var(--color-border);font-size:11px;align-items:center;">
-                <span onclick="window.__optionsSearchTicker('${esc(r.ticker)}')" style="cursor:pointer;color:${color};font-weight:600;">${esc(r.ticker)}${_marcaEarnings(r)}${badges(r)}${r.es_repetida ? ' <span title="Mismo contrato repetido en días anteriores">🔁</span>' : ''}</span>
+                <span data-options-ticker="${esc(r.ticker)}" style="cursor:pointer;color:${color};font-weight:600;">${esc(r.ticker)}${_marcaEarnings(r)}${badges(r)}${r.es_repetida ? ' <span title="Mismo contrato repetido en días anteriores">🔁</span>' : ''}</span>
                 <span style="color:var(--color-text);">$${esc(r.strike)} <span style="color:var(--color-muted);">(${esc(r.strike_pct)})</span></span>
                 <span style="color:var(--color-muted);">${esc(_fmtFecha(r.exp))}</span>
                 <span style="color:var(--color-text);text-align:right;">${esc(r.premium_fmt)}</span>
@@ -305,7 +316,7 @@ function oiTable(title, rows, color, arrow) {
         <div style="max-height:280px;overflow-y:auto;">
             ${rows.length ? rows.map(r => `
             <div style="display:grid;grid-template-columns:70px 1fr 90px 70px;gap:8px;padding:7px 14px;border-bottom:1px solid var(--color-border);font-size:11px;align-items:center;">
-                <span onclick="window.__optionsSearchTicker('${esc(r.ticker)}')" style="cursor:pointer;color:${color};font-weight:600;">${esc(r.ticker)}</span>
+                <span data-options-ticker="${esc(r.ticker)}" style="cursor:pointer;color:${color};font-weight:600;">${esc(r.ticker)}</span>
                 <span style="color:var(--color-text);">$${esc(r.strike)}</span>
                 <span style="color:var(--color-muted);">${esc(_fmtFecha(r.exp))}</span>
                 <span style="color:${color};text-align:right;">${arrow} ${Math.abs(r.daily_pct)}%</span>
@@ -645,7 +656,7 @@ function renderTicker(data) {
     return `
     <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:1rem;flex-wrap:wrap;gap:12px;">
         <div>
-            <div style="color:var(--color-text);font-size:24px;font-weight:700;margin-bottom:10px;">${esc(data.ticker)} <span onclick="window.__navigate('/research?ticker=${esc(data.ticker)}')" style="cursor:pointer;color:var(--color-accent);font-size:12px;font-weight:400;text-decoration:underline;vertical-align:middle;" title="Ver análisis completo en Research">→ Research</span>${data.en_cartera ? ' <span style="font-size:12px;background:var(--color-accent);color:var(--color-bg,#0a0a0a);padding:3px 8px;border-radius:3px;vertical-align:middle;">💼 EN CARTERA</span>' : ''}${data.in_watchlist ? ' <span title="En tu Watchlist">⭐</span>' : ''}${data.is_confluence ? ' <span title="Señal alcista simultánea en Insider Flow">⚡</span>' : ''}</div>
+            <div style="color:var(--color-text);font-size:24px;font-weight:700;margin-bottom:10px;">${esc(data.ticker)} <span data-research="${esc(data.ticker)}" style="cursor:pointer;color:var(--color-accent);font-size:12px;font-weight:400;text-decoration:underline;vertical-align:middle;" title="Ver análisis completo en Research">→ Research</span>${data.en_cartera ? ' <span style="font-size:12px;background:var(--color-accent);color:var(--color-bg,#0a0a0a);padding:3px 8px;border-radius:3px;vertical-align:middle;">💼 EN CARTERA</span>' : ''}${data.in_watchlist ? ' <span title="En tu Watchlist">⭐</span>' : ''}${data.is_confluence ? ' <span title="Señal alcista simultánea en Insider Flow">⚡</span>' : ''}</div>
             <div style="display:flex;gap:6px;">${periodBtns}</div>
         </div>
         <div style="background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius);min-width:180px;overflow:hidden;">

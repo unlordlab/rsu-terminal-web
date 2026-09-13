@@ -404,7 +404,7 @@ function renderAnalysis(data) {
         + '<div style="display:flex;justify-content:space-between;align-items:flex-start;">'
         + '<div>'
         + '<div style="display:flex;align-items:center;gap:12px;margin-bottom:6px;">'
-        + '<span style="color:var(--color-accent);font-size:22px;letter-spacing:0.1em;cursor:pointer;" onmouseover="this.style.textDecoration=\'underline\'" onmouseout="this.style.textDecoration=\'none\'" onclick="window.__navigate(\'/research?ticker=' + esc(data.ticker) + '\')">' + esc(data.ticker) + '</span>'
+        + '<span style="color:var(--color-accent);font-size:22px;letter-spacing:0.1em;cursor:pointer;" onmouseover="this.style.textDecoration=\'underline\'" onmouseout="this.style.textDecoration=\'none\'" data-research="' + esc(data.ticker) + '">' + esc(data.ticker) + '</span>'
         + marcas(data)
         + '<span style="color:var(--color-muted);font-size:13px;">' + esc(data.name) + '</span>'
         + '</div>'
@@ -618,7 +618,7 @@ function etiquetarOpciones(select, candidatos) {
 // se escapa con esc() aunque venga del backend: acaba dentro de un atributo
 // onclick, que es el contexto donde un valor sin sanear duele más.
 function enlaceTicker(ruta, ticker, texto, titulo) {
-    return '<span onclick="window.__navigate(\'' + ruta + '?ticker=' + esc(ticker) + '\')" title="' + esc(titulo) + '" '
+    return '<span data-ir="' + esc(ruta + '?ticker=' + encodeURIComponent(ticker)) + '" title="' + esc(titulo) + '" '
         + 'style="color:var(--color-secondary);cursor:pointer;text-decoration:underline;">' + esc(texto) + '</span>';
 }
 

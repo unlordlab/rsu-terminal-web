@@ -338,7 +338,12 @@ function tickerChips(tickers) {
     if (!tickers || !tickers.length) return '';
     return tickers.map(t =>
         '<a href="/research?ticker=' + encodeURIComponent(t) + '" '
-        + 'onclick="event.preventDefault();window.__navigate(\'/research?ticker=' + encodeURIComponent(t) + '\')" '
+        // El href se queda para abrir en pestaña nueva; el clic normal lo
+        // atiende el escuchador global (core/router.js) leyendo data-research.
+        // Antes era un onclick con el ticker dentro, y encodeURIComponent NO
+        // codifica la comilla simple: una comilla en el dato cerraba el string
+        // del onclick. Watchlist #22.
+        + 'data-research="' + esc(t) + '" '
         + 'title="Ver ' + esc(t) + ' en Research" '
         + 'style="color:var(--color-accent);font-size:10px;padding:1px 6px;border:1px solid var(--color-accent)33;'
         + 'border-radius:3px;text-decoration:none;cursor:pointer;">' + esc(t) + '</a>'

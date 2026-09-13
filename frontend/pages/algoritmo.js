@@ -601,7 +601,7 @@ async function loadCandidatos(container, enVerde) {
         // que navega por el router del SPA en vez de recargar la página.
         const filas = data.candidatos.map(c =>
             '<div style="display:grid;grid-template-columns:80px 1fr;gap:12px;padding:9px 0;border-bottom:1px solid var(--color-border);align-items:baseline;">'
-            + '<div onclick="goToResearch(\'' + esc(c.ticker) + '\')" class="ticker-link" style="color:var(--color-accent);font-weight:500;">' + esc(c.ticker) + '</div>'
+            + '<div data-research="' + esc(c.ticker) + '" class="ticker-link" style="color:var(--color-accent);font-weight:500;">' + esc(c.ticker) + '</div>'
             + '<span style="color:var(--color-muted);font-size:12px;">' + esc(c.porque)
             + '<span style="opacity:0.6;"> · ' + esc(c.sector) + '</span></span>'
             + '</div>'

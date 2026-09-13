@@ -245,7 +245,7 @@ function renderTransiciones(d) {
             + '<div style="color:' + color + ';font-size:11px;letter-spacing:0.06em;margin-bottom:0.5rem;">' + titulo + ' (' + filas.length + ')</div>'
             + filas.slice(0, 10).map(r =>
                 '<div style="display:grid;grid-template-columns:64px 1fr 46px;gap:8px;align-items:center;padding:4px 0;border-bottom:1px solid var(--color-border);font-size:11px;">'
-                + '<span onclick="goToResearch(\'' + esc(r.ticker) + '\')" class="ticker-link" style="color:var(--color-accent);">' + esc(r.ticker) + '</span>'
+                + '<span data-research="' + esc(r.ticker) + '" class="ticker-link" style="color:var(--color-accent);">' + esc(r.ticker) + '</span>'
                 + '<span style="color:var(--color-muted);font-size:10px;">' + esc(r.desde_label || '—') + ' → ' + esc(r.hasta_label || '—') + '</span>'
                 + '<span style="color:var(--color-text);text-align:right;" title="Percentil de fuerza relativa">' + (r.rs_pct != null ? r.rs_pct : '—') + '</span>'
                 + '</div>').join('')
@@ -802,7 +802,7 @@ function renderResults(el, data) {
                     : 'var(--color-muted)';
 
         return '<div style="display:grid;grid-template-columns:70px 82px 66px 58px 56px 66px 58px 60px 1fr 1fr 34px;gap:6px;padding:8px 12px;border-bottom:1px solid var(--color-border);font-size:11px;align-items:center;' + (r.new_high ? 'background:rgba(255,152,0,0.04);' : '') + '">'
-            + '<div onclick="goToResearch(\'' + esc(r.ticker || '') + '\')" class="ticker-link" style="color:var(--color-accent);font-weight:500;cursor:pointer;">' + esc(r.ticker || '') + athTag + carteraTag + watchlistTag + '</div>'
+            + '<div data-research="' + esc(r.ticker || '') + '" class="ticker-link" style="color:var(--color-accent);font-weight:500;cursor:pointer;">' + esc(r.ticker || '') + athTag + carteraTag + watchlistTag + '</div>'
             + '<div style="color:var(--color-muted);">' + (r.precio != null ? '$' + r.precio.toFixed(2) : '—') + '</div>'
             + '<div style="color:' + colorVariacion(chg) + ';font-weight:500;">' + textoVariacion(chg) + '</div>'
             + '<div style="color:' + rvolClr + ';">' + (r.rvol != null ? r.rvol.toFixed(2) + 'x' : '—') + '</div>'
@@ -812,7 +812,7 @@ function renderResults(el, data) {
             + '<div style="color:' + l3Clr + ';font-weight:500;" title="' + esc(r.l3_estado || 'sin lectura') + '">' + (l3 != null ? l3.toFixed(0) : '—') + '</div>'
             + '<div style="color:' + phaseClr + ';font-size:10px;">' + esc(r.phase_label || '—') + fasesemanal(r) + '</div>'
             + '<div style="color:var(--color-muted);font-size:10px;">' + esc(r.sector || '—') + '</div>'
-            + '<div style="text-align:center;"><button onclick="window.__quickAddWatchlist(\'' + esc(r.ticker || '') + '\', this)" title="Añadir a watchlist" style="background:transparent;border:1px solid var(--color-border);color:var(--color-muted);border-radius:3px;padding:2px 6px;font-size:11px;cursor:pointer;">＋</button></div>'
+            + '<div style="text-align:center;"><button data-add-watchlist="' + esc(r.ticker || '') + '" title="Añadir a watchlist" style="background:transparent;border:1px solid var(--color-border);color:var(--color-muted);border-radius:3px;padding:2px 6px;font-size:11px;cursor:pointer;">＋</button></div>'
             + '</div>';
     }).join('');
 

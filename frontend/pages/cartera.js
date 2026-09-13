@@ -695,7 +695,7 @@ function riskPanel(abiertas) {
         return `<div style="background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius);padding:.85rem 1rem;">
             <div style="color:var(--color-muted);font-size:10px;letter-spacing:.08em;margin-bottom:5px;">${label}</div>
             <div style="display:flex;justify-content:space-between;align-items:center;">
-                <span class="ticker-link" onclick="window.__navigate('/research?ticker=${ticker}')">${ticker}</span>
+                <span class="ticker-link" data-research="${esc(ticker)}">${esc(ticker)}</span>
                 <span style="color:${color};font-size:13px;font-weight:500;">${val}</span>
             </div>
         </div>`;
@@ -924,7 +924,7 @@ function activeTable(rows) {
             </td>
             <td style="padding:8px 10px;color:var(--color-muted);font-size:11px;white-space:nowrap;">${r.fecha_display || r.fecha}</td>
             <td style="padding:8px 10px;white-space:nowrap;">
-                <span class="ticker-link" onclick="window.__navigate('/research?ticker=${r.ticker}')" title="Ver análisis en Research">${r.ticker}</span>${earningsBadge(r)}
+                <span class="ticker-link" data-research="${esc(r.ticker)}" title="Ver análisis en Research">${esc(r.ticker)}</span>${earningsBadge(r)}
             </td>
             <td style="padding:8px 10px;">${tierBadge}</td>
             <td style="padding:8px 10px;color:var(--color-muted);font-size:11px;max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${r.sector || 'Sin clasificar'}</td>
@@ -1041,7 +1041,7 @@ function closedTable(rows) {
         return `<tr class="cartera-tr" style="border-bottom:1px solid var(--color-border);">
             <td style="padding:8px 12px;color:var(--color-muted);font-size:11px;">${r.fecha_display || r.fecha}</td>
             <td style="padding:8px 12px;">
-                <span class="ticker-link" onclick="window.__navigate('/research?ticker=${r.ticker}')">${r.ticker}</span>
+                <span class="ticker-link" data-research="${esc(r.ticker)}">${esc(r.ticker)}</span>
             </td>
             <td style="padding:8px 12px;color:var(--color-text);font-size:12px;">$${usd(r.compra)}</td>
             <td style="padding:8px 12px;color:var(--color-text);font-size:12px;">$${usd(r.actual)}</td>
@@ -1069,7 +1069,7 @@ function recentBox(title, rows, isEntradas) {
             : `<span style="color:${r.pnl >= 0 ? 'var(--color-accent)' : '#f23645'};">${r.pnl >= 0 ? '+' : ''}${fix(r.pnl)}%</span>`;
         return `<div style="display:flex;justify-content:space-between;align-items:center;padding:7px 0;border-bottom:1px solid var(--color-border);font-size:12px;">
             <span style="color:var(--color-muted);">${r.fecha_display || r.fecha}</span>
-            <span class="ticker-link" onclick="window.__navigate('/research?ticker=${r.ticker}')">${r.ticker}</span>
+            <span class="ticker-link" data-research="${esc(r.ticker)}">${esc(r.ticker)}</span>
             ${val}
         </div>`;
     }).join('') || `<div style="color:var(--color-muted);font-size:12px;padding:.5rem 0;">Sin datos.</div>`;

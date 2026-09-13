@@ -121,7 +121,7 @@ function renderBuys(buys, coverage) {
 
     const rows = buys.map(b => '<div style="display:grid;grid-template-columns:80px 70px 1fr 60px 100px 60px;gap:8px;padding:8px 14px;border-bottom:1px solid var(--color-border);font-size:11px;align-items:center;">'
         + '<div style="color:var(--color-muted);">' + esc(fmtFecha(b.transaction_date)) + '</div>'
-        + '<div onclick="goToResearch(\'' + esc(b.ticker) + '\')" class="ticker-link" style="color:var(--color-accent);font-weight:500;">' + esc(b.ticker) + badges(b) + '</div>'
+        + '<div data-research="' + esc(b.ticker) + '" class="ticker-link" style="color:var(--color-accent);font-weight:500;">' + esc(b.ticker) + badges(b) + '</div>'
         + '<div style="color:var(--color-text);">' + esc(b.filer_name || '—') + ' <span style="color:var(--color-muted);font-size:10px;">(' + esc(chamberLabel(b.chamber)) + ')</span></div>'
         + '<div style="color:var(--color-muted);font-size:10px;">' + esc(partyState(b)) + '</div>'
         + '<div style="color:var(--color-accent);font-weight:500;">' + esc(b.amount_range_label || '—') + '</div>'
@@ -141,7 +141,7 @@ function renderSells(sells, coverage) {
 
     const rows = sells.map(s => '<div style="display:grid;grid-template-columns:80px 70px 1fr 100px;gap:8px;padding:8px 14px;border-bottom:1px solid var(--color-border);font-size:11px;align-items:center;">'
         + '<div style="color:var(--color-muted);">' + esc(fmtFecha(s.transaction_date)) + '</div>'
-        + '<div onclick="goToResearch(\'' + esc(s.ticker) + '\')" class="ticker-link" style="color:var(--color-accent);font-weight:500;">' + esc(s.ticker) + badges(s) + '</div>'
+        + '<div data-research="' + esc(s.ticker) + '" class="ticker-link" style="color:var(--color-accent);font-weight:500;">' + esc(s.ticker) + badges(s) + '</div>'
         + '<div style="color:var(--color-text);">' + esc(s.filer_name || '—') + ' <span style="color:var(--color-muted);font-size:10px;">(' + esc(chamberLabel(s.chamber)) + ')</span></div>'
         + '<div style="color:#f23645;font-weight:500;">' + esc(s.amount_range_label || '—') + '</div>'
         + '</div>'
@@ -156,7 +156,7 @@ function renderClusters(clusters) {
     const rows = clusters.map(c => '<div style="padding:12px 14px;border-bottom:1px solid var(--color-border);">'
         + '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">'
         + '<div style="display:flex;align-items:center;gap:10px;">'
-        + '<span onclick="goToResearch(\'' + esc(c.ticker) + '\')" class="ticker-link" style="color:var(--color-accent);font-size:16px;font-weight:500;">' + esc(c.ticker) + badges(c) + '</span>'
+        + '<span data-research="' + esc(c.ticker) + '" class="ticker-link" style="color:var(--color-accent);font-size:16px;font-weight:500;">' + esc(c.ticker) + badges(c) + '</span>'
         + '<span style="color:var(--color-muted);font-size:11px;">' + esc(c.asset_name || '') + '</span>'
         + '</div>'
         + '<span style="background:' + (c.signal === 'FUERTE' ? '#00ffad' : '#ffb800') + '22;color:' + (c.signal === 'FUERTE' ? 'var(--color-accent)' : '#ffb800') + ';border:1px solid;border-radius:3px;padding:2px 8px;font-size:10px;">' + esc(c.signal) + '</span> ' + tt('congress-cluster')

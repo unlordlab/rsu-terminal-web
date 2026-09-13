@@ -112,7 +112,7 @@ function renderBuys(buys, coverage) {
 
     const rows = buys.map(b => '<div style="display:grid;grid-template-columns:80px 70px 1fr 120px 90px 80px;gap:8px;padding:8px 14px;border-bottom:1px solid var(--color-border);font-size:11px;align-items:center;">'
         + '<div style="color:var(--color-muted);">' + esc(fmtFecha(b.date)) + '</div>'
-        + '<div onclick="goToResearch(\'' + esc(b.ticker) + '\')" class="ticker-link" style="color:var(--color-accent);font-weight:500;">' + esc(b.ticker) + badges(b) + '</div>'
+        + '<div data-research="' + esc(b.ticker) + '" class="ticker-link" style="color:var(--color-accent);font-weight:500;">' + esc(b.ticker) + badges(b) + '</div>'
         + '<div style="color:var(--color-text);">' + esc(b.insider_name || '—') + '</div>'
         + '<div style="color:var(--color-muted);font-size:10px;">' + esc((b.title || '—').substring(0, 20)) + '</div>'
         + '<div style="color:var(--color-text);">' + Number(b.shares || 0).toLocaleString('en-US') + '</div>'
@@ -132,7 +132,7 @@ function renderSells(sells, coverage) {
 
     const rows = sells.map(s => '<div style="display:grid;grid-template-columns:80px 70px 1fr 90px 80px;gap:8px;padding:8px 14px;border-bottom:1px solid var(--color-border);font-size:11px;align-items:center;">'
         + '<div style="color:var(--color-muted);">' + esc(fmtFecha(s.date)) + '</div>'
-        + '<div onclick="goToResearch(\'' + esc(s.ticker) + '\')" class="ticker-link" style="color:var(--color-accent);font-weight:500;">' + esc(s.ticker) + badges(s) + '</div>'
+        + '<div data-research="' + esc(s.ticker) + '" class="ticker-link" style="color:var(--color-accent);font-weight:500;">' + esc(s.ticker) + badges(s) + '</div>'
         + '<div style="color:var(--color-text);">' + esc(s.insider_name || '—') + '</div>'
         + '<div style="color:var(--color-text);">' + Number(s.shares || 0).toLocaleString('en-US') + '</div>'
         + '<div style="color:#f23645;font-weight:500;">' + fmtVal(s.value) + '</div>'
@@ -148,7 +148,7 @@ function renderClusters(clusters) {
     const rows = clusters.map(c => '<div style="padding:12px 14px;border-bottom:1px solid var(--color-border);">'
         + '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">'
         + '<div style="display:flex;align-items:center;gap:10px;">'
-        + '<span onclick="goToResearch(\'' + esc(c.ticker) + '\')" class="ticker-link" style="color:var(--color-accent);font-size:16px;font-weight:500;">' + esc(c.ticker) + badges(c) + '</span>'
+        + '<span data-research="' + esc(c.ticker) + '" class="ticker-link" style="color:var(--color-accent);font-size:16px;font-weight:500;">' + esc(c.ticker) + badges(c) + '</span>'
         + '<span style="color:var(--color-muted);font-size:11px;">' + esc(c.company) + '</span>'
         + '</div>'
         + '<span style="background:' + esc(c.signal_color) + '22;color:' + esc(c.signal_color) + ';border:1px solid ' + esc(c.signal_color) + '44;border-radius:3px;padding:2px 8px;font-size:10px;">' + esc(c.signal) + '</span>'

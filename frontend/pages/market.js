@@ -1490,7 +1490,7 @@ async function loadCrypto(el) {
                         : '$' + c.price.toFixed(8);
                 return '<div style="display:flex;justify-content:space-between;align-items:center;padding:4px 0;font-size:11px;">'
                     + '<span style="color:var(--color-muted);width:16px;display:inline-block;">' + c.rank + '</span>'
-                    + '<span class="ticker-link" style="flex:1;margin:0 6px;" onclick="window.__navigate(\'/research?ticker=' + c.ticker + '-USD\')">' + c.ticker + '</span>'
+                    + '<span class="ticker-link" style="flex:1;margin:0 6px;" data-research="' + esc(c.ticker + '-USD') + '">' + esc(c.ticker) + '</span>'
                     + '<span style="color:var(--color-text);margin-right:8px;">' + priceStr + '</span>'
                     + '<span style="color:' + color + ';font-weight:500;">' + arrow + ' ' + Math.abs(c.pct_30d).toFixed(2) + '%</span>'
                     + '</div>';
@@ -2008,7 +2008,7 @@ async function loadReddit(el) {
                            : vr >= 1.5 ? '#ffb800' : 'var(--color-muted)';
             return '<div style="display:grid;grid-template-columns:' + GRID + ';gap:6px;padding:8px 12px;border-bottom:1px solid var(--color-border);font-size:11px;align-items:center;">'
                 + '<div style="color:' + (rank <= 3 ? 'var(--color-accent)' : 'var(--color-muted)') + ';font-weight:500;">' + rank + '</div>'
-                + '<div onclick="goToResearch(\'' + item.ticker + '\')" class="ticker-link" style="color:var(--color-accent);font-weight:500;">' + item.ticker + '</div>'
+                + '<div data-research="' + esc(item.ticker) + '" class="ticker-link" style="color:var(--color-accent);font-weight:500;">' + esc(item.ticker) + '</div>'
                 + '<div><div style="color:var(--color-text);">' + priceStr + '</div><div style="color:' + chgColor + ';font-size:10px;">' + chgStr + '</div></div>'
                 + '<div><div style="background:var(--color-surface2);border-radius:2px;height:4px;margin-bottom:2px;"><div style="height:100%;width:' + item.buzz + '%;background:var(--color-accent);border-radius:2px;"></div></div><div style="color:var(--color-muted);font-size:10px;">' + item.buzz + '</div></div>'
                 + '<div style="color:' + volColor + ';font-size:11px;font-weight:500;">' + volStr + '</div>'
@@ -2632,7 +2632,7 @@ function _prefijoDe(precioFormateado) {
 function wsRow(ticker, name, price, change, color) {
     return '<div data-ws-ticker="' + ticker + '" style="display:flex;justify-content:space-between;align-items:center;padding:10px 14px;border-bottom:1px solid var(--color-border);">'
         + '<div>'
-        + '<div onclick="goToResearch(\'' + ticker + '\')" class="ticker-link" style="color:var(--color-accent);font-size:13px;font-weight:500;">' + ticker + '</div>'
+        + '<div data-research="' + esc(ticker) + '" class="ticker-link" style="color:var(--color-accent);font-size:13px;font-weight:500;">' + esc(ticker) + '</div>'
         + '<div style="color:var(--color-muted);font-size:11px;">' + name + '</div>'
         + '</div>'
         + '<div style="text-align:right;">'

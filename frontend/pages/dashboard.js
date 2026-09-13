@@ -209,7 +209,7 @@ async function loadWatchlistSummary(el) {
             const up     = !sinChg && w.chg >= 0;
             const color  = (w.ok && !sinChg) ? (up ? 'var(--color-accent)' : '#f23645') : 'var(--color-muted)';
             return '<div style="display:flex;justify-content:space-between;padding:5px 0;font-size:12px;border-bottom:1px solid var(--color-border);">'
-                + '<span class="ticker-link" style="color:var(--color-accent);cursor:pointer;" onclick="window.__navigate(\'/research?ticker=' + w.ticker + '\')">' + w.ticker + '</span>'
+                + '<span class="ticker-link" style="color:var(--color-accent);cursor:pointer;" data-research="' + esc(w.ticker) + '">' + esc(w.ticker) + '</span>'
                 + '<span style="color:' + color + ';"' + (sinChg ? ' title="Todavía no hay cotización de hoy para este valor."' : '') + '>'
                 + ((w.ok && !sinChg) ? (up ? '▲' : '▼') + ' ' + Math.abs(w.chg).toFixed(2) + '%' : '—') + '</span>'
                 + '</div>';
@@ -484,9 +484,10 @@ async function loadAcademyContinuar(el) {
         if (!progreso || !progreso.ok || !cert || !cert.ok) return;
         const paso = siguientePaso(progreso, cert, catalogoAcademy());
         if (!paso) return;
+        // El botón lleva data-ir y lo atiende el escuchador global de
+        // core/router.js. Engancharle otro aquí navegaba DOS veces (dos
+        // entradas en el historial y «atrás» no volvía al Dashboard).
         el.innerHTML = tarjetaAcademy(paso);
-        const boton = el.querySelector('[data-ir]');
-        if (boton) boton.addEventListener('click', () => window.__navigate(boton.getAttribute('data-ir')));
     } catch (_) { /* el Dashboard se usa igual sin la tarjeta */ }
 }
 

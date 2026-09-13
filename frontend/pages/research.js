@@ -173,7 +173,7 @@ function cryptoHeaderSection(data, chgColor, chgStr) {
         + '<div style="color:var(--color-text);font-size:28px;font-weight:500;">$' + data.price.toLocaleString('en-US') + '</div>'
         + '<div style="color:' + chgColor + ';font-size:13px;">' + chgStr + ' hoy</div>'
         + '<div style="color:var(--color-muted);font-size:11px;margin-top:2px;">' + data.mktcap_fmt + ' market cap</div>'
-        + '<button onclick="window.__quickAddWatchlist(\'' + data.ticker + '\', this)" style="margin-top:8px;background:transparent;border:1px solid var(--color-border);color:var(--color-muted);border-radius:var(--radius);padding:5px 12px;font-size:11px;cursor:pointer;">＋ Watchlist</button>'
+        + '<button data-add-watchlist="' + esc(data.ticker) + '" style="margin-top:8px;background:transparent;border:1px solid var(--color-border);color:var(--color-muted);border-radius:var(--radius);padding:5px 12px;font-size:11px;cursor:pointer;">＋ Watchlist</button>'
         + '</div>'
         + '</div>'
         + '<div style="display:flex;gap:2rem;margin-top:1rem;padding-top:1rem;border-top:1px solid var(--color-border);font-size:11px;flex-wrap:wrap;">'
@@ -343,7 +343,7 @@ function headerSection(data, chgColor, chgStr) {
         + '<div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:1rem;">'
         + '<div>'
         + '<div style="display:flex;align-items:baseline;gap:12px;margin-bottom:4px;">'
-        + '<span onclick="goToResearch(\'' + esc(data.ticker) + '\')" class="ticker-link" style="color:var(--color-accent);font-size:24px;letter-spacing:0.1em;">' + esc(data.ticker) + '</span>'
+        + '<span data-research="' + esc(data.ticker) + '" class="ticker-link" style="color:var(--color-accent);font-size:24px;letter-spacing:0.1em;">' + esc(data.ticker) + '</span>'
         + '<span style="color:var(--color-muted);font-size:14px;">' + esc(data.name) + '</span>'
         + (data.en_cartera   ? ' <span title="Ya tienes esta acción en Cartera">💼</span>' : '')
         + (data.in_watchlist ? ' <span title="En tu Watchlist">⭐</span>' : '')
@@ -355,7 +355,7 @@ function headerSection(data, chgColor, chgStr) {
         + '<div style="color:var(--color-text);font-size:28px;font-weight:500;">$' + data.price.toLocaleString('en-US') + '</div>'
         + '<div style="color:' + chgColor + ';font-size:13px;">' + chgStr + ' hoy</div>'
         + '<div style="color:var(--color-muted);font-size:11px;margin-top:2px;">' + data.mktcap_fmt + ' market cap ' + tt('market-cap') + '</div>'
-        + '<button onclick="window.__quickAddWatchlist(\'' + data.ticker + '\', this)" style="margin-top:8px;background:transparent;border:1px solid var(--color-border);color:var(--color-muted);border-radius:var(--radius);padding:5px 12px;font-size:11px;cursor:pointer;">＋ Watchlist</button>'
+        + '<button data-add-watchlist="' + esc(data.ticker) + '" style="margin-top:8px;background:transparent;border:1px solid var(--color-border);color:var(--color-muted);border-radius:var(--radius);padding:5px 12px;font-size:11px;cursor:pointer;">＋ Watchlist</button>'
         + '</div>'
         + '</div>'
         + '<div style="display:flex;gap:2rem;margin-top:1rem;padding-top:1rem;border-top:1px solid var(--color-border);font-size:11px;flex-wrap:wrap;">'

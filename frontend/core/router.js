@@ -356,8 +356,48 @@ Tooltip.init();
 
 window.goToResearch = function(ticker) {
     if (!ticker) return;
-    navigate('/research?ticker=' + ticker.toUpperCase());
+    navigate('/research?ticker=' + encodeURIComponent(ticker.toUpperCase()));
 };
+
+// ── CLICS CON DATOS DENTRO, SIN onclick ──────────────────────────────────────
+//
+// EL CASO (Watchlist #22). 24 enlaces en 11 páginas llevaban el ticker metido
+// en el propio atributo: onclick="goToResearch('…')". Y dentro de un onclick
+// escapar HTML NO protege: el navegador descodifica el atributo (`&#39;` vuelve
+// a ser una comilla) ANTES de ejecutar el JavaScript, así que una comilla en el
+// dato cerraba el string y lo que viniera detrás se ejecutaba. Hoy no había un
+// vector abierto conocido —las fuentes de terceros se validan en el origen—,
+// pero la seguridad de 24 enlaces dependía de que ninguna fuente cambiara
+// nunca. Cuatro, además, ni siquiera escapaban.
+//
+// Ahora el dato va en un atributo data-*, que el navegador entrega como TEXTO y
+// nunca ejecuta, y un único escuchador decide qué hacer:
+//
+//   data-research="NVDA"        → ficha de Research de ese ticker
+//   data-add-watchlist="NVDA"   → añadir a la watchlist (el botón es el propio elemento)
+//   data-ir="/ruta?x=y"         → navegar a una ruta interna
+//
+// Un test prohíbe volver a meter datos dentro de un onclick.
+document.addEventListener('click', (e) => {
+    const el = e.target.closest('[data-research],[data-add-watchlist],[data-ir]');
+    if (!el) return;
+    // Un enlace <a href> con data-*: el clic con Ctrl/Cmd/Shift o con la rueda
+    // se deja al navegador (abrir en pestaña nueva); el clic normal navega
+    // dentro de la app sin recargar.
+    if (el.tagName === 'A') {
+        if (e.ctrlKey || e.metaKey || e.shiftKey || e.button !== 0) return;
+        e.preventDefault();
+    }
+    if (el.hasAttribute('data-add-watchlist')) {
+        window.__quickAddWatchlist(el.getAttribute('data-add-watchlist'), el);
+    } else if (el.hasAttribute('data-research')) {
+        window.goToResearch(el.getAttribute('data-research'));
+    } else {
+        const ruta = el.getAttribute('data-ir') || '';
+        // Solo rutas internas: «/algo», nunca «//otro-dominio» ni «javascript:».
+        if (ruta.startsWith('/') && !ruta.startsWith('//')) navigate(ruta);
+    }
+});
 
 window.__quickAddWatchlist = async function(ticker, btnEl) {
     if (!ticker || !btnEl) return;

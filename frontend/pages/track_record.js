@@ -237,7 +237,7 @@ function seccionTesis(t) {
                 ? '<span style="color:var(--color-accent);">✓ tocado</span>'
                 : '<span style="color:var(--color-muted);">no</span>');
         return '<div style="display:grid;grid-template-columns:70px 90px 1fr 1fr 1fr 90px;gap:8px;padding:7px 16px;border-top:1px solid var(--color-border);font-size:11px;align-items:center;">'
-            + '<span style="color:var(--color-text);cursor:pointer;" onclick="window.__navigate(\'/research?ticker=' + encodeURIComponent(x.ticker) + '\')">' + esc(x.ticker || '') + '</span>'
+            + '<span style="color:var(--color-text);cursor:pointer;" data-research="' + esc(x.ticker) + '">' + esc(x.ticker || '') + '</span>'
             + '<span style="color:var(--color-muted);">' + esc((x.fecha || '').slice(0, 10)) + '</span>'
             + '<span>' + pct(x.retorno_pct) + '</span>'
             + '<span style="color:var(--color-muted);">' + (x.spy_mismo_periodo_pct === null || x.spy_mismo_periodo_pct === undefined ? '—' : esc((x.spy_mismo_periodo_pct >= 0 ? '+' : '') + x.spy_mismo_periodo_pct + '%')) + '</span>'
