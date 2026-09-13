@@ -377,7 +377,7 @@ function wireAddTicker(container) {
             // «Todas» va a la de por defecto, como siempre.
             const cuerpo = { ticker };
             if (listaActiva !== TODAS) cuerpo.lista = listaActiva;
-            const res  = await fetch('/api/v1/watchlist', { method: 'POST', headers: authHeader(), body: JSON.stringify(cuerpo) });
+            const res  = await fetch('/api/v1/watchlist', { method: 'POST', headers: { ...authHeader(), 'Content-Type': 'application/json' }, body: JSON.stringify(cuerpo) });
             const data = await res.json();
             if (data.ok) {
                 input.value = '';
@@ -553,7 +553,7 @@ function wireCreateAlert(container) {
                     ? { ticker, metric: metricValue, ema_period: parseInt(emaPeriod.value, 10) }
                     : { ticker, condition: condition.value, target_price: parseFloat(price.value), metric: metricValue });
             const res  = await fetch('/api/v1/watchlist/alerts', {
-                method: 'POST', headers: authHeader(),
+                method: 'POST', headers: { ...authHeader(), 'Content-Type': 'application/json' },
                 body: JSON.stringify(payload),
             });
             const data = await res.json();

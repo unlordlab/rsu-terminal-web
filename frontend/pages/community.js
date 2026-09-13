@@ -133,7 +133,7 @@ function wireForm(container) {
 
         try {
             const res  = await fetch('/api/v1/community/feedback', {
-                method: 'POST', headers: authHeader(),
+                method: 'POST', headers: { ...authHeader(), 'Content-Type': 'application/json' },
                 body: JSON.stringify({ tipo, mensaje, contacto }),
             });
             const data = await res.json();

@@ -261,3 +261,17 @@ def test_por_donde_sigue_cada_uno():
     obtenido = json.loads(r.stdout)
     for caso, esperado in _ESPERADO.items():
         assert obtenido[caso] == esperado, f"{caso}: {obtenido[caso]} != {esperado}"
+
+
+def test_el_menu_lleva_iconos_y_no_letras():
+    """Pedido del usuario el 13/09: iconos en todas las secciones. Una letra
+    («D», «Ac») o dos secciones con el mismo icono (Equipo y Comunidad
+    compartían 👥; RS/RW y Roadmap, la «R») hacen que el menú no se lea de un
+    vistazo, que es para lo que está el icono."""
+    iconos = re.findall(r"^\s+\{ path: '(/[a-z-]*)',.*?icon: '([^']+)'",
+                        SIDEBAR_JS[SIDEBAR_JS.index("NAV_ITEMS"):], re.M)
+    assert iconos, "no se encuentran los iconos del menú"
+    letras = [p for p, i in iconos if re.fullmatch(r"[A-Za-z]{1,3}", i)]
+    assert not letras, f"secciones con letras en vez de icono: {letras}"
+    repetidos = {i for _, i in iconos if [x for _, x in iconos].count(i) > 1}
+    assert not repetidos, f"iconos repetidos en el menú: {repetidos}"

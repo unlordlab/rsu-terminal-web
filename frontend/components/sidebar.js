@@ -1,27 +1,27 @@
 import { hasTier, isLoggedIn, authHeader } from '/core/api.js';
 
 export const NAV_ITEMS = [
-    { path: '/',          label: 'Dashboard',    icon: 'D' },
+    { path: '/',          label: 'Dashboard',    icon: '🏠' },
     { path: '/manifiesto', label: 'Manifiesto',  icon: '📜' },
-    { path: '/market',    label: 'Market',       icon: 'M' },
-    { path: '/cartera',   label: 'Cartera',      icon: 'C', minTier: 'tier1' },
-    { path: '/rsrw',      label: 'RS/RW',        icon: 'R' },
+    { path: '/market',    label: 'Market',       icon: '📈' },
+    { path: '/cartera',   label: 'Cartera',      icon: '💼', minTier: 'tier1' },
+    { path: '/rsrw',      label: 'RS/RW',        icon: '📊' },
     { path: '/scanner',   label: 'Scanner',      icon: '⚡' },
     { path: '/watchlist', label: 'Watchlist',    icon: '★' },
-    { path: '/newsfeed',  label: 'News Feed',    icon: 'N' },
-    { path: '/tesis',     label: 'Tesis', icon: 'T', minTier: 'tier1' },
-    { path: '/equipo',    label: 'Equipo RSU',   icon: '👥' },
-    { path: '/spxl',      label: 'SPXL',         icon: 'S' },
+    { path: '/newsfeed',  label: 'News Feed',    icon: '📰' },
+    { path: '/tesis',     label: 'Tesis', icon: '📄', minTier: 'tier1' },
+    { path: '/equipo',    label: 'Equipo RSU',   icon: '🤖' },
+    { path: '/spxl',      label: 'SPXL',         icon: '🚀' },
     { path: '/btc-stratum', label: 'BTC Stratum', icon: '₿' },
-    { path: '/options', label: 'Options Flow', icon: 'O' },
-    { path: '/research',  label: 'Research',     icon: 'I' },
+    { path: '/options', label: 'Options Flow', icon: '🌊' },
+    { path: '/research',  label: 'Research',     icon: '🔬' },
     { path: '/insider',   label: 'Insider Flow',  icon: '🔍' },
     { path: '/congress',  label: 'Congress Trading', icon: '🏛️' },
-    { path: '/academy', label: 'Academy', icon: 'Ac' },
-    { path: '/roadmap', label: 'Roadmap 2026', icon: 'R' },
+    { path: '/academy', label: 'Academy', icon: '🎓' },
+    { path: '/roadmap', label: 'Roadmap 2026', icon: '🗺️' },
     { path: '/community', label: 'Comunidad', icon: '👥' },
-    { path: '/canslim',   label: 'CANSLIM',      icon: 'K' },
-    { path: '/algoritmo', label: 'RSU Algoritmo',icon: 'A' },
+    { path: '/canslim',   label: 'CANSLIM',      icon: '🏆' },
+    { path: '/algoritmo', label: 'RSU Algoritmo',icon: '🚦' },
     { path: '/track-record', label: 'Track Record', icon: '📓' },
     { path: '/disclaimer', label: 'Disclaimer', icon: '⚖' },
 ];
@@ -78,7 +78,7 @@ export function renderSidebar(container, navigate) {
         a.setAttribute('data-path', item.path);
 
         const icon = document.createElement('span');
-        icon.style.cssText = 'font-size:14px;width:16px;text-align:center;';
+        icon.style.cssText = 'font-size:14px;width:20px;flex-shrink:0;text-align:center;line-height:1;';
         icon.textContent = item.icon;
 
         const label = document.createElement('span');

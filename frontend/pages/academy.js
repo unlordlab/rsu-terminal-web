@@ -79,7 +79,7 @@ async function marcarLeccionLeida(key) {
     _leidas.add(key);                      // optimista: la UI responde al instante
     try {
         const res = await fetch('/api/v1/academy/progress/lesson', {
-            method: 'POST', headers: authHeader(), body: JSON.stringify({ lesson_key: key })
+            method: 'POST', headers: { ...authHeader(), 'Content-Type': 'application/json' }, body: JSON.stringify({ lesson_key: key })
         });
         if (!res.ok) throw new Error(res.status);
     } catch (_) {
@@ -92,7 +92,7 @@ async function guardarResultadoQuiz(moduleId, score, total) {
     if (!previo || score > previo.score) _quizzes[String(moduleId)] = { score, total };
     try {
         await fetch('/api/v1/academy/progress/quiz', {
-            method: 'POST', headers: authHeader(),
+            method: 'POST', headers: { ...authHeader(), 'Content-Type': 'application/json' },
             body: JSON.stringify({ module_id: moduleId, score, total })
         });
     } catch (_) { /* mismo criterio: si falla, se reintenta al repetir el quiz */ }
@@ -300,7 +300,7 @@ function attachCertificado(container, d) {
         err.textContent = '';
         try {
             const res = await fetch('/api/v1/academy/certificado', {
-                method: 'POST', headers: authHeader(),
+                method: 'POST', headers: { ...authHeader(), 'Content-Type': 'application/json' },
                 body: JSON.stringify({ nombre: q('#ac-cert-input').value })
             });
             const data = await res.json();
