@@ -7,6 +7,7 @@ import asyncio
 import os
 from config import settings
 from json_seguro import JSONSeguro
+from ejecutor_fondo import EjecutorVigilado, esperar_hilos_o_salir
 from auth import verify_token, require_tier, verify_admin_key
 from middleware.rate_limit import rate_limit
 from middleware.analytics import AnalyticsMiddleware
@@ -38,6 +39,12 @@ else:
     print(f"[Startup] Sin proxy configurado para yfinance (yfinance_proxy_url vacío)")
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    # Todo `run_in_executor(None, …)` y `to_thread` pasa por aquí. Ver
+    # ejecutor_fondo.py (Infraestructura #32): sin él no hay forma de saber qué
+    # hilo retiene el apagado, ni de no esperarlo para siempre.
+    ejecutor = EjecutorVigilado(thread_name_prefix="rsu-fondo")
+    asyncio.get_running_loop().set_default_executor(ejecutor)
+
     # Cada bucle va envuelto en ws.supervisar() -- si la Task muere por una
     # excepción no capturada por su propio try/except interno (hoy se queda
     # muerta para siempre, en silencio), se relanza sola tras 60s con un log
@@ -80,6 +87,11 @@ async def lifespan(app: FastAPI):
     for t in tareas:
         t.cancel()
     await asyncio.gather(*tareas, return_exceptions=True)
+
+    # Cancelar la tarea suelta el `await`, pero NO para el hilo que estaba
+    # descargando: sin esto, Python esperaba a ese hilo al salir y Docker
+    # acababa matando el contenedor (137). Ver ejecutor_fondo.py.
+    await esperar_hilos_o_salir(ejecutor)
 
 app = FastAPI(
     title=settings.app_name,

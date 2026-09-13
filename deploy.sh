@@ -8,6 +8,100 @@
 #
 # Uso: ./deploy.sh
 set -e  # cualquier fallo detiene el script en vez de seguir a ciegas
+cd "$(dirname "$0")"
+
+CONTENEDOR="rsu-terminal-web-app-1"
+ESPERA_ARRANQUE_S="${DEPLOY_ESPERA_ARRANQUE:-10}"
+DIR_LOGS="${DEPLOY_DIR_LOGS:-$HOME/deploy_logs}"
+CERROJO="${DEPLOY_CERROJO:-/tmp/rsu-terminal-deploy.lock}"
+
+# ── EL DESPLIEGUE NO DEPENDE DE LA SESIÓN SSH (Infraestructura #33) ──────────
+#
+# EL CASO, 12/09/2026. Se cortó la conexión en el paso 6, durante
+# `docker compose up -d --force-recreate`. El corte mató a docker compose a
+# mitad de recrear: el contenedor viejo quedó parado y renombrado
+# (`<id>_rsu-terminal-web-app-1`), el nuevo creado sin arrancar, y la terminal
+# estuvo 12 horas caída.
+#
+# AHORA el trabajo lo hace una copia de este script DESENGANCHADA de la
+# terminal (setsid + nohup) que escribe en un log, y lo que ves en la sesión es
+# solo un `tail` de ese log. Si se corta el SSH —o pulsas Ctrl+C— deja de
+# verse, pero el despliegue sigue hasta el final. Para volver a mirarlo:
+#     tail -f ~/deploy_logs/ultimo.log
+#
+# Y un CERROJO: si reconectas y lanzas ./deploy.sh otra vez mientras el
+# primero sigue, el segundo no hace nada y te dice dónde mirar. Dos despliegues
+# a la vez recreando el mismo contenedor es justo cómo se rompe.
+
+cerrojo_ocupado_por() {
+    # Devuelve (en stdout) el PID que tiene el cerrojo si sigue vivo.
+    local pid
+    pid=$(cat "$CERROJO/pid" 2>/dev/null || true)
+    if [ -n "$pid" ] && kill -0 "$pid" 2>/dev/null; then
+        echo "$pid"
+    fi
+}
+
+if [ -z "${DEPLOY_SH_DESACOPLADO:-}" ]; then
+    OCUPADO=$(cerrojo_ocupado_por)
+    if [ -n "$OCUPADO" ]; then
+        echo "✗ Ya hay un despliegue en marcha (PID $OCUPADO). No se lanza otro."
+        echo "  Para seguirlo:  tail -f $DIR_LOGS/ultimo.log"
+        exit 1
+    fi
+    mkdir -p "$DIR_LOGS"
+    LOG="$DIR_LOGS/deploy-$(date -u +%Y%m%d-%H%M%S)-$$.log"
+    : > "$LOG"
+    ln -sfn "$LOG" "$DIR_LOGS/ultimo.log"
+    echo "El despliegue corre aparte y NO se para si se corta la conexión."
+    echo "Log: $LOG   (para volver a verlo: tail -f $DIR_LOGS/ultimo.log)"
+    echo ""
+    LANZADOR="nohup"
+    if command -v setsid >/dev/null 2>&1; then
+        LANZADOR="setsid nohup"
+    fi
+    DEPLOY_SH_DESACOPLADO=1 DEPLOY_LOG="$LOG" $LANZADOR "./$(basename "$0")" "$@" >> "$LOG" 2>&1 < /dev/null &
+    PID_DESPLIEGUE=$!
+    tail -n +1 -f --pid="$PID_DESPLIEGUE" "$LOG"
+    ESTADO=$(cat "$LOG.estado" 2>/dev/null || echo "desconocido")
+    if [ "$ESTADO" = "0" ]; then
+        exit 0
+    fi
+    echo "✗ El despliegue terminó con error (código $ESTADO). Log completo: $LOG"
+    exit 1
+fi
+
+# A partir de aquí: la copia desenganchada, que es la que despliega.
+# El cerrojo se toma una vez; tras el `exec` del paso 2 el PID es el mismo, así
+# que el cerrojo sigue siendo nuestro.
+if [ "$(cat "$CERROJO/pid" 2>/dev/null || true)" != "$$" ]; then
+    if ! mkdir "$CERROJO" 2>/dev/null; then
+        if [ -n "$(cerrojo_ocupado_por)" ]; then
+            echo "✗ Ya hay un despliegue en marcha (PID $(cerrojo_ocupado_por)). No se lanza otro."
+            echo "1" > "$DEPLOY_LOG.estado"
+            exit 1
+        fi
+        # Cerrojo de un despliegue que murió sin soltarlo (el servidor se reinició...).
+        rm -rf "$CERROJO"
+        mkdir "$CERROJO"
+    fi
+    echo "$$" > "$CERROJO/pid"
+fi
+al_terminar() {
+    local codigo=$?
+    echo "$codigo" > "$DEPLOY_LOG.estado"
+    if [ "$(cat "$CERROJO/pid" 2>/dev/null || true)" = "$$" ]; then
+        rm -rf "$CERROJO"
+    fi
+}
+trap al_terminar EXIT
+# Si esta copia muere por una señal, el EXIT de arriba vería el código de la
+# última orden (a menudo 0) y el despliegue muerto constaría como bueno: pasó
+# al probarlo el 13/09. Con esto consta 128+señal. (Bajo nohup el HUP ya viene
+# ignorado y bash no deja atraparlo, así que esto no deshace la protección.)
+trap 'exit 129' HUP
+trap 'exit 130' INT
+trap 'exit 143' TERM
 
 echo "=== 1/7: Comprobando estado de git ==="
 # Solo bloqueamos por cambios en archivos que YA están en git (modificados,
@@ -54,6 +148,31 @@ fi
 # versión, nunca una mezcla vieja/nueva.
 BEFORE_COMMIT="$DEPLOY_SH_BEFORE"
 AFTER_COMMIT="$DEPLOY_SH_AFTER"
+
+# ¿Está la terminal en marcha? Si un despliegue anterior se quedó a medias, NO
+# lo está, y el backup del paso 3 fallaría y abortaría — dejando la terminal
+# caída con el despliegue que debía arreglarla. Se recupera primero el estado
+# exacto que dejó el corte del 12/09: `docker compose up -d` arranca el
+# contenedor que quedó, que lleva el nombre cambiado (`<id>_rsu-terminal-web-app-1`),
+# y se le devuelve su nombre, que es el que buscan el backup, los crons y el
+# vigilante de salud.
+if ! docker ps --filter "status=running" --format '{{.Names}}' | grep -qx "$CONTENEDOR"; then
+    echo "=== 2b/7: La terminal NO está corriendo — recuperándola antes de seguir ==="
+    docker ps -a --format '    {{.Names}} · {{.Status}}' || true
+    docker compose up -d
+    RENOMBRADO=$(docker ps --format '{{.Names}}' | grep -E "^[0-9a-f]+_${CONTENEDOR}\$" | head -1 || true)
+    if [ -n "$RENOMBRADO" ] && ! docker ps -a --format '{{.Names}}' | grep -qx "$CONTENEDOR"; then
+        echo "  El contenedor arrancado se llama $RENOMBRADO: se le devuelve su nombre."
+        docker rename "$RENOMBRADO" "$CONTENEDOR"
+    fi
+    sleep "$ESPERA_ARRANQUE_S"
+    if ! docker ps --filter "status=running" --format '{{.Names}}' | grep -qx "$CONTENEDOR"; then
+        echo "✗ No se ha podido recuperar la terminal. Estado de los contenedores:"
+        docker ps -a --format '    {{.Names}} · {{.Status}}' || true
+        exit 1
+    fi
+    echo "✓ Terminal recuperada y corriendo; se sigue con el despliegue."
+fi
 
 echo "=== 3/7: Backup de las bases de datos antes de tocar nada ==="
 # Antes de reconstruir la imagen o recrear el contenedor -- si algo sale mal
@@ -152,8 +271,8 @@ fi
 echo "=== 6/7: Recreando el contenedor ==="
 docker compose up -d --force-recreate
 
-echo "=== 7/7: Comprobación rápida de salud (10s de margen para arrancar) ==="
-sleep 10
+echo "=== 7/7: Comprobación rápida de salud (${ESPERA_ARRANQUE_S}s de margen para arrancar) ==="
+sleep "$ESPERA_ARRANQUE_S"
 if docker ps --filter "name=rsu-terminal-web-app-1" --filter "status=running" | grep -q rsu-terminal-web-app-1; then
     echo "✓ Contenedor arriba y corriendo."
     docker logs rsu-terminal-web-app-1 --tail 20
