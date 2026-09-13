@@ -126,10 +126,19 @@ def test_McClellan_ABI_y_A_D_comparten_la_MISMA_etiqueta():
     # La COMPARACIÓN, no que la cadena aparezca por ahí: con `false ?` el
     # sabotaje se escapaba porque `data.ad_source` seguía saliendo unas líneas
     # más abajo, en la rama del NYSE.
+    #
+    # 13/09/2026 (Market #59): la decisión se movió a UNA función,
+    # `etiquetaFuenteAmplitud`, porque el gráfico A/D tenía su propia cadena y
+    # seguía diciendo «[S&P 500 REAL]». Se exige lo mismo en su sitio nuevo:
+    # que McClellan la use con el dato, y que la función compare de verdad.
     mc = js[js.index("const mcBadge"):js.index("const abiAvailable")]
-    assert "data.ad_source === 'sp500_r2k'" in mc, (
-        "McClellan ya no mira si los datos son del universo ampliado: volvería "
-        "a etiquetar 2.422 valores como «[S&P 500 REAL]»")
+    assert "etiquetaFuenteAmplitud(data.ad_source)" in mc, (
+        "McClellan ya no deriva la etiqueta del dato: volvería a etiquetar "
+        "2.422 valores como «[S&P 500 REAL]»")
+    i = js.index("function etiquetaFuenteAmplitud")
+    funcion = js[i:js.index("\n}", i)]
+    assert "if (fuente === 'sp500_r2k')  return '[S&amp;P 500 + RUSSELL 2000 REAL]';" in funcion, (
+        "la función ya no mira si los datos son del universo ampliado")
 
 
 # ── De qué sesión es la amplitud ─────────────────────────────────────────────

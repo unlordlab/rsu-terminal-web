@@ -760,6 +760,23 @@ POR QUÉ MIRARLOS JUNTOS:
 Comparar el comportamiento relativo entre ellos da contexto adicional — por ejemplo, si el Nasdaq lidera al alza mientras el Russell 2000 se queda atrás, sugiere un mercado impulsado por grandes tecnológicas más que por una recuperación económica amplia.`
     },
 
+    "mcclellan-por-tamano": {
+        title: "McClellan: grandes contra pequeñas",
+        short: "El mismo oscilador calculado por separado para el S&P 500 y para el Russell 2000, en una escala que permite compararlos.",
+        long: `Para qué sirve: saber si la subida (o la caída) es de todo el mercado o solo de una parte. El McClellan de arriba mezcla las dos, y una puede tapar a la otra.
+
+CÓMO LEERLO:
+▸ Positivo: en las últimas semanas han subido más acciones de las que han bajado. Negativo: al revés.
+▸ Grandes en positivo y pequeñas en negativo: la subida la llevan pocas empresas grandes. Es la señal clásica de un mercado estrecho.
+▸ Pequeñas mejor que grandes: el dinero se reparte también por las empresas pequeñas.
+▸ Los dos con el mismo signo: el movimiento es general.
+
+POR QUÉ «AJUSTADO POR TAMAÑO»:
+El Russell 2000 tiene unas cuatro veces más acciones que el S&P 500, así que en la versión normal daría siempre números más grandes aunque el mercado se comportara igual. Aquí se usa la proporción neta (avances menos descensos sobre el total, en tantos por mil), así los dos números se pueden poner uno al lado del otro. Por eso la escala no es la del McClellan de arriba ni la de sus niveles de ±70.
+
+No es el $NAMO del Nasdaq ni el $NYMO del NYSE: son otros universos. Hacen falta al menos 110 sesiones de historia para que el número sea fiable; hasta entonces no se muestra.`
+    },
+
     "market-breadth": {
         title: "Amplitud de Mercado",
         short: "Salud interna del mercado: SMA50/200, Golden/Death Cross, RSI, McClellan real, % real del S&P 500 y Línea A/D.",
@@ -769,9 +786,9 @@ COMPONENTES:
 ▸ SMA50/SMA200: medias móviles de referencia. Precio sobre ambas = tendencia alcista de fondo.
 ▸ Golden Cross / Death Cross: SMA50 cruzando por encima (Golden) o por debajo (Death) de la SMA200. Señal de cambio de régimen de medio-largo plazo.
 ▸ RSI(14): momentum de corto plazo. &gt;70 sobrecompra, &lt;30 sobreventa.
-▸ Oscilador McClellan: calculado con datos reales de avance/declive del NYSE (^ADV/^DEC), no un proxy del propio índice.
+▸ Oscilador McClellan: calculado con los avances y descensos reales de ~2.400 acciones (las 500 del S&amp;P 500 y las del Russell 2000), no un proxy del propio índice. No es el NYSE: ese universo incluye ETFs, preferentes y ADRs que diluyen la señal. Debajo, el mismo indicador separado en grandes y pequeñas.
 ▸ % del S&amp;P 500 sobre SMA50: calculado sobre las ~500 acciones del índice (scan nocturno), no una muestra de 11 ETFs sectoriales.
-▸ Línea A/D: avance/declive acumulado del NYSE, con su gráfico histórico frente al SPY.
+▸ Línea A/D: avances menos descensos acumulados de ese mismo universo, con su gráfico histórico frente al SPY.
 
 CÓMO LEERLO:
 Si el SPY sube pero el % del S&P 500 sobre SMA50 cae o la Línea A/D diverge a la baja, el rally se está estrechando — señal de alerta. Cuantos más componentes confirmen la misma dirección, más sólida es la tendencia.`

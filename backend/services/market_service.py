@@ -14,7 +14,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "..", "shared")
 from time_utils import get_timestamp, session_fraction_elapsed  # noqa: E402
 from yf_batch import download_batch  # noqa: E402
 from vix_curve import vix_ratio, zona_curva, UMBRAL_BACKWARDATION, UMBRAL_TENSION  # noqa: E402
-from mcclellan import mcclellan_series  # noqa: E402
+from mcclellan import mcclellan_series, mcclellan_ajustado, MIN_SESIONES_AJUSTADO  # noqa: E402
 from market_regime import spy_trend_snapshot  # noqa: E402
 from social_tickers import (  # noqa: E402
     BLACKLIST as _BLACKLIST, extract_tickers, fetch_reddit_titles_via_rss,
@@ -1384,6 +1384,33 @@ BRIEFING_GIST_ID = "715ee0c4e571517c11fa65c5c2376c34"
 # API de GitHub. Lo cazo el despliegue, que corre la suite antes de recrear el
 # contenedor; en local paso porque la cache estaba vacia y el envoltorio
 # llamaba a la funcion de todos modos.
+def _mcclellan_por_tamano() -> dict:
+    """McClellan de las grandes (S&P 500) y de las pequeñas (Russell 2000) por
+    separado, AJUSTADO POR TAMAÑO para que se puedan comparar.
+
+    Por qué existe (13/09/2026): el usuario preguntó por añadir $NAMO (el
+    McClellan del Nasdaq). Lo que se busca con él es ver si la subida la llevan
+    unas pocas grandes o el mercado entero. El combinado de arriba no puede
+    decirlo -- mezcla los dos universos y una mitad tapa a la otra --, y un
+    "$NAMO" hecho con nuestros datos no sería el $NAMO. Esto sí se puede
+    calcular bien y con su nombre verdadero: las dos series ya salen cada noche
+    del escaneo.
+
+    Fuera de `get_market_breadth` para poder probarlo sin red, como
+    `_fuente_amplitud`."""
+    try:
+        from services.scanner_service import get_amplitudes_separadas
+        grandes, pequenas = get_amplitudes_separadas()
+    except Exception as e:
+        print(f"[MarketBreadth] Amplitud separada no disponible: {e}")
+        grandes, pequenas = [], []
+    return {
+        "grandes": mcclellan_ajustado(grandes),
+        "pequenas": mcclellan_ajustado(pequenas),
+        "minimo_sesiones": MIN_SESIONES_AJUSTADO,
+    }
+
+
 def _fuente_amplitud(fila: dict) -> str:
     """De que universo son estos numeros de amplitud, DEDUCIDO del propio dato.
 
@@ -2375,7 +2402,8 @@ def get_market_breadth():
     """
     Amplitud de Mercado (unificado): SMA50/200, Golden/Death Cross, RSI(14) del
     SPY + Oscilador McClellan REAL (EMA19-EMA39 sobre avance/declive neto real
-    del NYSE, no un proxy del propio índice) + % REAL del S&P 500 sobre su
+    del universo propio del escaneo --S&P 500 + Russell 2000--, no del NYSE ni
+    un proxy del propio índice; ver Market #59) + % REAL del S&P 500 sobre su
     SMA50 (desde el scan nocturno de 500 tickers, no una muestra de 11 ETFs) +
     los datos de la Línea A/D (fusionados aquí — antes vivían en un widget
     aparte, /market/ad-line, que se mantiene por compatibilidad pero ya no se
@@ -2619,6 +2647,9 @@ def get_market_breadth():
             "mcclellan": mcclellan,
             "mcclellan_state": mcclellan_state,
             "mcclellan_wow": mcclellan_wow,
+            # Grandes y pequeñas por separado, ajustado por tamaño. Cada uno con
+            # su fecha: salen de dos series distintas del escaneo.
+            "mcclellan_por_tamano": _mcclellan_por_tamano(),
             "abi": abi,
             "abi_wow": abi_wow,
             "abi_state": abi_state,

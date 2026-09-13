@@ -466,6 +466,14 @@ def _technical_score(rs_pct: float, phase: int, rvol: float) -> float:
     return round(rs_pts + phase_pts + _rvol_pts(rvol), 1)
 
 
+# 150 y no 60 (13/09/2026): con estas series se calcula también el McClellan
+# de grandes y de pequeñas por separado (Market), y su EMA39 necesita unas 110
+# sesiones para dejar de arrastrar el arranque -- con 60 el error medio medido
+# fue de 34 puntos. Ver MIN_SESIONES_AJUSTADO en shared/mcclellan.py. Son dos
+# series de ~150 filas pequeñas en el Gist: unos KB.
+SESIONES_AMPLITUD_SEPARADA = 150
+
+
 def _amplitudes_separadas(close_d: dict, tickers_sp500: list):
     """Las dos amplitudes, cada una sobre SU universo.
 
@@ -476,8 +484,8 @@ def _amplitudes_separadas(close_d: dict, tickers_sp500: list):
     Lo destapó el sabotaje el 15/08/2026, igual que con la ordenación de las
     cestas temáticas ese mismo día.
     """
-    return (_compute_breadth_history(close_d, tickers_sp500, lookback_days=60),
-            _compute_breadth_history(close_d, RUSSELL2000_TICKERS, lookback_days=60))
+    return (_compute_breadth_history(close_d, tickers_sp500, lookback_days=SESIONES_AMPLITUD_SEPARADA),
+            _compute_breadth_history(close_d, RUSSELL2000_TICKERS, lookback_days=SESIONES_AMPLITUD_SEPARADA))
 
 
 def _compute_breadth_history(close_d: dict, tickers: list, lookback_days: int = 150) -> list:
@@ -759,8 +767,9 @@ def run_scan() -> dict:
     # construcción: cuando las grandes hacen máximos y las pequeñas no, el
     # liderazgo se está estrechando. Mezclados, una mitad tapa a la otra.
     #
-    # 60 sesiones y no 150: la divergencia es una lectura de semanas, no de
-    # meses, y son dos series más en el mismo Gist.
+    # 150 sesiones (eran 60): la divergencia se lee en semanas, pero el
+    # McClellan de cada universo necesita ~110 para ser fiable. Ver
+    # SESIONES_AMPLITUD_SEPARADA.
     breadth_sp500, breadth_russell = _amplitudes_separadas(close_d, tickers)
     print(f"📊 Amplitud separada: S&P 500 {len(breadth_sp500)} sesiones · "
           f"Russell 2000 {len(breadth_russell)} sesiones")

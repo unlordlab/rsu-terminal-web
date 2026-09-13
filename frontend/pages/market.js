@@ -1062,8 +1062,63 @@ async function loadVix(el) {
     }
 }
 
+
+// De qué universo sale la amplitud. UNA sola función para McClellan, ABI y la
+// línea A/D (Market #59): con tres cadenas escritas a mano, la del gráfico A/D
+// seguía diciendo «[S&P 500 REAL]» sobre S&P 500 + Russell 2000.
+function etiquetaFuenteAmplitud(fuente) {
+    if (fuente === 'sp500_r2k')  return '[S&amp;P 500 + RUSSELL 2000 REAL]';
+    if (fuente === 'nyse_yahoo') return '[NYSE REAL]';
+    return '[S&amp;P 500 REAL]';
+}
+
+// Grandes contra pequeñas en el McClellan, ajustado por tamaño.
+//
+// El combinado de arriba mezcla las 500 grandes con las ~1.960 del Russell
+// 2000, y una mitad tapa a la otra. Separado responde lo que se busca mirando
+// el $NAMO: si la subida (o la caída) es de todo el mercado o solo de una
+// parte. Ajustado por tamaño —la fracción neta en tantos por mil— porque en
+// bruto el Russell daría siempre números ~4 veces mayores solo por tener más
+// valores, y compararlos llevaría a error.
+function mcclellanPorTamanoHtml(pt, fechaAmplitud) {
+    const caja = (cuerpo) => '<div style="margin-top:8px;padding-top:6px;border-top:1px dashed var(--color-border);">'
+        + '<div style="color:var(--color-muted);font-size:10px;margin-bottom:4px;">Grandes contra pequeñas · ajustado por tamaño '
+        + tt('mcclellan-por-tamano') + '</div>' + cuerpo + '</div>';
+    if (!pt || !pt.grandes || !pt.pequenas) {
+        return caja('<div style="color:var(--color-muted);font-size:10px;">Aún no disponible: hacen falta '
+            + esc(String((pt && pt.minimo_sesiones) || 110))
+            + ' sesiones de cada índice para que el número sea fiable. Aparece tras el próximo escaneo nocturno.</div>');
+    }
+    const g = pt.grandes, p = pt.pequenas;
+    const valor = (x) => {
+        const c = x.valor >= 0 ? '#00ffad' : '#f23645';
+        const sem = x.semana == null ? '' : ' <span style="color:var(--color-muted);font-size:9px;">(' + (x.semana >= 0 ? '+' : '') + x.semana.toFixed(1) + ' sem.)</span>';
+        return '<span style="color:' + c + ';font-weight:600;">' + (x.valor >= 0 ? '+' : '') + x.valor.toFixed(1) + '</span>' + sem;
+    };
+    let lectura;
+    if (g.valor >= 0 && p.valor < 0) {
+        lectura = 'Las grandes suben y las pequeñas no: la subida la llevan pocas empresas.';
+    } else if (g.valor < 0 && p.valor >= 0) {
+        lectura = 'Las pequeñas aguantan mejor que las grandes: participación más repartida.';
+    } else if (g.valor >= 0) {
+        lectura = 'Grandes y pequeñas suben a la vez: la subida es de todo el mercado.';
+    } else {
+        lectura = 'Grandes y pequeñas caen a la vez: la debilidad es general.';
+    }
+    const otraFecha = (g.fecha !== fechaAmplitud || p.fecha !== fechaAmplitud)
+        ? '<div style="color:#ff9800;font-size:9px;margin-top:2px;">Sesiones: grandes ' + esc(g.fecha || '—') + ' · pequeñas ' + esc(p.fecha || '—') + '</div>'
+        : '';
+    return caja(
+        '<div style="display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap;font-size:11px;">'
+        + '<span><span style="color:var(--color-muted);">S&amp;P 500</span> ' + valor(g) + '</span>'
+        + '<span><span style="color:var(--color-muted);">Russell 2000</span> ' + valor(p) + '</span>'
+        + '</div>'
+        + '<div style="color:var(--color-muted);font-size:10px;margin-top:3px;">' + lectura + '</div>'
+        + otraFecha);
+}
+
 async function loadBreadth(el) {
-    el.innerHTML = widgetShell('AMPLITUD DE MERCADO ' + tt('market-breadth'), 'SMA50/200 · RSI · McClellan · % S&amp;P500 · NH-NL · A/D NYSE', loading());
+    el.innerHTML = widgetShell('AMPLITUD DE MERCADO ' + tt('market-breadth'), 'SMA50/200 · RSI · McClellan · % S&amp;P500 · NH-NL · A/D', loading());
     try {
         const res  = await fetch('/api/v1/market/breadth', { headers: authHeader() });
         const data = await res.json();
@@ -1090,9 +1145,7 @@ async function loadBreadth(el) {
         const mcAvailable   = data.mcclellan != null;
         const mcColor       = mcAvailable ? (data.mcclellan > 0 ? '#00ffad' : '#f23645') : 'var(--color-muted)';
         const mcBadge       = !mcAvailable ? ''
-            : (data.ad_source === 'sp500_r2k' ? '<span style="color:#00ffad;font-size:9px;">[S&amp;P 500 + RUSSELL 2000 REAL]</span>'
-                : data.ad_source === 'nyse_yahoo' ? '<span style="color:#00ffad;font-size:9px;">[NYSE REAL]</span>'
-                : '<span style="color:#00ffad;font-size:9px;">[S&amp;P 500 REAL]</span>');
+            : '<span style="color:#00ffad;font-size:9px;">' + etiquetaFuenteAmplitud(data.ad_source) + '</span>';
         const abiAvailable  = data.abi != null;
         const abiColor      = abiAvailable ? (data.abi >= 40 ? '#f23645' : (data.abi <= 15 ? 'var(--color-muted)' : '#ff9800')) : 'var(--color-muted)';
         const abiBadge      = !abiAvailable ? '' : mcBadge; // mismo dato de origen que McClellan, misma etiqueta
@@ -1174,7 +1227,7 @@ async function loadBreadth(el) {
             // hoy» en el prompt del briefing (#35/#36). Se había arreglado para
             // el consumidor que habla y no para el que pinta.
             + fechaAmplitudHtml
-        // McClellan (real cuando A/D es real — EMA19/EMA39 sobre avance/declive neto NYSE)
+        // McClellan (EMA19/EMA39 sobre avance/declive neto del universo del escaneo: S&P 500 + Russell 2000)
             + '<div style="background:var(--color-bg);border:1px solid var(--color-border);border-radius:6px;padding:8px 12px;margin-bottom:6px;">'
             + '<div style="display:flex;justify-content:space-between;margin-bottom:4px;">'
             + '<span style="color:var(--color-muted);font-size:11px;">Oscilador McClellan ' + tt('mcclellan-oscillator') + '</span>'
@@ -1184,6 +1237,7 @@ async function loadBreadth(el) {
             + '<div style="height:100%;width:' + (mcAvailable ? Math.min(Math.abs(data.mcclellan)/100*100, 100) : 0) + '%;background:' + mcColor + ';"></div>'
             + '</div>'
             + '<div style="font-size:9px;color:var(--color-muted);margin-top:3px;">&gt;+70 sobrecompra de amplitud · &lt;-70 sobreventa de amplitud ' + mcBadge + '</div>'
+            + mcclellanPorTamanoHtml(data.mcclellan_por_tamano, data.breadth_fecha)
             + '</div>'
 
             // ABI — Absolute Breadth Index (|avances-declives| / total, no direccional)
@@ -1246,7 +1300,10 @@ async function loadBreadth(el) {
         let adSectionHtml = '';
         let chartId = null;
         if (data.ad_ok) {
-            const badgeText  = data.ad_source === 'nyse_yahoo' ? '[NYSE REAL]' : '[S&P 500 REAL]';
+            // La MISMA función que McClellan y ABI: aquí decía «[S&P 500 REAL]»
+            // sobre S&P 500 + Russell 2000 (Market #59). Tres etiquetas escritas
+            // a mano para un mismo dato acaban diciendo tres cosas.
+            const badgeText  = etiquetaFuenteAmplitud(data.ad_source);
             const badgeColor = '#00ffad';
             const netColor   = data.current_net >= 0 ? '#00ffad' : '#f23645';
             const netArrow   = data.current_net >= 0 ? '▲' : '▼';
@@ -1270,7 +1327,7 @@ async function loadBreadth(el) {
                 + '</div>';
         }
 
-        el.innerHTML = widgetShell('AMPLITUD DE MERCADO ' + tt('market-breadth'), 'SMA50/200 · RSI · McClellan · % S&amp;P500 · NH-NL · A/D NYSE', content + adSectionHtml, data.timestamp);
+        el.innerHTML = widgetShell('AMPLITUD DE MERCADO ' + tt('market-breadth'), 'SMA50/200 · RSI · McClellan · % S&amp;P500 · NH-NL · A/D', content + adSectionHtml, data.timestamp);
 
         if (chartId) {
             const history = data.ad_history || [];
@@ -1314,7 +1371,7 @@ async function loadBreadth(el) {
             }
         }
     } catch(e) {
-        el.innerHTML = widgetShell('AMPLITUD DE MERCADO', 'SMA50/200 · RSI · McClellan · % S&amp;P500 · NH-NL · A/D NYSE', widgetError(e.message));
+        el.innerHTML = widgetShell('AMPLITUD DE MERCADO', 'SMA50/200 · RSI · McClellan · % S&amp;P500 · NH-NL · A/D', widgetError(e.message));
     }
 }
 

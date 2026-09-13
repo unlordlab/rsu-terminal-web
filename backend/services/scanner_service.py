@@ -384,6 +384,19 @@ def get_divergencia_universos() -> dict:
     }
 
 
+def get_amplitudes_separadas() -> tuple:
+    """(S&P 500, Russell 2000): las dos series de amplitud por universo del
+    último scan nocturno, con el mismo caché que el resto. Para el McClellan de
+    grandes y pequeñas de Market (ver shared/mcclellan.py::mcclellan_ajustado)."""
+    cached = cache.get(CACHE_KEY)
+    data = cached or _load_gist()
+    if not data:
+        return [], []
+    if not cached:
+        cache.set(CACHE_KEY, data, CACHE_TTL)
+    return data.get("breadth_sp500") or [], data.get("breadth_russell") or []
+
+
 def get_universe_stocks() -> dict:
     """Devuelve el dict completo {ticker: {...}} del último scan nocturno,
     reutilizando el mismo caché que get_scanner_data(). Pensado para consumo
