@@ -1,0 +1,5 @@
+# Los scripts de shell se ejecutan en el VPS (Linux). Con core.autocrlf en
+# Windows, un checkout los dejaría con CRLF y bash fallaría con
+# «$'
+': command not found». Aquí se fija LF en todas las copias.
+*.sh text eol=lf
