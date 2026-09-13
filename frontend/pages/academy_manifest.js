@@ -176,4 +176,9 @@ export const LESSON_INDEX = {
     '35-3': { title: 'Los Algoritmos de Ejecución: VWAP, TWAP, POV y Otros', words: 612 },
     '35-4': { title: 'Las Huellas que Dejan', words: 373 },
     '35-5': { title: 'Qué Significa Todo Esto para Ti', words: 413 },
+    '36-1': { title: 'Toda Estrategia Descansa en una Premisa', words: 369 },
+    '36-2': { title: 'La Gran Premisa: la Bolsa Americana Sube a Largo Plazo', words: 550 },
+    '36-3': { title: 'Degradación Monetaria y Liquidez: Qué Explican y Qué No', words: 427 },
+    '36-4': { title: 'Las Estrategias de la Terminal, Una a Una', words: 505 },
+    '36-5': { title: 'Cómo Nos Protege la Metodología', words: 403 },
 };

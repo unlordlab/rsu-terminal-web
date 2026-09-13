@@ -8546,4 +8546,213 @@ export const LESSONS = {
             },
         ]
     },
+    // ── MÓDULO 36: LAS PREMISAS ──────────────────────────────────────────────
+    // Las cifras están medidas con datos reales el 13/09/2026 (yfinance y FRED)
+    // y coinciden con las de los gráficos prem_*. Si se cambia una en un sitio,
+    // hay que cambiarla en el otro: tests/test_academy_contenido.py lo vigila.
+
+    '36-1': {
+        moduleId: 36,
+        lessonIndex: 0,
+        title: 'Toda Estrategia Descansa en una Premisa',
+        duration: '6 min',
+        intro: 'Detrás de cualquier forma de invertir hay una creencia de fondo que tiene que ser cierta para que funcione. Casi nunca se dice en voz alta, y es justo lo que más conviene conocer.',
+        sections: [
+            {
+                heading: 'Reglas y premisa no son lo mismo',
+                blocks: [
+                    { type: 'concept', title: 'Premisa', content: 'La creencia que tiene que ser verdad para que una estrategia gane dinero. Las reglas te dicen <b>qué hacer</b>: cuándo entrar, cuánto y cuándo salir. La premisa te dice <b>por qué debería funcionar</b>.' },
+                    { type: 'chart', id: 'prem_cimientos' },
+                    { type: 'text', content: 'Un ejemplo sencillo: comprar el índice cada vez que cae un 20%. La regla es clara. La premisa es que <b>el índice acaba recuperando</b>. Si eso deja de ser cierto, la regla sigue siendo igual de clara… y te hace comprar una y otra vez algo que no vuelve.' },
+                ]
+            },
+            {
+                heading: 'Por qué conocerla te dice cuándo parar',
+                blocks: [
+                    { type: 'text', content: 'Toda estrategia pasa por malas rachas. El problema es distinguir una mala racha de una premisa rota, porque se ven igual desde dentro: pierdes dinero en los dos casos.' },
+                    { type: 'table',
+                        headers: ['', 'Una mala racha', 'Una premisa rota'],
+                        rows: [
+                            ['Qué pasa', 'La estrategia pierde, pero lo que la sostiene sigue siendo cierto', 'Lo que la sostenía ha dejado de ser verdad'],
+                            ['Qué hacer', 'Seguir las reglas: la racha forma parte del camino', 'Parar: ningún ajuste de las reglas la arregla'],
+                            ['Cómo se nota', 'Ya pasó antes y se recuperó', 'Algo de fondo ha cambiado y no hay precedente de recuperación'],
+                        ]
+                    },
+                    { type: 'text', content: 'Sin conocer la premisa, solo puedes mirar las pérdidas. Y con las pérdidas en la mano, es muy fácil abandonar en la mala racha —justo antes de que se recupere— o aguantar con la premisa rota —justo cuando había que salir—.' },
+                ]
+            },
+            {
+                heading: 'Tres preguntas para cualquier estrategia',
+                blocks: [
+                    { type: 'steps', items: [
+                        '<b>¿Cuál es su premisa?</b> Dicha en una frase, sin tecnicismos.',
+                        '<b>¿Qué me pasa si falla?</b> No lo que espero ganar: lo que perdería si la creencia de fondo no se cumple.',
+                        '<b>¿Qué señal me diría que está fallando?</b> Escrita antes de entrar, no inventada después.',
+                    ]},
+                    { type: 'warning', content: 'La premisa más peligrosa es la que nadie dice en voz alta. Si alguien te cuenta una estrategia y no sabe responder a la primera pregunta, probablemente no la ha pensado.' },
+                ]
+            },
+        ]
+    },
+
+    '36-2': {
+        moduleId: 36,
+        lessonIndex: 1,
+        title: 'La Gran Premisa: la Bolsa Americana Sube a Largo Plazo',
+        duration: '8 min',
+        intro: 'Buena parte de lo que se hace en bolsa —y buena parte de esta terminal— se apoya en esta idea. Tiene argumentos muy sólidos. También tiene excepciones que conviene conocer antes de apostar a ella.',
+        sections: [
+            {
+                heading: 'Los argumentos a favor',
+                blocks: [
+                    { type: 'steps', items: [
+                        '<b>Las empresas ganan más con el tiempo.</b> Si la economía crece, sus beneficios crecen, y a la larga el precio de una acción sigue a los beneficios.',
+                        '<b>El índice se renueva solo.</b> Las empresas que fracasan salen del S&amp;P 500 y entran las que crecen. Nadie tiene que acertar cuáles: el índice lo hace por ti.',
+                        '<b>La inflación empuja los precios.</b> Si todo cuesta más dinero cada año, las empresas también valen más dinero, aunque no valgan más de verdad.',
+                        '<b>Entra dinero constantemente.</b> Planes de pensiones y fondos indexados compran cada mes, pase lo que pase.',
+                    ]},
+                    { type: 'text', content: 'Por eso la premisa es razonable, y la historia del último siglo en Estados Unidos la respalda. Pero «a largo plazo» esconde una trampa: nadie dice cuánto es ese plazo.' },
+                ]
+            },
+            {
+                heading: 'Primera excepción: trece años para volver al mismo sitio',
+                blocks: [
+                    { type: 'text', content: 'El S&amp;P 500 marcó un máximo el <b>24 de marzo de 2000</b>, en 1.527 puntos. Cayó, se recuperó, volvió a hacer máximo en 2007 (1.565) y volvió a caer. No superó ese máximo de 2007 hasta el <b>28 de marzo de 2013</b>.' },
+                    { type: 'chart', id: 'prem_sp_nominal_real' },
+                    { type: 'text', content: 'En esos trece años el índice subió solo un <b>2,7%</b> en precio. Y como en ese tiempo la vida se encareció un 35,8%, en poder de compra la pérdida fue del <b>24,4%</b>. La premisa se cumplió… si tienes trece años de paciencia y no cuentas la inflación.' },
+                    { type: 'tip', label: 'UN MATIZ JUSTO', content: 'Estas cifras son del precio del índice, sin los dividendos. Con los dividendos reinvertidos el resultado fue algo mejor. Aun así, fueron trece años muy duros para quien necesitaba ese dinero.' },
+                ]
+            },
+            {
+                heading: 'Segunda excepción: Japón, 34 años',
+                blocks: [
+                    { type: 'text', content: 'A finales de los 80, Japón era la segunda economía del mundo y la bolsa de Tokio parecía imparable. El Nikkei marcó su máximo el <b>29 de diciembre de 1989</b>, en 38.916 puntos.' },
+                    { type: 'chart', id: 'prem_nikkei' },
+                    { type: 'text', content: 'No volvió a superarlo hasta el <b>22 de febrero de 2024</b>: <b>34 años</b> después. Por el camino llegó a caer un <b>81,9%</b>, hasta los 7.055 puntos de marzo de 2009. En 1989, la premisa «a largo plazo sube» también parecía obvia en Japón.' },
+                ]
+            },
+            {
+                heading: 'La trampa de mirar al ganador',
+                blocks: [
+                    { type: 'concept', title: 'Sesgo de supervivencia', content: 'Sacar conclusiones mirando solo a los que sobrevivieron. La idea de que «la bolsa siempre sube» se construye mirando a Estados Unidos, que fue el gran ganador del siglo XX. Pero no todos los mercados tuvieron esa suerte.' },
+                    { type: 'text', content: 'En Rusia, tras la revolución de 1917, la bolsa cerró y los accionistas lo perdieron todo. La bolsa de Tokio estuvo cerrada de 1945 a 1949, tras la guerra. Nadie los usa como ejemplo porque no están en los gráficos que se enseñan hoy.' },
+                    { type: 'warning', content: 'Esto no significa que la premisa sea falsa. Significa que es una <b>apuesta</b>: la apuesta de que Estados Unidos seguirá siendo el mercado que funciona. Es una apuesta razonable, pero hay que hacerla sabiendo que lo es.' },
+                ]
+            },
+        ]
+    },
+
+    '36-3': {
+        moduleId: 36,
+        lessonIndex: 2,
+        title: 'Degradación Monetaria y Liquidez: Qué Explican y Qué No',
+        duration: '7 min',
+        intro: 'Se oye mucho que la bolsa sube porque los bancos centrales imprimen dinero. Tiene parte de verdad. Pero como herramienta para decidir cuándo comprar o vender, falla más de lo que su fama promete.',
+        sections: [
+            {
+                heading: 'Qué es la degradación monetaria',
+                blocks: [
+                    { type: 'concept', title: 'Degradación monetaria', content: 'Cuando se crea dinero más deprisa de lo que crece la economía, cada euro o dólar compra menos cosas. Los activos —acciones, pisos, oro, bitcoin— cuestan más dinero, aunque no valgan más en términos reales.' },
+                    { type: 'concept', title: 'M2', content: 'Una forma de medir cuánto dinero hay en circulación: el efectivo, las cuentas corrientes y los ahorros que se pueden sacar enseguida. Si el M2 crece mucho, hay más dinero buscando dónde ir.' },
+                    { type: 'text', content: 'La idea tiene lógica: más dinero persiguiendo el mismo número de empresas empuja sus precios hacia arriba. Y a veces se ve con claridad: tras la crisis de 2020, el M2 llegó a crecer un <b>26,8% en un año</b> (febrero de 2021) y la bolsa subió con fuerza.' },
+                ]
+            },
+            {
+                heading: 'Lo que no explica: el caso de 2022 y 2023',
+                blocks: [
+                    { type: 'chart', id: 'prem_m2_bolsa' },
+                    { type: 'text', content: 'En <b>diciembre de 2022</b> el M2 empezó a caer respecto al año anterior: la primera caída anual en los datos de la Reserva Federal, que empiezan en 1960. Llegó a bajar un 4,6% en abril de 2023 y siguió en negativo hasta febrero de 2024.' },
+                    { type: 'text', content: 'Si la liquidez mandara, la bolsa debería haber sufrido. Pasó lo contrario: el S&amp;P 500 ya había tocado suelo el <b>12 de octubre de 2022</b> —antes de que el M2 empezara a caer— y subió un <b>24,2% en 2023</b> y un <b>23,3% en 2024</b>, con el dinero cayendo o casi plano.' },
+                    { type: 'warning', content: 'La liquidez es viento de fondo que actúa en años, no una señal para entrar y salir en meses. Quien vendió en 2023 porque «el M2 cae» se perdió dos de los mejores años de la bolsa reciente.' },
+                ]
+            },
+            {
+                heading: 'Y protege el precio, no el poder de compra',
+                blocks: [
+                    { type: 'text', content: 'La degradación monetaria ayuda a que los precios <b>nominales</b> suban. Pero recuerda la lección anterior: del 2000 al 2013 el S&amp;P 500 subió un 2,7% en precio y perdió un 24,4% en poder de compra. Que el número suba no significa que tu dinero valga más.' },
+                    { type: 'tip', label: 'EN LA TERMINAL', content: 'En Market, el panel <b>LIQUIDEZ</b> enseña la liquidez neta y el M2 junto al S&amp;P 500. Úsalo para entender el clima de fondo, no como semáforo de compra y venta.' },
+                ]
+            },
+        ]
+    },
+
+    '36-4': {
+        moduleId: 36,
+        lessonIndex: 3,
+        title: 'Las Estrategias de la Terminal, Una a Una',
+        duration: '8 min',
+        intro: 'Cada herramienta de RSU se apoya en su propia premisa. Conocerlas te dice qué puede salir mal con cada una, cuánto cuesta aunque todo salga bien, y qué señal indicaría que algo de fondo ha cambiado.',
+        sections: [
+            {
+                heading: 'La premisa de cada una',
+                blocks: [
+                    { type: 'table',
+                        headers: ['Estrategia', 'Su premisa', 'Lo que cuesta aunque se cumpla', 'La señal de que se está rompiendo'],
+                        rows: [
+                            ['<b>SPXL</b>', 'El S&amp;P 500 sube a largo plazo y recupera sus caídas', 'Caídas del 76,9% (2020) y del 63,8% (2022); operaciones abiertas más de dos años', 'El índice pasa muchos años sin recuperar su máximo, como del 2000 al 2013'],
+                            ['<b>RSU Algoritmo</b>', 'Los suelos de mercado dejan huellas parecidas y, tras ellos, el mercado tiende a recuperar', 'No acierta el día del mínimo: puede seguir cayendo después de la señal', 'Señales que se repiten sin que llegue la recuperación'],
+                            ['<b>Cartera RSU</b>', 'Cinco tendencias de fondo seguirán creciendo años, y las empresas difíciles de sustituir se lo llevarán', 'Mucha volatilidad y pagar más caro que la media', 'La tendencia se frena, o sigue pero la empresa pierde su sitio dentro de ella'],
+                            ['<b>CANSLIM y RS/RW</b>', 'Lo que ha sido fuerte tiende a seguir siéndolo durante un tiempo', 'Los giros bruscos del mercado, cuando lo más castigado rebota más deprisa', 'Los líderes pierden su puesto en bloque'],
+                            ['<b>BTC Stratum</b>', 'Bitcoin se mueve en ciclos de unos cuatro años y vuelve hacia su media', 'Caídas del 83,4% (2017-2018) y del 76,6% (2021-2022)', 'Un ciclo que no recupera su máximo anterior'],
+                        ]
+                    },
+                    { type: 'tip', label: 'PARA PROFUNDIZAR', content: 'Cada una tiene su propio manual en la Guía de la Terminal: SPXL en el módulo 30, el Algoritmo en el 26, la Cartera en el 27 y CANSLIM y la fuerza relativa en el 28 y el 29.' },
+                ]
+            },
+            {
+                heading: 'Una premisa cumplida también se paga',
+                blocks: [
+                    { type: 'text', content: 'Fíjate en la tercera columna. Incluso cuando la premisa se cumple, el camino puede ser brutal. Las cuatro grandes crisis del S&amp;P 500 de este siglo se recuperaron… y un triple apalancado sobre el índice tuvo que aguantar caídas de entre el 64% y el 96%.' },
+                    { type: 'chart', id: 'prem_caidas_apalancado' },
+                    { type: 'text', content: 'Con bitcoin pasa lo mismo: tras el techo del 16 de diciembre de 2017 cayó un 83,4% en un año y tardó casi tres en recuperar ese precio. Tras el del 8 de noviembre de 2021 cayó un 76,6% y no volvió hasta marzo de 2024. La premisa del ciclo se cumplió las dos veces. Aguantar esas caídas era otra historia.' },
+                ]
+            },
+            {
+                heading: 'Cinco estrategias no son cinco apuestas',
+                blocks: [
+                    { type: 'chart', id: 'prem_premisas_compartidas' },
+                    { type: 'text', content: 'SPXL, el Algoritmo, buena parte de la Cartera y los buscadores de fuerza relativa dependen, en el fondo, de lo mismo: que la bolsa americana siga funcionando. Si esa premisa fallara, fallarían a la vez.' },
+                    { type: 'warning', content: 'Tener muchas estrategias da sensación de estar diversificado. Pero si todas cuelgan de la misma premisa, en el escenario que más duele se comportan como una sola.' },
+                ]
+            },
+        ]
+    },
+
+    '36-5': {
+        moduleId: 36,
+        lessonIndex: 4,
+        title: 'Cómo Nos Protege la Metodología',
+        duration: '6 min',
+        intro: 'Ninguna metodología hace que una premisa sea verdad. Lo que sí puede hacer es que sobrevivas si resulta que no lo era. Esa es su función.',
+        sections: [
+            {
+                heading: 'El apalancamiento se paga en tiempo',
+                blocks: [
+                    { type: 'text', content: 'Una caída del 50% necesita un 100% de subida para recuperarse. Una del 90% necesita multiplicar el dinero por diez. Por eso el apalancamiento no solo hace las caídas más hondas: hace la vuelta mucho más larga.' },
+                    { type: 'chart', id: 'prem_recuperar_maximo' },
+                    { type: 'text', content: 'Tras el máximo de marzo de 2000, el S&amp;P 500 tardó <b>7,2 años</b> en volver a él. Un triple apalancado sobre el índice tardó <b>21,6</b>: quien entró entonces no recuperó su dinero hasta noviembre de 2021. Tras el máximo de 2007, 5,5 años el índice y 10 años el triple.' },
+                ]
+            },
+            {
+                heading: 'Cinco protecciones',
+                blocks: [
+                    { type: 'steps', items: [
+                        '<b>El tamaño lo decide el peor caso, no el esperado.</b> Pregúntate cuánto perderías si la premisa fallara, y que esa cifra sea soportable.',
+                        '<b>Apalanca solo lo que podrías ver caer un 90%.</b> Ha pasado dos veces en este siglo con un triple sobre el S&amp;P 500, y la premisa se cumplió las dos.',
+                        '<b>Diversifica premisas, no solo activos.</b> Diez acciones americanas son diez activos y una sola premisa.',
+                        '<b>Escribe la señal de rotura antes de entrar.</b> Después, con pérdidas, cualquier señal parecerá ruido.',
+                        '<b>Revisa la premisa con calendario, no con el precio del día.</b> Una vez al trimestre, con calma, no el día que el mercado cae un 3%.',
+                    ]},
+                    { type: 'tip', label: 'EN LA TERMINAL', content: 'El <b>Roadmap</b> hace exactamente esto con el escenario de mercado: lo escribe y lo revisa. Y el <b>Track Record</b> enseña lo que hicieron de verdad las señales, incluidos los periodos en que no aportaron nada. Son las dos formas que tiene la terminal de no enamorarse de su propia premisa.' },
+                ]
+            },
+            {
+                heading: 'Lo que este módulo no dice',
+                blocks: [
+                    { type: 'warning', content: 'Nada de lo anterior es una predicción ni una recomendación. No dice que la bolsa vaya a subir ni que vaya a caer. Dice que toda estrategia apuesta por algo, y que conviene saber por qué, cuánto cuesta el camino y cómo seguir en pie si la apuesta sale mal.' },
+                    { type: 'concept', title: 'Todo el módulo en una frase', content: 'Antes de preguntarte cuánto puede ganar una estrategia, pregúntate en qué tiene que creer para ganarlo, cuánto duele el camino aunque acierte y qué harías si esa creencia deja de ser verdad.' },
+                ]
+            },
+        ]
+    },
 };

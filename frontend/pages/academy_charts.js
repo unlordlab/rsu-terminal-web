@@ -12809,6 +12809,217 @@ function inst_vwap_referencia() {
     </svg>`;
 }
 
+// ── Módulo 36 (premisas) ─────────────────────────────────────────────────────
+// Las cifras de estos gráficos están MEDIDAS con datos reales el 13/09/2026
+// (yfinance: ^GSPC, ^N225, SPXL, BTC-USD, ^IRX; FRED: M2SL y CPIAUCSL), no
+// dibujadas a ojo. Si se cambia una, hay que cambiar la lección que la cita:
+// tests/test_academy_contenido.py comprueba que las dos dicen lo mismo.
+
+// La premisa es el cimiento: si se agrieta, no hay regla de arriba que lo arregle
+function prem_cimientos() {
+    const W = 680, H = 290;
+    const caja = (y, h, color, titulo, sub, op) =>
+        `<rect x="140" y="${y}" width="400" height="${h}" fill="${color}" opacity="${op}" rx="4"/>`
+        + `<text x="340" y="${y + h / 2 - 2}" fill="${C.text}" font-size="12" font-family="monospace" text-anchor="middle">${titulo}</text>`
+        + `<text x="340" y="${y + h / 2 + 14}" fill="${C.textDim}" font-size="9.5" font-family="monospace" text-anchor="middle">${sub}</text>`;
+    return `<svg viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg">
+        <rect width="${W}" height="${H}" fill="${C.bg}" rx="6"/>
+        <text x="20" y="28" fill="${C.text}" font-size="13" font-family="monospace">Toda estrategia se levanta sobre una premisa</text>
+        ${caja(48, 50, C.accent, 'LAS REGLAS', 'cuándo entrar · cuánto · cuándo salir', 0.16)}
+        ${caja(106, 50, C.cyan, 'LA ESTRATEGIA', 'SPXL, la Cartera, el Algoritmo, Stratum…', 0.14)}
+        ${caja(164, 58, C.orange, 'LA PREMISA', 'lo que TIENE que ser cierto para que gane dinero', 0.22)}
+        <path d="M 500 164 L 512 180 L 504 192 L 520 208 L 514 222" fill="none" stroke="${C.red}" stroke-width="2"/>
+        <text x="548" y="197" fill="${C.red}" font-size="9.5" font-family="monospace">una grieta</text>
+        <text x="${W / 2}" y="${H - 34}" fill="${C.text}" font-size="10.5" font-family="monospace" text-anchor="middle">Las reglas se ven y se discuten. La premisa casi nunca se dice en voz alta.</text>
+        <text x="${W / 2}" y="${H - 16}" fill="${C.textDim}" font-size="9.5" font-family="monospace" text-anchor="middle">Si el cimiento se agrieta, ningún ajuste de las reglas sostiene lo de arriba</text>
+    </svg>`;
+}
+
+// S&P 500 del 2000 al 2013: recupera el precio, no el poder de compra
+function prem_sp_nominal_real() {
+    const W = 680, H = 300;
+    const nominal = [32.8, 35.7, 38.3, 40.3, 42.3, 43.9, 45.0, 48.5, 49.6, 57.9, 62.0, 63.5, 72.1, 74.2, 66.6, 80.5, 84.2, 89.9, 84.0, 96.2, 98.1, 95.2, 94.0, 86.4, 76.0, 80.2, 68.1, 75.2, 75.1, 64.8, 53.4, 57.6, 55.5, 63.8, 65.2, 72.8, 73.7, 74.7, 73.0, 79.3, 77.3, 78.0, 80.4, 81.7, 84.8, 83.2, 87.5, 92.9, 93.0, 98.4, 100.0, 96.1, 86.6, 83.8, 76.4, 59.1, 52.2, 60.2, 69.2, 73.0, 76.6, 67.5, 74.7, 82.3, 86.8, 86.5, 74.1, 82.3, 92.2, 89.2, 94.3, 93.4, 102.7, 105.2, 110.1, 121.0, 122.6, 128.3, 129.1, 134.8];
+    const real = [37.1, 40.0, 42.7, 44.8, 46.5, 47.9, 48.8, 52.1, 53.0, 61.9, 65.8, 67.1, 76.1, 78.0, 69.6, 83.7, 87.4, 92.6, 85.6, 97.4, 98.1, 94.6, 92.6, 84.7, 73.8, 77.1, 65.4, 72.5, 72.0, 61.7, 50.5, 54.2, 51.6, 59.6, 60.2, 67.1, 67.4, 67.6, 65.7, 70.8, 68.4, 68.9, 69.2, 70.5, 72.6, 70.5, 73.7, 78.2, 77.5, 81.2, 82.0, 77.7, 69.4, 65.9, 59.7, 47.8, 42.0, 47.9, 54.8, 57.4, 60.2, 53.1, 58.5, 63.9, 66.5, 65.8, 55.9, 62.0, 68.9, 66.7, 69.8, 69.1, 75.6, 77.4, 80.6, 88.2, 88.8, 92.5, 93.0, 97.6];
+    const fechas = ["1995-03", "1995-06", "1995-09", "1995-12", "1996-03", "1996-06", "1996-09", "1996-12", "1997-03", "1997-06", "1997-09", "1997-12", "1998-03", "1998-06", "1998-09", "1998-12", "1999-03", "1999-06", "1999-09", "1999-12", "2000-03", "2000-06", "2000-09", "2000-12", "2001-03", "2001-06", "2001-09", "2001-12", "2002-03", "2002-06", "2002-09", "2002-12", "2003-03", "2003-06", "2003-09", "2003-12", "2004-03", "2004-06", "2004-09", "2004-12", "2005-03", "2005-06", "2005-09", "2005-12", "2006-03", "2006-06", "2006-09", "2006-12", "2007-03", "2007-06", "2007-09", "2007-12", "2008-03", "2008-06", "2008-09", "2008-12", "2009-03", "2009-06", "2009-09", "2009-12", "2010-03", "2010-06", "2010-09", "2010-12", "2011-03", "2011-06", "2011-09", "2011-12", "2012-03", "2012-06", "2012-09", "2012-12", "2013-03", "2013-06", "2013-09", "2013-12", "2014-03", "2014-06", "2014-09", "2014-12"];
+    const x0 = 60, y0 = 55, w = 580, h = 170, MIN = 30, MAX = 140;
+    const x = (i) => x0 + i / (nominal.length - 1) * w;
+    const y = (v) => y0 + h - (v - MIN) / (MAX - MIN) * h;
+    const linea = (serie) => serie.map((v, i) => `${i ? 'L' : 'M'} ${x(i).toFixed(1)} ${y(v).toFixed(1)}`).join(' ');
+    const marca = (clave, texto) => {
+        const i = fechas.indexOf(clave);
+        return `<line x1="${x(i).toFixed(1)}" y1="${y0}" x2="${x(i).toFixed(1)}" y2="${y0 + h}" stroke="${C.grid}" stroke-width="1"/>`
+            + `<text x="${x(i).toFixed(1)}" y="${y0 + h + 14}" fill="${C.textDim}" font-size="9" font-family="monospace" text-anchor="middle">${texto}</text>`;
+    };
+    const iFin = fechas.indexOf('2013-03');
+    return `<svg viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg">
+        <rect width="${W}" height="${H}" fill="${C.bg}" rx="6"/>
+        <text x="20" y="26" fill="${C.text}" font-size="13" font-family="monospace">S&amp;P 500, 1995-2014 · máximo de marzo de 2000 = 100</text>
+        <text x="20" y="43" fill="${C.textDim}" font-size="10" font-family="monospace">Precio del índice, sin dividendos · la línea naranja descuenta la inflación (IPC de EE. UU.)</text>
+        ${marca('2000-03', 'mar 2000')}${marca('2007-09', '2007')}${marca('2013-03', 'mar 2013')}
+        <line x1="${x0}" y1="${y(100).toFixed(1)}" x2="${x0 + w}" y2="${y(100).toFixed(1)}" stroke="${C.textDim}" stroke-dasharray="3 3" opacity="0.5"/>
+        <path d="${linea(nominal)}" fill="none" stroke="${C.text}" stroke-width="2"/>
+        <path d="${linea(real)}" fill="none" stroke="${C.orange}" stroke-width="2"/>
+        <text x="${(x(iFin) - 6).toFixed(1)}" y="${(y(nominal[iFin]) - 8).toFixed(1)}" fill="${C.text}" font-size="9.5" font-family="monospace" text-anchor="end">+2,7% en precio</text>
+        <text x="${(x(iFin) - 6).toFixed(1)}" y="${y0 + h - 8}" fill="${C.orange}" font-size="9.5" font-family="monospace" text-anchor="end">-24,4% en poder de compra</text>
+        <text x="${W / 2}" y="${H - 28}" fill="${C.text}" font-size="10.5" font-family="monospace" text-anchor="middle">Trece años para volver al mismo sitio en precio… y un cuarto menos de lo que ese dinero compraba.</text>
+        <text x="${W / 2}" y="${H - 11}" fill="${C.textDim}" font-size="9.5" font-family="monospace" text-anchor="middle">«A largo plazo» es verdad, pero el plazo puede ser mucho más largo que tu paciencia</text>
+    </svg>`;
+}
+
+// Japón: 34 años por debajo del máximo de 1989
+function prem_nikkei() {
+    const W = 680, H = 290;
+    const anos = [1985, 1986, 1987, 1988, 1989, 1990, 1991, 1992, 1993, 1994, 1995, 1996, 1997, 1998, 1999, 2000, 2001, 2002, 2003, 2004, 2005, 2006, 2007, 2008, 2009, 2010, 2011, 2012, 2013, 2014, 2015, 2016, 2017, 2018, 2019, 2020, 2021, 2022, 2023, 2024, 2025];
+    const cierre = [13083, 18821, 21564, 30159, 38916, 23849, 22984, 16925, 17417, 19723, 19868, 19361, 15259, 13842, 18934, 13786, 10543, 8579, 10677, 11489, 16111, 17226, 15308, 8860, 10546, 10229, 8455, 10395, 16291, 17451, 19034, 19114, 22765, 20015, 23657, 27444, 28792, 26094, 33464, 39895, 50339];
+    const PICO = 38916;
+    const x0 = 60, y0 = 50, w = 580, h = 170, MAX = 56000;
+    const x = (i) => x0 + i / (anos.length - 1) * w;
+    const y = (v) => y0 + h - v / MAX * h;
+    const linea = cierre.map((v, i) => `${i ? 'L' : 'M'} ${x(i).toFixed(1)} ${y(v).toFixed(1)}`).join(' ');
+    const i90 = anos.indexOf(1990), i24 = anos.indexOf(2024), iMin = cierre.indexOf(Math.min(...cierre.slice(i90)));
+    const eje = [1985, 1990, 2000, 2010, 2020, 2025].map(a => {
+        const i = anos.indexOf(a);
+        return `<text x="${x(i).toFixed(1)}" y="${y0 + h + 14}" fill="${C.textDim}" font-size="9" font-family="monospace" text-anchor="middle">${a}</text>`;
+    }).join('');
+    return `<svg viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg">
+        <rect width="${W}" height="${H}" fill="${C.bg}" rx="6"/>
+        <text x="20" y="26" fill="${C.text}" font-size="13" font-family="monospace">Nikkei 225, la bolsa de Japón · cierre de cada año</text>
+        <rect x="${x(i90).toFixed(1)}" y="${y0}" width="${(x(i24) - x(i90)).toFixed(1)}" height="${h}" fill="${C.red}" opacity="0.07"/>
+        <line x1="${x0}" y1="${y(PICO).toFixed(1)}" x2="${x0 + w}" y2="${y(PICO).toFixed(1)}" stroke="${C.orange}" stroke-dasharray="4 3"/>
+        <text x="${x0 + 4}" y="${(y(PICO) - 5).toFixed(1)}" fill="${C.orange}" font-size="9.5" font-family="monospace">máximo del 29/12/1989: 38.916</text>
+        <path d="${linea}" fill="none" stroke="${C.text}" stroke-width="2"/>
+        <text x="${((x(i90) + x(i24)) / 2).toFixed(1)}" y="${y0 + 16}" fill="${C.red}" font-size="10.5" font-family="monospace" text-anchor="middle">34 años por debajo</text>
+        <text x="${x(iMin).toFixed(1)}" y="${(y(cierre[iMin]) + 16).toFixed(1)}" fill="${C.red}" font-size="9" font-family="monospace" text-anchor="middle">llegó a caer un 81,9%</text>
+        <text x="${x(i24).toFixed(1)}" y="${(y(PICO) + 16).toFixed(1)}" fill="${C.accent}" font-size="9" font-family="monospace" text-anchor="middle">22/02/2024</text>
+        ${eje}
+        <text x="${W / 2}" y="${H - 26}" fill="${C.text}" font-size="10.5" font-family="monospace" text-anchor="middle">Quien compró en el máximo de 1989 tardó 34 años en volver a estar en positivo.</text>
+        <text x="${W / 2}" y="${H - 10}" fill="${C.textDim}" font-size="9.5" font-family="monospace" text-anchor="middle">Era la segunda economía del mundo. La premisa «a largo plazo sube» también parecía obvia allí</text>
+    </svg>`;
+}
+
+// M2 y bolsa 2019-2024: la liquidez no marcó el suelo ni la subida
+function prem_m2_bolsa() {
+    const W = 680, H = 330;
+    const fechas = ["2019-01", "2019-02", "2019-03", "2019-04", "2019-05", "2019-06", "2019-07", "2019-08", "2019-09", "2019-10", "2019-11", "2019-12", "2020-01", "2020-02", "2020-03", "2020-04", "2020-05", "2020-06", "2020-07", "2020-08", "2020-09", "2020-10", "2020-11", "2020-12", "2021-01", "2021-02", "2021-03", "2021-04", "2021-05", "2021-06", "2021-07", "2021-08", "2021-09", "2021-10", "2021-11", "2021-12", "2022-01", "2022-02", "2022-03", "2022-04", "2022-05", "2022-06", "2022-07", "2022-08", "2022-09", "2022-10", "2022-11", "2022-12", "2023-01", "2023-02", "2023-03", "2023-04", "2023-05", "2023-06", "2023-07", "2023-08", "2023-09", "2023-10", "2023-11", "2023-12", "2024-01", "2024-02", "2024-03", "2024-04", "2024-05", "2024-06", "2024-07", "2024-08", "2024-09", "2024-10", "2024-11", "2024-12"];
+    const m2 = [4.0, 4.0, 3.9, 4.0, 4.3, 4.7, 5.0, 5.3, 5.6, 6.5, 7.1, 6.7, 6.7, 6.8, 10.1, 16.9, 22.0, 22.8, 23.2, 23.0, 23.6, 23.5, 24.2, 24.5, 25.6, 26.8, 23.9, 18.2, 14.1, 12.6, 12.5, 13.2, 12.8, 12.8, 12.3, 12.5, 11.7, 10.6, 9.6, 7.9, 6.2, 5.7, 4.9, 3.8, 2.6, 1.4, 0.3, -1.0, -1.7, -2.2, -3.9, -4.6, -4.1, -3.9, -4.0, -4.0, -3.7, -3.4, -3.1, -2.4, -2.1, -1.5, 0.1, 0.9, 0.9, 1.3, 1.5, 2.0, 2.5, 2.9, 3.4, 3.4];
+    const sp = [2704, 2784, 2834, 2946, 2752, 2942, 2980, 2926, 2977, 3038, 3141, 3231, 3226, 2954, 2585, 2912, 3044, 3100, 3271, 3500, 3363, 3270, 3622, 3756, 3714, 3811, 3973, 4181, 4204, 4298, 4395, 4523, 4308, 4605, 4567, 4766, 4516, 4374, 4530, 4132, 4132, 3785, 4130, 3955, 3586, 3872, 4080, 3840, 4077, 3970, 4109, 4169, 4180, 4450, 4589, 4508, 4288, 4194, 4568, 4770, 4846, 5096, 5254, 5036, 5278, 5460, 5522, 5648, 5762, 5705, 6032, 5882];
+    const x0 = 60, w = 580, n = fechas.length;
+    const x = (i) => x0 + (i + 0.5) / n * w;
+    const ySp = (v) => 45 + 110 - (v - 2400) / (6400 - 2400) * 110;
+    const yM = (v) => 205 + 45 - v / 30 * 45 * 1.0;
+    const cero = yM(0);
+    const lineaSp = sp.map((v, i) => `${i ? 'L' : 'M'} ${x(i).toFixed(1)} ${ySp(v).toFixed(1)}`).join(' ');
+    const barras = m2.map((v, i) => {
+        const top = v >= 0 ? yM(v) : cero, alto = Math.abs(yM(v) - cero);
+        return `<rect x="${(x(i) - w / n / 2 + 1).toFixed(1)}" y="${top.toFixed(1)}" width="${(w / n - 2).toFixed(1)}" height="${Math.max(alto, 0.6).toFixed(1)}" fill="${v >= 0 ? C.accent : C.red}" opacity="0.75"/>`;
+    }).join('');
+    const vl = (clave, texto, color, dy) => {
+        const i = fechas.indexOf(clave);
+        return `<line x1="${x(i).toFixed(1)}" y1="45" x2="${x(i).toFixed(1)}" y2="275" stroke="${color}" stroke-dasharray="3 3" opacity="0.7"/>`
+            + `<text x="${(x(i) + 4).toFixed(1)}" y="${dy}" fill="${color}" font-size="9" font-family="monospace">${texto}</text>`;
+    };
+    const anos = ['2019', '2020', '2021', '2022', '2023', '2024'].map(a => {
+        const i = fechas.indexOf(a + '-01');
+        return `<text x="${x(i).toFixed(1)}" y="292" fill="${C.textDim}" font-size="9" font-family="monospace">${a}</text>`;
+    }).join('');
+    return `<svg viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg">
+        <rect width="${W}" height="${H}" fill="${C.bg}" rx="6"/>
+        <text x="20" y="26" fill="${C.text}" font-size="13" font-family="monospace">La cantidad de dinero (M2) y la bolsa, 2019-2024</text>
+        <text x="20" y="150" fill="${C.text}" font-size="9" font-family="monospace" opacity="0.8">S&amp;P 500</text>
+        <path d="${lineaSp}" fill="none" stroke="${C.text}" stroke-width="2"/>
+        <line x1="${x0}" y1="${cero.toFixed(1)}" x2="${x0 + w}" y2="${cero.toFixed(1)}" stroke="${C.textDim}" opacity="0.5"/>
+        ${barras}
+        <text x="20" y="${(cero - 30).toFixed(1)}" fill="${C.text}" font-size="9" font-family="monospace" opacity="0.8">M2, % anual</text>
+        ${vl('2021-02', '+26,8%: el mayor aumento', C.accent, 196)}
+        ${vl('2022-10', 'suelo de la bolsa', C.cyan, 60)}
+        ${vl('2022-12', 'el M2 empieza a caer', C.red, 268)}
+        ${anos}
+        <text x="${W / 2}" y="${H - 20}" fill="${C.text}" font-size="10.5" font-family="monospace" text-anchor="middle">La bolsa tocó suelo ANTES de que el dinero empezara a caer, y subió un 24% en 2023 con el dinero cayendo.</text>
+        <text x="${W / 2}" y="${H - 5}" fill="${C.textDim}" font-size="9.5" font-family="monospace" text-anchor="middle">Datos: FRED (M2SL) y S&amp;P 500 a fin de mes · la primera caída anual del M2 en la serie, que empieza en 1960</text>
+    </svg>`;
+}
+
+// Lo que cuesta el apalancamiento aunque la premisa acabe cumpliéndose
+function prem_caidas_apalancado() {
+    const W = 680, H = 345;
+    const episodios = [
+        ['2000-2002', 49.1, 92.9, '3x simulado'],
+        ['2007-2009', 56.8, 95.9, '3x simulado'],
+        ['2020', 33.9, 76.9, 'SPXL real'],
+        ['2022', 25.4, 63.8, 'SPXL real'],
+    ];
+    const x0 = 150, w = 400, y0 = 58, alto = 22, hueco = 16;
+    let filas = '';
+    episodios.forEach((e, i) => {
+        const yy = y0 + i * (2 * alto + hueco);
+        filas += `<text x="${x0 - 12}" y="${yy + alto + 4}" fill="${C.text}" font-size="10.5" font-family="monospace" text-anchor="end">${e[0]}</text>`
+            + `<rect x="${x0}" y="${yy}" width="${(e[1] / 100 * w).toFixed(1)}" height="${alto - 4}" fill="${C.muted}" opacity="0.8" rx="2"/>`
+            + `<text x="${(x0 + e[1] / 100 * w + 6).toFixed(1)}" y="${yy + 13}" fill="${C.textDim}" font-size="9.5" font-family="monospace">-${String(e[1]).replace('.', ',')}% S&amp;P 500</text>`
+            + `<rect x="${x0}" y="${yy + alto}" width="${(e[2] / 100 * w).toFixed(1)}" height="${alto - 4}" fill="${C.red}" opacity="0.85" rx="2"/>`
+            + `<text x="${(x0 + e[2] / 100 * w + 6).toFixed(1)}" y="${yy + alto + 13}" fill="${C.red}" font-size="9.5" font-family="monospace">-${String(e[2]).replace('.', ',')}% ${e[3]}</text>`;
+    });
+    return `<svg viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg">
+        <rect width="${W}" height="${H}" fill="${C.bg}" rx="6"/>
+        <text x="20" y="26" fill="${C.text}" font-size="13" font-family="monospace">La peor caída de cada crisis: el índice y el triple apalancado</text>
+        <text x="20" y="43" fill="${C.textDim}" font-size="10" font-family="monospace">SPXL no existía antes de noviembre de 2008: esas dos crisis se simulan con el triple diario del índice</text>
+        ${filas}
+        <text x="${W / 2}" y="${H - 24}" fill="${C.text}" font-size="10.5" font-family="monospace" text-anchor="middle">Las cuatro crisis se recuperaron. La premisa se cumplió… y aun así hubo que aguantar caídas del 64% al 96%.</text>
+        <text x="${W / 2}" y="${H - 8}" fill="${C.textDim}" font-size="9.5" font-family="monospace" text-anchor="middle">Simulación con comisión del fondo y coste de financiación aproximados · la de 2020 y 2022 coincide con el SPXL real</text>
+    </svg>`;
+}
+
+// Años hasta volver al máximo anterior
+function prem_recuperar_maximo() {
+    const W = 680, H = 270;
+    const datos = [
+        ['Desde el máximo de 2000', 7.2, 21.6],
+        ['Desde el máximo de 2007', 5.5, 10.0],
+    ];
+    const x0 = 200, w = 380, MAX = 24, y0 = 62;
+    let filas = '';
+    datos.forEach((d, i) => {
+        const yy = y0 + i * 72;
+        const t = (v) => String(v).replace('.', ',');
+        filas += `<text x="${x0 - 12}" y="${yy + 26}" fill="${C.text}" font-size="10.5" font-family="monospace" text-anchor="end">${d[0]}</text>`
+            + `<rect x="${x0}" y="${yy}" width="${(d[1] / MAX * w).toFixed(1)}" height="20" fill="${C.muted}" opacity="0.8" rx="2"/>`
+            + `<text x="${(x0 + d[1] / MAX * w + 6).toFixed(1)}" y="${yy + 14}" fill="${C.textDim}" font-size="10" font-family="monospace">${t(d[1])} años el S&amp;P 500</text>`
+            + `<rect x="${x0}" y="${yy + 26}" width="${(d[2] / MAX * w).toFixed(1)}" height="20" fill="${C.red}" opacity="0.85" rx="2"/>`
+            + `<text x="${(x0 + d[2] / MAX * w + 6).toFixed(1)}" y="${yy + 40}" fill="${C.red}" font-size="10" font-family="monospace">${t(d[2])} años el triple</text>`;
+    });
+    return `<svg viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg">
+        <rect width="${W}" height="${H}" fill="${C.bg}" rx="6"/>
+        <text x="20" y="26" fill="${C.text}" font-size="13" font-family="monospace">Cuánto se tarda en volver al máximo anterior</text>
+        <text x="20" y="43" fill="${C.textDim}" font-size="10" font-family="monospace">Precio del S&amp;P 500 · el triple es la simulación diaria con sus costes aproximados</text>
+        ${filas}
+        <text x="${W / 2}" y="${H - 26}" fill="${C.text}" font-size="10.5" font-family="monospace" text-anchor="middle">Quien entró con el triple en marzo de 2000 no volvió a su dinero hasta noviembre de 2021.</text>
+        <text x="${W / 2}" y="${H - 10}" fill="${C.textDim}" font-size="9.5" font-family="monospace" text-anchor="middle">Una caída del 90% necesita multiplicar por diez para recuperarse: el apalancamiento se paga en tiempo</text>
+    </svg>`;
+}
+
+// Tener cinco estrategias no es tener cinco apuestas
+function prem_premisas_compartidas() {
+    const W = 680, H = 300;
+    const estrategias = ['SPXL', 'RSU Algoritmo', 'Cartera RSU', 'CANSLIM y RS/RW', 'BTC Stratum'];
+    const premisas = [
+        ['La bolsa americana sube a largo plazo', C.orange],
+        ['Las tendencias de fondo siguen creciendo', C.cyan],
+        ['Lo fuerte sigue siendo fuerte un tiempo', C.accent],
+        ['Bitcoin sigue sus ciclos de unos cuatro años', C.yellow],
+    ];
+    const enlaces = [[0, 0], [1, 0], [2, 0], [2, 1], [3, 0], [3, 2], [4, 3]];
+    const ye = (i) => 70 + i * 40, yp = (i) => 82 + i * 48;
+    const lineas = enlaces.map(([e, p]) => `<line x1="210" y1="${ye(e)}" x2="400" y2="${yp(p)}" stroke="${premisas[p][1]}" stroke-width="${p === 0 ? 2.2 : 1.4}" opacity="${p === 0 ? 0.85 : 0.6}"/>`).join('');
+    const cajasE = estrategias.map((t, i) => `<rect x="40" y="${ye(i) - 13}" width="170" height="26" fill="${C.surface}" stroke="${C.border}" rx="4"/><text x="125" y="${ye(i) + 4}" fill="${C.text}" font-size="10.5" font-family="monospace" text-anchor="middle">${t}</text>`).join('');
+    const cajasP = premisas.map(([t, c], i) => `<rect x="400" y="${yp(i) - 14}" width="250" height="28" fill="${c}" opacity="0.13" rx="4"/><text x="525" y="${yp(i) + 4}" fill="${c}" font-size="9.5" font-family="monospace" text-anchor="middle">${t}</text>`).join('');
+    return `<svg viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg">
+        <rect width="${W}" height="${H}" fill="${C.bg}" rx="6"/>
+        <text x="20" y="28" fill="${C.text}" font-size="13" font-family="monospace">De qué premisa cuelga cada estrategia de la terminal</text>
+        ${lineas}${cajasE}${cajasP}
+        <text x="${W / 2}" y="${H - 26}" fill="${C.text}" font-size="10.5" font-family="monospace" text-anchor="middle">Cuatro de las cinco dependen, en el fondo, de la misma premisa: la línea naranja.</text>
+        <text x="${W / 2}" y="${H - 10}" fill="${C.textDim}" font-size="9.5" font-family="monospace" text-anchor="middle">Si esa falla, fallan a la vez. Diversificar activos no es lo mismo que diversificar premisas</text>
+    </svg>`;
+}
+
 export const CHARTS = {
     // Módulo 0
     rsu_philosophy, rsu_community, rsu_for_who,
@@ -12948,4 +13159,7 @@ export const CHARTS = {
     // Módulo 35 (instituciones)
     inst_libro_ordenes, inst_impacto_tamano, inst_orden_madre, inst_curva_u, inst_pov,
     inst_ritmo, inst_huella_escalones, inst_vwap_referencia,
+    // Módulo 36 (premisas)
+    prem_cimientos, prem_sp_nominal_real, prem_nikkei, prem_m2_bolsa,
+    prem_caidas_apalancado, prem_recuperar_maximo, prem_premisas_compartidas,
 };

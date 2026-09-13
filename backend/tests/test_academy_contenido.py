@@ -104,7 +104,7 @@ def test_el_VSA_tiene_sus_cinco_lecciones_y_sus_graficos():
     assert len(vsa) == 9 and all(c.startswith("vsa_") for c in vsa)
 
 
-@pytest.mark.parametrize("modulo", [33, 34, 35])
+@pytest.mark.parametrize("modulo", [33, 34, 35, 36])
 def test_el_quiz_de_los_modulos_nuevos_esta_bien_formado(modulo):
     bloque = QUIZZES[QUIZZES.index(f"    {modulo}: {{"):]
     siguiente = re.search(r"^    \d+: \{", bloque[10:], re.M)
@@ -171,7 +171,7 @@ def test_las_instituciones_abren_la_fase_2():
 
 def test_las_instituciones_tienen_sus_cinco_lecciones_y_sus_graficos():
     assert [k for k, m, _ in CLAVES if m == "35"] == ["35-1", "35-2", "35-3", "35-4", "35-5"]
-    bloque = LECCIONES[LECCIONES.index("'35-1': {"):]
+    bloque = LECCIONES[LECCIONES.index("'35-1': {"):LECCIONES.index("'36-1': {")]
     graficos = re.findall(r"type: 'chart', id: '([a-z0-9_]+)'", bloque)
     assert len(set(graficos)) == 8 and all(g.startswith("inst_") for g in graficos), graficos
     for algoritmo in ("VWAP", "TWAP", "POV", "precio de llegada"):
@@ -219,6 +219,70 @@ for (const [id, fn] of Object.entries(CHARTS)) {
 console.log(JSON.stringify({ total: Object.keys(CHARTS).length, rotos }));
 """
 
+
+
+# ── El módulo 36: Las premisas de cada estrategia ────────────────────────────
+
+LECCIONES_36 = LECCIONES[LECCIONES.index("'36-1': {"):]
+
+
+def test_las_premisas_van_en_la_fase_de_estrategia_detras_de_la_conviccion():
+    """Es la base de la convicción a largo plazo (23) —cómo no confundirla con
+    negación cuando la tesis se rompe— y va antes del DCA en apalancados (25),
+    que es donde más cara sale una premisa rota."""
+    fase3 = re.search(r"FASE 3[^\n]*modules:\[([\d,\s]+)\]", MODULOS).group(1)
+    orden = [int(x) for x in fase3.split(",")]
+    assert 36 in orden and orden.index(23) < orden.index(36) < orden.index(25), orden
+
+
+def test_las_premisas_tienen_sus_cinco_lecciones_y_sus_graficos():
+    assert [k for k, m, _ in CLAVES if m == "36"] == ["36-1", "36-2", "36-3", "36-4", "36-5"]
+    graficos = re.findall(r"type: 'chart', id: '([a-z0-9_]+)'", LECCIONES_36)
+    assert len(set(graficos)) == 7 and all(g.startswith("prem_") for g in graficos), graficos
+
+
+def _grafico(nombre):
+    ini = GRAFICOS.index(f"function {nombre}(")
+    fin = GRAFICOS.index("\nfunction ", ini + 10)
+    return GRAFICOS[ini:fin]
+
+
+@pytest.mark.parametrize("grafico,parejas", [
+    # (como está en el dibujo, como lo cuenta la lección)
+    ("prem_sp_nominal_real", [("+2,7% en precio", "2,7%"), ("-24,4% en poder", "24,4%")]),
+    ("prem_nikkei", [("38.916", "38.916 puntos"), ("34 años", "34 años"), ("81,9%", "81,9%"),
+                     ("22/02/2024", "22 de febrero de 2024")]),
+    ("prem_m2_bolsa", [("+26,8%", "26,8% en un año"), ("subió un 24% en 2023", "24,2% en 2023")]),
+    ("prem_caidas_apalancado", [("76.9", "76,9% (2020)"), ("63.8", "63,8% (2022)"),
+                                ("95.9", "entre el 64% y el 96%")]),
+    ("prem_recuperar_maximo", [("7.2", "7,2 años"), ("21.6", "<b>21,6</b>"), ("5.5", "5,5 años"),
+                               ("10.0", "10 años el triple")]),
+])
+def test_las_cifras_del_grafico_son_las_que_cuenta_la_leccion(grafico, parejas):
+    """Las cifras se midieron con datos reales una vez y viven en dos sitios: el
+    dibujo y el texto. Si alguien toca uno, el otro tiene que moverse con él."""
+    dibujo = _grafico(grafico)
+    for en_dibujo, en_texto in parejas:
+        assert en_dibujo in dibujo, f"{grafico} ya no tiene «{en_dibujo}»"
+        assert en_texto in LECCIONES_36, f"la lección ya no cuenta «{en_texto}» ({grafico})"
+
+
+def test_lo_que_la_leccion_senala_en_la_terminal_existe():
+    """«En Market, el panel LIQUIDEZ…» y «SPXL en el módulo 30…»: si la terminal
+    cambia, la lección no puede quedarse mandando a sitios que no están."""
+    market = _js("market.js")
+    assert "LIQUIDEZ" in market and "M2" in market
+    for modulo, titulo in ((26, "RSU Algoritmo"), (27, "La Cartera RSU"), (28, "CANSLIM"),
+                           (29, "RS/RW"), (30, "SPXL")):
+        assert re.search(rf"id:{modulo},\s*title:'[^']*{re.escape(titulo)}", MODULOS), (modulo, titulo)
+
+
+def test_las_premisas_no_prometen_nada():
+    """Un servicio de pago que afirma que la bolsa va a subir se acerca a
+    prometer rentabilidades. El módulo tiene que decir que no predice."""
+    assert "Nada de lo anterior es una predicción ni una recomendación" in LECCIONES_36
+    for promesa in ("seguro que sube", "siempre sube.", "garantiza que"):
+        assert promesa not in LECCIONES_36.lower(), promesa
 
 def _node():
     for nombre in ("node", "node.exe"):
