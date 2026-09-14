@@ -50,6 +50,7 @@ async function loadCartera(container) {
 
         html += avisoFechas(data.diag_fechas);
         html += avisoIncoherencias(data.incoherencias);
+        html += avisoDesajustesPrecio(data.desajustes_precio);
         if (m && m.total_inv > 0) html += metricsRow(m);
         if (data.asignacion && data.asignacion.por_nivel && data.asignacion.por_nivel.length) {
             html += asignacionPanel(data.asignacion);
@@ -197,6 +198,32 @@ const _ETIQUETA_INCOHERENCIA = {
     cerrada_sin_cierre:     'Cerrada sin fecha de cierre',
     abierta_con_cierre:     'Abierta con fecha de cierre',
 };
+
+// Precio de la hoja que no cuadra con el cierre de su fecha (Cartera #63). A
+// diferencia de las incoherencias de arriba no es una fila imposible, así que
+// no se puede afirmar que esté mal: se enseña para revisarla. Sin corregir, la
+// curva de patrimonio apunta en un solo día lo que pasó entre la operación real
+// y la fecha escrita.
+function avisoDesajustesPrecio(lista) {
+    if (!lista || !lista.length) return '';
+    const orden = { compra: 0, venta: 1, sin_precio: 2 };
+    const filas = [...lista].sort((a, b) => (orden[a.tipo] ?? 3) - (orden[b.tipo] ?? 3)).map(a => {
+        if (a.tipo === 'sin_precio') {
+            return `<div style="padding:3px 0;"><b style="color:var(--color-text);">${esc(a.ticker)}</b>
+                — comprada el ${esc(a.fecha)}, pero Yahoo aún no tenía precios de este valor: hasta que los tiene cuenta por lo que costó.</div>`;
+        }
+        const dif = a.diferencia_pct;
+        return `<div style="padding:3px 0;"><b style="color:var(--color-text);">${esc(a.ticker)}</b>
+            — ${a.tipo === 'compra' ? 'compra' : 'venta'} del ${esc(a.fecha)} a ${esc(fix(a.precio_hoja))}:
+            <span style="color:var(--color-muted);">ese día cerró en ${esc(fix(a.cierre_ese_dia))} (${dif >= 0 ? '+' : ''}${esc(fix(dif, 1))}%)</span></div>`;
+    }).join('');
+    const revisar = lista.filter(a => a.tipo !== 'sin_precio').length;
+    return `<details style="background:rgba(255,152,0,.06);border:1px solid #ff9800;border-radius:var(--radius);padding:10px 14px;font-size:11px;color:#ffb74d;margin-bottom:1.25rem;line-height:1.5;">
+        <summary style="cursor:pointer;">⚠ <b>${revisar} precio(s) de la hoja no cuadran con la fecha de la operación</b>
+            (más de un ${esc(15)}% frente al cierre de ese día). Mientras no se corrijan, la curva de patrimonio cuenta en un solo día lo que pasó en semanas o meses.</summary>
+        <div style="margin-top:8px;">${filas}</div>
+    </details>`;
+}
 
 function avisoIncoherencias(lista) {
     if (!lista || !lista.length) return '';

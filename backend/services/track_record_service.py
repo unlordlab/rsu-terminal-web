@@ -485,8 +485,17 @@ def _track_record_cartera() -> dict:
     datos = get_cartera()
     if not datos.get("ok"):
         raise ValueError(datos.get("error") or "Cartera no disponible")
-    close_d, _ = download_batch(["SPY"], period="1y", min_history=1, log_prefix="[TrackRecord Cartera] ")
-    return curva_cartera_vs_spy(datos.get("history") or [], close_d.get("SPY"))
+    # 5 años y no 1: desde el 14/09/2026 la curva empieza en la PRIMERA
+    # operación (febrero de 2025), y con 1 año el S&P 500 no llegaba a su primer
+    # día y la comparación salía vacía (Cartera #63).
+    close_d, _ = download_batch(["SPY"], period="5y", min_history=1, log_prefix="[TrackRecord Cartera] ")
+    curva = curva_cartera_vs_spy(datos.get("history") or [], close_d.get("SPY"))
+    # Cuántas operaciones tienen un precio que no cuadra con su fecha: con
+    # alguna, la curva puede tener saltos que no son reales y hay que decirlo
+    # donde se ve. Solo el número, sin tickers: la lista va en Cartera.
+    desajustes = [d for d in (datos.get("desajustes_precio") or []) if d.get("tipo") in ("compra", "venta")]
+    curva["operaciones_por_revisar"] = len({(d["ticker"], d.get("fecha"), d["tipo"]) for d in desajustes})
+    return curva
 
 
 def para_visitante(data: dict, usuario: dict | None) -> dict:

@@ -112,16 +112,23 @@ def test_el_guardia_de_dias_malos_esta_escrito_a_prueba_de_nan():
     assert 1234.5 > 0
 
 
-def test_una_serie_entera_de_nan_no_aporta_esa_posicion():
+def test_una_serie_entera_de_nan_cuenta_por_lo_que_costo():
     """Si un ticker no tiene NINGÚN precio válido no hay nada que arrastrar.
-    La curva sale con el resto en vez de romperse."""
+    La curva sale con el resto en vez de romperse.
+
+    CAMBIÓ el 14/09/2026 (Cartera #63): antes esa posición no aportaba valor,
+    pero su dinero SÍ contaba como aportado, así que la curva lo leía como una
+    pérdida del 100% el día de la compra y un salto falso el día que Yahoo
+    empezaba a dar precios (GLXY, +36,2% el 16/05/2025). Ahora vale lo que
+    costó: ni gana ni pierde mientras no hay precio."""
     series = {
         "AAA": _serie([100.0, 100.0, 100.0]),
         "BBB": _serie([float("nan")] * 3),
     }
-    h = _curva(series, [_posicion("AAA", 10.0), _posicion("BBB", 10.0)])
+    h = _curva(series, [_posicion("AAA", 10.0), _posicion("BBB", 10.0, inv=700.0)])
     assert h, "la curva sigue existiendo"
-    assert all(p["valor"] == 1000.0 for p in h), "solo aporta AAA"
+    assert all(p["valor"] == 1700.0 for p in h), "AAA a mercado (1000) + BBB a su coste (700)"
+    assert all(p["retorno"] == 100.0 for p in h), "sin precio no hay rentabilidad inventada"
 
 
 def test_la_curva_normal_no_cambia():

@@ -385,7 +385,15 @@ function seccionCartera(c) {
         + kpi('DIFERENCIA', c.diferencia_pp === null || c.diferencia_pp === undefined ? '—' : (c.diferencia_pp >= 0 ? '+' : '') + c.diferencia_pp + ' pp', color(c.diferencia_pp), 'lo que aportó frente al índice')
         + kpi('PEOR CAÍDA', c.peor_caida_cartera === null ? '—' : c.peor_caida_cartera + '%', '#f23645', 'S&P 500: ' + (c.peor_caida_spy === null ? '—' : c.peor_caida_spy + '%'))
         + '</div>';
-    return caja('CARTERA RSU · CONTRA EL S&P 500', kpis + graficoCurvas(c.serie)
+    // Mientras la hoja tenga operaciones cuyo precio no cuadra con su fecha, la
+    // curva apunta en un solo día lo que pasó en meses: se dice aquí mismo.
+    const avisoRevision = c.operaciones_por_revisar
+        ? '<div style="background:rgba(255,152,0,.08);border-left:3px solid #ff9800;padding:8px 14px;"><span style="color:#ff9800;font-size:11px;">'
+          + esc(c.operaciones_por_revisar + (c.operaciones_por_revisar === 1 ? ' operación tiene' : ' operaciones tienen')
+                + ' un precio de compra o de venta que no cuadra con su fecha y se están revisando. Hasta entonces la curva puede tener saltos que no son reales.')
+          + '</span></div>'
+        : '';
+    return caja('CARTERA RSU · CONTRA EL S&P 500', avisoRevision + kpis + graficoCurvas(c.serie)
         + '<div style="padding:8px 16px;border-top:1px solid var(--color-border);color:var(--color-muted);font-size:10px;line-height:1.6;">'
         + 'Las dos líneas parten de 100 el primer día. La de la cartera es la rentabilidad ponderada por tiempo: descuenta el dinero que se va aportando, así que mide rendimiento y no ingresos. '
         + 'Incluye las posiciones cerradas, también las que salieron mal. Sin cifras en dólares ni posiciones.</div>',

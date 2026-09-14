@@ -761,6 +761,27 @@ def get_portfolio_history(abiertas_rows: list, days: int = 180, cerradas_rows: l
     except Exception:
         return []
 
+    # DESDE LA PRIMERA OPERACIÓN, no los últimos `days` días (Cartera #63).
+    #
+    # EL CASO, 14/09/2026: el usuario no entendía cómo, con un +51% de P&L medio
+    # en las cerradas, la cartera rendía menos que el S&P 500 en el Track
+    # Record. Parte de la respuesta era esta ventana: la curva empezaba el
+    # 24/12/2025 porque se descargaban 180 días, pero la primera operación era
+    # del 10/02/2025 y 34 se habían abierto antes. De los +$56.307 de ganancia
+    # total, $41.220 —el 73%— se habían ganado ANTES de que la curva empezara.
+    # Una curva que corta así no es la de la cartera, es la de un tramo.
+    #
+    # Unos días de margen antes de la primera compra, para tener cierre del
+    # día anterior. Sin ninguna fecha legible, se vuelve a los `days` de antes.
+    def _fecha_op(valor):
+        try:
+            return datetime.strptime(valor, "%d/%m/%Y")
+        except Exception:
+            return None
+    fechas_ops = [f for f in (_fecha_op(r.get("fecha") or "") for r in positions + cerradas) if f]
+    rango = ({"start": (min(fechas_ops) - timedelta(days=7)).strftime("%Y-%m-%d")}
+             if fechas_ops else {"period": f"{days}d"})
+
     def _hist_for(ticker):
         try:
             # auto_adjust=False, mismo motivo que en _get_daily_bars (#A2), y
@@ -769,14 +790,30 @@ def get_portfolio_history(abiertas_rows: list, days: int = 180, cerradas_rows: l
             # abajo por los dividendos, el pasado parece más barato de lo que
             # fue y la curva aparenta haber crecido más. El número de acciones
             # no cambia con un dividendo; el precio de entonces tampoco debería.
-            return ticker, yf.Ticker(ticker).history(
-                period=f"{days}d", interval="1d", auto_adjust=False)["Close"]
+            tk = yf.Ticker(ticker)
+            cierres = tk.history(interval="1d", auto_adjust=False, **rango)["Close"]
         except Exception:
-            return ticker, None
+            return ticker, None, None
+        # Los SPLITS aparte: Yahoo reescala TODO el histórico por cada split
+        # (no así por los dividendos con auto_adjust=False), así que un precio
+        # anterior al split sale dividido. Ver `_factor_split` abajo.
+        try:
+            splits = tk.splits
+        except Exception:
+            splits = None
+        return ticker, cierres, splits
 
     tickers = list(dict.fromkeys([p["ticker"] for p in positions + cerradas]))
     series = {}
-    for ticker, s in yf_executor.map(_hist_for, tickers):
+    splits_por_ticker = {}
+    for ticker, s, splits in yf_executor.map(_hist_for, tickers):
+        if splits is not None and len(splits):
+            try:
+                splits = splits.copy()
+                splits.index = splits.index.tz_localize(None)
+            except (TypeError, AttributeError):
+                pass
+            splits_por_ticker[ticker] = splits
         if s is not None and not s.empty:
             s.index = s.index.tz_localize(None)
             # dropna() NO es cosmética. yfinance devuelve fila para la sesión
@@ -813,6 +850,65 @@ def get_portfolio_history(abiertas_rows: list, days: int = 180, cerradas_rows: l
     ops += [{"row": r, "entrada": _fecha(r["fecha"], all_dates[0]),
              "salida": _fecha(r["fecha_cierre"], all_dates[0])} for r in cerradas]
 
+    # SPLITS (Cartera #63). Yahoo reescala todos los cierres anteriores a un
+    # split, pero la hoja guarda las acciones y el precio de compra de ese
+    # momento. POWL se compró el 10/12/2025 a 326,90 y el 06/04/2026 hizo un
+    # split 3 por 1: con los cierres reescalados, sus acciones valían un tercio.
+    # Valor real = acciones de la hoja × precio de entonces
+    #            = acciones × (splits posteriores a la compra) × cierre reescalado.
+    # El factor es constante para toda la vida de la operación.
+    def _factor_split(ticker, desde):
+        splits = splits_por_ticker.get(ticker)
+        if splits is None:
+            return 1.0
+        factor = 1.0
+        for fecha_split, ratio in splits.items():
+            if fecha_split > desde and ratio and ratio > 0:
+                factor *= float(ratio)
+        return factor
+
+    for op in ops:
+        op["factor"] = _factor_split(op["row"]["ticker"], op["entrada"])
+
+    # ¿CUADRA EL PRECIO DE LA HOJA CON SU FECHA? (Cartera #63). El 14/09/2026,
+    # 29 de 85 operaciones tenían el precio de compra a más de un 15% del cierre
+    # de ese día (10 fechadas el mismo 07/11/2025, NBIS «comprada» a 44,25 con
+    # el valor en 111,28). La curva no puede arreglarlo —el dato bueno solo lo
+    # tiene quien operó—, pero sí decirlo: sin eso, la ganancia de meses se
+    # apunta en un solo día y parece un salto de rentabilidad.
+    desajustes = []
+
+    def _cierre_en(ticker, fecha):
+        s = series.get(ticker)
+        if s is None:
+            return None
+        previos = s[s.index <= fecha]
+        return float(previos.iloc[-1]) if not previos.empty else None
+
+    for op in ops:
+        p = op["row"]
+        cierre = _cierre_en(p["ticker"], op["entrada"])
+        if cierre is None:
+            desajustes.append({"ticker": p["ticker"], "fecha": p.get("fecha"), "tipo": "sin_precio",
+                               "precio_hoja": p.get("compra")})
+        elif p.get("compra"):
+            real = cierre * op["factor"]
+            dif = (real - p["compra"]) / p["compra"] * 100
+            if abs(dif) > UMBRAL_DESAJUSTE_PRECIO:
+                desajustes.append({"ticker": p["ticker"], "fecha": p.get("fecha"), "tipo": "compra",
+                                   "precio_hoja": p["compra"], "cierre_ese_dia": round(real, 2),
+                                   "diferencia_pct": round(dif, 1)})
+        if op["salida"] is not None and p.get("actual"):
+            cierre_venta = _cierre_en(p["ticker"], op["salida"])
+            if cierre_venta is not None:
+                # Tras la venta cuentan solo los splits posteriores a ESA fecha.
+                real = cierre_venta * _factor_split(p["ticker"], op["salida"])
+                dif = (real - p["actual"]) / p["actual"] * 100
+                if abs(dif) > UMBRAL_DESAJUSTE_PRECIO:
+                    desajustes.append({"ticker": p["ticker"], "fecha": p.get("fecha_cierre"), "tipo": "venta",
+                                       "precio_hoja": p["actual"], "cierre_ese_dia": round(real, 2),
+                                       "diferencia_pct": round(dif, 1)})
+
     result = []
     equity_prev = None
     inv_prev    = 0.0
@@ -831,12 +927,18 @@ def get_portfolio_history(abiertas_rows: list, days: int = 180, cerradas_rows: l
                 caja += p["actual"] * p["shares"]   # vendida: su importe queda en caja
                 continue
             s = series.get(p["ticker"])
-            if s is None:
+            px_series = s[s.index <= d] if s is not None else None
+            if px_series is None or px_series.empty:
+                # COMPRADA PERO SIN PRECIO TODAVÍA en Yahoo (Cartera #63). GLXY
+                # se compró el 10/02/2025 y Yahoo no tiene cierres hasta el
+                # 16/05/2025; SKYT, del 10/03 al 17/07/2026. Antes su dinero
+                # contaba como aportado pero no como valor, y el día que aparecía
+                # el precio la curva daba un salto falso (+36,2% el 16/05/2025).
+                # Mientras no hay precio vale lo que costó: ni gana ni pierde.
+                coste = (p.get("compra") or 0) * p["shares"] or (p.get("inv") or 0)
+                mercado += coste
                 continue
-            px_series = s[s.index <= d]
-            if px_series.empty:
-                continue
-            mercado += float(px_series.iloc[-1]) * p["shares"]
+            mercado += float(px_series.iloc[-1]) * p["shares"] * op["factor"]
 
         equity = mercado + caja
         # `not (equity > 0)` y no `equity <= 0`: con un NaN TODA comparación es
@@ -863,8 +965,19 @@ def get_portfolio_history(abiertas_rows: list, days: int = 180, cerradas_rows: l
             "retorno":   round(indice, 2),
         })
 
-    _history_cache.update({"updated": now, "key": cache_key, "data": result})
+    _history_cache.update({"updated": now, "key": cache_key, "data": result, "desajustes": desajustes})
     return result
+
+
+# Más de esto entre el precio de la hoja y el cierre de ese día ya no es el
+# ruido normal de comprar a media sesión: es una fecha o un precio mal apuntado.
+UMBRAL_DESAJUSTE_PRECIO = 15.0
+
+
+def ultimos_desajustes() -> list:
+    """Operaciones cuyo precio de la hoja no cuadra con el cierre de su fecha,
+    del último cálculo de la curva. Ver get_portfolio_history."""
+    return list(_history_cache.get("desajustes") or [])
 
 
 def simulate_tier_capital(df, col_fecha, col_estado, col_compra, col_actual, col_venta, col_tier, capital_total, col_cierre=None):
@@ -1629,6 +1742,9 @@ def get_cartera():
             "asignacion":   asignacion,
             "diag_fechas":  diag_fechas,
             "incoherencias": incoherencias,
+            # Precio de la hoja que no cuadra con el cierre de su fecha
+            # (Cartera #63): la curva apunta ese salto en un solo día.
+            "desajustes_precio": ultimos_desajustes(),
             "closed_stats": closed_stats,
             "abiertas":     abiertas_rows,
             "cerradas":     cerradas_rows,
