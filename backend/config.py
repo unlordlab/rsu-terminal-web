@@ -78,6 +78,13 @@ class Settings(BaseSettings):
     # ESCRIBIR esos Gists; aquí solo hace falta permiso de lectura.
     # Vacío = se lee sin autenticar, exactamente como hasta ahora.
     github_token: str = ""
+    # Token para LANZAR el briefing desde el servidor. La app NO lo usa: lo lee
+    # scripts/briefing_desde_vps.sh directamente del .env (Infraestructura #23).
+    # El campo existe porque Settings es estricto con el .env -- sin él, poner
+    # la variable en el .env del VPS tumbaría el arranque, como pasó el
+    # 20/07/2026 con openrouter_api_key. Lo cazó el CI el 14/09, ANTES de que
+    # nadie la añadiera en producción.
+    github_dispatch_token: str = ""
     # Precios de Cartera en vivo por el WebSocket de trades de Finnhub, en vez
     # de las cotizaciones diferidas de yfinance. Ver
     # services/finnhub_stream_service.py.
