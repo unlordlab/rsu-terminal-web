@@ -30,6 +30,9 @@ def _conn():
     return conn
 
 
+HORIZONTES_DIAS = (5, 10, 20, 60)
+
+
 def init_db():
     conn = _conn()
     conn.execute('''
@@ -51,6 +54,15 @@ def init_db():
             UNIQUE(ticker, fecha)
         )
     ''')
+    # EL S&P 500 DEL MISMO PERIODO (14/09/2026, a petición del usuario). Hasta
+    # entonces el RSU Score era el único seguimiento sin baseline: CANSLIM, las
+    # tesis y Options Flow ya se medían contra el índice. Sin él, «+6% a 20
+    # días» no dice nada si el mercado hizo +9%. Se añaden las columnas a una
+    # tabla que ya existe en producción, así que ALTER y no CREATE.
+    existentes = {r["name"] for r in conn.execute("PRAGMA table_info(score_tracked)")}
+    for dias in HORIZONTES_DIAS:
+        if f"spy_{dias}d" not in existentes:
+            conn.execute(f"ALTER TABLE score_tracked ADD COLUMN spy_{dias}d REAL")
     conn.commit()
     conn.close()
 
@@ -95,9 +107,14 @@ def actualizar_resultados_pendientes():
     mismo patrón ya usado en 4 sitios del proyecto) en vez de un
     yf.Ticker por señal pendiente."""
     conn = _conn()
+    # También las filas que ya tienen resultado pero no su S&P 500: las
+    # anteriores al 14/09/2026. El cierre del índice de cualquier fecha pasada
+    # se puede recuperar, así que no hace falta empezar la comparación de cero.
+    sin_spy = " OR ".join(f"(resultado_{d}d IS NOT NULL AND spy_{d}d IS NULL)" for d in HORIZONTES_DIAS)
     pendientes = conn.execute(
-        "SELECT id, ticker, fecha, precio_entrada, resultado_5d, resultado_10d, resultado_20d, resultado_60d "
-        "FROM score_tracked WHERE resultado_60d IS NULL"
+        "SELECT id, ticker, fecha, precio_entrada, resultado_5d, resultado_10d, resultado_20d, resultado_60d, "
+        "spy_5d, spy_10d, spy_20d, spy_60d "
+        f"FROM score_tracked WHERE resultado_60d IS NULL OR {sin_spy}"
     ).fetchall()
     conn.close()
     if not pendientes:
@@ -106,16 +123,18 @@ def actualizar_resultados_pendientes():
     sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "..", "shared"))
     from yf_batch import download_batch  # noqa: E402
 
-    tickers = list({r["ticker"] for r in pendientes})
-    # 6 meses cubre de sobra cualquier fila pendiente: el horizonte máximo
-    # es 60 sesiones (~3 meses) y una fila deja de estar "pendiente" en
-    # cuanto resultado_60d se rellena. min_history=1: el default de 130
+    tickers = list({r["ticker"] for r in pendientes} | {"SPY"})
+    # min_history=1: el default de 130
     # (pensado para RS/RW, que necesita histórico largo) descartaría
     # CUALQUIER ticker aquí, porque "6mo" son ~126 sesiones (<130) -- la
     # suficiencia real de datos ya la comprueba el bucle de abajo fila a
     # fila (pos_entrada + dias >= len(closes)), no hace falta un umbral
     # aquí también.
-    close_d, _ = download_batch(tickers, period="6mo", batch_size=40, min_history=1, log_prefix="[RSUScoreTracking] ")
+    # 1 año y no 6 meses: el relleno del S&P 500 de las filas antiguas puede
+    # necesitar ir más atrás que el horizonte de 60 sesiones de las pendientes.
+    close_d, _ = download_batch(tickers, period="1y", batch_size=40, min_history=1, log_prefix="[RSUScoreTracking] ")
+    spy = close_d.get("SPY")
+    spy_fechas = [d.date() for d in spy.index] if spy is not None and not spy.empty else []
 
     conn = _conn()
     actualizadas = 0
@@ -134,6 +153,27 @@ def actualizar_resultados_pendientes():
                 continue
             precio_h = float(closes.iloc[pos_entrada + dias])
             cambios[campo] = round((precio_h - row["precio_entrada"]) / row["precio_entrada"] * 100, 2)
+        # El S&P 500 en la MISMA ventana que el valor.
+        #
+        # LA VENTANA DEL VALOR: de `precio_entrada` —el precio que tenía la
+        # ficha al registrarse— al cierre N sesiones después de la primera
+        # sesión en o tras la fecha. Y ese precio de entrada es casi siempre el
+        # CIERRE ANTERIOR: se registra al abrir Research, y se abre sobre todo
+        # antes de la apertura de Nueva York (MSFT el domingo 26/07 a 381,70, el
+        # cierre del viernes). La primera versión arrancaba el índice en el
+        # cierre SIGUIENTE y se dejaba fuera un día que el valor sí contaba.
+        # Por eso el índice parte del último cierre ANTERIOR a la fecha y acaba
+        # en la misma sesión que el valor. Un registro hecho en plena sesión
+        # queda con una diferencia de horas, no de un día.
+        pos_spy = next((i for i, d in enumerate(spy_fechas) if d >= fecha_entrada), None)
+        if pos_spy is not None and pos_spy >= 1:
+            base_spy = float(spy.iloc[pos_spy - 1])
+            for dias in HORIZONTES_DIAS:
+                col = f"spy_{dias}d"
+                tiene_resultado = row[f"resultado_{dias}d"] is not None or f"resultado_{dias}d" in cambios
+                if row[col] is not None or not tiene_resultado or pos_spy + dias >= len(spy) or base_spy <= 0:
+                    continue
+                cambios[col] = round((float(spy.iloc[pos_spy + dias]) - base_spy) / base_spy * 100, 2)
         if cambios:
             set_clause = ", ".join(f"{k} = ?" for k in cambios)
             conn.execute(
@@ -154,8 +194,14 @@ BUCKETS = [(80, 101, "COMPRA FUERTE"), (65, 80, "COMPRA"), (50, 65, "NEUTRAL"),
 
 def obtener_resumen_por_bucket() -> list:
     conn = _conn()
-    rows = conn.execute("SELECT score, resultado_5d, resultado_10d, resultado_20d, resultado_60d FROM score_tracked").fetchall()
+    rows = conn.execute("SELECT score, resultado_5d, resultado_10d, resultado_20d, resultado_60d, "
+                        "spy_5d, spy_10d, spy_20d, spy_60d FROM score_tracked").fetchall()
     conn.close()
+
+    def _exceso(rows_bucket, dias):
+        pares = [(r[f"resultado_{dias}d"], r[f"spy_{dias}d"]) for r in rows_bucket
+                 if r[f"resultado_{dias}d"] is not None and r[f"spy_{dias}d"] is not None]
+        return round(sum(a - s for a, s in pares) / len(pares), 2) if pares else None
 
     def _avg(rows_bucket, campo):
         vals = [r[campo] for r in rows_bucket if r[campo] is not None]
@@ -173,6 +219,12 @@ def obtener_resumen_por_bucket() -> list:
             # de 3 casos no se puede leer igual que una de 300 (Track Record).
             "n_20d": sum(1 for r in en_bucket if r["resultado_20d"] is not None),
             "n_60d": sum(1 for r in en_bucket if r["resultado_60d"] is not None),
+            # Retorno del valor MENOS el del S&P 500 en la misma ventana, solo
+            # con las filas que tienen los dos. Es la cifra que dice si la nota
+            # aporta algo frente a comprar el índice.
+            **{f"vs_spy_{d}d": _exceso(en_bucket, d) for d in HORIZONTES_DIAS},
+            **{f"n_vs_spy_{d}d": sum(1 for r in en_bucket if r[f"resultado_{d}d"] is not None and r[f"spy_{d}d"] is not None)
+               for d in HORIZONTES_DIAS},
         })
     return resumen
 

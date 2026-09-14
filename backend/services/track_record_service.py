@@ -331,14 +331,9 @@ def _track_record_tesis() -> dict:
 
 def _track_record_rsu_score() -> dict:
     """¿Un RSU Score alto acierta más que uno bajo? Retorno medio por tramo de
-    nota. Hasta el 14/09 solo se veía en Research, con la búsqueda vacía; aquí
-    se junta con el resto para que el registro esté en un solo sitio.
-
-    OJO, y se dice en pantalla: estos retornos NO están comparados con el SPY
-    todavía (la tabla de seguimiento no guarda el índice del mismo periodo).
-    Lo que sí se puede leer es la COMPARACIÓN ENTRE TRAMOS: todos comparten
-    mercado, así que si los de nota alta no se separan de los de nota baja, la
-    nota no está aportando."""
+    nota, y desde el 14/09/2026 también contra el S&P 500 de la misma ventana
+    (`vs_spy_*`). Hasta entonces solo se veía en Research y era el único
+    seguimiento sin baseline."""
     from services.rsu_score_tracking_service import obtener_resumen_por_bucket
 
     tramos = obtener_resumen_por_bucket()
@@ -347,7 +342,7 @@ def _track_record_rsu_score() -> dict:
         "n_con_20d": sum(t.get("n_20d", 0) for t in tramos),
         "tramos": tramos,
         "min_muestra": MIN_MUESTRA_FIABLE,
-        "comparado_con_spy": False,
+        "comparado_con_spy": any(t.get("n_vs_spy_20d") or t.get("n_vs_spy_5d") for t in tramos),
     }
 
 
@@ -357,6 +352,141 @@ def _track_record_options() -> dict:
     el 14/09 solo se veía dentro de Options Flow."""
     from services.options_tracking_service import resumen
     return resumen()
+
+
+# Por debajo de esto, un porcentaje de aciertos del sesgo no es conclusión.
+# El mismo corte que usa el backend al enseñarlo junto al briefing.
+MIN_MUESTRA_SESGO = 30
+
+
+def _tasa_siempre_alcista(filas, dias):
+    """Qué habría acertado decir ALCISTA todos esos días. En un mercado que
+    sube, esa estrategia sin ninguna información acierta mucho: es el listón
+    que el sesgo del briefing tiene que superar para aportar algo."""
+    rets = [f.get(f"ret_{dias}d") for f in filas if f.get(f"ret_{dias}d") is not None]
+    return round(sum(1 for r in rets if r > 0) / len(rets) * 100, 1) if rets else None
+
+
+def resumen_sesgo_briefing(filas: list) -> dict:
+    """El registro de sesgos del briefing (bias_tracking.json) resumido para el
+    Track Record. Solo cuentan los días ALCISTA/BAJISTA ya evaluados: NEUTRAL no
+    tiene dirección que juzgar, y un día sin su plazo cumplido está pendiente,
+    no fallado (mismas reglas que scripts/daily_briefing.py::evaluar_sesgos)."""
+    evaluables = [f for f in filas if f.get("sesgo") in ("ALCISTA", "BAJISTA")]
+    horizontes = {}
+    for dias in (1, 5):
+        con = [f for f in evaluables if f.get(f"acierto_{dias}d") is not None]
+        por_dir = {}
+        for sesgo in ("ALCISTA", "BAJISTA"):
+            grupo = [f for f in con if f["sesgo"] == sesgo]
+            por_dir[sesgo.lower()] = {
+                "n": len(grupo),
+                "aciertos_pct": round(sum(1 for f in grupo if f[f"acierto_{dias}d"]) / len(grupo) * 100, 1) if grupo else None,
+            }
+        horizontes[str(dias)] = {
+            "n": len(con),
+            "aciertos_pct": round(sum(1 for f in con if f[f"acierto_{dias}d"]) / len(con) * 100, 1) if con else None,
+            "suficiente": len(con) >= MIN_MUESTRA_SESGO,
+            "siempre_alcista_pct": _tasa_siempre_alcista(con, dias),
+            "por_direccion": por_dir,
+        }
+    evaluados = sorted((f for f in evaluables if f.get("acierto_1d") is not None),
+                       key=lambda f: f.get("fecha") or "", reverse=True)
+    return {
+        "dias_registrados": len(filas),
+        "neutrales": len(filas) - len(evaluables),
+        "pendientes": sum(1 for f in evaluables if f.get("acierto_5d") is None),
+        "min_muestra": MIN_MUESTRA_SESGO,
+        "horizontes": horizontes,
+        "ultimos": [{k: f.get(k) for k in ("fecha", "sesgo", "ret_1d", "acierto_1d", "ret_5d", "acierto_5d")}
+                    for f in evaluados[:20]],
+    }
+
+
+def _track_record_briefing() -> dict:
+    """¿Acierta el sesgo que publica el briefing cada mañana? Ya se medía, pero
+    solo se veía dentro del briefing (14/09/2026, a petición del usuario)."""
+    import requests
+    from services.gist_client import cabeceras_gist
+    from services.market_service import BRIEFING_GIST_ID
+    r = requests.get(f"https://api.github.com/gists/{BRIEFING_GIST_ID}", headers=cabeceras_gist(), timeout=10)
+    r.raise_for_status()
+    crudo = (r.json().get("files", {}).get("bias_tracking.json") or {}).get("content") or "[]"
+    return resumen_sesgo_briefing(json.loads(crudo))
+
+
+def _peor_caida(indices: list) -> float | None:
+    """Máxima caída desde un máximo previo, en %, sobre una serie de índices."""
+    maximo, peor = None, 0.0
+    for v in indices:
+        if v is None:
+            continue
+        maximo = v if maximo is None else max(maximo, v)
+        if maximo > 0:
+            peor = min(peor, (v - maximo) / maximo * 100)
+    return round(peor, 2) if maximo is not None else None
+
+
+def curva_cartera_vs_spy(historia: list, spy) -> dict:
+    """La curva de la Cartera RSU contra el S&P 500, en porcentaje y nada más.
+
+    Usa `retorno`, el índice base 100 ponderado por tiempo que ya calcula
+    cartera_service.get_portfolio_history: descuenta el dinero que entra, así
+    que mide rendimiento y no aportaciones. NO se publica ni el patrimonio en
+    dólares, ni el capital, ni las posiciones: solo cómo lo hizo frente al
+    índice en las MISMAS fechas.
+
+    `spy`: serie de cierres del S&P 500 indexada por fecha. El índice se
+    rebasa a 100 el primer día de la curva; un día sin cierre del índice (no
+    debería haberlo) toma el último cierre anterior."""
+    puntos = [h for h in (historia or []) if h.get("retorno") is not None and h.get("fecha")]
+    if len(puntos) < 2:
+        return {"n_dias": len(puntos), "serie": []}
+    fechas_spy = [d.date() for d in spy.index] if spy is not None and len(spy) else []
+
+    def _spy_en(fecha_iso):
+        objetivo = datetime.strptime(fecha_iso, "%Y-%m-%d").date()
+        pos = None
+        for i, d in enumerate(fechas_spy):
+            if d <= objetivo:
+                pos = i
+            else:
+                break
+        return float(spy.iloc[pos]) if pos is not None else None
+
+    base_cartera = puntos[0]["retorno"]
+    base_spy = _spy_en(puntos[0]["fecha"])
+    serie = []
+    for h in puntos:
+        s = _spy_en(h["fecha"])
+        serie.append({
+            "fecha": h["fecha"],
+            "cartera": round(h["retorno"] / base_cartera * 100, 2),
+            "spy": round(s / base_spy * 100, 2) if (s and base_spy) else None,
+        })
+    ultimo = serie[-1]
+    cartera_pct = round(ultimo["cartera"] - 100, 2)
+    spy_pct = round(ultimo["spy"] - 100, 2) if ultimo["spy"] is not None else None
+    return {
+        "n_dias": len(serie),
+        "desde": serie[0]["fecha"],
+        "hasta": ultimo["fecha"],
+        "cartera_pct": cartera_pct,
+        "spy_pct": spy_pct,
+        "diferencia_pp": round(cartera_pct - spy_pct, 2) if spy_pct is not None else None,
+        "peor_caida_cartera": _peor_caida([p["cartera"] for p in serie]),
+        "peor_caida_spy": _peor_caida([p["spy"] for p in serie]),
+        "serie": serie,
+    }
+
+
+def _track_record_cartera() -> dict:
+    from services.cartera_service import get_cartera
+    datos = get_cartera()
+    if not datos.get("ok"):
+        raise ValueError(datos.get("error") or "Cartera no disponible")
+    close_d, _ = download_batch(["SPY"], period="1y", min_history=1, log_prefix="[TrackRecord Cartera] ")
+    return curva_cartera_vs_spy(datos.get("history") or [], close_d.get("SPY"))
 
 
 def para_visitante(data: dict, usuario: dict | None) -> dict:
@@ -454,7 +584,19 @@ def get_track_record() -> dict:
         print(f"[TrackRecord] Error con el seguimiento de Options Flow: {type(e).__name__}: {e}")
         options = None
 
-    fuentes = (algoritmo, tesis, canslim, rsu_score, options)
+    try:
+        briefing = _track_record_briefing()
+    except Exception as e:
+        print(f"[TrackRecord] Error con el sesgo del briefing: {type(e).__name__}: {e}")
+        briefing = None
+
+    try:
+        cartera = _track_record_cartera()
+    except Exception as e:
+        print(f"[TrackRecord] Error con la curva de la Cartera: {type(e).__name__}: {e}")
+        cartera = None
+
+    fuentes = (algoritmo, tesis, canslim, rsu_score, options, briefing, cartera)
     if all(f is None for f in fuentes):
         # Solo si no ha salido NINGUNA. Hasta el 14/09 se miraban el Algoritmo
         # y las tesis nada más, así que con esas dos caídas la página daba
@@ -469,6 +611,8 @@ def get_track_record() -> dict:
         "canslim": canslim,
         "rsu_score": rsu_score,
         "options": options,
+        "briefing": briefing,
+        "cartera": cartera,
         "generado_en": datetime.now(timezone.utc).isoformat(),
         "timestamp": get_timestamp(),
     }

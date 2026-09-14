@@ -41,6 +41,7 @@ async function cargar(container) {
         const data = await res.json();
         if (!data.ok) { body.innerHTML = errorMessage(data.error || 'Sin datos'); return; }
         body.innerHTML = avisoVisitante(data)
+                       + seccionCartera(data.cartera) + seccionBriefing(data.briefing)
                        + seccionAlgoritmo(data.algoritmo) + seccionCanslim(data.canslim)
                        + seccionRsuScore(data.rsu_score) + seccionOptions(data.options)
                        + seccionTesis(data.tesis, data) + seccionPrevisiones(data) + nota();
@@ -297,16 +298,20 @@ function seccionRsuScore(s) {
             '<div style="padding:1rem 16px;color:var(--color-muted);font-size:12px;">Todavía sin registros: se acumulan con cada valor analizado en Research.</div>');
     }
     const cab = '<div style="display:grid;grid-template-columns:190px 70px 1fr 1fr 1fr 1fr;gap:8px;padding:7px 16px;font-size:10px;color:var(--color-muted);letter-spacing:0.05em;">'
-        + '<span>NOTA</span><span>MUESTRA</span><span>+5D</span><span>+10D</span><span>+20D</span><span>+60D</span></div>';
+        + '<span>NOTA</span><span>MUESTRA</span><span>20D MEDIA</span><span>20D vs S&amp;P 500</span><span>60D MEDIA</span><span>60D vs S&amp;P 500</span></div>';
     const filas = s.tramos.map(b =>
         '<div style="display:grid;grid-template-columns:190px 70px 1fr 1fr 1fr 1fr;gap:8px;padding:7px 16px;border-top:1px solid var(--color-border);font-size:11px;align-items:center;">'
         + '<span style="color:var(--color-text);">' + esc(b.bucket) + ' <span style="color:var(--color-muted);font-size:10px;">(' + esc(b.rango) + ')</span></span>'
         + '<span style="color:var(--color-muted);" title="Con resultado a 20 días: ' + esc(b.n_20d || 0) + '">n=' + esc(b.n) + '</span>'
-        + '<span>' + pct(b.avg_5d) + '</span><span>' + pct(b.avg_10d) + '</span>'
-        + '<span>' + pct(b.avg_20d) + '</span><span>' + pct(b.avg_60d) + '</span>'
+        + '<span>' + pct(b.avg_20d) + '</span><span>' + pct(b.vs_spy_20d, ' pp') + '</span>'
+        + '<span>' + pct(b.avg_60d) + '</span><span>' + pct(b.vs_spy_60d, ' pp') + '</span>'
         + '</div>').join('');
-    const aviso = '<div style="background:rgba(255,152,0,.08);border-left:3px solid #ff9800;padding:8px 14px;">'
-        + '<span style="color:#ff9800;font-size:11px;">Estos retornos aún NO están comparados con el S&amp;P 500. Léelos comparando tramos entre sí: todos vivieron el mismo mercado.</span></div>';
+    // «vs S&P 500» = retorno del valor menos el del índice en la misma
+    // ventana. Si todavía no hay ninguna fila comparada, se dice.
+    const aviso = s.comparado_con_spy
+        ? ''
+        : '<div style="background:rgba(255,152,0,.08);border-left:3px solid #ff9800;padding:8px 14px;">'
+          + '<span style="color:#ff9800;font-size:11px;">Todavía no hay resultados comparados con el S&amp;P 500: aparecen cuando las notas cumplen su plazo.</span></div>';
     return caja('RSU SCORE · ¿UNA NOTA ALTA ACIERTA MÁS?', aviso + cab + filas + avisoMuestra(s.n_con_20d),
         s.n_registros + ' notas registradas · ' + s.n_con_20d + ' con resultado a 20 días');
 }
@@ -360,6 +365,100 @@ function seccionPrevisiones(data) {
         + (data.visitante === 'anonimo' ? '' : ' <a href="/roadmap" data-ir="/roadmap" style="color:var(--color-accent);">Ver el Roadmap completo</a>')
         + '</div>';
     return caja('PREVISIONES DEL ROADMAP 2026', filas + pie, 'Escritas antes de que pasara · con su veredicto y su fecha');
+}
+
+// ── Cartera RSU contra el S&P 500 ───────────────────────────────────────────
+//
+// Solo porcentajes. Ni patrimonio en dólares, ni capital, ni posiciones: cómo
+// lo hizo frente a comprar el índice en las mismas fechas. La rentabilidad es
+// la ponderada por tiempo, que descuenta el dinero que entra.
+
+function seccionCartera(c) {
+    if (!c) return caja('CARTERA RSU', '<div style="padding:1rem 16px;color:var(--color-muted);font-size:12px;">No disponible.</div>');
+    if (!c.serie || c.serie.length < 2) {
+        return caja('CARTERA RSU · CONTRA EL S&P 500',
+            '<div style="padding:1rem 16px;color:var(--color-muted);font-size:12px;">Todavía sin historia suficiente para comparar.</div>');
+    }
+    const kpis = '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:1px;background:var(--color-border);">'
+        + kpi('CARTERA RSU', (c.cartera_pct >= 0 ? '+' : '') + c.cartera_pct + '%', color(c.cartera_pct), 'rentabilidad ponderada por tiempo')
+        + kpi('S&P 500', c.spy_pct === null || c.spy_pct === undefined ? '—' : (c.spy_pct >= 0 ? '+' : '') + c.spy_pct + '%', color(c.spy_pct), 'mismas fechas')
+        + kpi('DIFERENCIA', c.diferencia_pp === null || c.diferencia_pp === undefined ? '—' : (c.diferencia_pp >= 0 ? '+' : '') + c.diferencia_pp + ' pp', color(c.diferencia_pp), 'lo que aportó frente al índice')
+        + kpi('PEOR CAÍDA', c.peor_caida_cartera === null ? '—' : c.peor_caida_cartera + '%', '#f23645', 'S&P 500: ' + (c.peor_caida_spy === null ? '—' : c.peor_caida_spy + '%'))
+        + '</div>';
+    return caja('CARTERA RSU · CONTRA EL S&P 500', kpis + graficoCurvas(c.serie)
+        + '<div style="padding:8px 16px;border-top:1px solid var(--color-border);color:var(--color-muted);font-size:10px;line-height:1.6;">'
+        + 'Las dos líneas parten de 100 el primer día. La de la cartera es la rentabilidad ponderada por tiempo: descuenta el dinero que se va aportando, así que mide rendimiento y no ingresos. '
+        + 'Incluye las posiciones cerradas, también las que salieron mal. Sin cifras en dólares ni posiciones.</div>',
+        'Del ' + fmtFecha(c.desde) + ' al ' + fmtFecha(c.hasta) + ' · ' + c.n_dias + ' días con datos');
+}
+
+function graficoCurvas(serie) {
+    const W = 600, H = 150, pad = 6;
+    const valores = serie.flatMap(p => [p.cartera, p.spy]).filter(v => v !== null && v !== undefined);
+    const min = Math.min(...valores), max = Math.max(...valores);
+    const rango = (max - min) || 1;
+    const x = i => (pad + i / (serie.length - 1) * (W - 2 * pad)).toFixed(1);
+    const y = v => (H - pad - (v - min) / rango * (H - 2 * pad)).toFixed(1);
+    const linea = (campo) => serie.map((p, i) => p[campo] === null || p[campo] === undefined ? '' : x(i) + ',' + y(p[campo])).filter(Boolean).join(' ');
+    const cien = y(100);
+    return '<div style="padding:12px 16px 4px;">'
+        + '<svg viewBox="0 0 ' + W + ' ' + H + '" style="width:100%;height:auto;display:block;" role="img" aria-label="Curva de la Cartera RSU frente al S&amp;P 500, las dos desde 100">'
+        + '<line x1="0" x2="' + W + '" y1="' + cien + '" y2="' + cien + '" stroke="var(--color-border)" stroke-dasharray="3 3"/>'
+        + '<polyline points="' + linea('spy') + '" fill="none" stroke="var(--color-muted)" stroke-width="1.5"/>'
+        + '<polyline points="' + linea('cartera') + '" fill="none" stroke="var(--color-accent)" stroke-width="2"/>'
+        + '</svg>'
+        + '<div style="display:flex;gap:16px;font-size:10px;color:var(--color-muted);margin-top:4px;">'
+        + '<span><span style="color:var(--color-accent);">━</span> Cartera RSU</span>'
+        + '<span><span style="color:var(--color-muted);">━</span> S&amp;P 500</span>'
+        + '<span>┄ 100 = punto de partida</span></div></div>';
+}
+
+// ── Sesgo del briefing ──────────────────────────────────────────────────────
+//
+// Al lado de cada acierto, lo que habría acertado decir ALCISTA siempre: en un
+// mercado que sube, eso ya acierta mucho sin aportar nada. Y si todos los días
+// fueron del mismo sesgo, se dice: entonces el acierto solo mide hacia dónde
+// fue el mercado, no si el briefing lo leyó bien.
+
+function seccionBriefing(b) {
+    if (!b) return caja('SESGO DEL BRIEFING', '<div style="padding:1rem 16px;color:var(--color-muted);font-size:12px;">No disponible.</div>');
+    const h1 = (b.horizontes || {})['1'] || { n: 0 };
+    if (!h1.n) {
+        return caja('SESGO DEL BRIEFING · ¿ACIERTA LA DIRECCIÓN?',
+            '<div style="padding:1rem 16px;color:var(--color-muted);font-size:12px;">Todavía sin días evaluados.</div>');
+    }
+    const filaH = (etq, h) => {
+        const d = h.por_direccion || {};
+        return '<div style="display:grid;grid-template-columns:90px 70px 1fr 1fr 1fr;gap:8px;padding:7px 16px;border-top:1px solid var(--color-border);font-size:11px;align-items:center;">'
+            + '<span style="color:var(--color-text);">' + esc(etq) + '</span>'
+            + '<span style="color:var(--color-muted);">n=' + esc(h.n) + '</span>'
+            + '<span style="color:var(--color-text);">' + (h.aciertos_pct === null || h.aciertos_pct === undefined ? '—' : esc(h.aciertos_pct + '%')) + '</span>'
+            + '<span style="color:var(--color-muted);">' + (h.siempre_alcista_pct === null || h.siempre_alcista_pct === undefined ? '—' : esc(h.siempre_alcista_pct + '%')) + '</span>'
+            + '<span style="color:var(--color-muted);font-size:10px;">' + esc((d.alcista ? d.alcista.n : 0) + ' alcistas · ' + (d.bajista ? d.bajista.n : 0) + ' bajistas') + '</span>'
+            + '</div>';
+    };
+    const cab = '<div style="display:grid;grid-template-columns:90px 70px 1fr 1fr 1fr;gap:8px;padding:7px 16px;font-size:10px;color:var(--color-muted);letter-spacing:0.05em;">'
+        + '<span>PLAZO</span><span>MUESTRA</span><span>ACIERTOS</span><span>DECIR SIEMPRE «ALCISTA»</span><span>REPARTO</span></div>';
+    const d1 = h1.por_direccion || {};
+    const unSoloSesgo = (d1.alcista && d1.alcista.n === 0) || (d1.bajista && d1.bajista.n === 0);
+    const avisos = [];
+    if (unSoloSesgo) {
+        avisos.push('Todos los días evaluados tuvieron el mismo sesgo, así que el acierto solo refleja hacia dónde fue el mercado en ese periodo, no si el briefing lo leyó mejor que nadie.');
+    }
+    if (!h1.suficiente) {
+        avisos.push('Con ' + h1.n + ' días (mínimo ' + b.min_muestra + ') ningún porcentaje es concluyente.');
+    }
+    const aviso = avisos.length
+        ? '<div style="background:rgba(255,152,0,.08);border-left:3px solid #ff9800;padding:8px 14px;"><span style="color:#ff9800;font-size:11px;">' + esc(avisos.join(' ')) + '</span></div>'
+        : '';
+    const dias = (b.ultimos || []).map(u =>
+        '<span title="' + esc(fmtFecha(u.fecha) + ': ' + u.sesgo + ', S&P 500 ' + (u.ret_1d >= 0 ? '+' : '') + u.ret_1d + '% al día siguiente') + '" style="display:inline-block;margin:2px;padding:2px 6px;border-radius:3px;font-size:10px;'
+        + 'border:1px solid ' + (u.acierto_1d ? 'var(--color-accent)' : '#f23645') + ';color:' + (u.acierto_1d ? 'var(--color-accent)' : '#f23645') + ';">'
+        + esc((u.fecha || '').slice(5).split('-').reverse().join('/')) + ' ' + (u.sesgo === 'ALCISTA' ? '▲' : '▼') + (u.acierto_1d ? ' ✓' : ' ✗') + '</span>').join('');
+    return caja('SESGO DEL BRIEFING · ¿ACIERTA LA DIRECCIÓN?',
+        aviso + cab + filaH('1 sesión', h1) + filaH('5 sesiones', (b.horizontes || {})['5'] || { n: 0 })
+        + (dias ? '<div style="padding:8px 16px;border-top:1px solid var(--color-border);"><div style="color:var(--color-muted);font-size:10px;margin-bottom:4px;">ÚLTIMOS DÍAS · sesgo publicado y si acertó al día siguiente</div>' + dias + '</div>' : ''),
+        b.dias_registrados + ' días registrados · ' + b.neutrales + ' neutrales (no se evalúan) · ' + b.pendientes + ' pendientes');
 }
 
 function kpi(label, valor, col, sub) {

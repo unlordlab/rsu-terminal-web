@@ -202,9 +202,16 @@ def test_el_resumen_de_rsu_score_dice_cuantos_tienen_resultado():
     assert tramos and all("n_20d" in t and "n_60d" in t for t in tramos)
 
 
-def test_rsu_score_avisa_de_que_no_esta_comparado_con_el_spy():
-    fuente = inspect.getsource(T._track_record_rsu_score)
-    assert '"comparado_con_spy": False' in fuente
+def test_rsu_score_dice_si_ya_hay_filas_comparadas_con_el_spy(monkeypatch):
+    """Desde el mismo 14/09 el RSU Score se compara con el índice
+    (test_track_record_ampliado.py). El aviso de «aún sin comparar» solo sale
+    mientras ninguna fila tiene los dos datos."""
+    import services.rsu_score_tracking_service as S
+    tramo = {"bucket": "X", "rango": "0-100", "n": 3, "n_20d": 3, "n_vs_spy_20d": 0, "n_vs_spy_5d": 0}
+    monkeypatch.setattr(S, "obtener_resumen_por_bucket", lambda: [tramo])
+    assert T._track_record_rsu_score()["comparado_con_spy"] is False
+    monkeypatch.setattr(S, "obtener_resumen_por_bucket", lambda: [{**tramo, "n_vs_spy_20d": 2}])
+    assert T._track_record_rsu_score()["comparado_con_spy"] is True
 
 
 def test_peticiones_simultaneas_no_repiten_el_calculo():
