@@ -160,6 +160,9 @@ def _segunda(monkeypatch, textos):
         llamadas.append(prompt)
         return textos[min(len(llamadas), len(textos)) - 1] + "\n\nSESGO: BAJISTA", {}
     monkeypatch.setattr(D, "generate_briefing", falso)
+    # El reintento espera 62 s a que se renueve el cupo de Groq (#68); aquí no
+    # hay Groq que esperar. El orden de la espera se prueba aparte, más abajo.
+    monkeypatch.setattr(D, "esperar_a_groq", lambda *a, **k: None)
     r = D.generar_segunda_lectura("PROMPT", modelo="groq/compound", titulares="",
                                   eventos=[], amplitud=AMPLITUD)
     return r, llamadas
@@ -189,6 +192,40 @@ def test_el_reintento_espera_antes_de_volver_a_llamar():
     assert "esperar_a_groq(" in fuente, "el reintento vuelve a llamar sin esperar"
     assert fuente.index("esperar_a_groq(") < fuente.index("reintento, diag_rev"), (
         "la espera tiene que ir ANTES de la llamada, no después")
+
+
+def test_el_reintento_de_la_SEGUNDA_lectura_tambien_espera(monkeypatch):
+    """#68, la otra rama del #62. El 14/09, dos de dos: la revisión rechazó la
+    segunda lectura, el reintento llamó en el mismo minuto y murió con 429 del
+    modelo que `compound` usa por dentro (8.000 por minuto). La espera se le
+    había puesto solo al reintento del briefing principal."""
+    secuencia = []
+
+    def falso(prompt, modelo=None, **_):
+        secuencia.append("LLAMADA")
+        return SEGUNDA_REAL + LARGO + "\n\nSESGO: BAJISTA", {}
+    monkeypatch.setattr(D, "generate_briefing", falso)
+    monkeypatch.setattr(D, "esperar_a_groq", lambda *a, **k: secuencia.append("ESPERA"))
+    D.generar_segunda_lectura("PROMPT", modelo="groq/compound", titulares="",
+                              eventos=[], amplitud=AMPLITUD)
+    assert secuencia == ["LLAMADA", "ESPERA", "LLAMADA"], secuencia
+
+
+def test_sin_reintento_la_segunda_lectura_no_espera(monkeypatch):
+    """Los días en que sale bien a la primera (10/09, 11/09) no hay que añadir
+    un minuto al briefing por nada."""
+    secuencia = []
+    bueno = ("El miercoles el McClellan marcó -123,1 y el ABI el 59,0%, con 99 avances "
+             "frente a 399 descensos." + LARGO)
+
+    def falso(prompt, modelo=None, **_):
+        secuencia.append("LLAMADA")
+        return bueno + "\n\nSESGO: BAJISTA", {}
+    monkeypatch.setattr(D, "generate_briefing", falso)
+    monkeypatch.setattr(D, "esperar_a_groq", lambda *a, **k: secuencia.append("ESPERA"))
+    r = D.generar_segunda_lectura("PROMPT", modelo="groq/compound", titulares="",
+                                  eventos=[], amplitud=AMPLITUD)
+    assert r is not None and secuencia == ["LLAMADA"]
 
 
 def test_la_espera_cubre_la_ventana_entera():

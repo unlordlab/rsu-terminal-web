@@ -336,6 +336,9 @@ def _segunda(monkeypatch, textos):
         llamadas.append(prompt)
         return textos[min(len(llamadas), len(textos)) - 1] + "\n\nSESGO: BAJISTA", {}
     monkeypatch.setattr(D, "generate_briefing", falso)
+    # El reintento espera 62 s a que se renueve el cupo de Groq (#68); aquí
+    # no hay Groq que esperar.
+    monkeypatch.setattr(D, "esperar_a_groq", lambda *a, **k: None)
     r = D.generar_segunda_lectura("PROMPT", modelo="groq/compound", titulares="", eventos=EVENTOS)
     return r, llamadas
 

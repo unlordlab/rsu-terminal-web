@@ -289,9 +289,12 @@ def esperar_a_groq(que: str = "el reintento"):
     """Deja pasar la ventana del minuto antes de volver a llamar a Groq."""
     if ESPERA_REINTENTO_S <= 0:
         return
-    print(f"   ⏳ Esperando {ESPERA_REINTENTO_S}s antes de {que}: el limite de ENTRADA de "
-          f"Groq es de {GROQ_ITPM_LIMIT} fichas por minuto y el prompt ya se ha gastado "
-          f"una vez, asi que dos llamadas en el mismo minuto no caben")
+    # Sin cifra concreta a proposito: para `qwen` ata el limite de entrada
+    # ({GROQ_ITPM_LIMIT}); para `compound`, el de 8.000 por minuto del modelo
+    # que usa por dentro (Newsfeed #68). En los dos casos la solucion es la misma.
+    print(f"   ⏳ Esperando {ESPERA_REINTENTO_S}s antes de {que}: Groq limita las fichas "
+          f"por MINUTO y la llamada anterior ya ha gastado casi todo el cupo, asi que "
+          f"dos llamadas en el mismo minuto no caben")
     time.sleep(ESPERA_REINTENTO_S)
 # ── OTPM: un techo SOLO de salida, que aparece y desaparece ──────────────────
 #
@@ -3023,6 +3026,16 @@ def generar_segunda_lectura(prompt: str, modelo: str = None, titulares: str = ""
         if revision["ordenes"] or revision["hechos"] or revision["amplitud"]:
             fallos = "; ".join(fallos_de(revision))
             print(f"🔎 Segunda lectura rechazada en la revision: {fallos}")
+            # LA MISMA ESPERA QUE EL REINTENTO DE LA PRIMERA (Newsfeed #68).
+            # El 12/09 se le puso al reintento del briefing principal (#62) y
+            # esta rama se quedo sin ella. El 14/09 fallo dos veces de dos: la
+            # revision rechazo la primera version, el reintento llamo en el
+            # mismo minuto y murio con 429 -- y no del limite de `compound`
+            # (70.000, que es el que dicen sus cabeceras), sino del de
+            # `openai/gpt-oss-120b`, el modelo que usa por dentro: 8.000 por
+            # minuto, con 7.120 ya gastadas por la primera llamada. Los dias
+            # sin reintento (10/09, 11/09) salio bien a la primera.
+            esperar_a_groq("el reintento de la segunda lectura")
             texto, diag = generate_briefing(
                 prompt + f"\n\nAVISO: tu version anterior incumplia esto y se rechazo — {fallos}. "
                          f"Reescribe el briefing entero SIN eso.", modelo=modelo)
