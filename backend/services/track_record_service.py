@@ -494,7 +494,16 @@ def _track_record_cartera() -> dict:
     # alguna, la curva puede tener saltos que no son reales y hay que decirlo
     # donde se ve. Solo el número, sin tickers: la lista va en Cartera.
     desajustes = [d for d in (datos.get("desajustes_precio") or []) if d.get("tipo") in ("compra", "venta")]
-    curva["operaciones_por_revisar"] = len({(d["ticker"], d.get("fecha"), d["tipo"]) for d in desajustes})
+    por_revisar = len({(d["ticker"], d.get("fecha"), d["tipo"]) for d in desajustes})
+    # OCULTA MIENTRAS HAYA OPERACIONES POR REVISAR (decisión del usuario,
+    # 14/09/2026). Con 41 precios de la hoja que no cuadraban con su fecha, la
+    # curva apuntaba en un día lo que pasó en meses: publicarla habría sido
+    # enseñar un número que ni el propio autor da por bueno. Se retira de la
+    # RESPUESTA, no solo de la pantalla, y vuelve sola cuando la cuenta llega
+    # a cero. En la página de Cartera (suscriptores) sigue, con su aviso.
+    if por_revisar:
+        return {"oculta": True, "operaciones_por_revisar": por_revisar}
+    curva["operaciones_por_revisar"] = 0
     return curva
 
 

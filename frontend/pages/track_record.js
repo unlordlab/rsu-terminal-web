@@ -375,6 +375,14 @@ function seccionPrevisiones(data) {
 
 function seccionCartera(c) {
     if (!c) return caja('CARTERA RSU', '<div style="padding:1rem 16px;color:var(--color-muted);font-size:12px;">No disponible.</div>');
+    // Retirada mientras haya operaciones de la hoja por revisar: el servidor ni
+    // siquiera manda la curva. Se dice que está en revisión, no se esconde que existe.
+    if (c.oculta) {
+        return caja('CARTERA RSU · CONTRA EL S&P 500',
+            '<div style="padding:1rem 16px;color:var(--color-muted);font-size:12px;line-height:1.6;">'
+            + 'En revisión. Algunas operaciones del registro tienen fechas o precios que se están corrigiendo, y con ellos la curva daría saltos que no son reales. '
+            + 'Se publicará cuando la revisión esté terminada.</div>');
+    }
     if (!c.serie || c.serie.length < 2) {
         return caja('CARTERA RSU · CONTRA EL S&P 500',
             '<div style="padding:1rem 16px;color:var(--color-muted);font-size:12px;">Todavía sin historia suficiente para comparar.</div>');

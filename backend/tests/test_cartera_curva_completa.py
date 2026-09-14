@@ -170,9 +170,21 @@ def test_el_track_record_avisa_cuantas_operaciones_estan_por_revisar(monkeypatch
         return {"SPY": pd.Series([500.0, 505.0], index=pd.to_datetime(["2025-02-10", "2025-02-11"]))}, {}
     monkeypatch.setattr(T, "download_batch", descarga)
     c = T._track_record_cartera()
-    assert c["operaciones_por_revisar"] == 2, "sin precio no es un error de la hoja: no cuenta"
-    assert c["spy_pct"] == 1.0
+    # Con operaciones por revisar, la curva se RETIRA de la respuesta
+    # (decisión del usuario, 14/09/2026): ni serie ni porcentajes.
+    assert c == {"oculta": True, "operaciones_por_revisar": 2}, "sin precio no es un error de la hoja: no cuenta"
     assert pedidos[0]["period"] == "5y", "con 1 año el S&P 500 no llega al primer día de la curva"
+
+
+def test_con_la_hoja_revisada_la_curva_vuelve_sola(monkeypatch):
+    import services.cartera_service as CS
+    historia = [{"fecha": "2025-02-10", "retorno": 100.0}, {"fecha": "2025-02-11", "retorno": 101.0}]
+    monkeypatch.setattr(CS, "get_cartera", lambda: {"ok": True, "history": historia, "desajustes_precio": [
+        {"ticker": "GLXY", "fecha": "10/02/2025", "tipo": "sin_precio"}]})
+    monkeypatch.setattr(T, "download_batch", lambda tickers, **kw: (
+        {"SPY": pd.Series([500.0, 505.0], index=pd.to_datetime(["2025-02-10", "2025-02-11"]))}, {}))
+    c = T._track_record_cartera()
+    assert not c.get("oculta") and c["serie"] and c["spy_pct"] == 1.0 and c["operaciones_por_revisar"] == 0
 
 
 def test_las_paginas_lo_ensenan():
@@ -183,3 +195,4 @@ def test_las_paginas_lo_ensenan():
         tr = f.read()
     seccion = tr[tr.index("function seccionCartera"):]
     assert "c.operaciones_por_revisar" in seccion[:3000] and "avisoRevision + kpis" in seccion
+    assert "if (c.oculta) {" in seccion[:1200], "la página tiene que decir que está en revisión"
