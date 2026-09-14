@@ -9,7 +9,8 @@ from concurrent.futures import ThreadPoolExecutor
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "..", "shared"))
 from time_utils import get_timestamp  # noqa: E402
 from mcclellan import mcclellan_series  # noqa: E402
-from vix_curve import vix_ratio, UMBRAL_BACKWARDATION, UMBRAL_TENSION  # noqa: E402
+from vix_curve import (vix_ratio, misma_sesion, historico_cboe, completar_con_cboe,  # noqa: E402
+                       UMBRAL_BACKWARDATION, UMBRAL_TENSION)
 
 VENTANA = 10
 
@@ -543,6 +544,11 @@ def _vix_vix3m_ratio(df_vix, df_vix3m=None):
     """
     try:
         if df_vix3m is None or df_vix3m.empty or df_vix.empty:
+            return None
+        # Las dos patas del MISMO día (Newsfeed #66): yfinance dejó de dar
+        # barras diarias de ^VIX3M el 17/07/2026, y el backtest comparaba el VIX
+        # de cada día con el VIX3M de esa fecha. Ver shared/vix_curve.py.
+        if not misma_sesion(df_vix.index[-1], df_vix3m.index[-1]):
             return None
         return vix_ratio(df_vix['Close'].iloc[-1], df_vix3m['Close'].iloc[-1])
     except Exception:
@@ -1431,6 +1437,15 @@ def get_rsu_algoritmo_backtest(years: int = 10, umbrales: tuple = None) -> dict:
         df_vix_full.index = df_vix_full.index.normalize()
         if not df_vix3m_full.empty:
             df_vix3m_full.index = df_vix3m_full.index.normalize()
+        # El hueco de ^VIX3M en yfinance (sin barras diarias desde el 17/07/2026)
+        # se rellena con el histórico oficial de CBOE, que cuadra al céntimo con
+        # yfinance donde los dos tienen dato. Si CBOE no responde, los días del
+        # hueco se quedan sin ratio (ver _vix_vix3m_ratio), no con uno de otra
+        # fecha. Ver Newsfeed #66 y shared/vix_curve.py.
+        if not df_vix3m_full.empty:
+            df_vix3m_full, rellenados = completar_con_cboe(df_vix3m_full, historico_cboe("VIX3M"))
+            if rellenados:
+                print(f"[RSU Algoritmo] VIX3M: {rellenados} sesiones sin dato en yfinance rellenadas con CBOE")
         # El BAA10Y viene de FRED sin timezone (naive) mientras que SPY/VIX
         # vienen de yfinance con timezone (America/New_York) — sin esto,
         # comparar índices más abajo lanza TypeError.

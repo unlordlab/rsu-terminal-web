@@ -13,7 +13,7 @@ from config import settings
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "..", "shared"))
 from time_utils import get_timestamp, session_fraction_elapsed  # noqa: E402
 from yf_batch import download_batch  # noqa: E402
-from vix_curve import vix_ratio, zona_curva, UMBRAL_BACKWARDATION, UMBRAL_TENSION  # noqa: E402
+from vix_curve import vix_ratio, zona_curva, misma_sesion, UMBRAL_BACKWARDATION, UMBRAL_TENSION  # noqa: E402
 from mcclellan import mcclellan_series, mcclellan_ajustado, MIN_SESIONES_AJUSTADO  # noqa: E402
 from market_regime import spy_trend_snapshot  # noqa: E402
 from social_tickers import (  # noqa: E402
@@ -648,7 +648,8 @@ def _fetch_vix_point(item):
         if len(hist) == 0:
             raise ValueError("Sin datos")
         price = round(float(hist["Close"].iloc[-1]), 2)
-        return {"label": item["label"], "value": price, "ok": True}
+        return {"label": item["label"], "value": price, "ok": True,
+                "fecha": hist.index[-1].strftime("%Y-%m-%d")}
     except Exception:
         return {"label": item["label"], "value": None, "ok": False}
 
@@ -671,7 +672,8 @@ def get_vix_term_structure():
                 if len(close) == 0:
                     raise ValueError("Sin datos")
                 price = round(float(close.iloc[-1]), 2)
-                out.append({"label": item["label"], "value": price, "ok": True})
+                out.append({"label": item["label"], "value": price, "ok": True,
+                            "fecha": close.index[-1].strftime("%Y-%m-%d")})
             except Exception:
                 out.append({"label": item["label"], "value": None, "ok": False})
         return out
@@ -705,6 +707,18 @@ def get_vix_term_structure():
     por_etiqueta = {r["label"]: r["value"] for r in valid}
     spot   = por_etiqueta.get("Spot")
     vix3m  = por_etiqueta.get("3 meses")
+    # LAS DOS PATAS DEL MISMO DÍA (Newsfeed #66). yfinance dejó de dar barras
+    # diarias de ^VIX3M el 17/07/2026; hoy la última fila es la cotización del
+    # día y el cálculo sale bien, pero si esa fila faltara, el «último valor»
+    # sería el de julio. Una resta o un cociente entre dos fechas distintas no
+    # describe ninguna curva: sin la misma sesión no hay ni contango ni ratio.
+    fechas = {r["label"]: r.get("fecha") for r in valid}
+    if spot is not None and vix3m is not None:
+        from datetime import date as _date
+        f_spot, f_3m = fechas.get("Spot"), fechas.get("3 meses")
+        if f_spot and f_3m and not misma_sesion(_date.fromisoformat(f_spot), _date.fromisoformat(f_3m)):
+            print(f"[VIX] VIX3M del {f_3m} frente a spot del {f_spot}: no se calcula la curva")
+            vix3m = None
 
     # El spread es SIEMPRE 3 meses menos spot, el par estándar del sector.
     #

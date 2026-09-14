@@ -28,6 +28,9 @@ from mcclellan import mcclellan_series  # noqa: E402
 # el sitio correcto es una casa comun y el origen -- no una copia por
 # consumidor, que es como se acaba con dos umbrales contradiciendose.
 from cobertura_amplitud import cobertura_insuficiente as amplitud_incompleta  # noqa: E402
+# Los mismos umbrales de la curva del VIX con los que puntúa el Algoritmo y
+# pinta Market: el briefing no puede leer la curva con otra vara.
+from vix_curve import vix_ratio, zona_curva, misma_sesion, UMBRAL_BACKWARDATION, UMBRAL_TENSION  # noqa: E402
 
 GROQ_KEY   = os.environ.get("GROQ_API_KEY", "")
 GIST_TOKEN = os.environ.get("GIST_TOKEN", "")
@@ -833,15 +836,21 @@ def get_market_data() -> dict:
     # VIX Term Structure
     vix_tickers = {"VIX_SPOT": "^VIX", "VIX_3M": "^VIX3M", "VIX_6M": "^VIX6M"}
     vix_data = {}
+    # La fecha de cada valor, aparte para no cambiar la forma de `vix_term`.
+    # Hace falta para no comparar un VIX de hoy con un VIX3M de otro día
+    # (Newsfeed #66, ver shared/vix_curve.py).
+    vix_fechas = {}
     for name, ticker in vix_tickers.items():
         try:
             t    = yf.Ticker(ticker)
             hist = t.history(period="5d").dropna()
             if len(hist) > 0:
                 vix_data[name] = round(float(hist["Close"].iloc[-1]), 2)
+                vix_fechas[name] = hist.index[-1].strftime("%Y-%m-%d")
         except Exception:
             pass
     data["vix_term"] = vix_data
+    data["vix_term_fechas"] = vix_fechas
 
     # Credit Spreads (FRED CSV)
     try:
@@ -1759,6 +1768,40 @@ def _cierre_y_estructura() -> str:
     return _CIERRE_V1 if PROMPT_VERSION == "v1" else _CIERRE_V2
 
 
+def linea_curva_vix(spot, vix3m, fechas: dict) -> str:
+    """Lo que el prompt dice de la forma de la curva del VIX (Newsfeed #66).
+
+    ANTES: « | Estructura: CONTANGO» a secas, con dos fallos. Uno, sin escala:
+    el contango es el estado NORMAL del VIX —el miedo a 3 meses suele estar por
+    encima del de 30 días—, así que decirlo sin más invita a leerlo como señal;
+    el 11/09 el modelo escribió que «el mercado espera más volatilidad». Dos,
+    sin mirar la fecha: `^VIX3M` no tiene barras diarias en yfinance desde el
+    17/07/2026, y un VIX3M de otro día contra el VIX de hoy no es una curva.
+
+    AHORA: el ratio VIX/VIX3M con la zona y los umbrales de shared/vix_curve.py,
+    que son los mismos con los que puntúa el Algoritmo y pinta Market."""
+    if not (isinstance(spot, (int, float)) and isinstance(vix3m, (int, float))):
+        return ""
+    f_spot, f_3m = fechas.get("VIX_SPOT"), fechas.get("VIX_3M")
+    if f_spot and f_3m:
+        try:
+            if not misma_sesion(datetime.fromisoformat(f_spot), datetime.fromisoformat(f_3m)):
+                return (f" | Curva: NO DISPONIBLE (el VIX3M es del {f_3m} y el spot del {f_spot}; "
+                        f"no los compares ni hables de contango o backwardation)")
+        except ValueError:
+            pass
+    ratio = vix_ratio(spot, vix3m)
+    zona = zona_curva(ratio)
+    if zona is None:
+        return ""
+    lectura = {
+        "normal": "NORMAL (contango: el miedo a 3 meses por encima del de 30 días es lo HABITUAL; no es una señal por sí sola)",
+        "tensa": f"TENSA (ratio entre {UMBRAL_TENSION} y {UMBRAL_BACKWARDATION}: la curva se ha comprimido casi hasta darse la vuelta)",
+        "backwardation": f"INVERTIDA (backwardation, ratio por encima de {UMBRAL_BACKWARDATION}: el miedo a 30 días supera al de 3 meses, pánico de corto plazo; históricamente acompaña a suelos más que a techos)",
+    }[zona]
+    return f" | Ratio VIX/VIX3M: {ratio} → curva {lectura}"
+
+
 def build_prompt(market_data: dict, news: list, major_headlines: list, earnings: list, breadth: dict,
                   briefing_history: list, bias_history: list,
                   macro_indicators: list = None, recorte: dict = None) -> str:
@@ -2008,9 +2051,7 @@ def build_prompt(market_data: dict, news: list, major_headlines: list, earnings:
     vix_spot = vix.get("VIX_SPOT", "N/D")
     vix_3m   = vix.get("VIX_3M", "N/D")
     vix_str  = f"Spot: {vix_spot} | 3M: {vix_3m}"
-    if vix_spot and vix_3m and isinstance(vix_spot, float) and isinstance(vix_3m, float):
-        structure = "CONTANGO" if vix_3m > vix_spot else "BACKWARDATION"
-        vix_str += f" | Estructura: {structure}"
+    vix_str += linea_curva_vix(vix_spot, vix_3m, d.get("vix_term_fechas") or {})
 
     hy = d.get("hy_spread")
     hy_str = f"{hy:.2f}%" if hy else "Dato no disponible"
