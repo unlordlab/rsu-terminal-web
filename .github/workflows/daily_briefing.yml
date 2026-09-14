@@ -2,9 +2,14 @@ name: Daily Market Briefing
 
 on:
   schedule:
-    # Lunes a viernes a las 08:00 CET (07:00 UTC)
+    # RESPALDO, no el disparo principal (Infraestructura #23). A las 07:00 UTC
+    # el planificador de GitHub llega con horas de retraso (6 h 26 min el
+    # 14/09), así que el briefing lo lanza el servidor a su hora con
+    # `workflow_dispatch` (scripts/briefing_desde_vps.sh). Este se queda por si
+    # el servidor no lo lanzara; si el briefing de hoy ya está publicado, el
+    # primer paso lo detecta y no lo repite.
     - cron: '0 7 * * 1-5'
-  workflow_dispatch:  # Permite ejecutar manualmente
+  workflow_dispatch:  # El servidor (cada mañana) o a mano
 
 jobs:
   briefing:
@@ -12,19 +17,44 @@ jobs:
     timeout-minutes: 10
 
     steps:
+      # SOLO en el disparo programado. Si el servidor ya lo lanzó a su hora,
+      # generarlo otra vez gastaría el cupo de Groq y REESCRIBIRÍA el briefing
+      # que la gente ya ha leído con otro distinto a media tarde. Lanzado a mano
+      # o por el servidor (`workflow_dispatch`) se genera siempre.
+      #
+      # Si el Gist no se puede leer, NO se salta: ante la duda, briefing.
+      - name: ¿Ya está publicado el briefing de hoy?
+        id: hoy
+        if: github.event_name == 'schedule'
+        env:
+          GIST_TOKEN: ${{ secrets.GIST_TOKEN }}
+          GIST_ID:    ${{ secrets.GIST_ID }}
+        run: |
+          FECHA=$(curl -s -m 20 -H "Authorization: Bearer $GIST_TOKEN" "https://api.github.com/gists/${GIST_ID:-715ee0c4e571517c11fa65c5c2376c34}"             | python3 -c 'import json,sys; g=json.load(sys.stdin); print(json.loads(g["files"]["briefing.json"]["content"]).get("date",""))' 2>/dev/null || true)
+          HOY=$(date -u +%Y-%m-%d)
+          echo "Briefing publicado: ${FECHA:-ilegible} · hoy: $HOY"
+          if [ "$FECHA" = "$HOY" ]; then
+            echo "ya=1" >> "$GITHUB_OUTPUT"
+            echo "Ya está publicado (lo lanzó el servidor): este disparo programado no hace nada."
+          fi
+
       - name: Checkout
+        if: steps.hoy.outputs.ya != '1'
         uses: actions/checkout@v4
 
       - name: Setup Python
+        if: steps.hoy.outputs.ya != '1'
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
 
       - name: Install dependencies
+        if: steps.hoy.outputs.ya != '1'
         run: |
           pip install requests yfinance numpy
 
       - name: Generate Daily Briefing
+        if: steps.hoy.outputs.ya != '1'
         env:
           GROQ_API_KEY:         ${{ secrets.GROQ_API_KEY }}
           GIST_TOKEN:           ${{ secrets.GIST_TOKEN }}
