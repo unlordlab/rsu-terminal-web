@@ -441,7 +441,7 @@ estaba duplicada — ver su fila.
 | ❓ | 3 | ⚪ | [Menor] Sesgo de supervivencia suave: | *sin comprobar* |
 | ❓ | A1 | ⚪ | Research — los tres errores, en profundidad | *sin comprobar* |
 | ❓ | A2 | ⚪ | RSU Score — la doble contabilidad del sentimiento, con ejemplo | *sin comprobar* |
-| ❓ | A3 | ⚪ | Futuro — el track record público, aterrizado | *sin comprobar* |
+| ✅ | A3 | ⚪ | Futuro — el track record público, aterrizado | **VERIFICADO 14/09 contra el código, a pregunta del usuario.** Lo esencial está hecho: la página Track Record (`track_record_service.py`) enseña **todas** las señales, buenas y malas, del RSU Algoritmo (en vivo, a 5/10/20/60 días), de las **tesis** (reconstruidas con precios históricos) y de **CANSLIM** (con grupo de control), cada retorno con el **SPY del mismo periodo** y la muestra marcada como no fiable por debajo de 5. Además: el RSU Score se mide en Research, Options Flow en su propia página, y Cartera tiene su curva real. **Lo que falta del plan**: (1) la página **no es pública** —exige sesión—, y la idea del roadmap era enseñarla también a quien no paga, como prueba; es decisión de negocio; (2) **RSU Score y Options Flow no están en la página central**, cada uno se ve solo en su módulo; (3) el Roadmap como documento vivo con revisiones fechadas, sin empezar; (4) un detalle: si fallan a la vez las fuentes del Algoritmo y de las tesis, la página da error aunque CANSLIM sí haya cargado (`get_track_record` solo mira esas dos) |
 | ❓ | B1 | ⚪ | RS/RW — el mejor construido de los cuatro | *sin comprobar* |
 | ❓ | B2 | ⚪ | Scanner — bien diseñado, con pesos discutibles | *sin comprobar* |
 | ❓ | B3 | ⚪ | CANSLIM — los bugs se arreglaron hoy; queda la crítica metodológica | *sin comprobar* |
