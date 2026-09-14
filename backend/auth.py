@@ -116,6 +116,26 @@ def verify_token(
         )
     return payload
 
+def usuario_opcional(
+    request: Request,
+    credentials: HTTPAuthorizationCredentials = Depends(bearer),
+) -> dict | None:
+    """Para las páginas que se ven SIN cuenta (el Track Record público): el
+    usuario con su plan si hay una sesión válida, o None si no la hay. Nunca
+    responde 401 — una sesión caducada ve lo mismo que un visitante, en vez de
+    que el interceptor del frontend lo mande al login desde una página abierta.
+
+    El plan se relee de la base de datos, igual que en require_tier: un
+    usuario al que el admin acaba de subir de plan lo ve al momento."""
+    try:
+        payload = verify_token(request, credentials)
+    except HTTPException:
+        return None
+    from services import users_service
+    user = users_service.get_user_by_email(payload.get("sub"))
+    return {**payload, "tier": (user or {}).get("tier", "free")}
+
+
 # ── Tiers ──────────────────────────────────────────────────────────────────
 # Jerarquía de planes: free < tier1 < tiers ("tier S"). El JWT lleva el tier
 # del usuario en el momento del login/registro (payload["tier"]); si por lo

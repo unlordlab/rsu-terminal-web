@@ -42,6 +42,9 @@ def _js(nombre):
 
 
 ROADMAP = _js("roadmap.js")
+# Desde el 14/09/2026 los veredictos y la fecha de escritura viven en un
+# registro compartido con el Track Record (frontend/core/previsiones.js).
+PREVISIONES = io.open(os.path.join(RAIZ, "frontend", "core", "previsiones.js"), encoding="utf-8").read()
 TESIS = _js("tesis.js")
 
 
@@ -74,7 +77,8 @@ def test_la_revision_existe_y_va_antes_de_las_secciones():
 
 def test_lleva_la_fecha_en_que_se_ESCRIBIO_la_prevision():
     """Es lo que da valor al acierto: 3 meses y 10 días antes del suelo."""
-    assert "const ESCRITO_EL = '20 de diciembre de 2025';" in ROADMAP
+    assert "export const ROADMAP_ESCRITO_EL = '20 de diciembre de 2025';" in PREVISIONES
+    assert "const ESCRITO_EL = ROADMAP_ESCRITO_EL;" in ROADMAP
     assert "Texto original escrito el ' + ESCRITO_EL" in ROADMAP
 
 
@@ -93,8 +97,12 @@ def test_las_cifras_son_las_verificadas_el_10_09():
 
 def test_dice_tambien_lo_que_NO_salio_como_estaba_escrito():
     """Publicar solo los aciertos es vender humo. El calendario se adelantó."""
-    assert "◐ El calendario:" in ROADMAP
-    assert "duró solo enero" in ROADMAP
+    calendario = PREVISIONES[PREVISIONES.index("(el calendario)"):]
+    calendario = calendario[:calendario.index("prevision:")]
+    assert "veredicto: 'parcial'" in calendario
+    assert "duró solo enero" in calendario
+    assert "parcial:   { icono: '◐'" in PREVISIONES
+    assert "PREVISIONES.map(p =>" in ROADMAP, "el Roadmap tiene que pintar el registro, con los fallos"
 
 
 def test_lleva_lo_que_aprendio_el_autor_en_su_voz():

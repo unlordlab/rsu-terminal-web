@@ -1,3 +1,4 @@
+import { isLoggedIn } from '/core/api.js';
 // URL dinámica basada en el host actual — funciona en localhost Y en producción
 // sin ningún cambio de configuración. Usa wss:// automáticamente si la página
 // se sirve sobre HTTPS (Hetzner con Nginx + certificado).
@@ -27,9 +28,21 @@ let reconnectT = null;
 // tenga que acordarse de esto.
 export const RUTAS_SIN_SESION = ['/login', '/register', '/privacidad'];
 
+// Páginas que se ven CON y SIN cuenta. A diferencia de las de arriba, quien
+// entra con sesión tiene que seguir teniendo el ticker en directo, así que
+// solo cuentan como «sin sesión» cuando no la hay. El Track Record es público
+// desde el 14/09/2026 y, al abrirlo sin cuenta, el ticker pedía
+// /market/indices, recibía 401 y el interceptor mandaba al visitante a login.
+export const RUTAS_PUBLICAS = ['/track-record'];
+
+export function paginaSinSesion() {
+    const ruta = window.location.pathname;
+    return RUTAS_SIN_SESION.includes(ruta) || (RUTAS_PUBLICAS.includes(ruta) && !isLoggedIn());
+}
+
 export function initWebSocket(token) {
     if (socket && socket.readyState === WebSocket.OPEN) return;
-    if (RUTAS_SIN_SESION.includes(window.location.pathname)) return;
+    if (paginaSinSesion()) return;
 
     const url = WS_URL + (token ? '?token=' + token : '');
     socket = new WebSocket(url);

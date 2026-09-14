@@ -261,13 +261,18 @@ function trackPageView(cleanPath) {
     }).catch(() => { /* no pasa nada si falla */ });
 }
 
+// Páginas que se ven SIN cuenta y cuya visita se cuenta cuando hay sesión.
+const PAGINAS_PUBLICAS_CONTADAS = new Set(['/track-record']);
+
 export function navigate(path, options = {}) {
     const isPopState = !!options.isPopState;
     const cleanPath = path.split('?')[0];
-    const protectedRoutes = ['/', '/manifiesto', '/market', '/cartera', '/rsrw', '/scanner', '/watchlist', '/account', '/community', '/newsfeed', '/spxl', '/btc-stratum', '/roadmap', '/academy', '/tesis', '/equipo', '/options', '/research', '/disclaimer', '/canslim', '/algoritmo', '/insider', '/congress', '/track-record', '/admin'];
+    const protectedRoutes = ['/', '/manifiesto', '/market', '/cartera', '/rsrw', '/scanner', '/watchlist', '/account', '/community', '/newsfeed', '/spxl', '/btc-stratum', '/roadmap', '/academy', '/tesis', '/equipo', '/options', '/research', '/disclaimer', '/canslim', '/algoritmo', '/insider', '/congress', '/admin'];
     const needsAuth = protectedRoutes.includes(cleanPath);
 
-    if (needsAuth && isAuthenticated()) trackPageView(cleanPath);
+    // /track-record es PÚBLICA desde el 14/09/2026 (se ve sin cuenta), pero la
+    // visita de quien sí tiene sesión se sigue contando como antes.
+    if ((needsAuth || PAGINAS_PUBLICAS_CONTADAS.has(cleanPath)) && isAuthenticated()) trackPageView(cleanPath);
 
     if (needsAuth && !isAuthenticated()) {
         loadView('/login');

@@ -12,7 +12,8 @@ import { authHeader } from '/core/api.js';
 // mercado alcista se vende solo y no dice nada.
 // ─────────────────────────────────────────────────────────────────────────────
 
-import { errorMessage, esc } from '/core/ui.js';
+import { errorMessage, esc, fmtFecha } from '/core/ui.js';
+import { PREVISIONES, VEREDICTOS, ultimaRevision, ROADMAP_ESCRITO_EL } from '/core/previsiones.js';
 
 export async function render(container) {
     container.innerHTML = cabecera() + '<div id="tr-body">' + cargando() + '</div>';
@@ -39,8 +40,10 @@ async function cargar(container) {
         });
         const data = await res.json();
         if (!data.ok) { body.innerHTML = errorMessage(data.error || 'Sin datos'); return; }
-        body.innerHTML = seccionAlgoritmo(data.algoritmo) + seccionCanslim(data.canslim)
-                       + seccionTesis(data.tesis) + nota();
+        body.innerHTML = avisoVisitante(data)
+                       + seccionAlgoritmo(data.algoritmo) + seccionCanslim(data.canslim)
+                       + seccionRsuScore(data.rsu_score) + seccionOptions(data.options)
+                       + seccionTesis(data.tesis, data) + seccionPrevisiones(data) + nota();
     } catch (e) {
         body.innerHTML = errorMessage(e.message);
     }
@@ -205,7 +208,7 @@ function seccionAlgoritmo(a) {
 
 // ── Tesis ────────────────────────────────────────────────────────────────────
 
-function seccionTesis(t) {
+function seccionTesis(t, data) {
     if (!t) return caja('TESIS PUBLICADAS', '<div style="padding:1rem 16px;color:var(--color-muted);font-size:12px;">No disponible.</div>');
     if (!t.n_tesis) {
         return caja('TESIS PUBLICADAS',
@@ -226,18 +229,23 @@ function seccionTesis(t) {
     const filas = t.tesis.map(x => {
         if (x.estado_dato !== 'ok') {
             return '<div style="display:grid;grid-template-columns:70px 90px 1fr 1fr 1fr 90px;gap:8px;padding:7px 16px;border-top:1px solid var(--color-border);font-size:11px;align-items:center;">'
-                + '<span style="color:var(--color-text);">' + esc(x.ticker || '') + '</span>'
+                + '<span style="color:var(--color-text);">' + esc(x.ticker || '🔒') + '</span>'
                 + '<span style="color:var(--color-muted);">' + esc((x.fecha || '').slice(0, 10)) + '</span>'
                 + '<span style="color:var(--color-muted);grid-column:span 4;font-size:10px;">Sin precios disponibles para este ticker</span>'
                 + '</div>';
         }
+        // Tesis de menos de un mes, vista sin suscripción: la fila y su
+        // resultado se ven (y cuentan en los totales), pero no de qué valor es.
+        const tickerHtml = x.ticker
+            ? '<span style="color:var(--color-text);cursor:pointer;" data-research="' + esc(x.ticker) + '">' + esc(x.ticker) + '</span>'
+            : '<span style="color:var(--color-muted);font-size:10px;" title="Solo para suscriptores hasta el ' + esc(fmtFecha(x.reservada_hasta)) + '">🔒 reservada</span>';
         const objTxt = x.objetivo_alcanzado === null || x.objetivo_alcanzado === undefined
             ? '<span style="color:var(--color-muted);">—</span>'
             : (x.objetivo_alcanzado
                 ? '<span style="color:var(--color-accent);">✓ tocado</span>'
                 : '<span style="color:var(--color-muted);">no</span>');
         return '<div style="display:grid;grid-template-columns:70px 90px 1fr 1fr 1fr 90px;gap:8px;padding:7px 16px;border-top:1px solid var(--color-border);font-size:11px;align-items:center;">'
-            + '<span style="color:var(--color-text);cursor:pointer;" data-research="' + esc(x.ticker) + '">' + esc(x.ticker || '') + '</span>'
+            + tickerHtml
             + '<span style="color:var(--color-muted);">' + esc((x.fecha || '').slice(0, 10)) + '</span>'
             + '<span>' + pct(x.retorno_pct) + '</span>'
             + '<span style="color:var(--color-muted);">' + (x.spy_mismo_periodo_pct === null || x.spy_mismo_periodo_pct === undefined ? '—' : esc((x.spy_mismo_periodo_pct >= 0 ? '+' : '') + x.spy_mismo_periodo_pct + '%')) + '</span>'
@@ -249,8 +257,109 @@ function seccionTesis(t) {
     const cabeceraTabla = '<div style="display:grid;grid-template-columns:70px 90px 1fr 1fr 1fr 90px;gap:8px;padding:7px 16px;border-top:1px solid var(--color-border);font-size:10px;color:var(--color-muted);letter-spacing:0.05em;">'
         + '<span>TICKER</span><span>PUBLICADA</span><span>RETORNO</span><span>S&P 500</span><span>DIFERENCIA</span><span>OBJETIVO</span></div>';
 
-    return caja('TESIS PUBLICADAS', resumen + avisoMuestra(r.n || 0) + cabeceraTabla + filas,
+    const reservadas = t.tesis.filter(x => x.reservada_hasta).length;
+    const avisoReserva = reservadas
+        ? '<div style="padding:8px 16px;border-top:1px solid var(--color-border);color:var(--color-muted);font-size:10px;">'
+          + esc(reservadas + (reservadas === 1 ? ' tesis tiene' : ' tesis tienen') + ' menos de ' + ((data && data.dias_reserva_tesis) || 30)
+                + ' días: su resultado cuenta en los totales, pero el valor solo lo ven los suscriptores hasta que cumpla ese plazo.')
+          + '</div>'
+        : '';
+    return caja('TESIS PUBLICADAS', resumen + avisoMuestra(r.n || 0) + cabeceraTabla + filas + avisoReserva,
         'Retorno desde la fecha de publicación, con precios reales · ' + t.n_tesis + ' tesis');
+}
+
+// ── Quién mira ───────────────────────────────────────────────────────────────
+//
+// Esta página es PÚBLICA desde el 14/09/2026: la prueba de que las
+// herramientas funcionan no puede verla solo quien ya ha pagado. A quien entra
+// sin cuenta se le dice qué está viendo y cómo seguir, sin tapar nada.
+
+function avisoVisitante(data) {
+    if (data.visitante !== 'anonimo') return '';
+    return '<div style="background:rgba(0,255,173,0.05);border:1px solid var(--color-accent);border-radius:var(--radius);padding:12px 16px;margin-bottom:1.5rem;font-size:12px;line-height:1.6;color:var(--color-text);">'
+        + 'Esta página es abierta: cualquiera puede comprobar qué hicieron las señales de RSU Terminal, las buenas y las malas. '
+        + 'Las herramientas que las generan están dentro. '
+        + '<a href="/register" data-ir="/register" style="color:var(--color-accent);">Crear cuenta</a> · '
+        + '<a href="/login" data-ir="/login" style="color:var(--color-accent);">Entrar</a>'
+        + '</div>';
+}
+
+// ── RSU Score · ¿una nota alta acierta más? ─────────────────────────────────
+//
+// Sin comparar con el SPY todavía (la tabla de seguimiento no guarda el índice),
+// y se dice. Lo que sí se puede leer es la comparación ENTRE tramos: todos
+// comparten mercado, así que si la nota alta no se separa de la baja, no aporta.
+
+function seccionRsuScore(s) {
+    if (!s) return caja('RSU SCORE', '<div style="padding:1rem 16px;color:var(--color-muted);font-size:12px;">No disponible.</div>');
+    if (!s.n_registros) {
+        return caja('RSU SCORE · ¿UNA NOTA ALTA ACIERTA MÁS?',
+            '<div style="padding:1rem 16px;color:var(--color-muted);font-size:12px;">Todavía sin registros: se acumulan con cada valor analizado en Research.</div>');
+    }
+    const cab = '<div style="display:grid;grid-template-columns:190px 70px 1fr 1fr 1fr 1fr;gap:8px;padding:7px 16px;font-size:10px;color:var(--color-muted);letter-spacing:0.05em;">'
+        + '<span>NOTA</span><span>MUESTRA</span><span>+5D</span><span>+10D</span><span>+20D</span><span>+60D</span></div>';
+    const filas = s.tramos.map(b =>
+        '<div style="display:grid;grid-template-columns:190px 70px 1fr 1fr 1fr 1fr;gap:8px;padding:7px 16px;border-top:1px solid var(--color-border);font-size:11px;align-items:center;">'
+        + '<span style="color:var(--color-text);">' + esc(b.bucket) + ' <span style="color:var(--color-muted);font-size:10px;">(' + esc(b.rango) + ')</span></span>'
+        + '<span style="color:var(--color-muted);" title="Con resultado a 20 días: ' + esc(b.n_20d || 0) + '">n=' + esc(b.n) + '</span>'
+        + '<span>' + pct(b.avg_5d) + '</span><span>' + pct(b.avg_10d) + '</span>'
+        + '<span>' + pct(b.avg_20d) + '</span><span>' + pct(b.avg_60d) + '</span>'
+        + '</div>').join('');
+    const aviso = '<div style="background:rgba(255,152,0,.08);border-left:3px solid #ff9800;padding:8px 14px;">'
+        + '<span style="color:#ff9800;font-size:11px;">Estos retornos aún NO están comparados con el S&amp;P 500. Léelos comparando tramos entre sí: todos vivieron el mismo mercado.</span></div>';
+    return caja('RSU SCORE · ¿UNA NOTA ALTA ACIERTA MÁS?', aviso + cab + filas + avisoMuestra(s.n_con_20d),
+        s.n_registros + ' notas registradas · ' + s.n_con_20d + ' con resultado a 20 días');
+}
+
+// ── Options Flow · ¿acierta el dinero inusual? ──────────────────────────────
+
+function seccionOptions(o) {
+    if (!o || !o.ok) return caja('OPTIONS FLOW', '<div style="padding:1rem 16px;color:var(--color-muted);font-size:12px;">No disponible.</div>');
+    if (!o.senales) {
+        return caja('OPTIONS FLOW · ¿ACIERTA EL DINERO INUSUAL?',
+            '<div style="padding:1rem 16px;color:var(--color-muted);font-size:12px;">Todavía sin señales medidas.</div>');
+    }
+    const cab = '<div style="display:grid;grid-template-columns:70px 90px 1fr 1fr 1fr;gap:8px;padding:7px 16px;font-size:10px;color:var(--color-muted);letter-spacing:0.05em;">'
+        + '<span>PLAZO</span><span>MUESTRA</span><span>ACIERTOS</span><span>SIGUIENDO LA SEÑAL</span><span>SIN MIRAR DIRECCIÓN</span></div>';
+    const filas = Object.keys(o.horizontes || {}).map(d => {
+        const b = o.horizontes[d].todas || { n: 0 };
+        return '<div style="display:grid;grid-template-columns:70px 90px 1fr 1fr 1fr;gap:8px;padding:7px 16px;border-top:1px solid var(--color-border);font-size:11px;align-items:center;">'
+            + '<span style="color:var(--color-text);">' + esc(d) + 'd</span>'
+            + '<span style="color:var(--color-muted);">n=' + esc(b.n) + (b.suficiente ? '' : ' <span style="color:#ff9800;" title="Por debajo de ' + esc(o.min_muestra) + ' casos no es concluyente">·</span>') + '</span>'
+            + '<span style="color:var(--color-text);">' + (b.aciertos_pct === null || b.aciertos_pct === undefined ? '—' : esc(b.aciertos_pct + '%')) + '</span>'
+            + '<span>' + pct(b.exceso_dirigido, ' pp') + '</span>'
+            + '<span>' + pct(b.exceso_universo, ' pp') + '</span>'
+            + '</div>';
+    }).join('');
+    const nota = '<div style="padding:8px 16px;border-top:1px solid var(--color-border);color:var(--color-muted);font-size:10px;line-height:1.6;">'
+        + 'Todo frente al S&amp;P 500 en la misma ventana. «Siguiendo la señal» es lo que se habría ganado haciendo caso a la dirección del flujo; '
+        + '«sin mirar dirección» es cómo lo hicieron esos valores en general. Si las dos se parecen, la dirección no aporta nada. '
+        + 'Por debajo de ' + esc(o.min_muestra) + ' casos, ningún porcentaje es concluyente.</div>';
+    return caja('OPTIONS FLOW · ¿ACIERTA EL DINERO INUSUAL?', cab + filas + nota,
+        o.senales + ' señales en ' + o.sesiones + ' sesiones');
+}
+
+// ── Previsiones del Roadmap ─────────────────────────────────────────────────
+//
+// Del registro compartido con la página del Roadmap (core/previsiones.js): la
+// previsión tal como se escribió, y cada revisión con su fecha.
+
+function seccionPrevisiones(data) {
+    const filas = PREVISIONES.map(p => {
+        const r = ultimaRevision(p);
+        const v = VEREDICTOS[r.veredicto];
+        return '<div style="display:grid;grid-template-columns:120px 1fr;gap:12px;padding:10px 16px;border-top:1px solid var(--color-border);font-size:11px;align-items:start;">'
+            + '<span style="color:' + v.color + ';">' + v.icono + ' ' + esc(v.texto)
+            + (r.fecha ? '<br><span style="color:var(--color-muted);font-size:10px;">revisada ' + esc(fmtFecha(r.fecha)) + '</span>' : '') + '</span>'
+            + '<span><span style="color:var(--color-text);">' + esc(p.prevision) + '</span>'
+            + '<br><span style="color:var(--color-muted);">' + esc(r.detalle) + '</span></span>'
+            + '</div>';
+    }).join('');
+    const pie = '<div style="padding:8px 16px;border-top:1px solid var(--color-border);color:var(--color-muted);font-size:10px;">'
+        + 'Previsiones copiadas tal cual del Roadmap 2026, escrito el ' + esc(ROADMAP_ESCRITO_EL) + '. No se retocan: cada revisión nueva se añade con su fecha.'
+        + (data.visitante === 'anonimo' ? '' : ' <a href="/roadmap" data-ir="/roadmap" style="color:var(--color-accent);">Ver el Roadmap completo</a>')
+        + '</div>';
+    return caja('PREVISIONES DEL ROADMAP 2026', filas + pie, 'Escritas antes de que pasara · con su veredicto y su fecha');
 }
 
 function kpi(label, valor, col, sub) {

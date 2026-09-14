@@ -35,7 +35,7 @@ backtest (baseline condicional).
 import json
 import os
 import sys
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "..", "shared"))
 from yf_batch import download_batch  # noqa: E402
@@ -329,6 +329,91 @@ def _track_record_tesis() -> dict:
     }
 
 
+def _track_record_rsu_score() -> dict:
+    """¿Un RSU Score alto acierta más que uno bajo? Retorno medio por tramo de
+    nota. Hasta el 14/09 solo se veía en Research, con la búsqueda vacía; aquí
+    se junta con el resto para que el registro esté en un solo sitio.
+
+    OJO, y se dice en pantalla: estos retornos NO están comparados con el SPY
+    todavía (la tabla de seguimiento no guarda el índice del mismo periodo).
+    Lo que sí se puede leer es la COMPARACIÓN ENTRE TRAMOS: todos comparten
+    mercado, así que si los de nota alta no se separan de los de nota baja, la
+    nota no está aportando."""
+    from services.rsu_score_tracking_service import obtener_resumen_por_bucket
+
+    tramos = obtener_resumen_por_bucket()
+    return {
+        "n_registros": sum(t["n"] for t in tramos),
+        "n_con_20d": sum(t.get("n_20d", 0) for t in tramos),
+        "tramos": tramos,
+        "min_muestra": MIN_MUESTRA_FIABLE,
+        "comparado_con_spy": False,
+    }
+
+
+def _track_record_options() -> dict:
+    """¿Acierta el flujo inusual de opciones? Aciertos y exceso sobre el SPY en
+    la misma ventana, por dirección (options_tracking_service.resumen). Hasta
+    el 14/09 solo se veía dentro de Options Flow."""
+    from services.options_tracking_service import resumen
+    return resumen()
+
+
+def para_visitante(data: dict, usuario: dict | None) -> dict:
+    """Lo que ve cada uno del track record, que desde el 14/09 es PÚBLICO.
+
+    Todo lo que mide si las herramientas aciertan se enseña igual a todo el
+    mundo: esa es la gracia de un registro público. Lo único que se retiene a
+    quien no paga es lo que ES el producto de pago, y solo mientras está vivo:
+
+      · De las tesis se quitan precio objetivo, título, nombre, autor y rating:
+        la página no los pinta, y en la respuesta eran el resumen de una tesis
+        de pago al alcance de cualquiera.
+      · Las tesis de menos de DIAS_RESERVA_TESIS días no enseñan el ticker a
+        quien no está suscrito. Su resultado SÍ cuenta en los totales y la fila
+        se ve —nada se filtra—; solo se aplaza saber de qué valor es.
+
+    Trabaja sobre una copia: `data` viene de la caché compartida."""
+    import copy
+    from auth import TIER_ORDER
+
+    salida = copy.deepcopy(data)
+    es_suscriptor = bool(usuario) and TIER_ORDER.get(usuario.get("tier", "free"), 0) >= TIER_ORDER["tier1"]
+    salida["visitante"] = "suscriptor" if es_suscriptor else ("registrado" if usuario else "anonimo")
+    salida["dias_reserva_tesis"] = DIAS_RESERVA_TESIS
+    tesis = salida.get("tesis")
+    if es_suscriptor or not tesis:
+        return salida
+
+    hoy = datetime.now(timezone.utc).date()
+    for t in tesis.get("tesis", []):
+        for campo in ("precio_objetivo", "titulo", "nombre", "autor", "rating"):
+            t.pop(campo, None)
+        try:
+            publicada = datetime.strptime((t.get("fecha") or "")[:10], "%Y-%m-%d").date()
+        except ValueError:
+            continue
+        if (hoy - publicada).days < DIAS_RESERVA_TESIS:
+            t["ticker"] = None
+            t["reservada_hasta"] = (publicada + timedelta(days=DIAS_RESERVA_TESIS)).isoformat()
+    return salida
+
+
+# Días que una tesis es solo para suscriptores antes de enseñar su ticker en
+# el track record público. Ver para_visitante().
+DIAS_RESERVA_TESIS = 30
+
+
+def _single_flight(fn):
+    # Al hacerse PÚBLICA (14/09/2026) cualquiera puede pedir esta página, y con
+    # la caché vacía cada petición descargaba 5 años de precios de todas las
+    # tesis. Con esto, las peticiones simultáneas esperan al primer cálculo en
+    # vez de repetirlo (Infraestructura #28, el mismo patrón que Market).
+    from services.cache import cache
+    return cache.single_flight("track_record:all")(fn)
+
+
+@_single_flight
 def get_track_record() -> dict:
     """Punto de entrada único. Cacheado 6h: son datos que cambian una vez al
     día como mucho (el job de resultados corre a diario) y la parte de tesis
@@ -357,9 +442,24 @@ def get_track_record() -> dict:
         print(f"[TrackRecord] Error con el tracking de CANSLIM: {type(e).__name__}: {e}")
         canslim = None
 
-    if algoritmo is None and tesis is None:
-        # Sin ninguna de las dos fuentes no hay track record que enseñar --
-        # y no se cachea el fallo, para que el siguiente intento lo reintente.
+    try:
+        rsu_score = _track_record_rsu_score()
+    except Exception as e:
+        print(f"[TrackRecord] Error con el seguimiento del RSU Score: {type(e).__name__}: {e}")
+        rsu_score = None
+
+    try:
+        options = _track_record_options()
+    except Exception as e:
+        print(f"[TrackRecord] Error con el seguimiento de Options Flow: {type(e).__name__}: {e}")
+        options = None
+
+    fuentes = (algoritmo, tesis, canslim, rsu_score, options)
+    if all(f is None for f in fuentes):
+        # Solo si no ha salido NINGUNA. Hasta el 14/09 se miraban el Algoritmo
+        # y las tesis nada más, así que con esas dos caídas la página daba
+        # error aunque CANSLIM hubiera cargado bien. No se cachea el fallo,
+        # para que el siguiente intento lo reintente.
         return {"ok": False, "error": "No se pudo construir el track record"}
 
     result = {
@@ -367,6 +467,8 @@ def get_track_record() -> dict:
         "algoritmo": algoritmo,
         "tesis": tesis,
         "canslim": canslim,
+        "rsu_score": rsu_score,
+        "options": options,
         "generado_en": datetime.now(timezone.utc).isoformat(),
         "timestamp": get_timestamp(),
     }

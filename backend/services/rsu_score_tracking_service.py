@@ -168,6 +168,11 @@ def obtener_resumen_por_bucket() -> list:
             "bucket": label, "rango": f"{lo}-{hi-1}", "n": len(en_bucket),
             "avg_5d": _avg(en_bucket, "resultado_5d"), "avg_10d": _avg(en_bucket, "resultado_10d"),
             "avg_20d": _avg(en_bucket, "resultado_20d"), "avg_60d": _avg(en_bucket, "resultado_60d"),
+            # Cuántos tienen ya resultado a cada plazo. `n` cuenta también los
+            # que aún no han cumplido el plazo, y una media de 20 días sacada
+            # de 3 casos no se puede leer igual que una de 300 (Track Record).
+            "n_20d": sum(1 for r in en_bucket if r["resultado_20d"] is not None),
+            "n_60d": sum(1 for r in en_bucket if r["resultado_60d"] is not None),
         })
     return resumen
 

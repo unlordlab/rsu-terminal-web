@@ -1,3 +1,6 @@
+import { esc } from '/core/ui.js';
+import { PREVISIONES, VEREDICTOS, ultimaRevision, ROADMAP_ESCRITO_EL } from '/core/previsiones.js';
+
 export async function render(container) {
     container.innerHTML = pageContent();
 }
@@ -24,7 +27,7 @@ function pageContent() {
 // migración desde la versión anterior de la terminal, así que la fecha es la
 // que declara el autor. Si existe una publicación de entonces, enlazarla
 // aquí la convertiría en comprobable.
-const ESCRITO_EL = '20 de diciembre de 2025';
+const ESCRITO_EL = ROADMAP_ESCRITO_EL;
 const REVISION_FECHA = '9 de septiembre de 2026';
 const REVISION_INDICES = [
     // [índice, caída, desde, hasta, rebote desde el suelo, en el año]
@@ -49,11 +52,13 @@ function revision() {
         + '<th style="' + celda + 'color:var(--color-muted);text-align:left;font-weight:normal;">REBOTE DESDE EL SUELO</th>'
         + '<th style="' + celda + 'color:var(--color-muted);text-align:left;font-weight:normal;">EN EL AÑO</th></tr>'
         + filas + '</table></div>'
-        + list([
-            '<b style="color:var(--color-accent)">✅ La corrección del 8% al 15%:</b> se produjo, entre el 9% y el 12% en los tres índices.',
-            '<b style="color:var(--color-accent)">✅ El rebote fuerte y la recuperación en la segunda mitad:</b> entre un 20% y un 28% desde el suelo.',
-            '<b style="color:#ffb800">◐ El calendario:</b> el máximo llegó a finales de enero y el suelo el 30 de marzo, justo al empezar la primavera. La caída se adelantó unas semanas, y el «inicio constructivo de enero–febrero» duró solo enero.',
-        ])
+        // Los veredictos salen del registro compartido con el Track Record
+        // (core/previsiones.js): se escriben una vez y se ven en los dos sitios.
+        + list(PREVISIONES.map(p => {
+            const r = ultimaRevision(p);
+            const v = VEREDICTOS[r.veredicto];
+            return '<b style="color:' + v.color + '">' + v.icono + ' ' + esc(p.prevision) + ':</b> ' + esc(r.detalle);
+        }))
         // Lo que aprendió el autor, en SU voz: aprobado por él el 10/09/2026.
         + '<div style="border-left:3px solid var(--color-accent);padding:0.75rem 1rem;margin-top:14px;background:var(--color-surface);border-radius:0 var(--radius) var(--radius) 0;">'
         + '<div style="color:var(--color-accent);font-size:12px;letter-spacing:0.08em;margin-bottom:6px;">LO QUE ME LLEVO</div>'
