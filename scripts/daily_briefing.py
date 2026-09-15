@@ -60,8 +60,32 @@ GIST_ID    = os.environ.get("GIST_ID", "715ee0c4e571517c11fa65c5c2376c34")
 #
 # Se deja elegible por entorno para poder comparar briefings reales lado a lado
 # (ver scripts/comparar_modelos_briefing.py) sin tocar el código ni desplegar.
-MODEL_POR_DEFECTO = "qwen/qwen3.6-27b"
+#
+# 15/09/2026: GROQ RETIRÓ `qwen/qwen3.6-27b` SIN AVISO. El briefing murió con
+# «404 model_not_found» y ese día no salió. Ya no estaba en la lista de modelos
+# de la consola ni en la página de retiradas: es el riesgo de ser Preview que
+# se apuntaba arriba, y se cumplió. Se pasa a `qwen/qwen3.8-27b`, la misma
+# familia, que acepta los mismos parámetros ("none" + "hidden") y tiene los
+# mismos 8.000 TPM.
+MODEL_POR_DEFECTO = "qwen/qwen3.8-27b"
 MODEL      = os.environ.get("BRIEFING_MODEL", MODEL_POR_DEFECTO)
+
+# EL RESPALDO, para que la próxima retirada no se coma otra mañana. Si Groq
+# dice que el modelo principal no existe, el briefing se escribe con este y
+# queda anotado en `briefing.json` (`modelo_retirado`) y como aviso en la
+# ejecución. Es `gpt-oss-120b` por ser **Production**, que no se retira sin
+# aviso. Tiene un coste conocido (razona siempre y se come parte de la salida,
+# ver parametros_del_modelo), pero es mejor un briefing algo más corto que
+# ninguno. Solo cubre al principal: la segunda lectura es opcional y no se le
+# cambia el modelo, porque escrita con el mismo que la primera ya no sería otra
+# lectura.
+MODELO_RESPALDO = os.environ.get("BRIEFING_MODELO_RESPALDO", "openai/gpt-oss-120b")
+
+
+def modelo_retirado(r) -> bool:
+    """Groq ya no sirve ese modelo, que no es lo mismo que un fallo pasajero."""
+    return (r.status_code in (400, 404)
+            and ("model_not_found" in r.text or "model_decommissioned" in r.text))
 
 # Medios que el briefing ya considera fiables para el bloque de prensa
 # internacional. Se reutilizan para acotar la búsqueda de los `compound`: si el
@@ -2325,6 +2349,7 @@ def generate_briefing(prompt: str, reintento_de_corte: bool = False,
     `reintento_de_corte` lo pone la propia función al volver a intentarlo
     cuando la respuesta salió truncada: sirve para no encadenar reintentos
     indefinidos si el segundo tampoco cabe."""
+    global MODEL
     if not GROQ_KEY:
         raise ValueError("GROQ_API_KEY no configurada")
 
@@ -2457,6 +2482,21 @@ def generate_briefing(prompt: str, reintento_de_corte: bool = False,
                f"de ejecución" if techo_salida else
                ", y el mensaje no trae el número del límite, así que no se puede recortar solo")
             + f". Respuesta de Groq: {r.text[:200]}")
+    # MODELO RETIRADO (15/09/2026, ver MODELO_RESPALDO). Solo el principal y
+    # una vez: si el respaldo tampoco existe, se falla como siempre. Se cambia
+    # el global y no solo esta llamada porque main() hace más llamadas
+    # (reintento por corte, reescritura tras la revisión) y cada una volvería
+    # a chocar con el 404. Así además `briefing.json` apunta el modelo que de
+    # verdad lo escribió.
+    if (modelo_retirado(r) and modelo == MODEL and MODELO_RESPALDO
+            and modelo != MODELO_RESPALDO):
+        print(f"::warning::Groq ya no ofrece `{modelo}`. El briefing se escribe con el "
+              f"respaldo `{MODELO_RESPALDO}`: hay que elegir un modelo nuevo por defecto.")
+        MODEL = MODELO_RESPALDO
+        texto, diag_respaldo = generate_briefing(prompt, reintento_de_corte, techo_salida,
+                                                 modelo=MODELO_RESPALDO)
+        diag_respaldo["modelo_retirado"] = modelo
+        return texto, diag_respaldo
     if r.status_code != 200:
         raise ValueError(f"Groq error {r.status_code}: {r.text[:200]}")
 

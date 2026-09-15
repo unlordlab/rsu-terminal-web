@@ -1,7 +1,7 @@
 """
 Agente Elia — revisa el contenido existente de Academy y propone mejoras,
 o redacta lecciones nuevas sobre temas no cubiertos. Usa Groq (modelo
-qwen/qwen3.6-27b, el mismo ya probado en producción para el Daily
+qwen/qwen3.8-27b desde el 15/09/2026, el mismo que usa el Daily
 Briefing) — no necesita navegar la web, es tarea de redacción pedagógica
 sobre contenido que ya conoce el modelo o que se le da como contexto.
 
@@ -31,7 +31,7 @@ from config import settings  # noqa: E402
 from services.academy_review_service import create_review  # noqa: E402
 
 LESSONS_FILE = os.path.join(os.path.dirname(__file__), '..', 'frontend', 'pages', 'academy_lessons.js')
-MODEL = "qwen/qwen3.6-27b"
+MODEL = "qwen/qwen3.8-27b"  # 15/09/2026: Groq retiró qwen3.6-27b sin aviso
 
 TIPOS_BLOQUE_PERMITIDOS = ['text', 'tip', 'warning', 'concept', 'steps', 'table', 'divider']
 

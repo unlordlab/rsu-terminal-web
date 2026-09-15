@@ -135,7 +135,7 @@ def _generar_veredicto_laia(hype_result: dict, sesgo_result: dict) -> str:
             "https://api.groq.com/openai/v1/chat/completions",
             headers={"Authorization": f"Bearer {settings.groq_api_key}", "Content-Type": "application/json"},
             json={
-                "model": "qwen/qwen3.6-27b",
+                "model": "qwen/qwen3.8-27b",  # 15/09/2026: Groq retiró qwen3.6-27b sin aviso
                 "messages": [{"role": "user", "content": prompt}],
                 "max_tokens": 300,
                 "temperature": 0.75,

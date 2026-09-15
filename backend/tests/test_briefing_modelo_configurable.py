@@ -129,8 +129,112 @@ def test_el_modelo_se_puede_elegir_por_entorno(monkeypatch):
 
 def test_el_defecto_es_el_modelo_MEDIDO():
     """El que está funcionando y con el presupuesto calibrado. Cambiarlo es una
-    decisión, no un efecto secundario de tocar otra cosa."""
-    assert D.MODEL_POR_DEFECTO == "qwen/qwen3.6-27b"
+    decisión, no un efecto secundario de tocar otra cosa.
+
+    15/09/2026: Groq retiró `qwen/qwen3.6-27b` sin aviso (404 model_not_found)
+    y se pasó a `qwen/qwen3.8-27b`: la misma familia, los mismos parámetros y
+    los mismos 8.000 TPM."""
+    assert D.MODEL_POR_DEFECTO == "qwen/qwen3.8-27b"
+    assert D.parametros_del_modelo(D.MODEL_POR_DEFECTO) == {
+        "reasoning_effort": "none", "reasoning_format": "hidden"}
+
+
+# ── Modelo retirado: el respaldo (15/09/2026) ────────────────────────────────
+#
+# EL CASO. «Groq error 404: The model `qwen/qwen3.6-27b` does not exist or you
+# do not have access to it» y ese día no hubo briefing. El modelo era Preview y
+# Groq lo quitó sin pasar por su página de retiradas. Cambiar el defecto arregla
+# este día; el respaldo arregla el siguiente.
+
+ERROR_RETIRADO = ('{"error":{"message":"The model `qwen/qwen3.8-27b` does not exist or you do '
+                  'not have access to it.","type":"invalid_request_error","code":"model_not_found"}}')
+
+
+def _error(status, texto):
+    r = MagicMock(status_code=status, text=texto)
+    r.headers = {}
+    r.json.return_value = {}
+    return r
+
+
+def test_el_respaldo_es_un_modelo_Production():
+    """Production no se retira sin aviso, que es justo lo que falló."""
+    assert D.MODELO_RESPALDO == "openai/gpt-oss-120b"
+
+
+def test_si_groq_retira_el_modelo_el_briefing_sale_con_el_respaldo(monkeypatch, capsys):
+    monkeypatch.setattr(D, "MODEL", "qwen/qwen3.8-27b")
+    respuestas = [_error(404, ERROR_RETIRADO), _respuesta()]
+    with patch.object(D.requests, "post", side_effect=respuestas) as post:
+        texto, diag = D.generate_briefing("prompt")
+    assert post.call_count == 2
+    segunda = post.call_args_list[1].kwargs["json"]
+    assert segunda["model"] == "openai/gpt-oss-120b"
+    assert segunda.get("reasoning_effort") == "low" and "reasoning_format" not in segunda, (
+        "el respaldo tiene que llevar SUS parámetros, o el 404 se convierte en un 400")
+    assert texto.startswith("briefing")
+    assert diag["modelo"] == "openai/gpt-oss-120b"
+    assert diag["modelo_retirado"] == "qwen/qwen3.8-27b", "tiene que quedar anotado en briefing.json"
+    assert "::warning::" in capsys.readouterr().out, "tiene que verse en la ejecución"
+
+
+def test_las_llamadas_siguientes_ya_van_directas_al_respaldo(monkeypatch):
+    """main() llama más de una vez (reintento por corte, reescritura tras la
+    revisión). Cada una volvería a chocar con el 404, y el `model` de
+    briefing.json diría un modelo que no lo escribió."""
+    monkeypatch.setattr(D, "MODEL", "qwen/qwen3.8-27b")
+    with patch.object(D.requests, "post", side_effect=[_error(404, ERROR_RETIRADO), _respuesta()]):
+        D.generate_briefing("prompt")
+    assert D.MODEL == "openai/gpt-oss-120b"
+    with patch.object(D.requests, "post", return_value=_respuesta()) as post:
+        D.generate_briefing("prompt")
+    assert post.call_count == 1 and post.call_args.kwargs["json"]["model"] == "openai/gpt-oss-120b"
+
+
+def test_si_el_respaldo_tampoco_existe_se_falla_sin_bucle(monkeypatch):
+    monkeypatch.setattr(D, "MODEL", "qwen/qwen3.8-27b")
+    with patch.object(D.requests, "post", return_value=_error(404, ERROR_RETIRADO)) as post:
+        with pytest.raises(ValueError, match="404"):
+            D.generate_briefing("prompt")
+    assert post.call_count == 2
+
+
+def test_la_segunda_lectura_NO_cambia_de_modelo(monkeypatch):
+    """Es opcional, y escrita con el mismo modelo que la primera ya no sería
+    otra lectura: si su modelo desaparece, ese día no sale."""
+    monkeypatch.setattr(D, "MODEL", "qwen/qwen3.8-27b")
+    with patch.object(D.requests, "post", return_value=_error(404, ERROR_RETIRADO)) as post:
+        with pytest.raises(ValueError, match="404"):
+            D.generate_briefing("prompt", modelo="groq/compound")
+    assert post.call_count == 1
+    assert D.MODEL == "qwen/qwen3.8-27b"
+
+
+def test_otro_404_no_es_un_modelo_retirado(monkeypatch):
+    """Un 404 cualquiera (una URL mal escrita) no puede esconderse cambiando de
+    modelo en silencio."""
+    monkeypatch.setattr(D, "MODEL", "qwen/qwen3.8-27b")
+    with patch.object(D.requests, "post", return_value=_error(404, '{"error":"not found"}')) as post:
+        with pytest.raises(ValueError, match="404"):
+            D.generate_briefing("prompt")
+    assert post.call_count == 1
+
+
+def test_modelo_dado_de_baja_con_400_tambien_cuenta():
+    """Groq usa `model_decommissioned` con 400 para los que sí anuncia."""
+    assert D.modelo_retirado(_error(400, '{"error":{"code":"model_decommissioned"}}'))
+    assert not D.modelo_retirado(_error(400, '{"error":{"code":"invalid_request"}}'))
+    assert not D.modelo_retirado(_error(500, ERROR_RETIRADO))
+
+
+def test_los_agentes_no_siguen_en_el_modelo_retirado():
+    """Laia y Gael tienen su propio texto de respaldo cuando Groq falla, así que
+    con el modelo retirado no se caen: se degradan EN SILENCIO, que es peor."""
+    raiz = os.path.join(os.path.dirname(__file__), '..', '..', 'agents')
+    for nombre in ("laia_ethics_agent.py", "bull_agent.py", "elia_agent.py"):
+        with open(os.path.join(raiz, nombre), encoding="utf-8") as f:
+            codigo = f.read()
+        assert '"qwen/qwen3.6-27b"' not in codigo, nombre
 
 
 # ── La búsqueda de compound: acotada y registrada ────────────────────────────

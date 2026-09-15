@@ -521,7 +521,7 @@ def _extraer_ticker_de_instruccion(mensaje: str) -> str | None:
             "https://api.groq.com/openai/v1/chat/completions",
             headers={"Authorization": f"Bearer {settings.groq_api_key}", "Content-Type": "application/json"},
             json={
-                "model": "qwen/qwen3.6-27b",
+                "model": "qwen/qwen3.8-27b",  # 15/09/2026: Groq retiró qwen3.6-27b sin aviso
                 "messages": [{"role": "user", "content": prompt}],
                 "max_tokens": 20,
                 "temperature": 0,
