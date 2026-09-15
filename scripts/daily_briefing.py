@@ -667,6 +667,100 @@ def _safe(val):
     except Exception:
         return None
 
+# ── FUTUROS: la variación, siempre del MISMO contrato ─────────────────────────
+#
+# EL CASO, 15/09/2026 (Newsfeed #70). El briefing dijo «los futuros de S&P y
+# Nasdaq abrieron con un gap alcista del 0,85% y 0,92%… y corrección
+# inmediata». Era falso: la serie diaria de `ES=F` era el contrato de
+# SEPTIEMBRE hasta el 14/09 (7.625,00) y el de DICIEMBRE el 15/09. Comparaba
+# dos contratos, y la diferencia era la prima del de diciembre (~67 puntos). El
+# de diciembre contra sí mismo iba −0,15%, igual que el S&P al contado. Pasa
+# cada vez que Yahoo cambia de contrato: trimestral en ES/NQ y más a menudo en
+# el crudo y el oro.
+#
+# Y UN SEGUNDO EFECTO: a media sesión, el último cierre de la barra diaria de
+# un futuro va con retraso. El WTI salió a 102,18 (+0,78%) cuando en ese
+# minuto cotizaba a ~103,6 (+2,17%).
+#
+# Por eso, en un futuro: (1) se averigua qué contrato hay detrás del continuo
+# —el que cierra igual que su última barra—; (2) la variación sale de la serie
+# diaria DE ESE CONTRATO; y (3) su última barra se pone al día con el último
+# minuto del mismo contrato. Si no se sabe qué contrato es, no se da la
+# variación: un gap inventado es peor que un hueco.
+CONTRATOS_FUTUROS = {
+    # continuo: (raíz, mercado de Yahoo, meses con contrato)
+    "ES=F": ("ES", "CME", "HMUZ"),
+    "NQ=F": ("NQ", "CME", "HMUZ"),
+    "CL=F": ("CL", "NYM", "FGHJKMNQUVXZ"),
+    "GC=F": ("GC", "CMX", "GJMQVZ"),
+}
+_LETRA_MES = "FGHJKMNQUVXZ"
+# Hasta dónde puede separarse el último cierre del continuo del de su contrato
+# por el rato que pasa entre una descarga y otra. Los contratos vecinos se
+# separan bastante más (ES sep/dic: 0,9%; CL oct/nov: 4%).
+TOLERANCIA_CONTRATO = 0.003
+
+
+def contratos_candidatos(continuo: str, hoy, cuantos: int = 4) -> list:
+    """Los próximos contratos del futuro, empezando por el mes en curso."""
+    raiz, mercado, meses = CONTRATOS_FUTUROS[continuo]
+    anio, mes, out = hoy.year, hoy.month, []
+    while len(out) < cuantos:
+        letra = _LETRA_MES[mes - 1]
+        if letra in meses:
+            out.append(f"{raiz}{letra}{anio % 100:02d}.{mercado}")
+        mes += 1
+        if mes > 12:
+            mes, anio = 1, anio + 1
+    return out
+
+
+def fecha_de_sesion_futuro(ts):
+    """La sesión de un futuro del CME empieza a las 18:00 ET del día anterior:
+    un minuto de las 19:00 del lunes pertenece a la barra del martes."""
+    ts = ts.tz_convert("America/New_York") if getattr(ts, "tzinfo", None) else ts
+    return (ts + timedelta(days=1)).date() if ts.hour >= 18 else ts.date()
+
+
+def serie_del_contrato(continuo: str, hist_continuo, hoy, descargar) -> tuple:
+    """(serie diaria del contrato vigente, contrato) o (None, None).
+
+    `descargar(ticker, intervalo)` devuelve un DataFrame de Yahoo o None; se
+    inyecta para poder probarlo sin red."""
+    if continuo not in CONTRATOS_FUTUROS or hist_continuo is None or len(hist_continuo) < 2:
+        return None, None
+    ultimo = float(hist_continuo["Close"].iloc[-1])
+    fecha = hist_continuo.index[-1].date()
+    mejor = None
+    for contrato in contratos_candidatos(continuo, hoy):
+        try:
+            h = descargar(contrato, "1d")
+        except Exception:
+            continue
+        if h is None or len(h) < 2 or h.index[-1].date() != fecha:
+            continue
+        separacion = abs(float(h["Close"].iloc[-1]) - ultimo) / ultimo
+        if separacion <= TOLERANCIA_CONTRATO and (mejor is None or separacion < mejor[0]):
+            mejor = (separacion, contrato, h)
+    if mejor is None:
+        return None, None
+    _, contrato, h = mejor
+    h = h.copy()
+    try:
+        minutos = descargar(contrato, "1m")
+        if minutos is not None and len(minutos):
+            if fecha_de_sesion_futuro(minutos.index[-1]) == h.index[-1].date():
+                h.iloc[-1, h.columns.get_loc("Close")] = float(minutos["Close"].iloc[-1])
+    except Exception:
+        pass   # sin el minuto se queda la barra diaria: más vieja, pero del mismo contrato
+    return h, contrato
+
+
+def _descargar_yahoo(ticker: str, intervalo: str):
+    periodo = "1d" if intervalo == "1m" else "5d"
+    return yf.Ticker(ticker).history(period=periodo, interval=intervalo).dropna()
+
+
 def get_market_data() -> dict:
     """Recopila datos reales de mercado para dar contexto al LLM"""
     data = {}
@@ -701,6 +795,17 @@ def get_market_data() -> dict:
             t    = yf.Ticker(ticker)
             hist = t.history(period="5d", interval="1d").dropna()
             if len(hist) < 2: continue
+            contrato = None
+            if ticker in CONTRATOS_FUTUROS:
+                # Ver serie_del_contrato (Newsfeed #70): la del continuo puede
+                # coser dos contratos y dar un gap que no ha existido.
+                hist, contrato = serie_del_contrato(ticker, hist, datetime.now(timezone.utc).date(),
+                                                    _descargar_yahoo)
+                if hist is None:
+                    print(f"⚠️  {name}: no se ha podido saber qué contrato hay detrás de {ticker}; "
+                          f"no se da su variación antes que dar la de dos contratos cosidos")
+                    data[name] = {"price": None, "chg_pct": None}
+                    continue
             cierres[name] = {d.date().isoformat(): float(c) for d, c in hist["Close"].items()}
             if name == "SPX":
                 ultima_barra = hist.index[-1].date()
@@ -720,6 +825,8 @@ def get_market_data() -> dict:
             # puntos basicos. Ver fmt_yield(): un bono no se mueve "un 1,32%",
             # se mueve 6 pb, y el modelo confundia las dos cosas.
             data[name] = {"price": round(last, 2), "chg_pct": chg, "prev": round(prev, 2)}
+            if contrato:
+                data[name]["contrato"] = contrato
         except Exception:
             data[name] = {"price": None, "chg_pct": None}
 
@@ -2721,6 +2828,14 @@ def _numeros(texto: str) -> list:
     que compararlos como cadenas no vale para nada.
     """
     fuera = []
+    # MILES CON ESPACIO (Newsfeed #73, 15/09/2026). `compound` escribe
+    # «7 611,50» con espacio fino o duro, y esto lo leía como 7 y 611,5: la
+    # revisión denunció como INVENTADOS la SMA50, la SMA20 y el precio reales.
+    # El espacio fino, el duro y el estrecho son siempre separador de miles. El
+    # normal solo cuando detrás vienen tres cifras y los decimales, para no
+    # fundir «entre 395 y 494» ni «S&P 500 200 puntos».
+    texto = re.sub(r"(?<=\d)[\u00a0\u202f\u2009](?=\d{3}(?!\d))", "", texto or "")
+    texto = re.sub(r"(?<=\d) (?=\d{3}[.,]\d)", "", texto)
     for bruto in re.findall(r"\d[\d.,]*\d|\d", texto):
         t = bruto
         if "," in t and "." in t:
@@ -2830,6 +2945,91 @@ def amplitud_de_otro_dia(texto: str, amplitud: dict) -> list:
     return []
 
 
+# ── DEL LADO EQUIVOCADO DE LA MEDIA ──────────────────────────────────────────
+#
+# EL CASO, 15/09/2026 (Newsfeed #71). Las DOS versiones de ese día escribieron
+# «el S&P 500 está por debajo de su SMA20 y apenas por encima de su SMA50
+# (7.611,41)» con el precio en 7.604,91: por DEBAJO. Y la conclusión colgaba de
+# ahí. No era la primera vez: el 07/09 `gpt-oss-120b` puso el S&P «bajo la SMA20
+# (7.708,70)» habiendo cerrado en 7.718,60. La revisión miraba que el nivel
+# existiera, no de qué lado dice el texto que está el precio.
+#
+# Solo se comprueban AFIRMACIONES del estado actual («está/cotiza/se mantiene…
+# por encima de su SMA50»), nunca condiciones: «un cierre por encima de la
+# SMA20 invalidaría» es una hipótesis y denunciarla costaría un reintento
+# contra Groq por nada, que ya pasó con el consenso (#59).
+_LADO_MEDIA = re.compile(
+    r"(por encima de|por debajo de|encima de|debajo de|\bbajo\b|\bsobre\b)\s+(?:de\s+)?"
+    r"(?:su|la|sus|las)?\s*sma\s?(20|50|200)\b", re.IGNORECASE)
+_VERBO_DE_ESTADO = re.compile(
+    r"\b(est[aá]|cotiza|se sit[uú]a|sigue|contin[uú]a|se mantiene|queda|cerr[oó]|cierra|"
+    r"opera|se encuentra|permanece|termin[oó])\b", re.IGNORECASE)
+_CONDICIONAL = re.compile(
+    r"\bsi\b|invalid|recuper|hasta que|mientras|cuando|en caso|podr[ií]a|volver|rompe|romper|"
+    r"perfor|superar|perder|un cierre|cerrar por|de nuevo", re.IGNORECASE)
+# LA AMPLITUD USA LAS MISMAS PALABRAS. «El 65% del S&P 500 está sobre su SMA50»
+# habla de las acciones, no del índice: pasado por encima de los briefings del
+# Gist desde julio, era la mitad de las frases que la regla habría mirado.
+_ES_AMPLITUD = re.compile(r"%\s+(?:de|del)\s|acciones|valores|componentes|miembros|compañ[ií]as|empresas",
+                          re.IGNORECASE)
+
+
+def _niveles_tecnicos_del_prompt(prompt: str) -> dict:
+    """{"SPX": {"ultimo": x, 20: y, 50: z, 200: w}, "NDX": {...}} leídos de la
+    línea de niveles técnicos tal como llegó al modelo."""
+    niveles = {}
+    for clave, etiqueta in (("SPX", "S&P 500"), ("NDX", "Nasdaq 100")):
+        m = re.search(rf"^- {re.escape(etiqueta)}: Último: ([\d,.]+).*$", prompt or "", re.MULTILINE)
+        if not m:
+            continue
+        linea = m.group(0)
+        valores = {"ultimo": float(m.group(1).replace(",", ""))}
+        for periodo in (20, 50, 200):
+            mm = re.search(rf"SMA{periodo}: ([\d,.]+)", linea)
+            if mm:
+                valores[periodo] = float(mm.group(1).replace(",", ""))
+        niveles[clave] = valores
+    return niveles
+
+
+def lado_de_la_media_invertido(texto: str, prompt: str) -> list:
+    """Frases que ponen al índice del lado equivocado de una de sus medias."""
+    niveles = _niveles_tecnicos_del_prompt(prompt)
+    fallos = []
+    for frase in re.split(r"(?<=[.!?])\s+", texto or ""):
+        if (not _VERBO_DE_ESTADO.search(frase) or _CONDICIONAL.search(frase)
+                or _ES_AMPLITUD.search(frase)):
+            continue
+        spx = re.search(r"s&p|spx", frase, re.IGNORECASE)
+        ndx = re.search(r"nasdaq|ndx|tecnol[oó]gico", frase, re.IGNORECASE)
+        if bool(spx) == bool(ndx):
+            # Con los dos, o con ninguno («el índice ya está sobre su SMA200»),
+            # no se sabe de cuál habla: se deja pasar antes que acusar al otro.
+            continue
+        indice = "NDX" if ndx else "SPX"
+        datos = niveles.get(indice)
+        if not datos:
+            continue
+        for m in _LADO_MEDIA.finditer(frase):
+            media = datos.get(int(m.group(2)))
+            if media is None:
+                continue
+            dice_encima = m.group(1).lower() in ("por encima de", "encima de", "sobre")
+            ultimo = datos["ultimo"]
+            if abs(ultimo - media) / media < 0.0001:
+                # Pegado a la media (menos de un 0,01%, menos de un punto en el S&P):
+                # cualquiera de los dos lados vale. El 15/09 el de las 13:41 estaba a
+                # un 0,03% por debajo y lo llamo «apenas por encima»: eso si cuenta.
+                continue
+            if dice_encima != (ultimo > media):
+                fallos.append(
+                    f"LADO DE LA MEDIA INVERTIDO: el texto pone al {'Nasdaq 100' if ndx else 'S&P 500'} "
+                    f"{'por encima' if dice_encima else 'por debajo'} de su SMA{m.group(2)} "
+                    f"({media:,.2f}) y el último dato es {ultimo:,.2f}: está "
+                    f"{'por debajo' if dice_encima else 'por encima'}. Frase: «{frase.strip()[:120]}»")
+    return fallos
+
+
 def revisar_briefing(texto: str, prompt: str, titulares: str = "", eventos: list = None,
                      amplitud: dict = None) -> dict:
     """Lo que el briefing ha roto, antes de publicarlo.
@@ -2853,6 +3053,10 @@ def revisar_briefing(texto: str, prompt: str, titulares: str = "", eventos: list
             ordenes.append(f"ORDEN DE OPERAR: {nombre} (prohibido desde el 04/09)")
 
     hechos = previsiones_contadas_como_hechos(texto, eventos)
+    # Un índice del lado equivocado de su media es un hecho falso, igual que un
+    # dato no publicado contado como publicado: reintento en el principal y
+    # descarte en la segunda lectura (Newsfeed #71).
+    hechos += lado_de_la_media_invertido(texto, prompt)
 
     # «EL CONSENSO» SOLO ES SOSPECHOSO SI SU CIFRA NO ESTA EN EL CALENDARIO. La
     # regla se escribio para el 08/09 (el empleo de FRED, que no trae
@@ -3046,7 +3250,7 @@ def construir_datos(market_data: dict, news=None, major_headlines=None) -> dict:
         "sesion":   market_data.get("sesion"),
         "barras":   market_data.get("barras"),
         "indices":  {k: market_data.get(k) for k in
-                     ("SPX", "NDX", "RUT", "VIX", "TNX", "TYX", "DXY", "WTI", "GOLD")
+                     ("SPX", "NDX", "RUT", "VIX", "TNX", "TYX", "DXY", "WTI", "GOLD", "ES", "NQ")
                      if isinstance(market_data.get(k), dict)},
         "sectores": market_data.get("sectors"),
         "titulares_mercado": _t(news),

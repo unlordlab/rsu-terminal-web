@@ -66,7 +66,12 @@ REALES = {"^VIX": (15.72, 16.46, 16.63), "DX-Y.NYB": (98.84, 98.77, 98.91),
 
 class _TickerFalso:
     def __init__(self, simbolo):
-        self.s = simbolo
+        # Desde Newsfeed #70 (15/09) la variación de un futuro sale de SU
+        # contrato (`CLV26.NYM`), no del continuo (`CL=F`). Aquí no hay cambio
+        # de contrato que simular: cada contrato sirve lo mismo que su continuo.
+        import re
+        m = re.match(r"^(ES|NQ|CL|GC)[FGHJKMNQUVXZ]\d\d\.(CME|NYM|CMX)$", simbolo)
+        self.s = f"{m.group(1)}=F" if m else simbolo
 
     def history(self, period="5d", interval="1d", **_):
         fechas = list(SESIONES) + (["2026-09-10"] if self.s in DE_NOCHE else [])

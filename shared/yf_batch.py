@@ -169,9 +169,104 @@ def reparar_ultima_sesion(close_d, vol_d, hl_d, esperada, batch_size=40, batch_s
     siguen = [t for t in faltan if _fecha_ultima(close_d[t]) < esperada]
     print(f"{log_prefix}Reparación: {recuperados} de {len(faltan)} recuperados, "
           f"{len(siguen)} siguen sin la barra del {esperada}")
+    if siguen:
+        desde_velas = reparar_con_velas(close_d, hl_d, siguen, esperada, batch_size,
+                                        batch_sleep, cache_dir, vol_d, log_prefix)
+        recuperados += desde_velas
+        siguen = [t for t in faltan if _fecha_ultima(close_d[t]) < esperada]
     for t in siguen[:MUESTRA_DIAGNOSTICO]:
         print(f"{log_prefix}🔬 {_diagnosticar_uno(t, esperada)}")
     return len(faltan), recuperados
+
+
+# ── SI LA BARRA DIARIA LLEGA VACÍA, EL CIERRE SALE DE LAS VELAS DE 30 MINUTOS ─
+#
+# Scanner #26, 15/09/2026. La segunda pasada de arriba recuperó 0 de 2.402 la
+# primera noche que corrió, y su propio diagnóstico dijo por qué: «SPY: fila
+# presente · Close=nan · Adj Close=nan», pedido con `Ticker.history` y sin
+# ajustar. O sea que a esa hora Yahoo tiene la fila de la sesión pero sin el
+# cierre, por cualquier camino de barras DIARIAS. Ninguna de las dos
+# explicaciones de #25 (rango largo, ajuste) era la buena.
+#
+# Las velas intradía de la misma sesión sí se sirven en directo. Medido el
+# 15/09 sobre 39 valores contra el cierre oficial del 14/09: el cierre de la
+# última vela de 30 min se separa un 0,03% de mediana (0,4% como mucho) y solo
+# 1 de 39 cambia de sube a baja, por un movimiento mínimo. El VOLUMEN no sirve:
+# sale un 17% corto de mediana porque la subasta de cierre no está en las velas.
+# Por eso se pega el cierre y el OHLC, pero NO el volumen: un RVOL con el
+# volumen de la víspera es un dato viejo, y uno con el 83% del volumen es un
+# dato falso.
+#
+# Solo cuenta una sesión COMPLETA: si la última vela no es la de las 15:30 ET,
+# no se pega nada.
+VELA_INTRADIA = "30m"
+ULTIMA_VELA_ET = (15, 30)
+
+
+def _barra_desde_velas(velas, esperada):
+    """{Open, High, Low, Close} de la sesión `esperada` a partir de sus velas,
+    o None si no está completa. `velas` es un DataFrame de UN ticker."""
+    if velas is None or len(velas) == 0 or "Close" not in velas:
+        return None
+    idx = velas.index
+    if getattr(idx, "tz", None) is not None:
+        idx = idx.tz_convert("America/New_York")
+    del_dia = velas[[ts.date() == esperada for ts in idx]].dropna(subset=["Close"])
+    if del_dia.empty:
+        return None
+    ultima = del_dia.index[-1]
+    ultima = ultima.tz_convert("America/New_York") if getattr(ultima, "tzinfo", None) else ultima
+    if (ultima.hour, ultima.minute) < ULTIMA_VELA_ET:
+        return None
+    return {"Open": float(del_dia["Open"].iloc[0]), "High": float(del_dia["High"].max()),
+            "Low": float(del_dia["Low"].min()), "Close": float(del_dia["Close"].iloc[-1])}
+
+
+def reparar_con_velas(close_d, hl_d, tickers, esperada, batch_size=40, batch_sleep=1.8,
+                      cache_dir=None, vol_d=None, log_prefix="", descargar=None):
+    """Tercera pasada: la barra de `esperada` desde las velas de 30 min.
+    Devuelve cuántos se recuperaron. Nunca levanta."""
+    descargar = descargar or (lambda lote: yf.download(
+        lote, period="5d", interval=VELA_INTRADIA, auto_adjust=False,
+        prepost=False, progress=False, threads=True))
+    recuperados = 0
+    lotes = [tickers[i:i + batch_size] for i in range(0, len(tickers), batch_size)]
+    for i, lote in enumerate(lotes):
+        try:
+            raw = descargar(lote)
+        except Exception as e:
+            print(f"{log_prefix}Velas de {VELA_INTRADIA}: el lote {i+1}/{len(lotes)} falló "
+                  f"({type(e).__name__}: {e})")
+            continue
+        if raw is None or raw.empty:
+            continue
+        multi = isinstance(raw.columns, pd.MultiIndex)
+        for sym in lote:
+            try:
+                velas = raw.xs(sym, axis=1, level=1) if multi else raw
+            except KeyError:
+                continue
+            barra = _barra_desde_velas(velas, esperada)
+            if barra is None:
+                continue
+            # La barra se fecha como las diarias de esa serie: medianoche de NY.
+            ts = pd.Timestamp(esperada).tz_localize("America/New_York")
+            close_d[sym] = _pegar(close_d[sym], ts, barra["Close"])
+            if hl_d is not None and sym in hl_d:
+                nueva = pd.DataFrame([{k: barra[k] for k in ("Open", "High", "Low")}], index=[ts])
+                viejo = hl_d[sym]
+                if getattr(viejo.index, "tz", None) is None:
+                    nueva.index = nueva.index.tz_localize(None)
+                hl_d[sym] = pd.concat([viejo, nueva])
+            if cache_dir:
+                price_cache.escribir(cache_dir, sym, close_d[sym],
+                                     (vol_d or {}).get(sym), (hl_d or {}).get(sym))
+            recuperados += 1
+        if i < len(lotes) - 1:
+            time.sleep(batch_sleep)
+    print(f"{log_prefix}Velas de {VELA_INTRADIA}: {recuperados} de {len(tickers)} recuperados "
+          f"(cierre y OHLC; el volumen de ese día se deja sin poner)")
+    return recuperados
 
 
 def download_batch(tickers, period, batch_size=40, batch_sleep=1.8,
