@@ -206,6 +206,10 @@ const _ETIQUETA_INCOHERENCIA = {
 // y la fecha escrita.
 function avisoDesajustesPrecio(lista) {
     if (!lista || !lista.length) return '';
+    // Solo avisa si hay algo QUE CORREGIR en la hoja. Un valor sin precio en
+    // Yahoo en su fecha de compra (GLXY) no es un error de la hoja, y con él
+    // solo el aviso decía «⚠ 0 precio(s) no cuadran» (15/09/2026).
+    if (!lista.some(a => a.tipo !== 'sin_precio')) return '';
     const orden = { compra: 0, venta: 1, sin_precio: 2 };
     const filas = [...lista].sort((a, b) => (orden[a.tipo] ?? 3) - (orden[b.tipo] ?? 3)).map(a => {
         if (a.tipo === 'sin_precio') {

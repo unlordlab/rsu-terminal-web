@@ -196,3 +196,16 @@ def test_las_paginas_lo_ensenan():
     seccion = tr[tr.index("function seccionCartera"):]
     assert "c.operaciones_por_revisar" in seccion[:3000] and "avisoRevision + kpis" in seccion
     assert "if (c.oculta) {" in seccion[:1200], "la página tiene que decir que está en revisión"
+
+
+def test_sin_nada_que_corregir_no_sale_el_aviso_de_cero_precios():
+    """15/09/2026: con la hoja corregida solo quedaba GLXY «sin precio» y el
+    aviso decía «⚠ 0 precio(s) de la hoja no cuadran». Un valor que Yahoo no
+    cotizaba en su fecha no es un error de la hoja."""
+    with open(os.path.join(FRONT, 'pages', 'cartera.js'), encoding='utf-8') as f:
+        cartera = f.read()
+    cuerpo = cartera[cartera.index("function avisoDesajustesPrecio"):]
+    cuerpo = cuerpo[:cuerpo.index("\n}\n")]
+    guardia = "if (!lista.some(a => a.tipo !== 'sin_precio')) return '';"
+    assert guardia in cuerpo, "el aviso se pinta aunque no haya ningún precio que corregir"
+    assert cuerpo.index(guardia) < cuerpo.index("<details"), "la guardia tiene que ir antes de pintar"
