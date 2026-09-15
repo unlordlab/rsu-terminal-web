@@ -163,17 +163,34 @@ def test_el_track_record_avisa_cuantas_operaciones_estan_por_revisar(monkeypatch
         {"ticker": "NBIS", "fecha": "07/12/2025", "tipo": "venta"},
         {"ticker": "GLXY", "fecha": "10/02/2025", "tipo": "sin_precio"},
     ]})
-    pedidos = []
-
-    def descarga(tickers, **kw):
-        pedidos.append(kw)
-        return {"SPY": pd.Series([500.0, 505.0], index=pd.to_datetime(["2025-02-10", "2025-02-11"]))}, {}
-    monkeypatch.setattr(T, "download_batch", descarga)
+    monkeypatch.setattr(T, "_cierres_spy", lambda: pd.Series(
+        [500.0, 505.0], index=pd.to_datetime(["2025-02-10", "2025-02-11"])))
     c = T._track_record_cartera()
     # Con operaciones por revisar, la curva se RETIRA de la respuesta
     # (decisión del usuario, 14/09/2026): ni serie ni porcentajes.
     assert c == {"oculta": True, "operaciones_por_revisar": 2}, "sin precio no es un error de la hoja: no cuenta"
-    assert pedidos[0]["period"] == "5y", "con 1 año el S&P 500 no llega al primer día de la curva"
+
+
+def test_el_spy_se_pide_a_5_anos_y_SIN_dividendos(monkeypatch):
+    """5 años: con 1 el S&P 500 no llega al primer día de la curva (#63).
+    Sin ajustar: la cartera no lleva dividendos, y el índice con ellos le
+    sacaba 2,15 puntos que no eran de rendimiento (#65)."""
+    import yfinance as yf
+    pedidos = []
+
+    class _Tk:
+        def __init__(self, t):
+            pedidos.append(t)
+
+        def history(self, **kw):
+            pedidos.append(kw)
+            return pd.DataFrame({"Close": [500.0, float("nan"), 505.0]})
+    monkeypatch.setattr(yf, "Ticker", _Tk)
+    serie = T._cierres_spy()
+    assert pedidos[0] == "SPY" and pedidos[1]["period"] == "5y" and pedidos[1]["auto_adjust"] is False
+    assert list(serie) == [500.0, 505.0]
+    assert "download_batch" not in inspect.getsource(T._track_record_cartera), (
+        "download_batch da los cierres ajustados por dividendos")
 
 
 def test_con_la_hoja_revisada_la_curva_vuelve_sola(monkeypatch):
@@ -181,8 +198,8 @@ def test_con_la_hoja_revisada_la_curva_vuelve_sola(monkeypatch):
     historia = [{"fecha": "2025-02-10", "retorno": 100.0}, {"fecha": "2025-02-11", "retorno": 101.0}]
     monkeypatch.setattr(CS, "get_cartera", lambda: {"ok": True, "history": historia, "desajustes_precio": [
         {"ticker": "GLXY", "fecha": "10/02/2025", "tipo": "sin_precio"}]})
-    monkeypatch.setattr(T, "download_batch", lambda tickers, **kw: (
-        {"SPY": pd.Series([500.0, 505.0], index=pd.to_datetime(["2025-02-10", "2025-02-11"]))}, {}))
+    monkeypatch.setattr(T, "_cierres_spy", lambda: pd.Series(
+        [500.0, 505.0], index=pd.to_datetime(["2025-02-10", "2025-02-11"])))
     c = T._track_record_cartera()
     assert not c.get("oculta") and c["serie"] and c["spy_pct"] == 1.0 and c["operaciones_por_revisar"] == 0
 
@@ -209,3 +226,59 @@ def test_sin_nada_que_corregir_no_sale_el_aviso_de_cero_precios():
     guardia = "if (!lista.some(a => a.tipo !== 'sin_precio')) return '';"
     assert guardia in cuerpo, "el aviso se pinta aunque no haya ningún precio que corregir"
     assert cuerpo.index(guardia) < cuerpo.index("<details"), "la guardia tiene que ir antes de pintar"
+
+
+# ── Cartera #64: la curva pública empieza cuando es una cartera ─────────────
+
+def _hist(posiciones, retornos):
+    fechas = pd.date_range("2025-07-11", periods=len(retornos), freq="B")
+    return [{"fecha": f.strftime("%Y-%m-%d"), "retorno": r, "posiciones": n}
+            for f, r, n in zip(fechas, retornos, posiciones)]
+
+
+def _spy_para(historia):
+    return pd.Series([500.0 + i for i in range(len(historia))],
+                     index=pd.to_datetime([h["fecha"] for h in historia]))
+
+
+def test_EL_CASO_la_curva_empieza_el_primer_dia_con_cinco_posiciones():
+    """NBIS sola el 11/07/2025 con +17,27% el primer día: ese día no puede
+    decidir la rentabilidad de toda la cartera."""
+    historia = _hist([1, 1, 3, 5, 6, 6], [100.0, 117.27, 119.0, 125.0, 130.0, 137.5])
+    c = T.curva_cartera_vs_spy(historia, _spy_para(historia))
+    assert c["desde"] == historia[3]["fecha"] and c["serie"][0]["cartera"] == 100.0
+    assert c["cartera_pct"] == 10.0, "137,5 sobre la base de 125, no sobre 100"
+    assert c["serie"][0]["spy"] == 100.0, "el S&P se rebasa el MISMO día"
+    assert c["min_posiciones"] == T.MIN_POSICIONES_CURVA == 5
+    assert c["primera_operacion"] == historia[0]["fecha"], "la página dice desde cuándo hay operaciones"
+
+
+def test_si_nunca_llega_a_cinco_no_hay_curva_publica():
+    historia = _hist([1, 2, 3, 4], [100.0, 101.0, 102.0, 103.0])
+    c = T.curva_cartera_vs_spy(historia, _spy_para(historia))
+    assert c["serie"] == [] and c["n_dias"] == 0
+
+
+def test_una_historia_sin_el_recuento_se_toma_entera():
+    """La caché de antes del cambio no trae `posiciones`: no puede dejar la
+    página en blanco hasta que caduque."""
+    historia = [{"fecha": "2025-07-11", "retorno": 100.0}, {"fecha": "2025-07-14", "retorno": 110.0}]
+    assert T.curva_cartera_vs_spy(historia, _spy_para(historia))["cartera_pct"] == 10.0
+
+
+def test_la_historia_cuenta_las_posiciones_vivas_de_cada_dia():
+    """Una se vende el 12/02: ese día y los siguientes ya no cuenta."""
+    precios = {"AAA": _serie(FECHAS, [10.0] * 4), "BBB": _serie(FECHAS, [20.0] * 4)}
+    h, _, _ = _curva(precios, [_op("AAA", "10/02/2025", 10.0),
+                               _op("BBB", "11/02/2025", 20.0, cierre="12/02/2025", venta=20.0)])
+    assert [p["posiciones"] for p in h] == [1, 2, 1, 1]
+
+
+def test_la_pagina_dice_desde_cuando_y_que_el_sp_va_sin_dividendos():
+    with open(os.path.join(FRONT, 'pages', 'track_record.js'), encoding='utf-8') as f:
+        tr = f.read()
+    seccion = tr[tr.index("function seccionCartera"):tr.index("function graficoCurvas")]
+    assert "c.min_posiciones" in seccion and "c.primera_operacion" in seccion
+    assert "sin dividendos" in seccion
+    assert "const arranque = c.min_posiciones && c.primera_operacion && c.primera_operacion !== c.desde" in seccion
+    assert "'Las dos líneas parten de 100 el primer día. ' + arranque" in seccion, "el aviso del arranque no llega al pie"

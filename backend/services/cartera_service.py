@@ -918,6 +918,7 @@ def get_portfolio_history(abiertas_rows: list, days: int = 180, cerradas_rows: l
         mercado = 0.0   # valor de las posiciones vivas ese día
         caja    = 0.0   # importe de las ya vendidas a esa altura
         aportado = 0.0  # capital acumulado puesto hasta esa fecha
+        vivas   = 0     # posiciones abiertas ese día (Cartera #64: desde cuántas es «una cartera»)
         for op in ops:
             p = op["row"]
             if d < op["entrada"]:
@@ -926,6 +927,7 @@ def get_portfolio_history(abiertas_rows: list, days: int = 180, cerradas_rows: l
             if op["salida"] is not None and d >= op["salida"]:
                 caja += p["actual"] * p["shares"]   # vendida: su importe queda en caja
                 continue
+            vivas += 1
             s = series.get(p["ticker"])
             px_series = s[s.index <= d] if s is not None else None
             if px_series is None or px_series.empty:
@@ -963,6 +965,7 @@ def get_portfolio_history(abiertas_rows: list, days: int = 180, cerradas_rows: l
             "valor":     round(equity, 2),
             "invertido": round(aportado, 2),
             "retorno":   round(indice, 2),
+            "posiciones": vivas,
         })
 
     _history_cache.update({"updated": now, "key": cache_key, "data": result, "desajustes": desajustes})

@@ -385,8 +385,15 @@ function seccionCartera(c) {
     }
     if (!c.serie || c.serie.length < 2) {
         return caja('CARTERA RSU · CONTRA EL S&P 500',
-            '<div style="padding:1rem 16px;color:var(--color-muted);font-size:12px;">Todavía sin historia suficiente para comparar.</div>');
+            '<div style="padding:1rem 16px;color:var(--color-muted);font-size:12px;">Todavía sin historia suficiente para comparar'
+            + (c.min_posiciones ? ': la curva empieza el primer día con ' + esc(c.min_posiciones) + ' posiciones abiertas.' : '.') + '</div>');
     }
+    // Cartera #64: la curva no empieza en la primera compra sino cuando ya es
+    // una cartera, y hay que decirlo — si no, parece que se esconde el principio.
+    const arranque = c.min_posiciones && c.primera_operacion && c.primera_operacion !== c.desde
+        ? 'Empieza el primer día con ' + esc(c.min_posiciones) + ' posiciones abiertas; la primera operación es del '
+          + esc(fmtFecha(c.primera_operacion)) + ', y antes de eso un solo valor movía la curva entera. '
+        : '';
     const kpis = '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:1px;background:var(--color-border);">'
         + kpi('CARTERA RSU', (c.cartera_pct >= 0 ? '+' : '') + c.cartera_pct + '%', color(c.cartera_pct), 'rentabilidad ponderada por tiempo')
         + kpi('S&P 500', c.spy_pct === null || c.spy_pct === undefined ? '—' : (c.spy_pct >= 0 ? '+' : '') + c.spy_pct + '%', color(c.spy_pct), 'mismas fechas')
@@ -403,7 +410,9 @@ function seccionCartera(c) {
         : '';
     return caja('CARTERA RSU · CONTRA EL S&P 500', avisoRevision + kpis + graficoCurvas(c.serie)
         + '<div style="padding:8px 16px;border-top:1px solid var(--color-border);color:var(--color-muted);font-size:10px;line-height:1.6;">'
-        + 'Las dos líneas parten de 100 el primer día. La de la cartera es la rentabilidad ponderada por tiempo: descuenta el dinero que se va aportando, así que mide rendimiento y no ingresos. '
+        + 'Las dos líneas parten de 100 el primer día. ' + arranque
+        + 'La de la cartera es la rentabilidad ponderada por tiempo: descuenta el dinero que se va aportando, así que mide rendimiento y no ingresos. '
+        + 'Las dos van sin dividendos, para comparar lo mismo. '
         + 'Incluye las posiciones cerradas, también las que salieron mal. Sin cifras en dólares ni posiciones.</div>',
         'Del ' + fmtFecha(c.desde) + ' al ' + fmtFecha(c.hasta) + ' · ' + c.n_dias + ' días con datos');
 }

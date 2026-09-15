@@ -427,7 +427,19 @@ def _peor_caida(indices: list) -> float | None:
     return round(peor, 2) if maximo is not None else None
 
 
-def curva_cartera_vs_spy(historia: list, spy) -> dict:
+# DESDE CUÁNDO ES UNA CARTERA (Cartera #64, 15/09/2026). La curva empezaba en la
+# primera compra, y los primeros meses la «cartera» era UNA posición: GLXY sola
+# de febrero a julio de 2025, valorada a coste hasta que tuvo precio y luego con
+# −34% en un día; y, con GLXY corregida, NBIS sola, con +17,27% el primer día.
+# En una curva ponderada por tiempo ese primer tramo se encadena en todo lo
+# demás: medido, un solo día de una sola posición movía el resultado 35 puntos
+# (+141% desde el 11/07/2025, +106% desde el 14/07). Es la práctica habitual
+# (una cartera modelo se mide desde que está construida): la curva pública
+# empieza el primer día con MIN_POSICIONES_CURVA abiertas, y lo dice.
+MIN_POSICIONES_CURVA = 5
+
+
+def curva_cartera_vs_spy(historia: list, spy, min_posiciones: int = MIN_POSICIONES_CURVA) -> dict:
     """La curva de la Cartera RSU contra el S&P 500, en porcentaje y nada más.
 
     Usa `retorno`, el índice base 100 ponderado por tiempo que ya calcula
@@ -440,8 +452,14 @@ def curva_cartera_vs_spy(historia: list, spy) -> dict:
     rebasa a 100 el primer día de la curva; un día sin cierre del índice (no
     debería haberlo) toma el último cierre anterior."""
     puntos = [h for h in (historia or []) if h.get("retorno") is not None and h.get("fecha")]
+    primera_operacion = puntos[0]["fecha"] if puntos else None
+    # Una historia sin `posiciones` (la de antes del 15/09) se toma entera.
+    if min_posiciones and any("posiciones" in h for h in puntos):
+        inicio = next((i for i, h in enumerate(puntos) if (h.get("posiciones") or 0) >= min_posiciones), None)
+        puntos = puntos[inicio:] if inicio is not None else []
     if len(puntos) < 2:
-        return {"n_dias": len(puntos), "serie": []}
+        return {"n_dias": len(puntos), "serie": [], "min_posiciones": min_posiciones,
+                "primera_operacion": primera_operacion}
     fechas_spy = [d.date() for d in spy.index] if spy is not None and len(spy) else []
 
     def _spy_en(fecha_iso):
@@ -476,8 +494,25 @@ def curva_cartera_vs_spy(historia: list, spy) -> dict:
         "diferencia_pp": round(cartera_pct - spy_pct, 2) if spy_pct is not None else None,
         "peor_caida_cartera": _peor_caida([p["cartera"] for p in serie]),
         "peor_caida_spy": _peor_caida([p["spy"] for p in serie]),
+        "min_posiciones": min_posiciones,
+        "primera_operacion": primera_operacion,
         "serie": serie,
     }
+
+
+def _cierres_spy():
+    """Cierres del SPY SIN ajustar por dividendos (Cartera #65, 15/09/2026).
+
+    `download_batch` los da ajustados, o sea con los dividendos reinvertidos, y
+    la cartera se calcula a propósito sin ellos (`auto_adjust=False`, Cartera
+    #A2). La gráfica comparaba una rentabilidad total con una de solo precio:
+    S&P +27,95% frente a +25,80%, 2,15 puntos a favor del índice.
+
+    5 años y no 1: la curva puede empezar en 2025, y con 1 año el S&P 500 no
+    llegaba a su primer día (Cartera #63)."""
+    import yfinance as yf
+    serie = yf.Ticker("SPY").history(period="5y", interval="1d", auto_adjust=False)["Close"].dropna()
+    return serie if len(serie) else None
 
 
 def _track_record_cartera() -> dict:
@@ -485,11 +520,7 @@ def _track_record_cartera() -> dict:
     datos = get_cartera()
     if not datos.get("ok"):
         raise ValueError(datos.get("error") or "Cartera no disponible")
-    # 5 años y no 1: desde el 14/09/2026 la curva empieza en la PRIMERA
-    # operación (febrero de 2025), y con 1 año el S&P 500 no llegaba a su primer
-    # día y la comparación salía vacía (Cartera #63).
-    close_d, _ = download_batch(["SPY"], period="5y", min_history=1, log_prefix="[TrackRecord Cartera] ")
-    curva = curva_cartera_vs_spy(datos.get("history") or [], close_d.get("SPY"))
+    curva = curva_cartera_vs_spy(datos.get("history") or [], _cierres_spy())
     # Cuántas operaciones tienen un precio que no cuadra con su fecha: con
     # alguna, la curva puede tener saltos que no son reales y hay que decirlo
     # donde se ve. Solo el número, sin tickers: la lista va en Cartera.
