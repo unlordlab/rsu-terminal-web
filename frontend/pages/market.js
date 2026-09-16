@@ -2089,10 +2089,16 @@ async function loadBriefing(el) {
         if (!data.ok) throw new Error(data.error || 'Sin briefing');
         const html    = renderMarkdown(data.content);
         const updated = data.updated ? 'Generado: ' + data.updated : '';
+        // EL SESGO, igual que en la tarjeta del Dashboard (pedido el 16/09/2026:
+        // solo se veía allí). Sin sesgo ese día, no se pinta nada.
+        const bias = (data.bias || '').toUpperCase();
+        const biasBadge = BIAS_COLORS[bias]
+            ? '<span title="Sesgo del briefing de hoy" style="color:' + BIAS_COLORS[bias] + ';border:1px solid ' + BIAS_COLORS[bias] + '55;border-radius:3px;padding:1px 8px;font-size:10px;letter-spacing:0.05em;">' + esc(bias) + '</span>'
+            : '';
 
         // Header con botón expandir
         const header = '<div style="display:flex;justify-content:space-between;align-items:center;padding:10px 14px;border-bottom:1px solid var(--color-border);flex-shrink:0;">'
-            + '<div style="color:var(--color-accent);font-size:13px;letter-spacing:0.08em;text-shadow:var(--glow-text);">RESUMEN DE MERCADO DIARIO</div>'
+            + '<div style="display:flex;align-items:center;gap:10px;"><span style="color:var(--color-accent);font-size:13px;letter-spacing:0.08em;text-shadow:var(--glow-text);">RESUMEN DE MERCADO DIARIO</span>' + biasBadge + '</div>'
             + '<div style="display:flex;align-items:center;gap:10px;">'
             + '<span style="color:var(--color-muted);font-size:11px;">' + updated + '</span>'
             + '<button id="briefing-expand-btn" title="Leer completo" style="'

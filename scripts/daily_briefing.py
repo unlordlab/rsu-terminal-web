@@ -2756,7 +2756,16 @@ TEMAS_CALENDARIO = [
 # Lo que convierte una cifra del calendario en una EXPECTATIVA dicha como tal.
 MARCAS_DE_EXPECTATIVA = (r"consenso|se espera|esperad[oa]s?|previsi[óo]n|previst[oa]s?|"
                          r"\bprev[ée]n?\b|estimad|apunta a|si (sale|se publica|llega|supera|queda)|"
-                         r"saldr[áa]|se publicar[áa]|a las \d|pendiente|todav[íi]a no")
+                         r"saldr[áa]|se publicar[áa]|a las \d|pendiente|todav[íi]a no|"
+                         # UNA CONDICIÓN NO DA NADA POR PUBLICADO (Newsfeed #76, 16/09/2026).
+                         # «Si la Fed confirma la subida…» y «Si la Fed mantiene el 4,00%…»
+                         # se denunciaron como hechos: el reintento del principal y la
+                         # segunda lectura entera se perdieron por dos condicionales.
+                         # «si bien» no es condición: «si bien la Fed subió al 4,00%» sí afirma.
+                         # Solo cuenta el «si» que ABRE la condición (inicio de frase, tras
+                         # coma o tras «y»), y no «podría»: «el BCE sube al 2,65%, lo que
+                         # podría fortalecer el euro» afirma la decisión (test del 10/09).
+                         r"(?:^|[,;:]\s*|\by\s+)si (?!bien\b)|\ben caso de\b")
 
 
 def _cifras_del_evento(valor) -> list:
@@ -3113,6 +3122,47 @@ def fallos_de(revision: dict) -> list:
     guardada antes de que existieran «hechos» o «amplitud» no las trae."""
     return [x for clave in ("ordenes", "hechos", "amplitud", "otros")
             for x in (revision or {}).get(clave, [])]
+
+
+# ── CUANDO EL BRIEFING SALE CORTADO (Newsfeed #75, 16/09/2026) ───────────────
+#
+# EL CASO. Groq impuso un techo de 1.000 fichas de salida, el prompt pedía 288-360
+# palabras y `qwen3.8-27b` escribió 590 hasta que se le acabó el espacio, dos
+# veces. Se publicó terminando en «La clave es la reacción al anuncio de» y SIN
+# la línea «SESGO:» del final: el Dashboard se quedó sin sesgo y el registro
+# apuntó «N/D» un día en que el texto decía «Mantengo mi sesgo bajista».
+# Pedirle que escriba menos ya se hacía, y no obedece; lo que sí se puede
+# garantizar es lo que se publica.
+
+
+def recortar_a_frase_completa(texto: str) -> str:
+    """Lo que haya después de la última frase terminada se quita: un briefing
+    no puede acabar a mitad de frase. Sin ninguna frase terminada, se deja."""
+    texto = (texto or "").rstrip()
+    finales = list(re.finditer(r"[.!?…][»\")\]]*(?=\s|$)", texto))
+    if not finales:
+        return texto
+    return texto[:finales[-1].end()].rstrip()
+
+
+_SESGO_EN_PROSA = re.compile(
+    r"\b(?:sesgo|postura|lectura|tesis|visi[óo]n)\s+(?:\w+\s+){0,2}?(alcista|bajista|neutral)\b",
+    re.IGNORECASE)
+
+
+def sesgo_de_la_conclusion(texto: str):
+    """El sesgo que la propia conclusión dice con palabras («mantengo mi sesgo
+    bajista»), o None si no lo dice o dice más de uno. Solo se usa cuando falta
+    la etiqueta: es el respaldo, no la fuente."""
+    texto = texto or ""
+    m = re.search(r"mi conclusi[óo]n", texto, re.IGNORECASE)
+    tramo = texto[m.start():] if m else texto[-1500:]
+    # Las frases de invalidación nombran la postura CONTRARIA («la tesis
+    # alcista se invalida si…»). Contra los 32 briefings con etiqueta del Gist,
+    # contándolas se contradecía en 5 (todos NEUTRAL); sin ellas, en ninguno.
+    frases = [f for f in re.split(r"(?<=[.!?])\s+", tramo) if not re.search(r"invalid", f, re.IGNORECASE)]
+    encontrados = {x.lower() for f in frases for x in _SESGO_EN_PROSA.findall(f)}
+    return encontrados.pop().upper() if len(encontrados) == 1 else None
 
 
 def extract_bias_tag(text: str) -> tuple:
@@ -3641,6 +3691,21 @@ def main():
     # copia local.
     segunda = generar_segunda_lectura(prompt, titulares=titulares_txt, eventos=eventos,
                                       amplitud=amplitud)
+
+    # CORTADO O SIN ETIQUETA (Newsfeed #75). Lo que se publica acaba en una
+    # frase entera, y si falta la línea «SESGO:» se toma el que la conclusión
+    # dice con palabras. Queda anotado en el diagnóstico en los dos casos.
+    if diag.get("truncado"):
+        antes = len(briefing.split())
+        briefing = recortar_a_frase_completa(briefing)
+        diag["recortado_a_frase_completa"] = antes - len(briefing.split())
+        print(f"✂️  Salió cortado: se publica hasta la última frase completa "
+              f"({diag['recortado_a_frase_completa']} palabras quitadas)")
+    if not bias:
+        bias = sesgo_de_la_conclusion(briefing)
+        if bias:
+            diag["sesgo_de_la_conclusion"] = True
+            print(f"📌 Sin la etiqueta SESGO: se toma el que dice la conclusión — {bias}")
 
     # Si el modelo se queda sin presupuesto de tokens pensando (ver nota en
     # generate_briefing) puede devolver un texto vacío o casi vacío — mejor
