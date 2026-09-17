@@ -1933,6 +1933,39 @@ def linea_curva_vix(spot, vix3m, fechas: dict) -> str:
     return f" | Ratio VIX/VIX3M: {ratio} → curva {lectura}"
 
 
+# ── QUÉ TITULARES ENTRAN CUANDO NO CABEN TODOS (Newsfeed #77, 17/09/2026) ────
+#
+# EL CASO. El 16/09 la Fed subió los tipos por primera vez en tres años. Al
+# briefing del 17 le llegaron cuatro titulares que lo decían («Wall St ends lower
+# after Fed hikes interest rates», «US interest rates raised for first time in
+# three years», «How the Fed's rate hike could hit global markets»…) y NINGUNA de
+# las dos lecturas lo mencionó. En modo «mínimo» —el de todos los días— entran 2
+# titulares por lista, y se cogían los 2 MÁS RECIENTES: los migrantes afganos, el
+# Banco de Inglaterra, Assad y los aranceles a la UE. Los de la Fed eran de la
+# noche anterior y se quedaron fuera. Tampoco había otra vía: el calendario
+# (faireconomy) no trae nunca el dato publicado, solo consenso y previo.
+#
+# Ahora se ordenan por lo que mueve el mercado antes de recortar, y a igual
+# peso se respeta el orden de llegada (el más reciente primero).
+_PESO_TITULAR = [
+    # «Fed up with AI interviews» (15/09) es «harto de», no la Fed.
+    (3, r"\bfed\b(?!\s+up\b)|fomc|federal reserve|interest rates?|rate (hike|cut|rise|increase)|rates? (raised|cut|hiked)|"
+        r"\bpowell\b|\bwarsh\b|\btipos\b"),
+    (2, r"inflation|\bcpi\b|\bpce\b|\bjobs\b|payroll|unemployment|\bgdp\b|recession|treasur|\byields?\b|"
+        r"tariff|\becb\b|bank of england|\bboj\b|\bopec\b|\boil\b|crude|wall st|\bstocks?\b|s&p|nasdaq|"
+        r"\bdow\b|earnings"),
+    (1, r"\bdollar\b|\bgold\b|bitcoin|\bchina\b|\biran\b|\bwar\b|\btrade\b"),
+]
+
+
+def priorizar_titulares(titulares: list) -> list:
+    """Los titulares ordenados por peso de mercado; a igual peso, como venían."""
+    def peso(t):
+        texto = (t.get("headline") or "").lower()
+        return sum(p for p, patron in _PESO_TITULAR if re.search(patron, texto))
+    return sorted(titulares or [], key=lambda t: -peso(t))
+
+
 def build_prompt(market_data: dict, news: list, major_headlines: list, earnings: list, breadth: dict,
                   briefing_history: list, bias_history: list,
                   macro_indicators: list = None, recorte: dict = None) -> str:
@@ -1944,8 +1977,9 @@ def build_prompt(market_data: dict, news: list, major_headlines: list, earnings:
     max_titulares = recorte.get("titulares")
     max_calendario = recorte.get("calendario")
     if max_titulares:
-        news = news[:max_titulares]
-        major_headlines = major_headlines[:max_titulares]
+        # Por lo que mueve el mercado, no por hora (Newsfeed #77): ver priorizar_titulares.
+        news = priorizar_titulares(news)[:max_titulares]
+        major_headlines = priorizar_titulares(major_headlines)[:max_titulares]
     d = market_data
 
     # Formatear índices
