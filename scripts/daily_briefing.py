@@ -3199,6 +3199,36 @@ def sesgo_de_la_conclusion(texto: str):
     return encontrados.pop().upper() if len(encontrados) == 1 else None
 
 
+# ── LOS NÚMEROS, EN CASTELLANO (Newsfeed #78, 17/09/2026) ────────────────────
+#
+# Desde `qwen3.8-27b` el principal escribe «7,551.81», «0.45%», «-111.6»: copia
+# el formato americano en que el prompt le da los datos. `qwen3.6` los pasaba a
+# castellano; la segunda lectura (`compound`) lo sigue haciendo. Pedirlo en el
+# prompt cuesta fichas que no sobran, así que se convierte al publicar.
+#
+# SOLO SI TODO EL TEXTO VIENE EN FORMATO AMERICANO. Con los dos mezclados no se
+# toca nada: «7,675» es 7.675 en inglés y 7,675 en castellano, y adivinarlo cifra
+# a cifra es la forma de publicar un número que no es.
+# Un «0.898» no es un millar a la española: el patrón de miles exige que no empiece por 0.
+_NUM_AMERICANO = re.compile(r"\d{1,3}(?:,\d{3})+\.\d+|\d+\.\d+(?=\s?%)|\d{1,3}(?:,\d{3})+(?!\d)")
+_NUM_ESPANOL = re.compile(r"\d{1,3}(?:\.\d{3})+,\d+|\d+,\d+(?=\s?%)|(?<![\d.])[1-9]\d{0,2}(?:\.\d{3})+(?![\d,])")
+_NUM_A_CONVERTIR = re.compile(r"(?<![\d.,])\d{1,3}(?:,\d{3})+(?:\.\d+)?(?![\d,.]\d)|(?<![\d.,])\d+\.\d+(?![\d,.]\d)")
+
+
+def numeros_a_formato_espanol(texto: str) -> str:
+    """«7,551.81» -> «7.551,81», «0.45%» -> «0,45%», si el texto entero está en
+    formato americano. Si hay alguna cifra en formato español, se devuelve igual."""
+    texto = texto or ""
+    if not _NUM_AMERICANO.search(texto) or _NUM_ESPANOL.search(texto):
+        return texto
+
+    def convertir(m):
+        entero, _, decimales = m.group(0).partition(".")
+        entero = entero.replace(",", ".")
+        return entero + ("," + decimales if decimales else "")
+    return _NUM_A_CONVERTIR.sub(convertir, texto)
+
+
 def extract_bias_tag(text: str) -> tuple:
     """Separa la etiqueta final 'SESGO: ALCISTA/BAJISTA/NEUTRAL' del cuerpo
     del briefing. Devuelve (texto_sin_etiqueta, sesgo). Se pide al modelo en
@@ -3421,7 +3451,7 @@ def generar_segunda_lectura(prompt: str, modelo: str = None, titulares: str = ""
         print(f"   {len(cuerpo.split())} palabras · sesgo {sesgo or 'N/D'}"
               + (f" · consulto {len(herramientas)} fuente(s) por su cuenta"
                  if herramientas else ""))
-        return {"model": modelo, "text": cuerpo, "bias": sesgo, "diagnostico": diag,
+        return {"model": modelo, "text": numeros_a_formato_espanol(cuerpo), "bias": sesgo, "diagnostico": diag,
                 **({"revision": revision} if fallos_de(revision) else {})}
     except Exception as e:
         # Aislada a proposito: una segunda opinion nunca puede costar el
@@ -3740,6 +3770,13 @@ def main():
         if bias:
             diag["sesgo_de_la_conclusion"] = True
             print(f"📌 Sin la etiqueta SESGO: se toma el que dice la conclusión — {bias}")
+    # Números en castellano (Newsfeed #78), después de revisar: la revisión lee
+    # los dos formatos y compara contra el prompt, que va en americano.
+    en_castellano = numeros_a_formato_espanol(briefing)
+    if en_castellano != briefing:
+        diag["numeros_convertidos_a_castellano"] = True
+        print("🔢 Números en formato americano: se publican en castellano")
+        briefing = en_castellano
 
     # Si el modelo se queda sin presupuesto de tokens pensando (ver nota en
     # generate_briefing) puede devolver un texto vacío o casi vacío — mejor
