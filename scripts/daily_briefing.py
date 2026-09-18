@@ -761,6 +761,58 @@ def _descargar_yahoo(ticker: str, intervalo: str):
     return yf.Ticker(ticker).history(period=periodo, interval=intervalo).dropna()
 
 
+def _fred_ultimo(serie: str):
+    """(fecha, valor) de la última observación de una serie de FRED por su CSV
+    público, o None. Sin clave: es la misma vía que ya usaba `FEDFUNDS`."""
+    try:
+        r = requests.get(f"https://fred.stlouisfed.org/graph/fredgraph.csv?id={serie}",
+                         timeout=10, headers={"User-Agent": "RSU Terminal contact@rsu-terminal.com"})
+        if r.status_code != 200:
+            return None
+        for linea in reversed(r.text.strip().split("\n")[1:]):
+            fecha, _, valor = linea.partition(",")
+            try:
+                return fecha, float(valor)
+            except ValueError:
+                continue       # FRED marca con «.» los días sin dato
+    except Exception:
+        return None
+    return None
+
+
+def proxy_fed_funds(irx_val, leer=None):
+    """El tipo de la Fed de HOY frente al bono a 3 meses (ver Newsfeed #79).
+
+    Rango objetivo diario (DFEDTARL-DFEDTARU) y su punto medio; si falta, la
+    media mensual (FEDFUNDS), diciendo que lo es. None sin 3M o sin tipo."""
+    leer = leer or _fred_ultimo
+    fed_funds_now, rango, fuente = None, None, None
+    inferior, superior = leer("DFEDTARL"), leer("DFEDTARU")
+    if inferior is not None and superior is not None:
+        fed_funds_now = round((inferior[1] + superior[1]) / 2, 3)
+        rango = (inferior[1], superior[1])
+        fuente = f"rango objetivo a {superior[0]}"
+    else:
+        mensual = leer("FEDFUNDS")
+        if mensual is not None:
+            fed_funds_now, fuente = mensual[1], f"media mensual de {mensual[0][:7]}"
+    if irx_val is None or fed_funds_now is None:
+        return None
+    implied_gap = round(fed_funds_now - irx_val, 2)  # positivo = mercado espera bajadas
+    return {
+        "fed_funds_now": fed_funds_now,
+        "rango_objetivo": rango,
+        "fuente": fuente,
+        "yield_3m": irx_val,
+        "implied_gap_pct": implied_gap,
+        "interpretation": (
+            "bajadas" if implied_gap > 0.15 else
+            "subidas" if implied_gap < -0.15 else
+            "sin cambios significativos"
+        ),
+    }
+
+
 def get_market_data() -> dict:
     """Recopila datos reales de mercado para dar contexto al LLM"""
     data = {}
@@ -919,31 +971,16 @@ def get_market_data() -> dict:
     # pago, $25+/mes). Se calcula comparando el yield a 3 meses (IRX) contra el Fed Funds
     # Rate actual: si el 3M cotiza por debajo del Fed Funds, el mercado de bonos está
     # pricing bajadas de tipos en ese horizonte; si cotiza igual o por encima, no las espera.
+    #
+    # EL TIPO DE HOY, NO LA MEDIA DEL MES PASADO (Newsfeed #79, 18/09/2026). Se
+    # leía `FEDFUNDS`, que es la MEDIA MENSUAL: dos días después de que la Fed
+    # subiera al 3,75-4,00% el prompt seguía diciendo «Fed Funds actual 3,63%» (la
+    # media de agosto) y el briefing escribió que el mercado «espera subidas en 3
+    # meses» y que «la Fed mantendrá los tipos altos», sin nombrar la subida. Ahora
+    # es el rango objetivo DIARIO (DFEDTARL-DFEDTARU) y se compara con su punto
+    # medio. Si esas series fallan, se vuelve a la media mensual diciéndolo.
     try:
-        irx_val = data.get("IRX", {}).get("price")
-        r = requests.get(
-            "https://fred.stlouisfed.org/graph/fredgraph.csv?id=FEDFUNDS",
-            timeout=10, headers={"User-Agent": "RSU Terminal contact@rsu-terminal.com"}
-        )
-        fed_funds_now = None
-        if r.status_code == 200:
-            lines = r.text.strip().split("\n")
-            last_line = lines[-1].split(",")
-            fed_funds_now = float(last_line[1])
-        if irx_val is not None and fed_funds_now is not None:
-            implied_gap = round(fed_funds_now - irx_val, 2)  # positivo = mercado espera bajadas
-            data["fed_funds_proxy"] = {
-                "fed_funds_now": fed_funds_now,
-                "yield_3m": irx_val,
-                "implied_gap_pct": implied_gap,
-                "interpretation": (
-                    "bajadas" if implied_gap > 0.15 else
-                    "subidas" if implied_gap < -0.15 else
-                    "sin cambios significativos"
-                ),
-            }
-        else:
-            data["fed_funds_proxy"] = None
+        data["fed_funds_proxy"] = proxy_fed_funds(data.get("IRX", {}).get("price"))
     except Exception:
         data["fed_funds_proxy"] = None
 
@@ -2057,8 +2094,12 @@ def build_prompt(market_data: dict, news: list, major_headlines: list, earnings:
     # Proxy de Fed Funds (aproximado, NO es CME FedWatch — ver nota en el propio dato)
     ffp = d.get("fed_funds_proxy")
     if ffp:
+        rango = ffp.get("rango_objetivo")
+        tipo_fed = (f"Fed Funds, rango objetivo: {rango[0]:.2f}-{rango[1]:.2f}% (punto medio "
+                    f"{ffp['fed_funds_now']:.3f}%)" if rango else
+                    f"Fed Funds ({ffp.get('fuente') or 'último dato'}): {ffp['fed_funds_now']:.2f}%")
         fed_proxy_str = (
-            f"Fed Funds actual: {ffp['fed_funds_now']:.2f}% | Yield 3M: {ffp['yield_3m']:.2f}% | "
+            f"{tipo_fed} | Yield 3M: {ffp['yield_3m']:.2f}% | "
             f"Gap implícito: {ffp['implied_gap_pct']:+.2f}pp → el mercado de bonos a corto plazo "
             f"sugiere expectativa de {ffp['interpretation']} en el horizonte de 3 meses "
             f"(PROXY APROXIMADO basado en yields, no es la probabilidad exacta de CME FedWatch)"
@@ -2761,6 +2802,11 @@ FRASES_DE_CONSENSO = [
     (r"\bfrente a (lo|las) (esperado|expectativas|previsiones)\b", "«frente a lo esperado»"),
 ]
 
+# Palabras que hacen de «el consenso» el de un DATO y no la opinión del mercado.
+DATO_MACRO = (r"\bipc\b|\bppi\b|\bpce\b|\bpib\b|empleo|n[óo]minas|\bparo\b|desempleo|ventas|"
+              r"inflaci|\bdato|\bcifra|encuesta|\bpmi\b|\bism\b|solicitudes|producci[óo]n|"
+              r"\bfed\b|\bbce\b|\bboe\b|\bboj\b|\btipos?\b|decisi[óo]n")
+
 # Superlativos que la regla 12 solo permite si lo dice un titular.
 SUPERLATIVOS = r"(m[áa]ximos?|m[íi]nimos?) (hist[óo]ricos?|anuales?)|r[ée]cord hist[óo]rico|all-?time"
 
@@ -3121,7 +3167,12 @@ def revisar_briefing(texto: str, prompt: str, titulares: str = "", eventos: list
                 or any(re.search(t, bajo_f) for t in temas_consenso))
 
     for patron, nombre in FRASES_DE_CONSENSO:
-        frases = [f for f in _frases(texto) if re.search(patron, f.lower())]
+        # «EL CONSENSO» DEL MERCADO NO ES EL DE UN DATO (Newsfeed #80, 18/09/2026).
+        # «Aquí es donde el briefing se separa del consenso» es la opinión general,
+        # no una previsión del calendario, y costó un reintento sin mejora. Solo
+        # cuenta la frase que lleva una cifra o habla de un dato.
+        frases = [f for f in _frases(texto) if re.search(patron, f.lower())
+                  and (re.search(r"\d", f) or re.search(DATO_MACRO, f.lower()))]
         if not frases:
             continue
         if eventos is not None and all(_consenso_respaldado(f) for f in frases):
