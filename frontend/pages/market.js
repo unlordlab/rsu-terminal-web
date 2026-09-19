@@ -2142,6 +2142,13 @@ async function loadBriefing(el) {
 // terminal es autonoma, sin un modulo compartido de estilos por pagina.
 const BIAS_COLORS = { ALCISTA: 'var(--color-accent)', BAJISTA: '#f23645', NEUTRAL: '#ffb800' };
 
+// «2026-07-01» -> «jul 2026», para decir de qué mes es un dato mensual.
+const _MESES_CORTOS = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
+function fmtMes(iso) {
+    const m = /^(\d{4})-(\d{2})/.exec(iso || '');
+    return m ? _MESES_CORTOS[Number(m[2]) - 1] + ' ' + m[1] : '';
+}
+
 // EL MISMO DIA CONTADO POR OTRO MODELO.
 //
 // El 07/09/2026 se generaron tres briefings con el MISMO prompt y se auditaron
@@ -2267,7 +2274,12 @@ async function loadLiquidity(el) {
         const nlChgColor = (nl.w_change || 0) >= 0 ? 'var(--color-accent)' : '#f23645';
         const nlChgStr   = nl.w_change != null ? (nl.w_change > 0 ? '+' : '') + nl.w_change + 'B' : 'N/D';
         const m2ChgColor = (m2.yoy_pct || 0) >= 0 ? 'var(--color-accent)' : '#f23645';
-        const m2YoyStr   = m2.yoy_pct != null ? (m2.yoy_pct > 0 ? '+' : '') + m2.yoy_pct + '% YoY' : 'N/D';
+        const m2YoyStr   = m2.yoy_pct != null ? (m2.yoy_pct > 0 ? '+' : '') + m2.yoy_pct + '% interanual' + (m2.yoy_mes ? ' (' + esc(fmtMes(m2.yoy_mes)) + ')' : '') : 'N/D';
+        // M2 REAL: el crecimiento descontada la inflación del mismo mes.
+        const m2RealColor = m2.real_yoy_pct == null ? 'var(--color-muted)' : (m2.real_yoy_pct >= 0 ? 'var(--color-accent)' : '#f23645');
+        const m2RealStr   = m2.real_yoy_pct != null
+            ? 'Real: ' + (m2.real_yoy_pct > 0 ? '+' : '') + m2.real_yoy_pct + '% ' + tt('m2-real') + ' · IPC ' + (m2.ipc_yoy_pct > 0 ? '+' : '') + m2.ipc_yoy_pct + '%'
+            : 'Real: N/D';
         const corrColor  = corr == null ? 'var(--color-muted)' : (corr >= 0.5 ? 'var(--color-accent)' : (corr <= -0.2 ? '#f23645' : '#ffb800'));
         const corrStr    = corr != null ? corr.toFixed(2) : 'N/D';
 
@@ -2283,6 +2295,7 @@ async function loadLiquidity(el) {
             + '<div style="color:var(--color-muted);font-size:10px;margin-bottom:4px;">M2 MONEY SUPPLY ' + tt('m2-money-supply') + '</div>'
             + '<div style="color:var(--color-text);font-size:20px;font-weight:500;">$' + (m2.current != null ? m2.current.toFixed(2) + 'T' : 'N/D') + '</div>'
             + '<div style="color:' + m2ChgColor + ';font-size:10px;margin-top:4px;">' + m2YoyStr + '</div>'
+            + '<div style="color:' + m2RealColor + ';font-size:10px;margin-top:2px;">' + m2RealStr + '</div>'
             + '</div>'
 
             + '<div style="background:var(--color-bg,#0a0a0a);border:1px solid var(--color-border);border-radius:var(--radius);padding:0.75rem;text-align:center;">'
@@ -2300,7 +2313,7 @@ async function loadLiquidity(el) {
             + '</div>';
 
         const footerNote = '<div style="padding:0.6rem 1rem;font-size:10px;color:var(--color-muted);border-top:1px solid var(--color-border);">'
-            + '⚡ Fuente: FRED (WALCL, WTREGEN, RRPONTSYD, WM2NS) + Yahoo Finance (^GSPC) · Net Liquidity y M2 semanal/mensual, alineados por fecha más cercana'
+            + '⚡ Fuente: FRED (WALCL, WTREGEN, RRPONTSYD, WM2NS; interanual y M2 real con M2SL y CPIAUCSL) + Yahoo Finance (^GSPC) · Net Liquidity y M2 semanal/mensual, alineados por fecha más cercana'
             + '</div>';
 
         el.innerHTML = widgetShell('LIQUIDEZ ' + tt('liquidity-overview'), 'Net Liquidity · M2 · Overlay SPX', cardsSection + chartSection + footerNote, data.timestamp);

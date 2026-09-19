@@ -31,6 +31,7 @@ from cobertura_amplitud import cobertura_insuficiente as amplitud_incompleta  # 
 # Los mismos umbrales de la curva del VIX con los que puntúa el Algoritmo y
 # pinta Market: el briefing no puede leer la curva con otra vara.
 from vix_curve import vix_ratio, zona_curva, misma_sesion, UMBRAL_BACKWARDATION, UMBRAL_TENSION  # noqa: E402
+from interanual import variacion_interanual  # noqa: E402
 
 GROQ_KEY   = os.environ.get("GROQ_API_KEY", "")
 GIST_TOKEN = os.environ.get("GIST_TOKEN", "")
@@ -1665,7 +1666,7 @@ FRED_SERIES = [
 ]
 
 
-def _fred_observaciones(series_id: str, n: int = 14) -> list:
+def _fred_observaciones(series_id: str, n: int = 16) -> list:
     """Ultimas n observaciones (fecha, valor), mas reciente primero."""
     try:
         r = requests.get(
@@ -1772,9 +1773,17 @@ def get_macro_indicators() -> list:
             else:
                 extra = "sin mes anterior"
         elif tipo == "mm_aa":
-            mm = (valor / previo - 1) * 100
-            aa = (valor / obs[12][1] - 1) * 100 if len(obs) > 12 else None
-            dato  = f"{mm:+.2f}% m/m"
+            # POR FECHA, NO POR POSICIÓN (Newsfeed #81, 19/09/2026). En octubre
+            # de 2025 no se publicó el IPC: `obs[12]` era julio de 2025 y el
+            # interanual comparaba 13 meses (IPC 3,71% publicado frente a 3,35%
+            # real, subyacente 2,76% frente a 2,45%). Ver shared/interanual.py.
+            # Y el m/m, solo contra el mes INMEDIATAMENTE anterior: tras un hueco
+            # serían dos meses rotulados como uno.
+            aa = variacion_interanual(obs, fecha)
+            f_act, f_prev = _dt.strptime(fecha, "%Y-%m-%d"), _dt.strptime(obs[1][0], "%Y-%m-%d")
+            consecutivo = (f_act.year * 12 + f_act.month) - (f_prev.year * 12 + f_prev.month) == 1
+            mm = (valor / previo - 1) * 100 if consecutivo else None
+            dato  = f"{mm:+.2f}% m/m" if mm is not None else "m/m no disponible (falta el mes anterior)"
             extra = f"{aa:+.2f}% interanual" if aa is not None else "sin interanual"
         else:
             continue

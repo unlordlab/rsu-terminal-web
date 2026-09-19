@@ -124,8 +124,12 @@ def test_las_otras_filas_macro_no_se_han_roto():
                   tipo="nivel_miles", nombre="Peticiones semanales de paro")
     assert "previo 204" in paro["extra"] and "media 4 semanas" in paro["extra"]
 
-    ipc = _macro([("2026-07-01", 332.5), ("2026-06-01", 331.77)] +
-                 [("x", 323.3)] * 12, tipo="mm_aa", nombre="IPC subyacente")
+    # Con la fecha real de hace un año: desde el 19/09/2026 el interanual se busca
+    # por FECHA (shared/interanual.py), y el relleno con fechas «x» solo valía
+    # para el cálculo por posición, que comparaba trece meses tras el hueco de
+    # octubre de 2025.
+    ipc = _macro([("2026-07-01", 332.5), ("2026-06-01", 331.77), ("2025-07-01", 323.3)],
+                 tipo="mm_aa", nombre="IPC subyacente")
     assert ipc["dato"] == "+0.22% m/m"
     # La cifra, no la palabra: «sin interanual» también contiene «interanual»,
     # y con esa comprobación el sabotaje de quitarlo se escapaba.

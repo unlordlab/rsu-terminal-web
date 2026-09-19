@@ -250,6 +250,20 @@ Ninguna de las dos predice el mercado por sí sola con precisión de timing exac
 Ninguna métrica de liquidez sustituye al análisis técnico o fundamental — es una capa adicional de contexto macro sobre la "marea" en la que se mueven todos los activos de riesgo.`
     },
 
+    "m2-real": {
+        title: "M2 real",
+        short: "Lo que crece el dinero de la economía descontada la inflación del mismo mes.",
+        long: `El M2 nominal puede subir solo porque todo cuesta más. El M2 real le resta la inflación para ver si de verdad hay más dinero disponible.
+
+CÓMO SE CALCULA:
+Crecimiento interanual del M2 frente al IPC interanual del mismo mes. Si el M2 crece un 5,4% y el IPC un 3,4%, el M2 real crece alrededor de un 2%.
+
+CÓMO LEERLO:
+▸ Positivo: el dinero crece más deprisa que los precios. Suele acompañar a entornos cómodos para bolsa y cripto.
+▸ Negativo: la inflación se come el crecimiento del dinero y la liquidez real se contrae, aunque la cifra nominal suba. Pasó en 2022-2023.
+
+Es un dato mensual y lento: sirve para el contexto de fondo de varios meses, no para decidir el día a día. Ninguna cifra de este panel es una recomendación de inversión.`
+    },
     "m2-money-supply": {
         title: "M2 Money Supply",
         short: "Cantidad agregada de dinero amplio en la economía: efectivo, depósitos y fondos monetarios minoristas.",

@@ -15,6 +15,7 @@ from time_utils import get_timestamp, session_fraction_elapsed  # noqa: E402
 from yf_batch import download_batch  # noqa: E402
 from vix_curve import vix_ratio, zona_curva, misma_sesion, UMBRAL_BACKWARDATION, UMBRAL_TENSION  # noqa: E402
 from mcclellan import mcclellan_series, mcclellan_ajustado, MIN_SESIONES_AJUSTADO  # noqa: E402
+from interanual import valor_hace_un_ano, variacion_interanual  # noqa: E402
 from market_regime import spy_trend_snapshot  # noqa: E402
 from social_tickers import (  # noqa: E402
     BLACKLIST as _BLACKLIST, extract_tickers, fetch_reddit_titles_via_rss,
@@ -2102,10 +2103,13 @@ def get_fed_macro() -> dict:
             out = {}
             for key, (sid, tipo) in series.items():
                 data = fred_csv(sid)
-                if len(data) >= 13:
+                # El valor de hace un año, POR FECHA (Newsfeed #81): `data[-13]`
+                # era julio de 2025 porque falta octubre y el IPC salía 3,71% en
+                # vez de 3,35%. Sin ese mes, sin interanual.
+                prev_y = valor_hace_un_ano(data) if len(data) >= 13 else None
+                if prev_y is not None:
                     cur    = data[-1][1]
                     prev   = data[-2][1]
-                    prev_y = data[-13][1]
                     if tipo == 'tasa':
                         yoy, unidad = round(cur - prev_y, 2), 'pp'
                     else:
@@ -2234,12 +2238,29 @@ def get_liquidity() -> dict:
             history = [{'date': d, 'value': round(v / 1000, 3)} for d, v in m2[-104:]]
             current = history[-1]['value'] if history else None
             prev    = history[-2]['value'] if len(history) > 1 else current
-            prev_y  = history[-53]['value'] if len(history) > 53 else current  # ~1 año atrás (semanal)
-            yoy_pct = round((current - prev_y) / prev_y * 100, 2) if prev_y else None
+            # EL INTERANUAL, DE LA SERIE MENSUAL (19/09/2026). La semanal WM2NS
+            # no está desestacionalizada: según qué semana de hace un año se
+            # tomara, el mismo dato daba +5,30% o +6,05%. M2SL es la mensual
+            # desestacionalizada, la que se cita. Y buscado por FECHA (#81).
+            #
+            # M2 REAL: el crecimiento descontada la inflación del MISMO mes. Un
+            # M2 que crece un 5,4% con la inflación al 3,4% crece de verdad un 2%;
+            # si la inflación supera al M2, el dinero en la economía encoge en
+            # términos reales aunque la cifra nominal suba.
+            m2_mensual = fred_csv('M2SL')
+            ipc        = fred_csv('CPIAUCSL')
+            mes        = m2_mensual[-1][0] if m2_mensual else None
+            yoy        = variacion_interanual(m2_mensual) if mes else None
+            ipc_yoy    = variacion_interanual(ipc, mes) if (mes and ipc) else None
+            real_yoy   = ((1 + yoy / 100) / (1 + ipc_yoy / 100) - 1) * 100 \
+                if (yoy is not None and ipc_yoy is not None) else None
             return {
                 'current': current,
                 'chg': round(current - prev, 3) if current is not None else None,
-                'yoy_pct': yoy_pct,
+                'yoy_pct': round(yoy, 2) if yoy is not None else None,
+                'yoy_mes': mes,
+                'ipc_yoy_pct': round(ipc_yoy, 2) if ipc_yoy is not None else None,
+                'real_yoy_pct': round(real_yoy, 2) if real_yoy is not None else None,
                 'date': history[-1]['date'] if history else None,
                 'history': history,
             }
